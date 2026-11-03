@@ -14,31 +14,11 @@
     .card-neo { background: #ffffff; border-radius: 20px; border: 1px solid #eef2f8; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.03); }
     .tab-active { background: #2563eb; color: #ffffff !important; box-shadow: 0 8px 20px -6px rgba(37, 99, 235, 0.5); }
     
-    .highlight-card-blue {
-      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-      color: #ffffff;
-      box-shadow: 0 12px 28px -6px rgba(37, 99, 235, 0.35);
-    }
-    .highlight-card-emerald {
-      background: linear-gradient(135deg, #059669 0%, #047857 100%);
-      color: #ffffff;
-      box-shadow: 0 12px 28px -6px rgba(5, 150, 105, 0.35);
-    }
-    .highlight-card-purple {
-      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-      color: #ffffff;
-      box-shadow: 0 12px 28px -6px rgba(124, 58, 237, 0.35);
-    }
-    .highlight-card-amber {
-      background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
-      color: #ffffff;
-      box-shadow: 0 12px 28px -6px rgba(234, 88, 12, 0.35);
-    }
-    .highlight-card-indigo {
-      background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
-      color: #ffffff;
-      box-shadow: 0 12px 28px -6px rgba(79, 70, 229, 0.35);
-    }
+    .highlight-card-blue { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(37, 99, 235, 0.35); }
+    .highlight-card-emerald { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(5, 150, 105, 0.35); }
+    .highlight-card-purple { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(124, 58, 237, 0.35); }
+    .highlight-card-amber { background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(234, 88, 12, 0.35); }
+    .highlight-card-indigo { background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(79, 70, 229, 0.35); }
   </style>
 </head>
 <body class="text-slate-800 antialiased min-h-screen flex flex-col">
@@ -81,7 +61,6 @@
     let activeTab = 'dashboard';
     let timerInterval = null;
     let pollInterval = null;
-    let isFetchingCloud = false;
     let webhookUrl = localStorage.getItem('gb_webhook_url') || DEFAULT_WEBHOOK_URL;
 
     function getTodayFormatted() {
@@ -168,7 +147,7 @@
       return currentUser;
     }
 
-    // 100% RELIABLE GET SYNC (IMMUNE TO CORS)
+    // 100% DIRECT FETCH SYNC (NO CORS BLOCK WITH NO-CORS)
     async function postToSheet(action, payload) {
       try {
         const params = new URLSearchParams({
@@ -176,43 +155,34 @@
           timestamp: new Date().toISOString(),
           ...payload
         });
-        const s = document.createElement('script');
-        s.src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
-        document.body.appendChild(s);
-        setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, 5000);
+        
+        // Use fetch with no-cors so it fires successfully to Google Apps Script
+        await fetch(`${webhookUrl}?${params.toString()}`, {
+          method: 'GET',
+          mode: 'no-cors'
+        });
+        
+        // Also trigger image beacon backup
+        new Image().src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
       } catch (e) {
         console.warn('Sync error:', e);
       }
     }
 
     function fetchFromSheet() {
-      if (isFetchingCloud) return;
-      isFetchingCloud = true;
-
-      const callbackName = 'gb_cb_' + Date.now();
-      window[callbackName] = function(res) {
-        delete window[callbackName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-        isFetchingCloud = false;
-        if (res && res.status === 'success') handleCloudDataReceived(res);
-      };
-
-      const script = document.createElement('script');
-      script.src = `${webhookUrl}?callback=${callbackName}&t=${Date.now()}`;
-      script.onerror = function() {
-        if (script.parentNode) script.parentNode.removeChild(script);
-        isFetchingCloud = false;
-        fetch(`${webhookUrl}?t=${Date.now()}`)
-          .then(r => r.json())
-          .then(res => handleCloudDataReceived(res))
-          .catch(() => {});
-      };
-      document.body.appendChild(script);
+      fetch(`${webhookUrl}?t=${Date.now()}`)
+        .then(r => r.json())
+        .then(res => {
+          if (res && res.status === 'success') {
+            handleCloudDataReceived(res);
+          }
+        })
+        .catch(() => {});
     }
 
     function handleCloudDataReceived(res) {
       let hasChanges = false;
-      if (Array.isArray(res.salesRecords)) {
+      if (Array.isArray(res.salesRecords) && res.salesRecords.length > 0) {
         const local = getStored('sales_records', []);
         if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
           setStored('sales_records', res.salesRecords);
@@ -248,7 +218,7 @@
     function startBackgroundSync() {
       if (pollInterval) clearInterval(pollInterval);
       fetchFromSheet();
-      pollInterval = setInterval(fetchFromSheet, 3000);
+      pollInterval = setInterval(fetchFromSheet, 4000);
     }
 
     function init() {
