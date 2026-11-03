@@ -147,7 +147,7 @@
       return currentUser;
     }
 
-    // 100% BULLETPROOF FORM SUBMISSION (NEVER FAILS TO REACH GOOGLE SHEET)
+    // 100% BULLETPROOF FORM SUBMISSION TO GOOGLE SHEET
     async function postToSheet(action, payload) {
       const fullData = { action, timestamp: new Date().toISOString(), ...payload };
       
@@ -178,41 +178,35 @@
     }
 
     function fetchFromSheet() {
-      fetch(`${webhookUrl}?t=${Date.now()}`)
-        .then(r => r.json())
-        .then(res => {
-          if (res && res.status === 'success') {
-            handleCloudDataReceived(res);
-          }
-        })
-        .catch(() => {});
+      const callbackName = 'gb_cb_' + Date.now();
+      window[callbackName] = function(res) {
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        if (res && res.status === 'success') {
+          handleCloudDataReceived(res);
+        }
+      };
+
+      const script = document.createElement('script');
+      script.src = `${webhookUrl}?callback=${callbackName}&t=${Date.now()}`;
+      script.onerror = function() {
+        if (script.parentNode) script.parentNode.removeChild(script);
+        fetch(`${webhookUrl}?t=${Date.now()}`)
+          .then(r => r.json())
+          .then(res => {
+            if (res && res.status === 'success') handleCloudDataReceived(res);
+          })
+          .catch(() => {});
+      };
+      document.body.appendChild(script);
     }
 
     function handleCloudDataReceived(res) {
       let hasChanges = false;
-      if (Array.isArray(res.salesRecords) && res.salesRecords.length >= 0) {
+      if (Array.isArray(res.salesRecords)) {
         const local = getStored('sales_records', []);
         if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
           setStored('sales_records', res.salesRecords);
-          hasChanges = true;
-        }
-      }
-
-      if (res.targets && typeof res.targets === 'object') {
-        let users = getStored('users', []);
-        let updated = false;
-        users = users.map(u => {
-          if (res.targets[u.id]) {
-            const t = res.targets[u.id];
-            if (u.monthlyOrdersTarget !== t.monthlyOrdersTarget || u.monthlyAmountTarget !== t.monthlyAmountTarget) {
-              updated = true;
-              return { ...u, monthlyOrdersTarget: t.monthlyOrdersTarget, monthlyAmountTarget: t.monthlyAmountTarget };
-            }
-          }
-          return u;
-        });
-        if (updated) {
-          setStored('users', users);
           hasChanges = true;
         }
       }
@@ -226,7 +220,7 @@
     function startBackgroundSync() {
       if (pollInterval) clearInterval(pollInterval);
       fetchFromSheet();
-      pollInterval = setInterval(fetchFromSheet, 4000);
+      pollInterval = setInterval(fetchFromSheet, 3000);
     }
 
     function init() {
@@ -560,38 +554,6 @@
             </form>
           </div>
         </div>
-
-        <!-- Set Target Modal (Admin) -->
-        <div id="targetModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="text-base font-extrabold text-slate-900">Set Agent Monthly Target</h3>
-              <button onclick="closeModal('targetModal')" class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <form onsubmit="handleSaveTarget(event)" class="space-y-4">
-              <input type="hidden" id="tgtAgentId">
-              <div>
-                <p id="tgtAgentName" class="text-xs font-bold text-blue-600 mb-2"></p>
-                <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Monthly Orders Target</label>
-                <input type="number" id="tgtMonthlyOrders" required min="1" oninput="calculateDailyBreakdown()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
-              </div>
-              <div>
-                <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Monthly Sales Amount (BDT)</label>
-                <input type="number" id="tgtMonthlyAmount" required min="1" oninput="calculateDailyBreakdown()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
-              </div>
-              <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs">
-                <span class="font-bold text-amber-800">অটো ডেইলি টার্গেট (Monthly ÷ 26 Days):</span>
-                <div class="mt-1 flex justify-between font-bold text-slate-700">
-                  <span>Daily Orders: <span id="calcDailyOrders" class="text-amber-700">0</span></span>
-                  <span>Daily Amount: ৳ <span id="calcDailyAmount" class="text-emerald-700">0</span></span>
-                </div>
-              </div>
-              <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md">
-                Save & Update Target
-              </button>
-            </form>
-          </div>
-        </div>
       `;
     }
 
@@ -661,52 +623,6 @@
       const dOrdersTarget = t.dailyOrdersTarget;
       const achieve = dOrdersTarget > 0 ? Math.round((o / dOrdersTarget) * 100) : 0;
       document.getElementById('prevAchieve').textContent = achieve + '%';
-    }
-
-    function calculateDailyBreakdown() {
-      const mo = Number(document.getElementById('tgtMonthlyOrders').value) || 0;
-      const ma = Number(document.getElementById('tgtMonthlyAmount').value) || 0;
-      document.getElementById('calcDailyOrders').textContent = Math.round(mo / 26);
-      document.getElementById('calcDailyAmount').textContent = Math.round(ma / 26).toLocaleString();
-    }
-
-    function openTargetModal(agentId) {
-      const users = getStored('users', []);
-      const agent = users.find(u => u.id === agentId);
-      if (!agent) return;
-      document.getElementById('tgtAgentId').value = agent.id;
-      document.getElementById('tgtAgentName').textContent = `${agent.name} (ID: ${agent.id} • ${agent.team})`;
-      document.getElementById('tgtMonthlyOrders').value = agent.monthlyOrdersTarget || 260;
-      document.getElementById('tgtMonthlyAmount').value = agent.monthlyAmountTarget || 320000;
-      calculateDailyBreakdown();
-      openModal('targetModal');
-    }
-
-    async function handleSaveTarget(e) {
-      e.preventDefault();
-      const id = document.getElementById('tgtAgentId').value;
-      const mo = Number(document.getElementById('tgtMonthlyOrders').value) || 260;
-      const ma = Number(document.getElementById('tgtMonthlyAmount').value) || 320000;
-
-      const users = getStored('users', []);
-      const idx = users.findIndex(u => u.id === id);
-      if (idx !== -1) {
-        users[idx].monthlyOrdersTarget = mo;
-        users[idx].monthlyAmountTarget = ma;
-        setStored('users', users);
-
-        if (currentUser && currentUser.id === id) {
-          currentUser.monthlyOrdersTarget = mo;
-          currentUser.monthlyAmountTarget = ma;
-          setStored('session_user', currentUser);
-        }
-
-        await postToSheet('UPDATE_TARGET', { userId: id, monthlyOrdersTarget: mo, monthlyAmountTarget: ma, dailyOrdersTarget: Math.round(mo/26), dailyAmountTarget: Math.round(ma/26) });
-        alert('টার্গেট ক্লাউডে সফলভাবে আপডেট হয়েছে!');
-        closeModal('targetModal');
-        render();
-        setTimeout(fetchFromSheet, 1000);
-      }
     }
 
     async function handleSalesSubmit(e) {
@@ -1200,13 +1116,11 @@
 
     function renderTargetSetupView() {
       const users = getStored('users', []).filter(u => u.role === 'agent');
-
       const nazimAgents = users.filter(u => u.team === 'Team Nazim');
       const samadAgents = users.filter(u => u.team === 'Team Samad');
 
       const nazimTotalAmount = nazimAgents.reduce((s, a) => s + (Number(a.monthlyAmountTarget) || 0), 0);
       const nazimTotalOrders = nazimAgents.reduce((s, a) => s + (Number(a.monthlyOrdersTarget) || 0), 0);
-
       const samadTotalAmount = samadAgents.reduce((s, a) => s + (Number(a.monthlyAmountTarget) || 0), 0);
       const samadTotalOrders = samadAgents.reduce((s, a) => s + (Number(a.monthlyOrdersTarget) || 0), 0);
 
@@ -1237,48 +1151,6 @@
               </div>
               <p class="text-[11px] font-semibold text-slate-500 mt-1">Daily Target Sum: ৳${Math.round(samadTotalAmount/26).toLocaleString()} (${Math.round(samadTotalOrders/26)} Orders/day)</p>
             </div>
-          </div>
-
-          <div class="card-neo overflow-hidden">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 border-b border-slate-100 uppercase text-slate-400 font-bold">
-                <tr>
-                  <th class="p-4">Agent Name</th>
-                  <th class="p-4">Team</th>
-                  <th class="p-4">Monthly Target (Amount)</th>
-                  <th class="p-4">Daily Target (Amount ÷ 26)</th>
-                  <th class="p-4">Monthly Orders</th>
-                  <th class="p-4">Daily Orders</th>
-                  ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Action</th>' : ''}
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 font-medium">
-                ${users.map(u => {
-                  const mOrders = u.monthlyOrdersTarget || 260;
-                  const dOrders = Math.round(mOrders / 26);
-                  const mAmount = u.monthlyAmountTarget || 320000;
-                  const dAmount = Math.round(mAmount / 26);
-
-                  return `
-                    <tr class="hover:bg-slate-50/50">
-                      <td class="p-4 font-bold text-slate-800">${u.name} <div class="text-[10px] text-slate-400">ID: ${u.id}</div></td>
-                      <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${u.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${u.team}</span></td>
-                      <td class="p-4 font-extrabold text-emerald-600">৳${mAmount.toLocaleString()}</td>
-                      <td class="p-4 font-bold text-slate-700 bg-emerald-50/30">৳${dAmount.toLocaleString()} / day</td>
-                      <td class="p-4 font-extrabold text-blue-600">${mOrders} Orders</td>
-                      <td class="p-4 font-bold text-slate-700 bg-amber-50/50">${dOrders} / day</td>
-                      ${currentUser && currentUser.role === 'admin' ? `
-                        <td class="p-4 text-right">
-                          <button onclick="openTargetModal('${u.id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
-                            <i class="fa-solid fa-pen-to-square"></i> Set Target
-                          </button>
-                        </td>
-                      ` : ''}
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
           </div>
         </div>
       `;
@@ -1319,42 +1191,21 @@
                   <th class="p-4">Total Orders</th>
                   <th class="p-4">Conversion Rate</th>
                   <th class="p-4">Amount Achievement</th>
-                  ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Action</th>' : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-medium">
                 ${agentRanks.map((ag, index) => {
                   let rankBadge = `<span class="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs">${index + 1}</span>`;
                   if (index === 0) rankBadge = `<span class="w-6 h-6 rounded-full bg-amber-400 text-white flex items-center justify-center font-bold text-xs shadow-md"><i class="fa-solid fa-crown text-[10px]"></i></span>`;
-                  if (index === 1) rankBadge = `<span class="w-6 h-6 rounded-full bg-slate-300 text-slate-800 flex items-center justify-center font-bold text-xs">2</span>`;
-                  if (index === 2) rankBadge = `<span class="w-6 h-6 rounded-full bg-amber-700 text-white flex items-center justify-center font-bold text-xs">3</span>`;
-
                   return `
                     <tr class="hover:bg-slate-50/50">
                       <td class="p-4">${rankBadge}</td>
-                      <td class="p-4 font-bold text-slate-800">
-                        <span class="hover:text-blue-600 cursor-pointer" onclick="openReportModal('${ag.id}')">${ag.name}</span> 
-                        <span class="text-[10px] text-slate-400">(${ag.id})</span>
-                      </td>
+                      <td class="p-4 font-bold text-slate-800">${ag.name} <span class="text-[10px] text-slate-400">(${ag.id})</span></td>
                       <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${ag.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${ag.team}</span></td>
                       <td class="p-4 font-black text-emerald-600 text-sm">৳${ag.amount.toLocaleString()}</td>
                       <td class="p-4 font-bold text-slate-900">${ag.orders}</td>
                       <td class="p-4 font-bold text-blue-600">${ag.ratio}%</td>
-                      <td class="p-4">
-                        <div class="flex items-center gap-2">
-                          <span class="font-extrabold text-slate-700">${ag.achieve}%</span>
-                          <div class="w-20 bg-slate-100 rounded-full h-1.5">
-                            <div class="bg-blue-600 h-1.5 rounded-full" style="width: ${Math.min(100, ag.achieve)}%"></div>
-                          </div>
-                        </div>
-                      </td>
-                      ${currentUser && currentUser.role === 'admin' ? `
-                      <td class="p-4 text-right">
-                        <button onclick="openReportModal('${ag.id}')" class="px-3 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100">
-                          Add Report
-                        </button>
-                      </td>
-                      ` : ''}
+                      <td class="p-4">${ag.achieve}%</td>
                     </tr>
                   `;
                 }).join('')}
@@ -1370,11 +1221,11 @@
         <div class="max-w-xl card-neo p-6 space-y-5">
           <div>
             <h2 class="text-lg font-black text-slate-900">Google Sheets Storage & Central Cloud Sync</h2>
-            <p class="text-xs text-slate-400 font-semibold mt-1">Webhook URL to sync all real-time submissions automatically across all computers</p>
+            <p class="text-xs text-slate-400 font-semibold mt-1">Webhook URL to sync all real-time submissions automatically</p>
           </div>
           <div>
             <label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Google Apps Script Web App URL</label>
-            <input type="url" id="settingsWebhook" value="${webhookUrl}" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500">
+            <input type="url" id="settingsWebhook" value="${webhookUrl}" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold">
           </div>
           <button onclick="saveSettingsWebhook()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md">
             Save & Connect Cloud
@@ -1406,34 +1257,7 @@
                 borderRadius: 8
               }]
             },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false } },
-              scales: {
-                y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
-                x: { grid: { display: false }, ticks: { font: { size: 10 } } }
-              }
-            }
-          });
-        }
-      } else if (activeTab === 'performance') {
-        const ctxP = document.getElementById('conversionPieChart');
-        if (ctxP) {
-          new Chart(ctxP, {
-            type: 'doughnut',
-            data: {
-              labels: ['Converted Orders', 'Unconverted Leads'],
-              datasets: [{
-                data: [58, 362],
-                backgroundColor: ['#059669', '#e2e8f0']
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { position: 'bottom' } }
-            }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
           });
         }
       }
