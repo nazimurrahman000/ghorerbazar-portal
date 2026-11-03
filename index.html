@@ -39,6 +39,11 @@
       color: #ffffff;
       box-shadow: 0 12px 28px -6px rgba(79, 70, 229, 0.35);
     }
+    .highlight-card-rose {
+      background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+      color: #ffffff;
+      box-shadow: 0 12px 28px -6px rgba(225, 29, 72, 0.35);
+    }
   </style>
 </head>
 <body class="text-slate-800 antialiased min-h-screen flex flex-col">
@@ -46,9 +51,9 @@
 
   <script>
     const DEFAULT_USERS = [
-      // Admins (TL)
-      { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123', monthlyOrdersTarget: 500, monthlyAmountTarget: 600000 },
-      { id: '10107', name: 'Md Abdus Samad (TL)', role: 'admin', team: 'Team Samad', pass: 'admin123', monthlyOrdersTarget: 500, monthlyAmountTarget: 600000 },
+      // Admins (TL) - Team Targets will dynamically calculate as sum of their agents
+      { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123' },
+      { id: '10107', name: 'Md Abdus Samad (TL)', role: 'admin', team: 'Team Samad', pass: 'admin123' },
       
       // Team Nazim Agents
       { id: '10191', name: 'Shagor Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', monthlyOrdersTarget: 650, monthlyAmountTarget: 1300000 },
@@ -79,8 +84,10 @@
     } else {
       let u = getStored('users', []);
       u = u.map(usr => {
-        if (!usr.monthlyOrdersTarget) usr.monthlyOrdersTarget = 260;
-        if (!usr.monthlyAmountTarget) usr.monthlyAmountTarget = 320000;
+        if (usr.role === 'agent') {
+          if (!usr.monthlyOrdersTarget) usr.monthlyOrdersTarget = 260;
+          if (!usr.monthlyAmountTarget) usr.monthlyAmountTarget = 320000;
+        }
         if ((usr.id === '10122' || usr.id === '10107') && usr.pass === '123456') usr.pass = 'admin123';
         return usr;
       });
@@ -91,6 +98,34 @@
     let activeTab = 'dashboard';
     let timerInterval = null;
     let webhookUrl = localStorage.getItem('gb_webhook_url') || '';
+
+    // Calculate Dynamic Target: If Admin (TL), sum of their team agents; if Agent, their personal target
+    function getUserTargetInfo(user) {
+      const allUsers = getStored('users', []);
+      if (user.role === 'admin') {
+        const teamAgents = allUsers.filter(u => u.role === 'agent' && u.team === user.team);
+        const monthlyAmount = teamAgents.reduce((sum, a) => sum + (Number(a.monthlyAmountTarget) || 0), 0);
+        const monthlyOrders = teamAgents.reduce((sum, a) => sum + (Number(a.monthlyOrdersTarget) || 0), 0);
+        return {
+          monthlyAmountTarget: monthlyAmount,
+          monthlyOrdersTarget: monthlyOrders,
+          dailyAmountTarget: Math.round(monthlyAmount / 26),
+          dailyOrdersTarget: Math.round(monthlyOrders / 26),
+          agentCount: teamAgents.length
+        };
+      } else {
+        const fresh = allUsers.find(u => u.id === user.id) || user;
+        const monthlyAmount = Number(fresh.monthlyAmountTarget) || 320000;
+        const monthlyOrders = Number(fresh.monthlyOrdersTarget) || 260;
+        return {
+          monthlyAmountTarget: monthlyAmount,
+          monthlyOrdersTarget: monthlyOrders,
+          dailyAmountTarget: Math.round(monthlyAmount / 26),
+          dailyOrdersTarget: Math.round(monthlyOrders / 26),
+          agentCount: 1
+        };
+      }
+    }
 
     function getFreshUser() {
       if (!currentUser) return null;
@@ -114,7 +149,7 @@
           body: JSON.stringify({ action, timestamp: new Date().toISOString(), ...payload })
         });
       } catch (err) {
-        console.warn('Sheet sync:', err);
+        console.warn('Sheet sync error:', err);
       }
     }
 
@@ -464,12 +499,13 @@
 
     function calculatePreviewRatio() {
       const u = getFreshUser();
+      const t = getUserTargetInfo(u);
       const l = Number(document.getElementById('subLeads').value) || 0;
       const o = Number(document.getElementById('subOrders').value) || 0;
       const ratio = l > 0 ? ((o / l) * 100).toFixed(2) : '0.00';
       document.getElementById('prevRatio').textContent = ratio + '%';
 
-      const dOrdersTarget = Math.round((u.monthlyOrdersTarget || 260) / 26);
+      const dOrdersTarget = t.dailyOrdersTarget;
       const achieve = dOrdersTarget > 0 ? Math.round((o / dOrdersTarget) * 100) : 0;
       document.getElementById('prevAchieve').textContent = achieve + '%';
     }
@@ -522,11 +558,12 @@
     function handleSalesSubmit(e) {
       e.preventDefault();
       const u = getFreshUser();
+      const t = getUserTargetInfo(u);
       const leads = Number(document.getElementById('subLeads').value) || 0;
       const orders = Number(document.getElementById('subOrders').value) || 0;
       const amount = Number(document.getElementById('subAmount').value) || 0;
       const ratio = leads > 0 ? ((orders / leads) * 100).toFixed(2) : 0;
-      const dOrdersTarget = Math.round((u.monthlyOrdersTarget || 260) / 26);
+      const dOrdersTarget = t.dailyOrdersTarget;
       const achieve = dOrdersTarget > 0 ? Math.round((orders / dOrdersTarget) * 100) : 0;
 
       const sales = getStored('sales_records', []);
@@ -566,64 +603,82 @@
       }
     }
 
-    // DASHBOARD VIEW WITH DEDICATED DAILY & MONTHLY TARGET BADGES & CARDS
+    // DASHBOARD VIEW: COLORFUL BOXES WITH MONTHLY TARGET AMOUNT BEFORE TARGET ACHIEVEMENT
     function renderDashboardView() {
       const u = getFreshUser();
+      const t = getUserTargetInfo(u);
       const sales = getStored('sales_records', []);
       const todayStr = new Date().toLocaleDateString('en-GB');
       const attendance = getStored('attendance', []);
       const todaySession = attendance.find(a => a.userId === u.id && a.date === todayStr) || { activeSeconds: 0, breakSeconds: 0, isOnBreak: false };
 
-      const mySales = u.role === 'admin' ? sales : sales.filter(s => s.userId === u.id);
+      // Filter sales: For Admin, their whole team sales; For Agent, personal sales
+      const mySales = u.role === 'admin' 
+        ? sales.filter(s => s.team === u.team) 
+        : sales.filter(s => s.userId === u.id);
+
       const totalLeads = mySales.reduce((a, c) => a + c.leads, 0);
       const totalOrders = mySales.reduce((a, c) => a + c.orders, 0);
       const totalAmount = mySales.reduce((a, c) => a + c.amount, 0);
       const avgConversionRatio = totalLeads > 0 ? ((totalOrders / totalLeads) * 100).toFixed(2) : '0.00';
 
-      // Latest Target directly from fresh user
-      const targetAmt = u.monthlyAmountTarget || 1300000;
-      const targetOrders = u.monthlyOrdersTarget || 650;
-      const dailyOrdersTarget = Math.round(targetOrders / 26);
-      const dailyAmountTarget = Math.round(targetAmt / 26);
+      // Targets: Team Leader has Sum of Agents' Targets; Agent has Personal Target
+      const targetAmount = t.monthlyAmountTarget;
+      const targetOrders = t.monthlyOrdersTarget;
+      const dailyOrdersTarget = t.dailyOrdersTarget;
+      const dailyAmountTarget = t.dailyAmountTarget;
 
-      // Today's Sales specific calculation
-      const todaySales = mySales.filter(s => s.date === todayStr);
-      const todayOrdersCount = todaySales.reduce((a, c) => a + c.orders, 0);
-      const todayAmountSum = todaySales.reduce((a, c) => a + c.amount, 0);
-      const dailyAchievePct = dailyOrdersTarget > 0 ? Math.min(100, Math.round((todayOrdersCount / dailyOrdersTarget) * 100)) : 0;
-      const monthlyAchievePct = targetAmt > 0 ? Math.min(100, Math.round((totalAmount / targetAmt) * 100)) : 0;
+      // Achievement based on Amount
+      const achievePct = targetAmount > 0 ? Math.min(100, Math.round((totalAmount / targetAmount) * 100)) : 0;
 
       return `
         <div class="space-y-6">
-          <!-- Top Welcome & Target Overview Bar -->
+          <!-- Top Welcome & Team Target Header -->
           <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
             <div>
               <div class="flex items-center gap-2">
                 <h2 class="text-2xl font-black text-slate-900 leading-tight">Welcome, ${u.name}! 👋</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700">${u.team}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">
+                  ${u.team} (${u.role === 'admin' ? `Team Leader • ${t.agentCount} Agents Total Sum` : 'Sales Agent'})
+                </span>
               </div>
-              <p class="text-xs text-slate-500 font-medium mt-1">Here is your daily pace and monthly goal breakdown (26 Working Days basis):</p>
+              <p class="text-xs text-slate-500 font-medium mt-1">
+                ${u.role === 'admin' 
+                  ? `আপনার অধীনে থাকা সকল এজেন্টের মোট টার্গেট সামেশন (Sum) অনুযায়ী আপনার টিমের লক্ষ্যমাত্রা নির্ধারণ করা হয়েছে।` 
+                  : `২৬ কর্মদিবসের হিসেবে আপনার দৈনিক ও মাসিক সেলস টার্গেট ও পারফরম্যান্স ওভারভিউ।`}
+              </p>
             </div>
             
-            <!-- Prominent Daily & Monthly Target Pill Badges -->
             <div class="flex flex-wrap items-center gap-3">
-              <div class="px-4 py-2.5 bg-blue-50/80 border border-blue-200 rounded-xl text-left">
-                <span class="text-[10px] uppercase font-black text-blue-700 block tracking-wider">🎯 Daily Target (1/26th)</span>
-                <p class="text-sm font-black text-blue-900 mt-0.5">${dailyOrdersTarget} Orders &bull; ৳${dailyAmountTarget.toLocaleString()}</p>
+              <div class="px-4 py-2.5 bg-blue-50/90 border border-blue-200 rounded-xl text-left">
+                <span class="text-[10px] uppercase font-black text-blue-700 block tracking-wider">🎯 Daily Amount Target</span>
+                <p class="text-sm font-black text-blue-900 mt-0.5">৳${dailyAmountTarget.toLocaleString()} <span class="text-xs font-bold text-blue-600">(${dailyOrdersTarget} Orders)</span></p>
               </div>
 
-              <div class="px-4 py-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-left">
-                <span class="text-[10px] uppercase font-black text-emerald-700 block tracking-wider">🏆 Monthly Target</span>
-                <p class="text-sm font-black text-emerald-900 mt-0.5">${targetOrders} Orders &bull; ৳${targetAmt.toLocaleString()}</p>
+              <div class="px-4 py-2.5 bg-purple-50/90 border border-purple-200 rounded-xl text-left">
+                <span class="text-[10px] uppercase font-black text-purple-700 block tracking-wider">🏆 Monthly Target Sum</span>
+                <p class="text-sm font-black text-purple-900 mt-0.5">৳${targetAmount.toLocaleString()} <span class="text-xs font-bold text-purple-600">(${targetOrders} Orders)</span></p>
               </div>
 
+              ${u.role === 'agent' ? `
               <button onclick="openModal('submitModal')" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 flex items-center gap-2 transition-all">
                 <i class="fa-solid fa-plus text-sm"></i> Submit Daily Report
               </button>
+              ` : `
+              <button onclick="setTab('target')" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-500/20 flex items-center gap-2 transition-all">
+                <i class="fa-solid fa-sliders text-sm"></i> Manage Agent Targets
+              </button>
+              `}
             </div>
           </div>
 
-          <!-- 5 SUPER-HIGHLIGHTED METRIC CARDS WITH CLEAR TARGET SUBTITLES -->
+          <!-- 5 SUPER-HIGHLIGHTED COLORFUL BOXES IN EXACT ORDER:
+               1. Total Leads
+               2. Total Orders
+               3. Total Sales Amount
+               4. Monthly Target (Amount) [PLACED BEFORE TARGET ACHIEVEMENT]
+               5. Target Achievement (%)
+          -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <!-- 1. Total Leads -->
             <div class="highlight-card-blue p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
@@ -636,13 +691,13 @@
               <div class="mt-4">
                 <p class="text-3xl font-black tracking-tight text-white">${totalLeads}</p>
                 <div class="flex items-center justify-between text-[11px] font-bold text-blue-100 mt-1.5 pt-1.5 border-t border-white/20">
-                  <span>Customer Leads</span>
+                  <span>Customer Inbound</span>
                   <span class="text-xs font-black">Active</span>
                 </div>
               </div>
             </div>
 
-            <!-- 2. Total Orders (Monthly & Daily Target Breakdown) -->
+            <!-- 2. Total Orders -->
             <div class="highlight-card-emerald p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-emerald-100">Total Orders</span>
@@ -653,19 +708,19 @@
               <div class="mt-4">
                 <div class="flex items-baseline gap-1.5">
                   <p class="text-3xl font-black tracking-tight text-white">${totalOrders}</p>
-                  <span class="text-xs font-bold text-emerald-100">/ ${targetOrders} Target</span>
+                  <span class="text-xs font-bold text-emerald-100">/ ${targetOrders} Goal</span>
                 </div>
                 <div class="flex items-center justify-between text-[11px] font-bold text-emerald-100 mt-1.5 pt-1.5 border-t border-white/20">
-                  <span>Daily Target:</span>
-                  <span class="font-black text-white text-xs">${dailyOrdersTarget} / day</span>
+                  <span>Conv. Ratio:</span>
+                  <span class="font-black text-white text-xs">${avgConversionRatio}%</span>
                 </div>
               </div>
             </div>
 
-            <!-- 3. Monthly Sales Amount -->
+            <!-- 3. Total Sales Amount -->
             <div class="highlight-card-purple p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-bold uppercase tracking-wider text-purple-100">Sales Revenue</span>
+                <span class="text-xs font-bold uppercase tracking-wider text-purple-100">Total Sales Amount</span>
                 <div class="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-lg text-white">
                   <i class="fa-solid fa-bangladeshi-taka-sign"></i>
                 </div>
@@ -673,30 +728,30 @@
               <div class="mt-4">
                 <p class="text-2xl font-black tracking-tight text-white">৳${totalAmount.toLocaleString()}</p>
                 <div class="flex items-center justify-between text-[11px] font-bold text-purple-100 mt-1.5 pt-1.5 border-t border-white/20">
-                  <span>Month Target:</span>
-                  <span class="font-black text-white text-xs">৳${targetAmt.toLocaleString()}</span>
+                  <span>Current Achieved</span>
+                  <span class="font-black text-white text-xs">${achievePct}%</span>
                 </div>
               </div>
             </div>
 
-            <!-- 4. Conversion Ratio -->
+            <!-- 4. Monthly Target (Amount) [NOW BEFORE TARGET ACHIEVEMENT] -->
             <div class="highlight-card-indigo p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-bold uppercase tracking-wider text-indigo-100">Conversion Ratio</span>
+                <span class="text-xs font-bold uppercase tracking-wider text-indigo-100">Monthly Target (৳)</span>
                 <div class="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-lg text-white">
-                  <i class="fa-solid fa-chart-pie"></i>
+                  <i class="fa-solid fa-bullseye"></i>
                 </div>
               </div>
               <div class="mt-4">
-                <p class="text-3xl font-black tracking-tight text-white">${avgConversionRatio}%</p>
+                <p class="text-2xl font-black tracking-tight text-white">৳${targetAmount.toLocaleString()}</p>
                 <div class="flex items-center justify-between text-[11px] font-bold text-indigo-100 mt-1.5 pt-1.5 border-t border-white/20">
-                  <span>Rate:</span>
-                  <span class="font-black text-white text-xs">Orders ÷ Leads</span>
+                  <span>Daily (Amount ÷ 26):</span>
+                  <span class="font-black text-white text-xs">৳${dailyAmountTarget.toLocaleString()}</span>
                 </div>
               </div>
             </div>
 
-            <!-- 5. Target Achievement (Daily & Monthly Progress) -->
+            <!-- 5. Target Achievement (%) -->
             <div class="highlight-card-amber p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-amber-100">Target Achievement</span>
@@ -706,24 +761,24 @@
               </div>
               <div class="mt-4">
                 <div class="flex items-baseline justify-between">
-                  <p class="text-3xl font-black tracking-tight text-white">${monthlyAchievePct}%</p>
-                  <span class="text-[11px] font-bold text-amber-100">Today: ${dailyAchievePct}%</span>
+                  <p class="text-3xl font-black tracking-tight text-white">${achievePct}%</p>
+                  <span class="text-[11px] font-bold text-amber-100">${totalOrders}/${targetOrders} Orders</span>
                 </div>
                 <div class="w-full bg-black/20 rounded-full h-1.5 mt-2">
-                  <div class="bg-white h-1.5 rounded-full" style="width: ${monthlyAchievePct}%"></div>
+                  <div class="bg-white h-1.5 rounded-full" style="width: ${achievePct}%"></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Middle Split: Chart & Dual Target Tracker (Daily vs Monthly) -->
+          <!-- Middle Split: Performance Chart & Radial Completion Box -->
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2 space-y-6">
               <div class="card-neo p-6">
                 <div class="flex items-center justify-between mb-4">
                   <div>
-                    <h3 class="text-sm font-extrabold text-slate-900">Sales Performance Trend</h3>
-                    <p class="text-[11px] text-slate-400 font-semibold">Weekly volume & conversion progression</p>
+                    <h3 class="text-sm font-extrabold text-slate-900">${u.role === 'admin' ? `${u.team} Sales Trend` : 'My Sales Performance Trend'}</h3>
+                    <p class="text-[11px] text-slate-400 font-semibold">Weekly volume & orders progression</p>
                   </div>
                   <span class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-600">Weekly View</span>
                 </div>
@@ -732,18 +787,21 @@
                 </div>
               </div>
 
+              <!-- Quick Actions / Live Shortcuts -->
               <div class="card-neo p-4 flex flex-wrap items-center justify-between gap-3">
                 <p class="text-xs font-extrabold text-slate-600 uppercase">Quick Actions:</p>
                 <div class="flex items-center gap-2.5">
+                  ${u.role === 'agent' ? `
                   <button onclick="toggleBreak()" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 flex items-center gap-2 shadow-sm">
                     <i class="fa-solid ${todaySession.isOnBreak ? 'fa-play' : 'fa-mug-saucer'}"></i>
                     ${todaySession.isOnBreak ? 'Resume Work' : 'Take Break'}
                   </button>
+                  ` : ''}
                   <button onclick="setTab('daily_reports')" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 flex items-center gap-2 shadow-sm">
                     <i class="fa-solid fa-list-check"></i> View Report
                   </button>
                   <button onclick="setTab('target')" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 flex items-center gap-2 shadow-sm">
-                    <i class="fa-solid fa-bullseye"></i> Check Target
+                    <i class="fa-solid fa-bullseye"></i> ${u.role === 'admin' ? 'Agent Targets' : 'Check Target'}
                   </button>
                 </div>
               </div>
@@ -753,7 +811,9 @@
             <div class="space-y-6">
               <div class="card-neo p-6 text-center">
                 <div class="flex items-center justify-between mb-2">
-                  <h3 class="text-sm font-extrabold text-slate-900 text-left">Target Completion Tracker</h3>
+                  <h3 class="text-sm font-extrabold text-slate-900 text-left">
+                    ${u.role === 'admin' ? `${u.team} Target Goal` : 'Personal Target Goal'}
+                  </h3>
                   <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">26 Days Split</span>
                 </div>
                 
@@ -761,45 +821,45 @@
                   <div class="relative flex items-center justify-center">
                     <svg class="w-32 h-32 transform -rotate-90">
                       <circle cx="64" cy="64" r="50" stroke="#f1f5f9" stroke-width="10" fill="transparent"/>
-                      <circle cx="64" cy="64" r="50" stroke="#059669" stroke-width="10" stroke-dasharray="314" stroke-dashoffset="${314 - (314 * monthlyAchievePct / 100)}" stroke-linecap="round" fill="transparent"/>
+                      <circle cx="64" cy="64" r="50" stroke="#059669" stroke-width="10" stroke-dasharray="314" stroke-dashoffset="${314 - (314 * achievePct / 100)}" stroke-linecap="round" fill="transparent"/>
                     </svg>
                     <div class="absolute text-center">
-                      <span class="text-2xl font-black text-slate-800">${monthlyAchievePct}%</span>
-                      <p class="text-[10px] uppercase font-bold text-slate-400">Month Goal</p>
+                      <span class="text-2xl font-black text-slate-800">${achievePct}%</span>
+                      <p class="text-[10px] uppercase font-bold text-slate-400">Achieved</p>
                     </div>
                   </div>
                 </div>
 
-                <!-- Daily vs Monthly Detailed Metrics Grid -->
+                <!-- Daily vs Monthly Detailed Metrics Grid in Amount (BDT) -->
                 <div class="grid grid-cols-2 gap-3 text-left pt-3 border-t border-slate-100">
-                  <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                    <p class="text-[10px] font-black uppercase text-blue-600">Daily Target</p>
-                    <p class="text-xs font-bold text-slate-800 mt-1">${dailyOrdersTarget} Orders</p>
-                    <p class="text-[11px] font-bold text-slate-500">৳${dailyAmountTarget.toLocaleString()}</p>
+                  <div class="p-2.5 rounded-xl bg-blue-50/60 border border-blue-100">
+                    <p class="text-[10px] font-black uppercase text-blue-700">Daily Target (Amount)</p>
+                    <p class="text-xs font-black text-slate-900 mt-1">৳${dailyAmountTarget.toLocaleString()}</p>
+                    <p class="text-[10px] font-bold text-slate-500">${dailyOrdersTarget} Orders / day</p>
                   </div>
-                  <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                    <p class="text-[10px] font-black uppercase text-emerald-600">Monthly Target</p>
-                    <p class="text-xs font-bold text-slate-800 mt-1">${targetOrders} Orders</p>
-                    <p class="text-[11px] font-bold text-slate-500">৳${targetAmt.toLocaleString()}</p>
+                  <div class="p-2.5 rounded-xl bg-purple-50/60 border border-purple-100">
+                    <p class="text-[10px] font-black uppercase text-purple-700">Monthly Target (Amount)</p>
+                    <p class="text-xs font-black text-slate-900 mt-1">৳${targetAmount.toLocaleString()}</p>
+                    <p class="text-[10px] font-bold text-slate-500">${targetOrders} Orders</p>
                   </div>
                 </div>
               </div>
 
               <div class="card-neo p-6">
-                <h3 class="text-sm font-extrabold text-slate-900 mb-3">Today's Duty Status</h3>
+                <h3 class="text-sm font-extrabold text-slate-900 mb-3">Live Duty Status</h3>
                 <div class="flex items-center gap-2 mb-2">
                   <span class="w-2.5 h-2.5 rounded-full ${todaySession.isOnBreak ? 'bg-amber-400 animate-ping' : 'bg-emerald-500 animate-pulse'}"></span>
                   <span class="text-xs font-bold ${todaySession.isOnBreak ? 'text-amber-600' : 'text-emerald-600'}">
-                    ${todaySession.isOnBreak ? 'Currently On Break' : 'Working Online'}
+                    ${todaySession.isOnBreak ? 'Currently On Break' : 'Duty Time Running'}
                   </span>
                 </div>
                 <p id="timer-working-clock" class="text-3xl font-black font-mono text-slate-800 my-2">
                   ${formatTime(todaySession.activeSeconds)}
                 </p>
-                <p class="text-[11px] text-slate-400 font-semibold mb-4">Shift started at: ${todaySession.loginTime || '09:00 AM'}</p>
+                <p class="text-[11px] text-slate-400 font-semibold mb-4">Shift session: ${todaySession.loginTime || 'Active'}</p>
                 
                 <button onclick="handleLogout()" class="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold shadow-md shadow-red-500/20 flex items-center justify-center gap-2">
-                  <i class="fa-solid fa-power-off"></i> Clock Out
+                  <i class="fa-solid fa-power-off"></i> Clock Out / Logout
                 </button>
               </div>
             </div>
@@ -883,11 +943,12 @@
               <h3 class="text-sm font-extrabold text-slate-900 mb-2">Performance Formula Applied</h3>
               <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono space-y-2 mb-4">
                 <p>• Conversion Ratio = (Total Orders ÷ Total Leads) × 100%</p>
-                <p>• Daily Target = Monthly Target ÷ 26 Working Days</p>
-                <p>• Achievement Ratio = (Actual Orders ÷ Daily Target) × 100%</p>
+                <p>• Team Leader Target = Sum of all Agents' Targets in that Team</p>
+                <p>• Daily Target = Monthly Target Amount ÷ 26 Working Days</p>
+                <p>• Achievement Ratio = (Actual Revenue ÷ Monthly Target Amount) × 100%</p>
               </div>
               <p class="text-xs text-slate-500 font-medium leading-relaxed">
-                স্বয়ংক্রিয়ভাবে ২৬ কর্মদিবসের হিসেবে প্রতি এজেন্টের দৈনিক টার্গেট এবং অর্জিত রেশিও ড্যাশবোর্ডে নিখুঁতভাবে প্রদর্শিত হচ্ছে।
+                টিম লিডারদের টার্গেট স্বয়ংক্রিয়ভাবে তাদের অধীনে থাকা এজেন্টদের টার্গেটের মোট যোগফল (Sum) হিসেবে হিসাব করা হয়েছে।
               </p>
             </div>
           </div>
@@ -905,9 +966,11 @@
               <h2 class="text-xl font-black text-slate-900">Agent Daily Reports Log</h2>
               <p class="text-xs text-slate-400 font-semibold">Historical daily logs with auto conversion rates</p>
             </div>
+            ${currentUser && currentUser.role === 'agent' ? `
             <button onclick="openModal('submitModal')" class="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-md">
               <i class="fa-solid fa-plus mr-1"></i> New Entry
             </button>
+            ` : ''}
           </div>
 
           <div class="card-neo overflow-hidden">
@@ -950,12 +1013,43 @@
     function renderTargetSetupView() {
       const users = getStored('users', []).filter(u => u.role === 'agent');
 
+      // Calculate Total Team Targets
+      const nazimAgents = users.filter(u => u.team === 'Team Nazim');
+      const samadAgents = users.filter(u => u.team === 'Team Samad');
+
+      const nazimTotalAmount = nazimAgents.reduce((s, a) => s + (Number(a.monthlyAmountTarget) || 0), 0);
+      const nazimTotalOrders = nazimAgents.reduce((s, a) => s + (Number(a.monthlyOrdersTarget) || 0), 0);
+
+      const samadTotalAmount = samadAgents.reduce((s, a) => s + (Number(a.monthlyAmountTarget) || 0), 0);
+      const samadTotalOrders = samadAgents.reduce((s, a) => s + (Number(a.monthlyOrdersTarget) || 0), 0);
+
       return `
         <div class="space-y-6">
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="text-xl font-black text-slate-900">Target Management (26-Day Automatic Split)</h2>
-              <p class="text-xs text-slate-400 font-semibold">Monthly targets are automatically divided by 26 to derive daily goals & ratios</p>
+              <h2 class="text-xl font-black text-slate-900">Target Management (Automatic Team Leader Summation)</h2>
+              <p class="text-xs text-slate-400 font-semibold">টিম লিডারদের টার্গেট স্বয়ংক্রিয়ভাবে তাদের অধীনে থাকা এজেন্টদের টার্গেটের যোগফল (Sum) হিসেবে হিসাব হবে</p>
+            </div>
+          </div>
+
+          <!-- Team Leader Summation Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="p-5 rounded-2xl bg-orange-50/70 border border-orange-200">
+              <span class="text-xs font-black uppercase tracking-wider text-orange-800">Team Nazim Leader Goal (Md. Nazimur Rahman)</span>
+              <div class="flex items-baseline justify-between mt-2">
+                <span class="text-2xl font-black text-slate-900">৳${nazimTotalAmount.toLocaleString()}</span>
+                <span class="text-sm font-bold text-orange-700">${nazimTotalOrders} Orders (${nazimAgents.length} Agents)</span>
+              </div>
+              <p class="text-[11px] font-semibold text-slate-500 mt-1">Daily Target Sum: ৳${Math.round(nazimTotalAmount/26).toLocaleString()} (${Math.round(nazimTotalOrders/26)} Orders/day)</p>
+            </div>
+
+            <div class="p-5 rounded-2xl bg-blue-50/70 border border-blue-200">
+              <span class="text-xs font-black uppercase tracking-wider text-blue-800">Team Samad Leader Goal (Md Abdus Samad)</span>
+              <div class="flex items-baseline justify-between mt-2">
+                <span class="text-2xl font-black text-slate-900">৳${samadTotalAmount.toLocaleString()}</span>
+                <span class="text-sm font-bold text-blue-700">${samadTotalOrders} Orders (${samadAgents.length} Agents)</span>
+              </div>
+              <p class="text-[11px] font-semibold text-slate-500 mt-1">Daily Target Sum: ৳${Math.round(samadTotalAmount/26).toLocaleString()} (${Math.round(samadTotalOrders/26)} Orders/day)</p>
             </div>
           </div>
 
@@ -965,10 +1059,10 @@
                 <tr>
                   <th class="p-4">Agent Name</th>
                   <th class="p-4">Team</th>
-                  <th class="p-4">Monthly Orders Target</th>
-                  <th class="p-4">Daily Target (÷ 26)</th>
-                  <th class="p-4">Monthly Revenue Target</th>
-                  <th class="p-4">Daily Revenue (÷ 26)</th>
+                  <th class="p-4">Monthly Target (Amount)</th>
+                  <th class="p-4">Daily Target (Amount ÷ 26)</th>
+                  <th class="p-4">Monthly Orders</th>
+                  <th class="p-4">Daily Orders</th>
                   ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Action</th>' : ''}
                 </tr>
               </thead>
@@ -983,10 +1077,10 @@
                     <tr class="hover:bg-slate-50/50">
                       <td class="p-4 font-bold text-slate-800">${u.name} <div class="text-[10px] text-slate-400">ID: ${u.id}</div></td>
                       <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${u.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${u.team}</span></td>
-                      <td class="p-4 font-extrabold text-blue-600">${mOrders} Orders</td>
-                      <td class="p-4 font-bold text-slate-700 bg-amber-50/50">${dOrders} Orders / day</td>
                       <td class="p-4 font-extrabold text-emerald-600">৳${mAmount.toLocaleString()}</td>
                       <td class="p-4 font-bold text-slate-700 bg-emerald-50/30">৳${dAmount.toLocaleString()} / day</td>
+                      <td class="p-4 font-extrabold text-blue-600">${mOrders} Orders</td>
+                      <td class="p-4 font-bold text-slate-700 bg-amber-50/50">${dOrders} / day</td>
                       ${currentUser && currentUser.role === 'admin' ? `
                         <td class="p-4 text-right">
                           <button onclick="openTargetModal('${u.id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
@@ -1014,18 +1108,18 @@
         const amount = uSales.reduce((a, c) => a + c.amount, 0);
         const leads = uSales.reduce((a, c) => a + c.leads, 0);
         const ratio = leads > 0 ? Number(((orders / leads) * 100).toFixed(1)) : 0;
-        const target = u.monthlyOrdersTarget || 260;
-        const achieve = Math.round((orders / target) * 100);
+        const target = u.monthlyAmountTarget || 320000;
+        const achieve = target > 0 ? Math.round((amount / target) * 100) : 0;
         return { ...u, orders, amount, leads, ratio, achieve };
       });
 
-      agentRanks.sort((a, b) => b.orders - a.orders || b.amount - a.amount);
+      agentRanks.sort((a, b) => b.amount - a.amount || b.orders - a.orders);
 
       return `
         <div class="space-y-6">
           <div>
             <h2 class="text-xl font-black text-slate-900">Overall Agent Rankings & Leaderboard</h2>
-            <p class="text-xs text-slate-400 font-semibold">Real-time performance hierarchy across all teams</p>
+            <p class="text-xs text-slate-400 font-semibold">Real-time performance hierarchy across all teams (Sorted by Revenue Amount)</p>
           </div>
 
           <div class="card-neo overflow-hidden">
@@ -1035,10 +1129,10 @@
                   <th class="p-4">Rank</th>
                   <th class="p-4">Agent Name</th>
                   <th class="p-4">Team</th>
+                  <th class="p-4">Total Amount (৳)</th>
                   <th class="p-4">Total Orders</th>
-                  <th class="p-4">Total Amount</th>
                   <th class="p-4">Conversion Rate</th>
-                  <th class="p-4">Target Achievement</th>
+                  <th class="p-4">Amount Achievement</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-medium">
@@ -1053,8 +1147,8 @@
                       <td class="p-4">${rankBadge}</td>
                       <td class="p-4 font-bold text-slate-800">${ag.name} <span class="text-[10px] text-slate-400">(${ag.id})</span></td>
                       <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${ag.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${ag.team}</span></td>
-                      <td class="p-4 font-black text-slate-900">${ag.orders}</td>
-                      <td class="p-4 font-bold text-emerald-600">৳${ag.amount.toLocaleString()}</td>
+                      <td class="p-4 font-black text-emerald-600 text-sm">৳${ag.amount.toLocaleString()}</td>
+                      <td class="p-4 font-bold text-slate-900">${ag.orders}</td>
                       <td class="p-4 font-bold text-blue-600">${ag.ratio}%</td>
                       <td class="p-4">
                         <div class="flex items-center gap-2">
@@ -1108,8 +1202,8 @@
             data: {
               labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
               datasets: [{
-                label: 'Sales Orders',
-                data: [15, 28, 42, 35, 58, 62, 48],
+                label: 'Sales Revenue (৳)',
+                data: [15000, 28000, 42000, 35000, 58000, 62000, 48000],
                 backgroundColor: '#2563eb',
                 borderRadius: 8
               }]
