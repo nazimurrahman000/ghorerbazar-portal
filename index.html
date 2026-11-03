@@ -45,7 +45,6 @@
   <div id="app" class="flex-1 flex flex-col"></div>
 
   <script>
-    // HARDCODED CENTRAL GOOGLE SHEET WEBHOOK (WORKS FOR EVERY USER ACROSS ALL DEVICES)
     const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtdDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
 
     const DEFAULT_USERS = [
@@ -107,7 +106,6 @@
       return getTodayFormatted();
     }
 
-    // Dynamic Team Leader and Agent target calculations
     function getUserTargetInfo(user) {
       const allUsers = getStored('users', []);
       if (user.role === 'admin') {
@@ -146,7 +144,6 @@
       return currentUser;
     }
 
-    // POST to Google Sheet using text/plain (bypasses browser CORS blocking)
     async function postToSheet(action, payload) {
       try {
         await fetch(webhookUrl, {
@@ -160,7 +157,6 @@
       }
     }
 
-    // FETCH LATEST FROM GOOGLE SHEET (JSONP / CORS)
     function fetchFromSheet() {
       if (isFetchingCloud) return;
       isFetchingCloud = true;
@@ -170,10 +166,7 @@
         delete window[callbackName];
         if (script.parentNode) script.parentNode.removeChild(script);
         isFetchingCloud = false;
-
-        if (res && res.status === 'success') {
-          handleCloudDataReceived(res);
-        }
+        if (res && res.status === 'success') handleCloudDataReceived(res);
       };
 
       const script = document.createElement('script');
@@ -181,7 +174,6 @@
       script.onerror = function() {
         if (script.parentNode) script.parentNode.removeChild(script);
         isFetchingCloud = false;
-        // Fallback to direct fetch
         fetch(`${webhookUrl}?t=${Date.now()}`)
           .then(r => r.json())
           .then(res => handleCloudDataReceived(res))
@@ -194,7 +186,6 @@
       let hasChanges = false;
       if (Array.isArray(res.salesRecords)) {
         const local = getStored('sales_records', []);
-        // Compare lengths or values
         if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
           setStored('sales_records', res.salesRecords);
           hasChanges = true;
@@ -229,7 +220,7 @@
     function startBackgroundSync() {
       if (pollInterval) clearInterval(pollInterval);
       fetchFromSheet();
-      pollInterval = setInterval(fetchFromSheet, 4000); // Poll every 4 seconds
+      pollInterval = setInterval(fetchFromSheet, 4000);
     }
 
     function init() {
@@ -486,7 +477,7 @@
           </div>
         </div>
 
-        <!-- Submit / Edit Daily Report Modal (With Date Selection & 1-Report-Per-Date Enforcement) -->
+        <!-- Submit / Edit / DELETE Daily Report Modal -->
         <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
             <div class="flex items-center justify-between mb-4">
@@ -496,14 +487,13 @@
                 </div>
                 <div>
                   <h3 id="modalTitle" class="text-sm font-extrabold text-slate-900">Daily Sales Report</h3>
-                  <p class="text-[11px] text-slate-400">প্রতি দিনের জন্য ১টি রিপোর্ট (প্রয়োজনে এডিট করা যাবে)</p>
+                  <p class="text-[11px] text-slate-400">প্রতি দিনের ১টি রিপোর্ট (এডিট বা ডিলিট করা যাবে)</p>
                 </div>
               </div>
               <button onclick="closeModal('submitModal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <form id="eodReportForm" onsubmit="handleSalesSubmit(event)" class="space-y-3.5">
-              <!-- Admin Target Agent Selection (Visible for Admin only) -->
               <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Select Agent</label>
                 <select id="subAgentId" onchange="onReportTargetChanged()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
@@ -513,12 +503,11 @@
                 </select>
               </div>
 
-              <!-- Date Picker -->
               <div>
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Report Date (তারিখ নির্বাচন)</label>
                 <input type="date" id="subDate" required onchange="onReportTargetChanged()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
                 <p id="existingNotice" class="text-[10px] font-bold text-amber-600 mt-1 hidden">
-                  <i class="fa-solid fa-circle-exclamation mr-1"></i> এই তারিখে ইতিমধ্যে রিপোর্ট রয়েছে। সাবমিট করলে তা আপডেট/এডিট হবে।
+                  <i class="fa-solid fa-circle-exclamation mr-1"></i> এই তারিখে ইতিমধ্যে রিপোর্ট রয়েছে। আপনি এটি এডিট বা ডিলিট করতে পারবেন।
                 </p>
               </div>
 
@@ -548,11 +537,20 @@
                 </div>
               </div>
 
-              <div class="flex justify-end gap-2 pt-2">
-                <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
-                <button type="submit" id="submitBtnText" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 flex items-center gap-2">
-                  <i class="fa-solid fa-paper-plane"></i> <span>Submit Report</span>
-                </button>
+              <div class="flex items-center justify-between pt-2">
+                <!-- Delete Button (Visible only when existing report is found) -->
+                <div>
+                  <button type="button" id="deleteReportBtn" onclick="handleDeleteCurrentReport()" class="hidden px-4 py-2 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-trash-can"></i> <span>Delete Report</span>
+                  </button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+                  <button type="submit" id="submitBtnText" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 flex items-center gap-2">
+                    <i class="fa-solid fa-paper-plane"></i> <span>Submit Report</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -592,13 +590,9 @@
       `;
     }
 
-    // Opens Submit Modal (Can be triggered by Agent for themselves or by Admin for ANY agent)
     function openReportModal(targetAgentId, targetDateStr) {
       const u = getFreshUser();
-      const allUsers = getStored('users', []);
       const dateInput = document.getElementById('subDate');
-
-      // Default Date: today or targetDate
       dateInput.value = dateToInputVal(targetDateStr || getTodayFormatted());
 
       if (u.role === 'admin') {
@@ -610,10 +604,8 @@
       openModal('submitModal');
     }
 
-    // When Agent or Date changes in the modal, check if an entry exists to allow EDITING!
     function onReportTargetChanged() {
       const u = getFreshUser();
-      const allUsers = getStored('users', []);
       const allSales = getStored('sales_records', []);
 
       let agentId = u.id;
@@ -626,18 +618,21 @@
 
       const notice = document.getElementById('existingNotice');
       const btnText = document.querySelector('#submitBtnText span');
+      const delBtn = document.getElementById('deleteReportBtn');
 
       if (existing) {
         document.getElementById('subLeads').value = existing.leads;
         document.getElementById('subOrders').value = existing.orders;
         document.getElementById('subAmount').value = existing.amount;
         notice.classList.remove('hidden');
+        delBtn.classList.remove('hidden');
         btnText.textContent = `Update Report (${dateStr})`;
       } else {
         document.getElementById('subLeads').value = '';
         document.getElementById('subOrders').value = '';
         document.getElementById('subAmount').value = '';
         notice.classList.add('hidden');
+        delBtn.classList.add('hidden');
         btnText.textContent = 'Submit Report';
       }
       calculatePreviewRatio();
@@ -709,7 +704,6 @@
       }
     }
 
-    // Handles Submit / Edit with Date-wise uniqueness
     async function handleSalesSubmit(e) {
       e.preventDefault();
       const u = getFreshUser();
@@ -731,8 +725,6 @@
       const achieve = dOrdersTarget > 0 ? Math.round((orders / dOrdersTarget) * 100) : 0;
 
       let sales = getStored('sales_records', []);
-
-      // Check if entry exists for this user and this date
       const existingIdx = sales.findIndex(s => s.userId === agent.id && s.date === dateStr);
 
       const entry = {
@@ -749,19 +741,38 @@
         achievement: achieve
       };
 
-      if (existingIdx !== -1) {
-        sales[existingIdx] = entry; // Update existing
-      } else {
-        sales.unshift(entry); // Add new
-      }
+      if (existingIdx !== -1) sales[existingIdx] = entry;
+      else sales.unshift(entry);
 
       setStored('sales_records', sales);
       render();
 
-      // Send to Central Google Sheet
       await postToSheet('DAILY_SALES_SUBMIT', entry);
-
       alert(`ধন্যবাদ! ${agent.name}-এর ${dateStr} তারিখের রিপোর্ট সফলভাবে ক্লাউডে সেভ হয়েছে।`);
+      closeModal('submitModal');
+      setTimeout(fetchFromSheet, 1200);
+    }
+
+    // DELETE SALES REPORT (FROM MODAL OR TABLE)
+    async function handleDeleteCurrentReport(userIdParam, dateParam) {
+      const u = getFreshUser();
+      let agentId = userIdParam || u.id;
+      if (!userIdParam && u.role === 'admin') {
+        agentId = document.getElementById('subAgentId').value;
+      }
+      const dateStr = dateParam || inputValToDateStr(document.getElementById('subDate').value);
+
+      if (!confirm(`আপনি কি নিশ্চিতভাবে এই রিপোর্টটি (${dateStr}) মুছে ফেলতে চান? এটি গুগল শিট থেকেও মুছে যাবে।`)) {
+        return;
+      }
+
+      let sales = getStored('sales_records', []);
+      sales = sales.filter(s => !(s.userId === agentId && s.date === dateStr));
+      setStored('sales_records', sales);
+      render();
+
+      await postToSheet('DELETE_SALES_RECORD', { userId: agentId, date: dateStr });
+      alert('রিপোর্টটি সফলভাবে ডিলিট করা হয়েছে!');
       closeModal('submitModal');
       setTimeout(fetchFromSheet, 1200);
     }
@@ -779,7 +790,6 @@
       }
     }
 
-    // DASHBOARD VIEW
     function renderDashboardView() {
       const u = getFreshUser();
       const t = getUserTargetInfo(u);
@@ -788,7 +798,6 @@
       const attendance = getStored('attendance', []);
       const todaySession = attendance.find(a => a.userId === u.id && a.date === todayStr) || { activeSeconds: 0, breakSeconds: 0, isOnBreak: false };
 
-      // Sales filter: For Admin, sum of their whole team; for Agent, their own records
       const mySales = u.role === 'admin' 
         ? sales.filter(s => s.team === u.team) 
         : sales.filter(s => s.userId === u.id);
@@ -844,9 +853,7 @@
             </div>
           </div>
 
-          <!-- 5 HIGHLIGHTED CARDS -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <!-- 1. Total Leads -->
             <div class="highlight-card-blue p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-blue-100">Total Leads</span>
@@ -863,7 +870,6 @@
               </div>
             </div>
 
-            <!-- 2. Total Orders -->
             <div class="highlight-card-emerald p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-emerald-100">Total Orders</span>
@@ -883,7 +889,6 @@
               </div>
             </div>
 
-            <!-- 3. Total Sales Amount -->
             <div class="highlight-card-purple p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-purple-100">Total Sales Amount</span>
@@ -900,7 +905,6 @@
               </div>
             </div>
 
-            <!-- 4. Monthly Target (Amount) -->
             <div class="highlight-card-indigo p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-indigo-100">Monthly Target (৳)</span>
@@ -917,7 +921,6 @@
               </div>
             </div>
 
-            <!-- 5. Target Achievement (%) -->
             <div class="highlight-card-amber p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-amber-100">Target Achievement</span>
@@ -937,7 +940,6 @@
             </div>
           </div>
 
-          <!-- Middle Split -->
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2 space-y-6">
               <div class="card-neo p-6">
@@ -953,7 +955,6 @@
                 </div>
               </div>
 
-              <!-- Quick Actions -->
               <div class="card-neo p-4 flex flex-wrap items-center justify-between gap-3">
                 <p class="text-xs font-extrabold text-slate-600 uppercase">Quick Actions:</p>
                 <div class="flex items-center gap-2.5">
@@ -977,7 +978,6 @@
               </div>
             </div>
 
-            <!-- Target Overview Card -->
             <div class="space-y-6">
               <div class="card-neo p-6 text-center">
                 <div class="flex items-center justify-between mb-2">
@@ -1061,7 +1061,7 @@
                   <th class="p-4">Login Time</th>
                   <th class="p-4">Active Working Time</th>
                   <th class="p-4">Break Time</th>
-                  ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Quick Report</th>' : ''}
+                  ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Action</th>' : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-medium">
@@ -1141,7 +1141,7 @@
           <div class="flex items-center justify-between">
             <div>
               <h2 class="text-xl font-black text-slate-900">Agent Daily Reports Log</h2>
-              <p class="text-xs text-slate-400 font-semibold">সকল এজেন্টের তারিখ অনুযায়ী দৈনিক রিপোর্ট ও এডিট হিস্ট্রি</p>
+              <p class="text-xs text-slate-400 font-semibold">সকল এজেন্টের তারিখ অনুযায়ী দৈনিক রিপোর্ট, এডিট ও ডিলিট হিস্ট্রি</p>
             </div>
             <button onclick="openReportModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md">
               <i class="fa-solid fa-plus mr-1"></i> New / Edit Report
@@ -1159,7 +1159,7 @@
                   <th class="p-4">Orders</th>
                   <th class="p-4">Amount (BDT)</th>
                   <th class="p-4">Conversion Ratio</th>
-                  <th class="p-4 text-right">Action</th>
+                  <th class="p-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-medium">
@@ -1177,9 +1177,12 @@
                         ${s.ratio}%
                       </span>
                     </td>
-                    <td class="p-4 text-right">
+                    <td class="p-4 text-right space-x-1.5">
                       <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600">
                         <i class="fa-solid fa-pen-to-square"></i> Edit
+                      </button>
+                      <button onclick="handleDeleteCurrentReport('${s.userId}', '${s.date}')" class="px-3 py-1 rounded-lg text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600">
+                        <i class="fa-solid fa-trash-can"></i> Delete
                       </button>
                     </td>
                   </tr>
@@ -1212,7 +1215,6 @@
             </div>
           </div>
 
-          <!-- Team Leader Summation Cards -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="p-5 rounded-2xl bg-orange-50/70 border border-orange-200">
               <span class="text-xs font-black uppercase tracking-wider text-orange-800">Team Nazim Leader Goal (Md. Nazimur Rahman)</span>
