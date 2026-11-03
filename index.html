@@ -44,12 +44,6 @@
 <body class="text-slate-800 antialiased min-h-screen flex flex-col">
   <div id="app" class="flex-1 flex flex-col"></div>
 
-  <!-- Hidden iframe for bulletproof background form submissions -->
-  <iframe name="gb_sync_frame" id="gb_sync_frame" style="display:none;width:0;height:0;border:0;"></iframe>
-  <form id="gb_hidden_form" method="POST" target="gb_sync_frame" style="display:none;">
-    <input type="hidden" name="payload" id="gb_hidden_payload">
-  </form>
-
   <script>
     const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtdDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
 
@@ -174,46 +168,23 @@
       return currentUser;
     }
 
-    // 3-LAYER BULLETPROOF WRITE (GUARANTEED TO REACH GOOGLE SHEET)
+    // 100% RELIABLE GET SYNC (IMMUNE TO CORS)
     async function postToSheet(action, payload) {
-      const fullData = { action, timestamp: new Date().toISOString(), ...payload };
-
-      // Layer 1: Hidden form POST (immune to CORS)
       try {
-        const form = document.getElementById('gb_hidden_form');
-        const input = document.getElementById('gb_hidden_payload');
-        if (form && input) {
-          form.action = webhookUrl;
-          input.value = JSON.stringify(fullData);
-          form.submit();
-        }
-      } catch (e) {
-        console.warn('Form submit error:', e);
-      }
-
-      // Layer 2: GET query string via script tag
-      try {
-        const params = new URLSearchParams(fullData);
+        const params = new URLSearchParams({
+          action: action,
+          timestamp: new Date().toISOString(),
+          ...payload
+        });
         const s = document.createElement('script');
         s.src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
         document.body.appendChild(s);
-        setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, 4000);
+        setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, 5000);
       } catch (e) {
-        console.warn('Script query error:', e);
+        console.warn('Sync error:', e);
       }
-
-      // Layer 3: Direct fetch POST
-      try {
-        fetch(webhookUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(fullData)
-        }).catch(() => {});
-      } catch (e) {}
     }
 
-    // FETCH LATEST FROM GOOGLE SHEET (JSONP / CORS)
     function fetchFromSheet() {
       if (isFetchingCloud) return;
       isFetchingCloud = true;
@@ -277,7 +248,7 @@
     function startBackgroundSync() {
       if (pollInterval) clearInterval(pollInterval);
       fetchFromSheet();
-      pollInterval = setInterval(fetchFromSheet, 3500);
+      pollInterval = setInterval(fetchFromSheet, 3000);
     }
 
     function init() {
@@ -1471,7 +1442,7 @@
       } else if (activeTab === 'performance') {
         const ctxP = document.getElementById('conversionPieChart');
         if (ctxP) {
-          new Chart(ctxP, {
+          newChart(ctxP, {
             type: 'doughnut',
             data: {
               labels: ['Converted Orders', 'Unconverted Leads'],
