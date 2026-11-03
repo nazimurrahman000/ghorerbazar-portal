@@ -1442,7 +1442,7 @@
       } else if (activeTab === 'performance') {
         const ctxP = document.getElementById('conversionPieChart');
         if (ctxP) {
-          newChart(ctxP, {
+          new Chart(ctxP, {
             type: 'doughnut',
             data: {
               labels: ['Converted Orders', 'Unconverted Leads'],
