@@ -55,9 +55,7 @@
     function getStored(k, d) { const r = localStorage.getItem('gb_' + k); return r ? JSON.parse(r) : d; }
     function setStored(k, v) { localStorage.setItem('gb_' + k, JSON.stringify(v)); }
 
-    if (!localStorage.getItem('gb_users')) {
-      setStored('users', DEFAULT_USERS);
-    }
+    if (!localStorage.getItem('gb_users')) setStored('users', DEFAULT_USERS);
 
     let currentUser = getStored('session_user', null);
     let activeTab = 'dashboard';
@@ -67,10 +65,7 @@
 
     function getTodayFormatted() {
       const d = new Date();
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
+      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
     }
 
     function cleanDisplayDate(raw) {
@@ -105,24 +100,12 @@
         const teamAgents = allUsers.filter(u => u.role === 'agent' && u.team === user.team);
         const monthlyAmount = teamAgents.reduce((sum, a) => sum + (Number(a.monthlyAmountTarget) || 0), 0);
         const monthlyOrders = teamAgents.reduce((sum, a) => sum + (Number(a.monthlyOrdersTarget) || 0), 0);
-        return {
-          monthlyAmountTarget: monthlyAmount,
-          monthlyOrdersTarget: monthlyOrders,
-          dailyAmountTarget: Math.round(monthlyAmount / 26),
-          dailyOrdersTarget: Math.round(monthlyOrders / 26),
-          agentCount: teamAgents.length
-        };
+        return { monthlyAmountTarget: monthlyAmount, monthlyOrdersTarget: monthlyOrders, dailyAmountTarget: Math.round(monthlyAmount / 26), dailyOrdersTarget: Math.round(monthlyOrders / 26), agentCount: teamAgents.length };
       } else {
         const fresh = allUsers.find(u => u.id === user.id) || user;
         const monthlyAmount = Number(fresh.monthlyAmountTarget) || 320000;
         const monthlyOrders = Number(fresh.monthlyOrdersTarget) || 260;
-        return {
-          monthlyAmountTarget: monthlyAmount,
-          monthlyOrdersTarget: monthlyOrders,
-          dailyAmountTarget: Math.round(monthlyAmount / 26),
-          dailyOrdersTarget: Math.round(monthlyOrders / 26),
-          agentCount: 1
-        };
+        return { monthlyAmountTarget: monthlyAmount, monthlyOrdersTarget: monthlyOrders, dailyAmountTarget: Math.round(monthlyAmount / 26), dailyOrdersTarget: Math.round(monthlyOrders / 26), agentCount: 1 };
       }
     }
 
@@ -130,32 +113,18 @@
       if (!currentUser) return null;
       const users = getStored('users', []);
       const match = users.find(u => u.id === currentUser.id);
-      if (match) {
-        currentUser = { ...currentUser, ...match };
-        setStored('session_user', currentUser);
-      }
+      if (match) { currentUser = { ...currentUser, ...match }; setStored('session_user', currentUser); }
       return currentUser;
     }
 
-    // 100% UNIFIED SYNC (WORKS FOR BOTH ADMIN & AGENT)
+    // UNIFIED SYNC FOR BOTH ADMIN & AGENT (FIXED PAYLOAD BUG)
     async function postToSheet(action, payload) {
       try {
         const fullData = { action, timestamp: new Date().toISOString(), ...payload };
-        const params = new URLSearchParams({
-          action: action,
-          payload: JSON.stringify(fullData),
-          ...payload
-        });
-
-        fetch(`${webhookUrl}?${params.toString()}`, {
-          method: 'GET',
-          mode: 'no-cors'
-        }).catch(() => {});
-
+        const params = new URLSearchParams({ action: action, payload: JSON.stringify(fullData), ...payload });
+        fetch(`${webhookUrl}?${params.toString()}`, { method: 'GET', mode: 'no-cors' }).catch(() => {});
         new Image().src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
-      } catch (e) {
-        console.warn('Sync warning:', e);
-      }
+      } catch (e) { console.warn('Sync warning:', e); }
     }
 
     function fetchFromSheet() {
@@ -165,15 +134,11 @@
         if (script.parentNode) script.parentNode.removeChild(script);
         if (res && res.status === 'success') handleCloudDataReceived(res);
       };
-
       const script = document.createElement('script');
       script.src = `${webhookUrl}?callback=${callbackName}&t=${Date.now()}`;
       script.onerror = function() {
         if (script.parentNode) script.parentNode.removeChild(script);
-        fetch(`${webhookUrl}?t=${Date.now()}`)
-          .then(r => r.json())
-          .then(res => { if (res && res.status === 'success') handleCloudDataReceived(res); })
-          .catch(() => {});
+        fetch(`${webhookUrl}?t=${Date.now()}`).then(r => r.json()).then(res => { if (res && res.status === 'success') handleCloudDataReceived(res); }).catch(() => {});
       };
       document.body.appendChild(script);
     }
@@ -199,21 +164,12 @@
       pollInterval = setInterval(fetchFromSheet, 3000);
     }
 
-    function init() {
-      getFreshUser();
-      render();
-      startBackgroundSync();
-    }
+    function init() { getFreshUser(); render(); if (currentUser && currentUser.role === 'agent') startShiftTimer(); startBackgroundSync(); }
 
     function render() {
       const app = document.getElementById('app');
-      if (!currentUser) {
-        app.innerHTML = renderLogin();
-      } else {
-        getFreshUser();
-        app.innerHTML = renderAppLayout();
-        attachCharts();
-      }
+      if (!currentUser) { app.innerHTML = renderLogin(); }
+      else { getFreshUser(); app.innerHTML = renderAppLayout(); attachCharts(); }
     }
 
     function renderLogin() {
@@ -221,23 +177,15 @@
         <div class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-100 via-orange-50/30 to-blue-50/40">
           <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-8">
             <div class="text-center mb-8">
-              <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/30 mb-4">
-                <i class="fa-solid fa-basket-shopping text-3xl"></i>
-              </div>
-              <h1 class="text-2xl font-black tracking-tight text-slate-900">Ghorerbazar</h1>
-              <p class="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Sign In to SalesTrack</p>
+              <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-orange-500 text-white shadow-lg mb-4"><i class="fa-solid fa-basket-shopping text-3xl"></i></div>
+              <h1 class="text-2xl font-black text-slate-900">Ghorerbazar</h1>
+              <p class="text-xs font-bold text-slate-400 mt-1 uppercase">Sign In to SalesTrack</p>
             </div>
             <form onsubmit="handleLogin(event)" class="space-y-4">
-              <div>
-                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">User ID (Emp ID)</label>
-                <input type="text" id="loginId" required placeholder="e.g. 10122 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-orange-500">
-              </div>
-              <div>
-                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Password</label>
-                <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-orange-500">
-              </div>
-              <div id="loginError" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200 font-semibold text-center"></div>
-              <button type="submit" class="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm rounded-xl shadow-lg">Sign In</button>
+              <div><label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">User ID</label><input type="text" id="loginId" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"></div>
+              <div><label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Password</label><input type="password" id="loginPass" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold"></div>
+              <div id="loginError" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg text-center font-semibold"></div>
+              <button type="submit" class="w-full py-3.5 bg-orange-500 text-white font-bold rounded-xl shadow-lg">Sign In</button>
             </form>
           </div>
         </div>
@@ -250,28 +198,33 @@
       const pass = document.getElementById('loginPass').value.trim();
       const users = getStored('users', []);
       const user = users.find(u => u.id === id && u.pass === pass);
-      if (!user) {
-        document.getElementById('loginError').textContent = 'ভুল User ID অথবা Password!';
-        document.getElementById('loginError').classList.remove('hidden');
-        return;
-      }
-      currentUser = user;
-      setStored('session_user', user);
-      render();
-      startBackgroundSync();
+      if (!user) { document.getElementById('loginError').textContent = 'ভুল User ID অথবা Password!'; document.getElementById('loginError').classList.remove('hidden'); return; }
+      currentUser = user; setStored('session_user', user); render(); startBackgroundSync();
     }
 
-    function handleLogout() {
-      if (pollInterval) clearInterval(pollInterval);
-      currentUser = null;
-      localStorage.removeItem('gb_session_user');
-      activeTab = 'dashboard';
-      render();
+    function handleLogout() { if (pollInterval) clearInterval(pollInterval); currentUser = null; localStorage.removeItem('gb_session_user'); activeTab = 'dashboard'; render(); }
+    function setTab(tab) { activeTab = tab; render(); }
+
+    function startShiftTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        const attendance = getStored('attendance', []);
+        const todayStr = getTodayFormatted();
+        const session = attendance.find(a => a.userId === currentUser.id && a.date === todayStr);
+        if (session) {
+          if (!session.isOnBreak) session.activeSeconds = (session.activeSeconds || 0) + 1;
+          setStored('attendance', attendance);
+          const shiftEl = document.getElementById('timer-working-clock');
+          if (shiftEl) shiftEl.textContent = formatTime(session.activeSeconds);
+        }
+      }, 1000);
     }
 
-    function setTab(tab) {
-      activeTab = tab;
-      render();
+    function formatTime(sec) {
+      const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+      const s = String(sec % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
     }
 
     function renderAppLayout() {
@@ -281,77 +234,38 @@
           <aside class="w-64 glass-sidebar flex flex-col justify-between p-5 z-20">
             <div>
               <div class="flex items-center gap-3 px-2 mb-8">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold shadow-md">
-                  <i class="fa-solid fa-chart-line text-lg"></i>
-                </div>
-                <div>
-                  <h1 class="text-base font-extrabold text-slate-900 tracking-tight">SalesTrack</h1>
-                  <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cloud Connected</p>
-                </div>
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold"><i class="fa-solid fa-chart-line"></i></div>
+                <div><h1 class="text-base font-extrabold text-slate-900">SalesTrack</h1><p class="text-[10px] text-slate-400 font-bold uppercase">Cloud Connected</p></div>
               </div>
-
               <nav class="space-y-1.5">
-                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-house text-sm"></i> Dashboard
-                </button>
-                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-regular fa-clock text-sm"></i> Attendance & Live
-                </button>
-                <button onclick="setTab('performance')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'performance' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-chart-pie text-sm"></i> Performance
-                </button>
-                <button onclick="setTab('daily_reports')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'daily_reports' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-file-invoice text-sm"></i> Daily Reports
-                </button>
-                <button onclick="setTab('target')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'target' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-bullseye text-sm"></i> Target Setup
-                </button>
-                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-trophy text-sm"></i> Ranking & Teams
-                </button>
-                ${u.role === 'admin' ? `
-                <button onclick="setTab('settings')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'settings' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-gear text-sm"></i> Settings & Cloud Sync
-                </button>
-                ` : ''}
+                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-house"></i> Dashboard</button>
+                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-regular fa-clock"></i> Attendance & Live</button>
+                <button onclick="setTab('performance')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold ${activeTab === 'performance' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-chart-pie"></i> Performance</button>
+                <button onclick="setTab('daily_reports')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold ${activeTab === 'daily_reports' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-file-invoice"></i> Daily Reports</button>
+                <button onclick="setTab('target')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold ${activeTab === 'target' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-bullseye"></i> Target Setup</button>
+                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-trophy"></i> Ranking & Teams</button>
+                ${u.role === 'admin' ? `<button onclick="setTab('settings')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold ${activeTab === 'settings' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-gear"></i> Settings</button>` : ''}
               </nav>
             </div>
-
-            <div class="space-y-4">
-              <button onclick="handleLogout()" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
-                <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
-              </button>
-            </div>
+            <button onclick="handleLogout()" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</button>
           </aside>
 
           <div class="flex-1 flex flex-col min-w-0 overflow-y-auto">
             <header class="h-16 px-8 flex items-center justify-between border-b border-slate-200 bg-white sticky top-0 z-10">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Workspace</span>
-                <span class="text-slate-300">/</span>
-                <span class="text-xs font-extrabold text-slate-800 uppercase tracking-wider capitalize">${activeTab.replace('_', ' ')}</span>
-              </div>
+              <div class="flex items-center gap-2"><span class="text-xs font-bold text-slate-400 uppercase">Workspace</span>/<span class="text-xs font-extrabold text-slate-800 uppercase capitalize">${activeTab.replace('_', ' ')}</span></div>
               <div class="flex items-center gap-4">
-                <button onclick="fetchFromSheet()" class="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
-                  <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1 animate-pulse"></span> Cloud Live
-                </button>
+                <button onclick="fetchFromSheet()" class="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200"><span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1 animate-pulse"></span> Cloud Live</button>
                 <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200">
                   <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs">${u.name.charAt(0)}</div>
-                  <div>
-                    <p class="text-xs font-bold text-slate-800 leading-none">${u.name}</p>
-                    <span class="text-[10px] font-semibold text-slate-400 uppercase">${u.role === 'admin' ? 'Admin (TL)' : 'Agent'}</span>
-                  </div>
+                  <div><p class="text-xs font-bold text-slate-800 leading-none">${u.name}</p><span class="text-[10px] font-semibold text-slate-400 uppercase">${u.role === 'admin' ? 'Admin' : 'Agent'}</span></div>
                 </div>
               </div>
             </header>
-
-            <main class="p-8 flex-1">
-              ${renderTabContent()}
-            </main>
+            <main class="p-8 flex-1">${renderTabContent()}</main>
           </div>
         </div>
 
-        <!-- Submit / Edit Modal -->
+        <!-- Submit Modal -->
         <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
             <div class="flex items-center justify-between mb-4">
@@ -362,21 +276,21 @@
               <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
                 <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Select Agent</label>
                 <select id="subAgentId" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
-                  ${getStored('users', []).filter(usr => usr.role === 'agent').map(usr => `<option value="${usr.id}">${usr.name} (ID: ${usr.id} • ${usr.team})</option>`).join('')}
+                  ${getStored('users', []).filter(usr => usr.role === 'agent').map(usr => `<option value="${usr.id}">${usr.name} (${usr.id})</option>`).join('')}
                 </select>
               </div>
-              <div>
-                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Report Date</label>
-                <input type="date" id="subDate" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
-              </div>
+              <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Report Date</label><input type="date" id="subDate" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
               <div class="grid grid-cols-3 gap-3">
                 <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Leads</label><input type="number" id="subLeads" required min="1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
                 <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Orders</label><input type="number" id="subOrders" required min="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
                 <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount (৳)</label><input type="number" id="subAmount" required min="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
               </div>
-              <div class="flex justify-end gap-2 pt-2">
-                <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600">Cancel</button>
-                <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600">Submit Report</button>
+              <div class="flex justify-between items-center pt-2">
+                <button type="button" id="deleteReportBtn" onclick="handleDeleteCurrentReport()" class="hidden px-4 py-2 text-xs font-bold text-red-600 bg-red-50 rounded-xl">Delete</button>
+                <div class="flex gap-2">
+                  <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2 text-xs font-bold text-slate-600">Cancel</button>
+                  <button type="submit" class="px-5 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-xl">Submit</button>
+                </div>
               </div>
             </form>
           </div>
@@ -387,8 +301,23 @@
     function openReportModal(targetAgentId, targetDateStr) {
       const u = getFreshUser();
       document.getElementById('subDate').value = dateToInputVal(targetDateStr || getTodayFormatted());
-      if (u.role === 'admin' && targetAgentId) {
-        document.getElementById('subAgentId').value = targetAgentId;
+      if (u.role === 'admin' && targetAgentId) { document.getElementById('subAgentId').value = targetAgentId; }
+      
+      const agentId = u.role === 'admin' ? document.getElementById('subAgentId').value : u.id;
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+      const sales = getStored('sales_records', []);
+      const existing = sales.find(s => s.userId === agentId && s.date === dateStr);
+      
+      if (existing) {
+        document.getElementById('subLeads').value = existing.leads;
+        document.getElementById('subOrders').value = existing.orders;
+        document.getElementById('subAmount').value = existing.amount;
+        document.getElementById('deleteReportBtn').classList.remove('hidden');
+      } else {
+        document.getElementById('subLeads').value = '';
+        document.getElementById('subOrders').value = '';
+        document.getElementById('subAmount').value = '';
+        document.getElementById('deleteReportBtn').classList.add('hidden');
       }
       openModal('submitModal');
     }
@@ -420,10 +349,7 @@
         team: targetAgent.team,
         date: dateStr,
         time: new Date().toLocaleTimeString(),
-        leads,
-        orders,
-        amount,
-        ratio
+        leads, orders, amount, ratio
       };
 
       if (existingIdx !== -1) sales[existingIdx] = entry;
@@ -433,7 +359,25 @@
       render();
 
       await postToSheet('DAILY_SALES_SUBMIT', entry);
-      alert(`ধন্যবাদ! ${targetAgent.name}-এর রিপোর্ট সফলভাবে ক্লাউডে সেভ হয়েছে।`);
+      alert(`ধন্যবাদ! ${targetAgent.name}-এর রিপোর্ট সফলভাবে সেভ হয়েছে।`);
+      closeModal('submitModal');
+      setTimeout(fetchFromSheet, 1500);
+    }
+
+    async function handleDeleteCurrentReport() {
+      const u = getFreshUser();
+      const agentId = u.role === 'admin' ? document.getElementById('subAgentId').value : u.id;
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+
+      if (!confirm(`আপনি কি নিশ্চিতভাবে এই রিপোর্টটি (${dateStr}) মুছে ফেলতে চান?`)) return;
+
+      let sales = getStored('sales_records', []);
+      sales = sales.filter(s => !(s.userId === agentId && s.date === dateStr));
+      setStored('sales_records', sales);
+      render();
+
+      await postToSheet('DELETE_SALES_RECORD', { userId: agentId, date: dateStr });
+      alert('রিপোর্টটি সফলভাবে ডিলিট করা হয়েছে!');
       closeModal('submitModal');
       setTimeout(fetchFromSheet, 1500);
     }
@@ -455,13 +399,21 @@
       const u = getFreshUser();
       const t = getUserTargetInfo(u);
       const sales = getStored('sales_records', []);
+      const todayStr = getTodayFormatted();
+      const attendance = getStored('attendance', []);
+      const todaySession = attendance.find(a => a.userId === u.id && a.date === todayStr) || { activeSeconds: 0 };
+
       const mySales = u.role === 'admin' ? sales.filter(s => s.team === u.team) : sales.filter(s => s.userId === u.id);
 
       const totalLeads = mySales.reduce((a, c) => a + c.leads, 0);
       const totalOrders = mySales.reduce((a, c) => a + c.orders, 0);
       const totalAmount = mySales.reduce((a, c) => a + c.amount, 0);
+      const avgConversionRatio = totalLeads > 0 ? ((totalOrders / totalLeads) * 100).toFixed(2) : '0.00';
+
       const targetAmount = t.monthlyAmountTarget;
       const targetOrders = t.monthlyOrdersTarget;
+      const dailyOrdersTarget = t.dailyOrdersTarget;
+      const dailyAmountTarget = t.dailyAmountTarget;
       const achievePct = targetAmount > 0 ? Math.min(100, Math.round((totalAmount / targetAmount) * 100)) : 0;
 
       return `
@@ -470,10 +422,16 @@
             <div>
               <div class="flex items-center gap-2">
                 <h2 class="text-2xl font-black text-slate-900 leading-tight">Welcome, ${u.name}! 👋</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${u.team}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">
+                  ${u.team} (${u.role === 'admin' ? `Team Leader • ${t.agentCount} Agents Total Sum` : 'Sales Agent'})
+                </span>
               </div>
             </div>
-            <div>
+            <div class="flex flex-wrap items-center gap-3">
+              <div class="px-4 py-2.5 bg-blue-50/90 border border-blue-200 rounded-xl text-left">
+                <span class="text-[10px] uppercase font-black text-blue-700 block tracking-wider">🎯 Daily Amount Target</span>
+                <p class="text-sm font-black text-blue-900 mt-0.5">৳${dailyAmountTarget.toLocaleString()} <span class="text-xs font-bold text-blue-600">(${dailyOrdersTarget} Orders)</span></p>
+              </div>
               <button onclick="openReportModal()" class="px-5 py-3 rounded-xl text-xs font-bold text-white ${u.role === 'admin' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'} shadow-lg flex items-center gap-2">
                 <i class="fa-solid fa-plus text-sm"></i> ${u.role === 'admin' ? 'Add / Edit Agent Report' : 'Submit Daily Report'}
               </button>
@@ -488,16 +446,57 @@
             <div class="highlight-card-amber p-5 rounded-2xl"><span class="text-xs font-bold uppercase tracking-wider text-amber-100">Achievement</span><p class="text-3xl font-black text-white mt-4">${achievePct}%</p></div>
           </div>
 
-          <div class="card-neo p-6">
-            <h3 class="text-sm font-extrabold text-slate-900 mb-4">Sales Performance Trend</h3>
-            <div class="h-60 w-full"><canvas id="salesTrendChart"></canvas></div>
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 card-neo p-6">
+              <h3 class="text-sm font-extrabold text-slate-900 mb-4">Sales Performance Trend</h3>
+              <div class="h-60 w-full"><canvas id="salesTrendChart"></canvas></div>
+            </div>
+            <div class="card-neo p-6">
+              <h3 class="text-sm font-extrabold text-slate-900 mb-3">Live Duty Status</h3>
+              <p class="text-3xl font-black font-mono text-slate-800 my-2" id="timer-working-clock">${formatTime(todaySession.activeSeconds)}</p>
+              <p class="text-[11px] text-slate-400 font-semibold mb-4">Shift active</p>
+            </div>
           </div>
         </div>
       `;
     }
 
-    function renderAttendanceView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Attendance & Shift Tracking</h2></div>`; }
-    function renderPerformanceView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Performance Analytics</h2></div>`; }
+    function renderAttendanceView() {
+      const users = getStored('users', []).filter(u => u.role === 'agent');
+      const attendance = getStored('attendance', []);
+      const todayStr = getTodayFormatted();
+      return `
+        <div class="space-y-6">
+          <h2 class="text-xl font-black text-slate-900">Attendance & Live Shift Tracking</h2>
+          <div class="card-neo overflow-hidden">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 border-b uppercase text-slate-400 font-bold">
+                <tr><th class="p-4">Agent Name</th><th class="p-4">Team</th><th class="p-4">Status</th><th class="p-4">Active Time</th></tr>
+              </thead>
+              <tbody class="divide-y font-medium">
+                ${users.map(u => {
+                  const s = attendance.find(a => a.userId === u.id && a.date === todayStr);
+                  return `<tr><td class="p-4 font-bold">${u.name} (${u.id})</td><td class="p-4">${u.team}</td><td class="p-4"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">Online</span></td><td class="p-4 font-mono">${s ? formatTime(s.activeSeconds) : '00:00:00'}</td></tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPerformanceView() {
+      return `
+        <div class="space-y-6">
+          <h2 class="text-xl font-black text-slate-900">Performance & Conversion Analytics</h2>
+          <div class="card-neo p-6 space-y-4">
+            <p class="text-xs font-bold text-slate-600">• Conversion Ratio = (Total Orders ÷ Total Leads) × 100%</p>
+            <p class="text-xs font-bold text-slate-600">• Daily Target = Monthly Target Amount ÷ 26 Working Days</p>
+            <div class="h-64"><canvas id="conversionPieChart"></canvas></div>
+          </div>
+        </div>
+      `;
+    }
     
     function renderDailyReportsView() {
       const sales = getStored('sales_records', []);
@@ -522,7 +521,7 @@
                     <td class="p-4">${s.leads}</td>
                     <td class="p-4 font-bold text-blue-600">${s.orders}</td>
                     <td class="p-4 font-bold text-emerald-600">৳${s.amount.toLocaleString()}</td>
-                    <td class="p-4 text-right"><button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 bg-slate-100 rounded font-bold">Edit</button></td>
+                    <td class="p-4 text-right"><button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 bg-slate-100 rounded font-bold">Edit / Delete</button></td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -532,8 +531,51 @@
       `;
     }
 
-    function renderTargetSetupView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Target Management</h2></div>`; }
-    function renderRankingView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Agent Rankings</h2></div>`; }
+    function renderTargetSetupView() {
+      const users = getStored('users', []).filter(u => u.role === 'agent');
+      return `
+        <div class="space-y-6">
+          <h2 class="text-xl font-black text-slate-900">Target Management</h2>
+          <div class="card-neo overflow-hidden">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 border-b uppercase text-slate-400 font-bold">
+                <tr><th class="p-4">Agent Name</th><th class="p-4">Team</th><th class="p-4">Monthly Target (Amount)</th><th class="p-4">Monthly Orders</th></tr>
+              </thead>
+              <tbody class="divide-y font-medium">
+                ${users.map(u => `<tr><td class="p-4 font-bold">${u.name} (${u.id})</td><td class="p-4">${u.team}</td><td class="p-4 font-bold text-emerald-600">৳${(u.monthlyAmountTarget || 320000).toLocaleString()}</td><td class="p-4 font-bold text-blue-600">${u.monthlyOrdersTarget || 260} Orders</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderRankingView() {
+      const users = getStored('users', []).filter(u => u.role === 'agent');
+      const sales = getStored('sales_records', []);
+      const ranked = users.map(u => {
+        const uSales = sales.filter(s => s.userId === u.id);
+        const amount = uSales.reduce((a, c) => a + c.amount, 0);
+        const orders = uSales.reduce((a, c) => a + c.orders, 0);
+        return { ...u, amount, orders };
+      }).sort((a, b) => b.amount - a.amount);
+
+      return `
+        <div class="space-y-6">
+          <h2 class="text-xl font-black text-slate-900">Agent Rankings & Leaderboard</h2>
+          <div class="card-neo overflow-hidden">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 border-b uppercase text-slate-400 font-bold">
+                <tr><th class="p-4">Rank</th><th class="p-4">Agent Name</th><th class="p-4">Team</th><th class="p-4">Total Sales</th><th class="p-4">Orders</th></tr>
+              </thead>
+              <tbody class="divide-y font-medium">
+                ${ranked.map((r, i) => `<tr><td class="p-4 font-black">${i+1}</td><td class="p-4 font-bold">${r.name}</td><td class="p-4">${r.team}</td><td class="p-4 font-bold text-emerald-600">৳${r.amount.toLocaleString()}</td><td class="p-4 font-bold text-blue-600">${r.orders}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
     
     function renderSettingsView() {
       return `
@@ -552,13 +594,24 @@
     }
 
     function attachCharts() {
-      const ctx = document.getElementById('salesTrendChart');
-      if (ctx) {
-        new Chart(ctx, {
-          type: 'bar',
-          data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ data: [15, 25, 35, 30, 45, 55, 40], backgroundColor: '#2563eb' }] },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-        });
+      if (activeTab === 'dashboard') {
+        const ctx = document.getElementById('salesTrendChart');
+        if (ctx) {
+          new Chart(ctx, {
+            type: 'bar',
+            data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ data: [15, 25, 35, 30, 45, 55, 40], backgroundColor: '#2563eb' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+          });
+        }
+      } else if (activeTab === 'performance') {
+        const ctxP = document.getElementById('conversionPieChart');
+        if (ctxP) {
+          new Chart(ctxP, {
+            type: 'doughnut',
+            data: { labels: ['Converted', 'Unconverted'], datasets: [{ data: [65, 35], backgroundColor: ['#059669', '#e2e8f0'] }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+          });
+        }
       }
     }
 
