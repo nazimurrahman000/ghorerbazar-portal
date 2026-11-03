@@ -45,7 +45,9 @@
   <div id="app" class="flex-1 flex flex-col"></div>
 
   <script>
-    // Centralized Config & Initial Users
+    // HARDCODED CENTRAL GOOGLE SHEET WEBHOOK (WORKS FOR EVERY USER ACROSS ALL DEVICES)
+    const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtdDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
+
     const DEFAULT_USERS = [
       { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123' },
       { id: '10107', name: 'Md Abdus Samad (TL)', role: 'admin', team: 'Team Samad', pass: 'admin123' },
@@ -80,12 +82,32 @@
     let activeTab = 'dashboard';
     let timerInterval = null;
     let pollInterval = null;
-    let isSyncing = false;
+    let isFetchingCloud = false;
+    let webhookUrl = localStorage.getItem('gb_webhook_url') || DEFAULT_WEBHOOK_URL;
 
-    // Webhook URL: fallback to localStorage or default
-    let webhookUrl = localStorage.getItem('gb_webhook_url') || '';
+    function getTodayFormatted() {
+      const d = new Date();
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
 
-    // DYNAMIC TARGET CALCULATION
+    function dateToInputVal(dateStr) {
+      if (!dateStr) return new Date().toISOString().split('T')[0];
+      const p = dateStr.split('/');
+      if (p.length === 3) return `${p[2]}-${p[1]}-${p[0]}`;
+      return new Date().toISOString().split('T')[0];
+    }
+
+    function inputValToDateStr(val) {
+      if (!val) return getTodayFormatted();
+      const p = val.split('-');
+      if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+      return getTodayFormatted();
+    }
+
+    // Dynamic Team Leader and Agent target calculations
     function getUserTargetInfo(user) {
       const allUsers = getStored('users', []);
       if (user.role === 'admin') {
@@ -120,92 +142,101 @@
       if (match) {
         currentUser = { ...currentUser, ...match };
         setStored('session_user', currentUser);
-        return currentUser;
       }
       return currentUser;
     }
 
-    // BI-DIRECTIONAL REAL-TIME CLOUD SYNC WITH GOOGLE SHEET
-    async function syncToGoogleSheet(action, payload) {
-      if (!webhookUrl) return;
+    // POST to Google Sheet using text/plain (bypasses browser CORS blocking)
+    async function postToSheet(action, payload) {
       try {
         await fetch(webhookUrl, {
           method: 'POST',
           mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action, timestamp: new Date().toISOString(), ...payload })
         });
       } catch (err) {
-        console.warn('Sheet POST sync error:', err);
+        console.warn('Sync POST error:', err);
       }
     }
 
-    // FETCH LIVE CENTRAL DATA FROM GOOGLE SHEET (GET)
-    async function fetchCloudDataFromSheet() {
-      if (!webhookUrl || isSyncing) return;
-      isSyncing = true;
-      try {
-        const resp = await fetch(webhookUrl);
-        const res = await resp.json();
+    // FETCH LATEST FROM GOOGLE SHEET (JSONP / CORS)
+    function fetchFromSheet() {
+      if (isFetchingCloud) return;
+      isFetchingCloud = true;
+
+      const callbackName = 'gb_cb_' + Date.now();
+      window[callbackName] = function(res) {
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        isFetchingCloud = false;
+
         if (res && res.status === 'success') {
-          let hasChanges = false;
-          
-          // 1. Merge Sales Records
-          if (Array.isArray(res.salesRecords)) {
-            const localSales = getStored('sales_records', []);
-            // If cloud has records, sync to local
-            if (JSON.stringify(res.salesRecords) !== JSON.stringify(localSales)) {
-              setStored('sales_records', res.salesRecords);
-              hasChanges = true;
-            }
-          }
-
-          // 2. Merge Targets
-          if (res.targets && typeof res.targets === 'object') {
-            let users = getStored('users', []);
-            let updatedUsers = false;
-            users = users.map(u => {
-              if (res.targets[u.id]) {
-                const t = res.targets[u.id];
-                if (u.monthlyOrdersTarget !== t.monthlyOrdersTarget || u.monthlyAmountTarget !== t.monthlyAmountTarget) {
-                  updatedUsers = true;
-                  return { ...u, monthlyOrdersTarget: t.monthlyOrdersTarget, monthlyAmountTarget: t.monthlyAmountTarget };
-                }
-              }
-              return u;
-            });
-            if (updatedUsers) {
-              setStored('users', users);
-              hasChanges = true;
-            }
-          }
-
-          if (hasChanges && currentUser) {
-            getFreshUser();
-            render();
-          }
+          handleCloudDataReceived(res);
         }
-      } catch (err) {
-        // quiet ignore on background poll
-      } finally {
-        isSyncing = false;
+      };
+
+      const script = document.createElement('script');
+      script.src = `${webhookUrl}?callback=${callbackName}&t=${Date.now()}`;
+      script.onerror = function() {
+        if (script.parentNode) script.parentNode.removeChild(script);
+        isFetchingCloud = false;
+        // Fallback to direct fetch
+        fetch(`${webhookUrl}?t=${Date.now()}`)
+          .then(r => r.json())
+          .then(res => handleCloudDataReceived(res))
+          .catch(() => {});
+      };
+      document.body.appendChild(script);
+    }
+
+    function handleCloudDataReceived(res) {
+      let hasChanges = false;
+      if (Array.isArray(res.salesRecords)) {
+        const local = getStored('sales_records', []);
+        // Compare lengths or values
+        if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
+          setStored('sales_records', res.salesRecords);
+          hasChanges = true;
+        }
+      }
+
+      if (res.targets && typeof res.targets === 'object') {
+        let users = getStored('users', []);
+        let updated = false;
+        users = users.map(u => {
+          if (res.targets[u.id]) {
+            const t = res.targets[u.id];
+            if (u.monthlyOrdersTarget !== t.monthlyOrdersTarget || u.monthlyAmountTarget !== t.monthlyAmountTarget) {
+              updated = true;
+              return { ...u, monthlyOrdersTarget: t.monthlyOrdersTarget, monthlyAmountTarget: t.monthlyAmountTarget };
+            }
+          }
+          return u;
+        });
+        if (updated) {
+          setStored('users', users);
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges && currentUser) {
+        getFreshUser();
+        render();
       }
     }
 
-    // Auto Poll Cloud Sheet Every 5 Seconds
-    function startCloudPolling() {
+    function startBackgroundSync() {
       if (pollInterval) clearInterval(pollInterval);
-      pollInterval = setInterval(fetchCloudDataFromSheet, 5000);
+      fetchFromSheet();
+      pollInterval = setInterval(fetchFromSheet, 4000); // Poll every 4 seconds
     }
 
     function init() {
       getFreshUser();
       render();
       if (currentUser && currentUser.role === 'agent') startShiftTimer();
-      if (webhookUrl) {
-        fetchCloudDataFromSheet();
-        startCloudPolling();
-      }
+      startBackgroundSync();
     }
 
     function render() {
@@ -293,7 +324,7 @@
 
       if (user.role === 'agent') {
         const attendance = getStored('attendance', []);
-        const todayStr = new Date().toLocaleDateString('en-GB');
+        const todayStr = getTodayFormatted();
         let session = attendance.find(a => a.userId === user.id && a.date === todayStr);
         if (!session) {
           session = {
@@ -308,23 +339,20 @@
           };
           attendance.push(session);
           setStored('attendance', attendance);
-          syncToGoogleSheet('AGENT_LOGIN', session);
+          postToSheet('AGENT_LOGIN', session);
         }
       }
 
       render();
       if (currentUser.role === 'agent') startShiftTimer();
-      if (webhookUrl) {
-        fetchCloudDataFromSheet();
-        startCloudPolling();
-      }
+      startBackgroundSync();
     }
 
     function handleLogout() {
       if (timerInterval) clearInterval(timerInterval);
       if (pollInterval) clearInterval(pollInterval);
       if (currentUser && currentUser.role === 'agent') {
-        syncToGoogleSheet('AGENT_LOGOUT', { userId: currentUser.id, name: currentUser.name, time: new Date().toLocaleTimeString() });
+        postToSheet('AGENT_LOGOUT', { userId: currentUser.id, name: currentUser.name, time: new Date().toLocaleTimeString() });
       }
       currentUser = null;
       localStorage.removeItem('gb_session_user');
@@ -336,7 +364,7 @@
       if (timerInterval) clearInterval(timerInterval);
       timerInterval = setInterval(() => {
         const attendance = getStored('attendance', []);
-        const todayStr = new Date().toLocaleDateString('en-GB');
+        const todayStr = getTodayFormatted();
         const session = attendance.find(a => a.userId === currentUser.id && a.date === todayStr);
         if (session) {
           if (session.isOnBreak) session.breakSeconds = (session.breakSeconds || 0) + 1;
@@ -358,12 +386,12 @@
 
     function toggleBreak() {
       const attendance = getStored('attendance', []);
-      const todayStr = new Date().toLocaleDateString('en-GB');
+      const todayStr = getTodayFormatted();
       const session = attendance.find(a => a.userId === currentUser.id && a.date === todayStr);
       if (session) {
         session.isOnBreak = !session.isOnBreak;
         setStored('attendance', attendance);
-        syncToGoogleSheet('BREAK_TOGGLE', { userId: currentUser.id, isOnBreak: session.isOnBreak, time: new Date().toLocaleTimeString() });
+        postToSheet('BREAK_TOGGLE', { userId: currentUser.id, isOnBreak: session.isOnBreak, time: new Date().toLocaleTimeString() });
         render();
       }
     }
@@ -420,7 +448,7 @@
               <div class="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 text-center relative overflow-hidden">
                 <i class="fa-solid fa-cloud text-4xl text-blue-200 absolute -bottom-2 -right-2"></i>
                 <h4 class="text-xs font-extrabold text-blue-900">Cloud Live Sync</h4>
-                <p class="text-[11px] text-blue-600 mt-1 font-medium">Auto-syncing all agents' input</p>
+                <p class="text-[11px] text-blue-600 mt-1 font-medium">Automatic bi-directional sync</p>
               </div>
 
               <button onclick="handleLogout()" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
@@ -437,9 +465,9 @@
                 <span class="text-xs font-extrabold text-slate-800 uppercase tracking-wider capitalize">${activeTab.replace('_', ' ')}</span>
               </div>
               <div class="flex items-center gap-4">
-                <span onclick="fetchCloudDataFromSheet()" title="Click to force refresh cloud data" class="cursor-pointer text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-emerald-200">
+                <button onclick="fetchFromSheet()" title="Click to instant sync with Google Sheet" class="cursor-pointer text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-emerald-200 transition-colors">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Cloud Live
-                </span>
+                </button>
                 <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200">
                   <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
                     ${u.name.charAt(0)}
@@ -458,7 +486,7 @@
           </div>
         </div>
 
-        <!-- Submit Daily Report Modal -->
+        <!-- Submit / Edit Daily Report Modal (With Date Selection & 1-Report-Per-Date Enforcement) -->
         <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
             <div class="flex items-center justify-between mb-4">
@@ -467,31 +495,51 @@
                   <i class="fa-solid fa-file-lines"></i>
                 </div>
                 <div>
-                  <h3 class="text-sm font-extrabold text-slate-900">Submit Daily Report</h3>
-                  <p class="text-[11px] text-slate-400">Please fill in your sales report for today</p>
+                  <h3 id="modalTitle" class="text-sm font-extrabold text-slate-900">Daily Sales Report</h3>
+                  <p class="text-[11px] text-slate-400">প্রতি দিনের জন্য ১টি রিপোর্ট (প্রয়োজনে এডিট করা যাবে)</p>
                 </div>
               </div>
               <button onclick="closeModal('submitModal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
             </div>
+
             <form id="eodReportForm" onsubmit="handleSalesSubmit(event)" class="space-y-3.5">
+              <!-- Admin Target Agent Selection (Visible for Admin only) -->
+              <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
+                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Select Agent</label>
+                <select id="subAgentId" onchange="onReportTargetChanged()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
+                  ${getStored('users', []).filter(usr => usr.role === 'agent').map(usr => `
+                    <option value="${usr.id}">${usr.name} (ID: ${usr.id} • ${usr.team})</option>
+                  `).join('')}
+                </select>
+              </div>
+
+              <!-- Date Picker -->
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Report Date (তারিখ নির্বাচন)</label>
+                <input type="date" id="subDate" required onchange="onReportTargetChanged()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
+                <p id="existingNotice" class="text-[10px] font-bold text-amber-600 mt-1 hidden">
+                  <i class="fa-solid fa-circle-exclamation mr-1"></i> এই তারিখে ইতিমধ্যে রিপোর্ট রয়েছে। সাবমিট করলে তা আপডেট/এডিট হবে।
+                </p>
+              </div>
+
               <div class="grid grid-cols-3 gap-3">
                 <div>
                   <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Total Leads</label>
-                  <input type="number" id="subLeads" required min="1" placeholder="420" oninput="calculatePreviewRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
+                  <input type="number" id="subLeads" required min="1" placeholder="50" oninput="calculatePreviewRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div>
                   <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Total Orders</label>
-                  <input type="number" id="subOrders" required min="0" placeholder="58" oninput="calculatePreviewRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
+                  <input type="number" id="subOrders" required min="0" placeholder="10" oninput="calculatePreviewRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div>
                   <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount (৳)</label>
-                  <input type="number" id="subAmount" required min="0" placeholder="112500" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
+                  <input type="number" id="subAmount" required min="0" placeholder="25000" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
                 </div>
               </div>
 
               <div class="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
                 <div>
-                  <p class="text-[10px] font-bold text-slate-400 uppercase">Today Achievement</p>
+                  <p class="text-[10px] font-bold text-slate-400 uppercase">Daily Goal Achieved</p>
                   <p id="prevAchieve" class="text-base font-black text-amber-500 mt-0.5">0%</p>
                 </div>
                 <div>
@@ -502,8 +550,8 @@
 
               <div class="flex justify-end gap-2 pt-2">
                 <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
-                <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 flex items-center gap-2">
-                  <i class="fa-solid fa-paper-plane"></i> Submit Report
+                <button type="submit" id="submitBtnText" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 flex items-center gap-2">
+                  <i class="fa-solid fa-paper-plane"></i> <span>Submit Report</span>
                 </button>
               </div>
             </form>
@@ -544,9 +592,67 @@
       `;
     }
 
+    // Opens Submit Modal (Can be triggered by Agent for themselves or by Admin for ANY agent)
+    function openReportModal(targetAgentId, targetDateStr) {
+      const u = getFreshUser();
+      const allUsers = getStored('users', []);
+      const dateInput = document.getElementById('subDate');
+
+      // Default Date: today or targetDate
+      dateInput.value = dateToInputVal(targetDateStr || getTodayFormatted());
+
+      if (u.role === 'admin') {
+        const select = document.getElementById('subAgentId');
+        if (targetAgentId) select.value = targetAgentId;
+      }
+
+      onReportTargetChanged();
+      openModal('submitModal');
+    }
+
+    // When Agent or Date changes in the modal, check if an entry exists to allow EDITING!
+    function onReportTargetChanged() {
+      const u = getFreshUser();
+      const allUsers = getStored('users', []);
+      const allSales = getStored('sales_records', []);
+
+      let agentId = u.id;
+      if (u.role === 'admin') {
+        agentId = document.getElementById('subAgentId').value;
+      }
+
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+      const existing = allSales.find(s => s.userId === agentId && s.date === dateStr);
+
+      const notice = document.getElementById('existingNotice');
+      const btnText = document.querySelector('#submitBtnText span');
+
+      if (existing) {
+        document.getElementById('subLeads').value = existing.leads;
+        document.getElementById('subOrders').value = existing.orders;
+        document.getElementById('subAmount').value = existing.amount;
+        notice.classList.remove('hidden');
+        btnText.textContent = `Update Report (${dateStr})`;
+      } else {
+        document.getElementById('subLeads').value = '';
+        document.getElementById('subOrders').value = '';
+        document.getElementById('subAmount').value = '';
+        notice.classList.add('hidden');
+        btnText.textContent = 'Submit Report';
+      }
+      calculatePreviewRatio();
+    }
+
     function calculatePreviewRatio() {
       const u = getFreshUser();
-      const t = getUserTargetInfo(u);
+      const allUsers = getStored('users', []);
+      let targetUser = u;
+      if (u.role === 'admin') {
+        const selId = document.getElementById('subAgentId')?.value;
+        targetUser = allUsers.find(usr => usr.id === selId) || u;
+      }
+
+      const t = getUserTargetInfo(targetUser);
       const l = Number(document.getElementById('subLeads').value) || 0;
       const o = Number(document.getElementById('subOrders').value) || 0;
       const ratio = l > 0 ? ((o / l) * 100).toFixed(2) : '0.00';
@@ -595,18 +701,28 @@
           setStored('session_user', currentUser);
         }
 
-        await syncToGoogleSheet('UPDATE_TARGET', { userId: id, monthlyOrdersTarget: mo, monthlyAmountTarget: ma, dailyOrdersTarget: Math.round(mo/26), dailyAmountTarget: Math.round(ma/26) });
+        await postToSheet('UPDATE_TARGET', { userId: id, monthlyOrdersTarget: mo, monthlyAmountTarget: ma, dailyOrdersTarget: Math.round(mo/26), dailyAmountTarget: Math.round(ma/26) });
         alert('টার্গেট ক্লাউডে সফলভাবে আপডেট হয়েছে!');
         closeModal('targetModal');
         render();
-        setTimeout(fetchCloudDataFromSheet, 1500);
+        setTimeout(fetchFromSheet, 1000);
       }
     }
 
+    // Handles Submit / Edit with Date-wise uniqueness
     async function handleSalesSubmit(e) {
       e.preventDefault();
       const u = getFreshUser();
-      const t = getUserTargetInfo(u);
+      const allUsers = getStored('users', []);
+
+      let agent = u;
+      if (u.role === 'admin') {
+        const selId = document.getElementById('subAgentId').value;
+        agent = allUsers.find(usr => usr.id === selId) || u;
+      }
+
+      const t = getUserTargetInfo(agent);
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
       const leads = Number(document.getElementById('subLeads').value) || 0;
       const orders = Number(document.getElementById('subOrders').value) || 0;
       const amount = Number(document.getElementById('subAmount').value) || 0;
@@ -614,13 +730,17 @@
       const dOrdersTarget = t.dailyOrdersTarget;
       const achieve = dOrdersTarget > 0 ? Math.round((orders / dOrdersTarget) * 100) : 0;
 
-      const sales = getStored('sales_records', []);
+      let sales = getStored('sales_records', []);
+
+      // Check if entry exists for this user and this date
+      const existingIdx = sales.findIndex(s => s.userId === agent.id && s.date === dateStr);
+
       const entry = {
-        id: 'rec_' + Date.now(),
-        userId: u.id,
-        userName: u.name,
-        team: u.team,
-        date: new Date().toLocaleDateString('en-GB'),
+        id: existingIdx !== -1 ? sales[existingIdx].id : 'rec_' + agent.id + '_' + Date.now(),
+        userId: agent.id,
+        userName: agent.name,
+        team: agent.team,
+        date: dateStr,
         time: new Date().toLocaleTimeString(),
         leads,
         orders,
@@ -629,16 +749,21 @@
         achievement: achieve
       };
 
-      sales.unshift(entry);
+      if (existingIdx !== -1) {
+        sales[existingIdx] = entry; // Update existing
+      } else {
+        sales.unshift(entry); // Add new
+      }
+
       setStored('sales_records', sales);
       render();
 
-      // Instantly sync to Google Sheet
-      await syncToGoogleSheet('DAILY_SALES_SUBMIT', entry);
+      // Send to Central Google Sheet
+      await postToSheet('DAILY_SALES_SUBMIT', entry);
 
-      alert('Daily Report ক্লাউডে সফলভাবে সেভ হয়েছে! সকল ড্যাশবোর্ডে লাইভ দেখতে পাবেন।');
+      alert(`ধন্যবাদ! ${agent.name}-এর ${dateStr} তারিখের রিপোর্ট সফলভাবে ক্লাউডে সেভ হয়েছে।`);
       closeModal('submitModal');
-      setTimeout(fetchCloudDataFromSheet, 2000);
+      setTimeout(fetchFromSheet, 1200);
     }
 
     function renderTabContent() {
@@ -659,10 +784,11 @@
       const u = getFreshUser();
       const t = getUserTargetInfo(u);
       const sales = getStored('sales_records', []);
-      const todayStr = new Date().toLocaleDateString('en-GB');
+      const todayStr = getTodayFormatted();
       const attendance = getStored('attendance', []);
       const todaySession = attendance.find(a => a.userId === u.id && a.date === todayStr) || { activeSeconds: 0, breakSeconds: 0, isOnBreak: false };
 
+      // Sales filter: For Admin, sum of their whole team; for Agent, their own records
       const mySales = u.role === 'admin' 
         ? sales.filter(s => s.team === u.team) 
         : sales.filter(s => s.userId === u.id);
@@ -690,7 +816,7 @@
               </div>
               <p class="text-xs text-slate-500 font-medium mt-1">
                 ${u.role === 'admin' 
-                  ? `আপনার অধীনে থাকা সকল এজেন্টের মোট টার্গেট সামেশন (Sum) অনুযায়ী আপনার টিমের লক্ষ্যমাত্রা ও রিয়েল-টাইম ডাটা সিঙ্ক হচ্ছে।` 
+                  ? `আপনার অধীনে থাকা সকল এজেন্টের মোট টার্গেট সামেশন (Sum) ও লাইভ সেলস ডাটা প্রদর্শিত হচ্ছে।` 
                   : `২৬ কর্মদিবসের হিসেবে আপনার দৈনিক ও মাসিক সেলস টার্গেট ও পারফরম্যান্স ওভারভিউ।`}
               </p>
             </div>
@@ -707,18 +833,18 @@
               </div>
 
               ${u.role === 'agent' ? `
-              <button onclick="openModal('submitModal')" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 flex items-center gap-2 transition-all">
+              <button onclick="openReportModal()" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 flex items-center gap-2 transition-all">
                 <i class="fa-solid fa-plus text-sm"></i> Submit Daily Report
               </button>
               ` : `
-              <button onclick="setTab('target')" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-500/20 flex items-center gap-2 transition-all">
-                <i class="fa-solid fa-sliders text-sm"></i> Manage Agent Targets
+              <button onclick="openReportModal()" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all">
+                <i class="fa-solid fa-file-circle-plus text-sm"></i> Add / Edit Agent Report
               </button>
               `}
             </div>
           </div>
 
-          <!-- 5 HIGHLIGHTED CARDS IN EXACT ORDER -->
+          <!-- 5 HIGHLIGHTED CARDS -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <!-- 1. Total Leads -->
             <div class="highlight-card-blue p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
@@ -827,6 +953,7 @@
                 </div>
               </div>
 
+              <!-- Quick Actions -->
               <div class="card-neo p-4 flex flex-wrap items-center justify-between gap-3">
                 <p class="text-xs font-extrabold text-slate-600 uppercase">Quick Actions:</p>
                 <div class="flex items-center gap-2.5">
@@ -835,7 +962,11 @@
                     <i class="fa-solid ${todaySession.isOnBreak ? 'fa-play' : 'fa-mug-saucer'}"></i>
                     ${todaySession.isOnBreak ? 'Resume Work' : 'Take Break'}
                   </button>
-                  ` : ''}
+                  ` : `
+                  <button onclick="openReportModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-pen-to-square"></i> Create/Edit Report for Agent
+                  </button>
+                  `}
                   <button onclick="setTab('daily_reports')" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 flex items-center gap-2 shadow-sm">
                     <i class="fa-solid fa-list-check"></i> View Report
                   </button>
@@ -846,7 +977,7 @@
               </div>
             </div>
 
-            <!-- Target Overview Card with Clear Daily & Monthly Section -->
+            <!-- Target Overview Card -->
             <div class="space-y-6">
               <div class="card-neo p-6 text-center">
                 <div class="flex items-center justify-between mb-2">
@@ -909,7 +1040,7 @@
     function renderAttendanceView() {
       const users = getStored('users', []).filter(u => u.role === 'agent');
       const attendance = getStored('attendance', []);
-      const todayStr = new Date().toLocaleDateString('en-GB');
+      const todayStr = getTodayFormatted();
 
       return `
         <div class="space-y-6">
@@ -930,6 +1061,7 @@
                   <th class="p-4">Login Time</th>
                   <th class="p-4">Active Working Time</th>
                   <th class="p-4">Break Time</th>
+                  ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Quick Report</th>' : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-medium">
@@ -944,7 +1076,7 @@
                   return `
                     <tr class="hover:bg-slate-50/50">
                       <td class="p-4 font-bold text-slate-800">
-                        ${u.name}
+                        <span class="hover:text-blue-600 cursor-pointer" onclick="openReportModal('${u.id}')">${u.name}</span>
                         <div class="text-[10px] text-slate-400 font-mono">ID: ${u.id}</div>
                       </td>
                       <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${u.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${u.team}</span></td>
@@ -952,6 +1084,13 @@
                       <td class="p-4 font-semibold text-slate-600">${s ? s.loginTime : '--:--'}</td>
                       <td class="p-4 font-mono font-bold text-emerald-600">${s ? formatTime(s.activeSeconds) : '00:00:00'}</td>
                       <td class="p-4 font-mono font-bold text-amber-600">${s ? formatTime(s.breakSeconds) : '00:00:00'}</td>
+                      ${currentUser && currentUser.role === 'admin' ? `
+                      <td class="p-4 text-right">
+                        <button onclick="openReportModal('${u.id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100">
+                          <i class="fa-solid fa-pen-to-square"></i> Add/Edit Report
+                        </button>
+                      </td>
+                      ` : ''}
                     </tr>
                   `;
                 }).join('')}
@@ -986,7 +1125,7 @@
                 <p>• Achievement Ratio = (Actual Revenue ÷ Monthly Target Amount) × 100%</p>
               </div>
               <p class="text-xs text-slate-500 font-medium leading-relaxed">
-                টিম লিডারদের টার্গেট স্বয়ংক্রিয়ভাবে তাদের অধীনে থাকা এজেন্টদের টার্গেটের মোট যোগফল (Sum) হিসেবে হিসাব করা হয়েছে।
+                টিম লিডারদের টার্গেট ও রিয়েল-টাইম সেলস স্বয়ংক্রিয়ভাবে তাদের অধীনে থাকা এজেন্টদের মোট যোগফল হিসেবে আপডেট হচ্ছে।
               </p>
             </div>
           </div>
@@ -1002,33 +1141,32 @@
           <div class="flex items-center justify-between">
             <div>
               <h2 class="text-xl font-black text-slate-900">Agent Daily Reports Log</h2>
-              <p class="text-xs text-slate-400 font-semibold">Historical daily logs with auto conversion rates</p>
+              <p class="text-xs text-slate-400 font-semibold">সকল এজেন্টের তারিখ অনুযায়ী দৈনিক রিপোর্ট ও এডিট হিস্ট্রি</p>
             </div>
-            ${currentUser && currentUser.role === 'agent' ? `
-            <button onclick="openModal('submitModal')" class="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-md">
-              <i class="fa-solid fa-plus mr-1"></i> New Entry
+            <button onclick="openReportModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md">
+              <i class="fa-solid fa-plus mr-1"></i> New / Edit Report
             </button>
-            ` : ''}
           </div>
 
           <div class="card-neo overflow-hidden">
             <table class="w-full text-left text-xs">
               <thead class="bg-slate-50 border-b border-slate-100 uppercase text-slate-400 font-bold">
                 <tr>
-                  <th class="p-4">Date & Time</th>
+                  <th class="p-4">Report Date</th>
                   <th class="p-4">Agent Name</th>
                   <th class="p-4">Team</th>
                   <th class="p-4">Leads</th>
                   <th class="p-4">Orders</th>
                   <th class="p-4">Amount (BDT)</th>
                   <th class="p-4">Conversion Ratio</th>
+                  <th class="p-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-medium">
-                ${sales.length === 0 ? '<tr><td colspan="7" class="p-8 text-center text-slate-400">কোন সেলস এন্ট্রি এখনো সাবমিট করা হয়নি।</td></tr>' : ''}
+                ${sales.length === 0 ? '<tr><td colspan="8" class="p-8 text-center text-slate-400">কোন সেলস এন্ট্রি এখনো সাবমিট করা হয়নি।</td></tr>' : ''}
                 ${sales.map(s => `
                   <tr class="hover:bg-slate-50/50">
-                    <td class="p-4 font-semibold text-slate-600">${s.date} <span class="text-[10px] text-slate-400">${s.time}</span></td>
+                    <td class="p-4 font-bold text-slate-800">${s.date} <span class="text-[10px] text-slate-400 font-normal">(${s.time})</span></td>
                     <td class="p-4 font-bold text-slate-800">${s.userName} <span class="text-[10px] text-slate-400">(${s.userId})</span></td>
                     <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${s.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${s.team}</span></td>
                     <td class="p-4">${s.leads}</td>
@@ -1038,6 +1176,11 @@
                       <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold ${s.ratio >= 20 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}">
                         ${s.ratio}%
                       </span>
+                    </td>
+                    <td class="p-4 text-right">
+                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600">
+                        <i class="fa-solid fa-pen-to-square"></i> Edit
+                      </button>
                     </td>
                   </tr>
                 `).join('')}
@@ -1069,6 +1212,7 @@
             </div>
           </div>
 
+          <!-- Team Leader Summation Cards -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="p-5 rounded-2xl bg-orange-50/70 border border-orange-200">
               <span class="text-xs font-black uppercase tracking-wider text-orange-800">Team Nazim Leader Goal (Md. Nazimur Rahman)</span>
@@ -1169,6 +1313,7 @@
                   <th class="p-4">Total Orders</th>
                   <th class="p-4">Conversion Rate</th>
                   <th class="p-4">Amount Achievement</th>
+                  ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Action</th>' : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-medium">
@@ -1181,7 +1326,10 @@
                   return `
                     <tr class="hover:bg-slate-50/50">
                       <td class="p-4">${rankBadge}</td>
-                      <td class="p-4 font-bold text-slate-800">${ag.name} <span class="text-[10px] text-slate-400">(${ag.id})</span></td>
+                      <td class="p-4 font-bold text-slate-800">
+                        <span class="hover:text-blue-600 cursor-pointer" onclick="openReportModal('${ag.id}')">${ag.name}</span> 
+                        <span class="text-[10px] text-slate-400">(${ag.id})</span>
+                      </td>
                       <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${ag.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${ag.team}</span></td>
                       <td class="p-4 font-black text-emerald-600 text-sm">৳${ag.amount.toLocaleString()}</td>
                       <td class="p-4 font-bold text-slate-900">${ag.orders}</td>
@@ -1194,6 +1342,13 @@
                           </div>
                         </div>
                       </td>
+                      ${currentUser && currentUser.role === 'admin' ? `
+                      <td class="p-4 text-right">
+                        <button onclick="openReportModal('${ag.id}')" class="px-3 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100">
+                          Add Report
+                        </button>
+                      </td>
+                      ` : ''}
                     </tr>
                   `;
                 }).join('')}
@@ -1224,11 +1379,10 @@
 
     function saveSettingsWebhook() {
       const url = document.getElementById('settingsWebhook').value.trim();
-      webhookUrl = url;
-      localStorage.setItem('gb_webhook_url', url);
+      webhookUrl = url || DEFAULT_WEBHOOK_URL;
+      localStorage.setItem('gb_webhook_url', webhookUrl);
       alert('Webhook URL updated! Now fetching live cloud data...');
-      fetchCloudDataFromSheet();
-      startCloudPolling();
+      fetchFromSheet();
     }
 
     function attachCharts() {
