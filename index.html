@@ -145,6 +145,22 @@
     }
 
     async function postToSheet(action, payload) {
+      // 1. Send via JSONP GET Script (100% immune to CORS and cross-origin blocking)
+      try {
+        const params = new URLSearchParams({
+          action: action,
+          timestamp: new Date().toISOString(),
+          ...payload
+        });
+        const s = document.createElement('script');
+        s.src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
+        document.body.appendChild(s);
+        setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, 3000);
+      } catch (e) {
+        console.warn('GET sync:', e);
+      }
+
+      // 2. Also send via POST
       try {
         await fetch(webhookUrl, {
           method: 'POST',
@@ -153,7 +169,7 @@
           body: JSON.stringify({ action, timestamp: new Date().toISOString(), ...payload })
         });
       } catch (err) {
-        console.warn('Sync POST error:', err);
+        console.warn('POST sync:', err);
       }
     }
 
