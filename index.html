@@ -13,6 +13,8 @@
     .glass-sidebar { background: #ffffff; border-right: 1px solid #e2e8f0; }
     .card-neo { background: #ffffff; border-radius: 20px; border: 1px solid #eef2f8; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.03); }
     .tab-active { background: #2563eb; color: #ffffff !important; box-shadow: 0 8px 20px -6px rgba(37, 99, 235, 0.5); }
+    .badge-soft-orange { background-color: #ffedd5; color: #c2410c; }
+    .badge-soft-blue { background-color: #dbeafe; color: #1d4ed8; }
     
     .highlight-card-blue { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(37, 99, 235, 0.35); }
     .highlight-card-emerald { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(5, 150, 105, 0.35); }
@@ -74,23 +76,11 @@
     function cleanDisplayDate(raw) {
       if (!raw) return getTodayFormatted();
       let s = String(raw).trim();
-      if (s.includes("GMT") || s.includes("T")) {
-        try {
-          const d = new Date(s);
-          if (!isNaN(d.getTime())) {
-            const day = String(d.getDate()).padStart(2, '0');
-            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-            return `${day} ${months[d.getMonth()]} ${d.getFullYear()}`;
-          }
-        } catch(e) {}
-      }
       const p = s.split('/');
       if (p.length === 3) {
         const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const mIdx = parseInt(p[1], 10) - 1;
-        if (mIdx >= 0 && mIdx < 12) {
-          return `${p[0]} ${months[mIdx]} ${p[2]}`;
-        }
+        if (mIdx >= 0 && mIdx < 12) return `${p[0]} ${months[mIdx]} ${p[2]}`;
       }
       return s;
     }
@@ -147,7 +137,7 @@
       return currentUser;
     }
 
-    // 100% UNIVERSAL SYNC FOR BOTH ADMIN & AGENTS
+    // 100% UNIFIED SYNC (WORKS FOR BOTH ADMIN & AGENT)
     async function postToSheet(action, payload) {
       try {
         const fullData = { action, timestamp: new Date().toISOString(), ...payload };
@@ -173,9 +163,7 @@
       window[callbackName] = function(res) {
         delete window[callbackName];
         if (script.parentNode) script.parentNode.removeChild(script);
-        if (res && res.status === 'success') {
-          handleCloudDataReceived(res);
-        }
+        if (res && res.status === 'success') handleCloudDataReceived(res);
       };
 
       const script = document.createElement('script');
@@ -184,9 +172,7 @@
         if (script.parentNode) script.parentNode.removeChild(script);
         fetch(`${webhookUrl}?t=${Date.now()}`)
           .then(r => r.json())
-          .then(res => {
-            if (res && res.status === 'success') handleCloudDataReceived(res);
-          })
+          .then(res => { if (res && res.status === 'success') handleCloudDataReceived(res); })
           .catch(() => {});
       };
       document.body.appendChild(script);
@@ -201,7 +187,6 @@
           hasChanges = true;
         }
       }
-
       if (hasChanges && currentUser) {
         getFreshUser();
         render();
@@ -217,7 +202,6 @@
     function init() {
       getFreshUser();
       render();
-      if (currentUser && currentUser.role === 'agent') startShiftTimer();
       startBackgroundSync();
     }
 
@@ -246,136 +230,43 @@
             <form onsubmit="handleLogin(event)" class="space-y-4">
               <div>
                 <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">User ID (Emp ID)</label>
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                    <i class="fa-regular fa-id-badge text-lg"></i>
-                  </span>
-                  <input type="text" id="loginId" required placeholder="e.g. 10122 or 10191" 
-                    class="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all">
-                </div>
+                <input type="text" id="loginId" required placeholder="e.g. 10122 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-orange-500">
               </div>
               <div>
                 <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Password</label>
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                    <i class="fa-solid fa-lock text-base"></i>
-                  </span>
-                  <input type="password" id="loginPass" required placeholder="••••••••" 
-                    class="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all">
-                  <button type="button" onclick="togglePassVisibility()" class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-slate-600">
-                    <i id="passIcon" class="fa-regular fa-eye"></i>
-                  </button>
-                </div>
+                <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-orange-500">
               </div>
               <div id="loginError" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200 font-semibold text-center"></div>
-              <button type="submit" 
-                class="w-full py-3.5 px-4 bg-orange-500 hover:bg-orange-600 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2">
-                <span>Sign In</span>
-                <i class="fa-solid fa-arrow-right"></i>
-              </button>
+              <button type="submit" class="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm rounded-xl shadow-lg">Sign In</button>
             </form>
           </div>
         </div>
       `;
     }
 
-    function togglePassVisibility() {
-      const i = document.getElementById('loginPass');
-      const ic = document.getElementById('passIcon');
-      if (i.type === 'password') { i.type = 'text'; ic.className = 'fa-regular fa-eye-slash'; }
-      else { i.type = 'password'; ic.className = 'fa-regular fa-eye'; }
-    }
-
     function handleLogin(e) {
       e.preventDefault();
       const id = document.getElementById('loginId').value.trim();
       const pass = document.getElementById('loginPass').value.trim();
-      const errBox = document.getElementById('loginError');
-
       const users = getStored('users', []);
       const user = users.find(u => u.id === id && u.pass === pass);
-
       if (!user) {
-        errBox.textContent = 'ভুল User ID অথবা Password!';
-        errBox.classList.remove('hidden');
+        document.getElementById('loginError').textContent = 'ভুল User ID অথবা Password!';
+        document.getElementById('loginError').classList.remove('hidden');
         return;
       }
-
       currentUser = user;
       setStored('session_user', user);
-
-      if (user.role === 'agent') {
-        const attendance = getStored('attendance', []);
-        const todayStr = getTodayFormatted();
-        let session = attendance.find(a => a.userId === user.id && a.date === todayStr);
-        if (!session) {
-          session = {
-            userId: user.id,
-            userName: user.name,
-            team: user.team,
-            date: todayStr,
-            loginTime: new Date().toLocaleTimeString(),
-            activeSeconds: 0,
-            breakSeconds: 0,
-            isOnBreak: false
-          };
-          attendance.push(session);
-          setStored('attendance', attendance);
-          postToSheet('AGENT_LOGIN', session);
-        }
-      }
-
       render();
-      if (currentUser.role === 'agent') startShiftTimer();
       startBackgroundSync();
     }
 
     function handleLogout() {
-      if (timerInterval) clearInterval(timerInterval);
       if (pollInterval) clearInterval(pollInterval);
-      if (currentUser && currentUser.role === 'agent') {
-        postToSheet('AGENT_LOGOUT', { userId: currentUser.id, name: currentUser.name, time: new Date().toLocaleTimeString() });
-      }
       currentUser = null;
       localStorage.removeItem('gb_session_user');
       activeTab = 'dashboard';
       render();
-    }
-
-    function startShiftTimer() {
-      if (timerInterval) clearInterval(timerInterval);
-      timerInterval = setInterval(() => {
-        const attendance = getStored('attendance', []);
-        const todayStr = getTodayFormatted();
-        const session = attendance.find(a => a.userId === currentUser.id && a.date === todayStr);
-        if (session) {
-          if (session.isOnBreak) session.breakSeconds = (session.breakSeconds || 0) + 1;
-          else session.activeSeconds = (session.activeSeconds || 0) + 1;
-          setStored('attendance', attendance);
-          
-          const shiftEl = document.getElementById('timer-working-clock');
-          if (shiftEl) shiftEl.textContent = formatTime(session.activeSeconds);
-        }
-      }, 1000);
-    }
-
-    function formatTime(sec) {
-      const h = String(Math.floor(sec / 3600)).padStart(2, '0');
-      const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
-      const s = String(sec % 60).padStart(2, '0');
-      return `${h}:${m}:${s}`;
-    }
-
-    function toggleBreak() {
-      const attendance = getStored('attendance', []);
-      const todayStr = getTodayFormatted();
-      const session = attendance.find(a => a.userId === currentUser.id && a.date === todayStr);
-      if (session) {
-        session.isOnBreak = !session.isOnBreak;
-        setStored('attendance', attendance);
-        postToSheet('BREAK_TOGGLE', { userId: currentUser.id, isOnBreak: session.isOnBreak, time: new Date().toLocaleTimeString() });
-        render();
-      }
     }
 
     function setTab(tab) {
@@ -390,12 +281,12 @@
           <aside class="w-64 glass-sidebar flex flex-col justify-between p-5 z-20">
             <div>
               <div class="flex items-center gap-3 px-2 mb-8">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-orange-500/20">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold shadow-md">
                   <i class="fa-solid fa-chart-line text-lg"></i>
                 </div>
                 <div>
                   <h1 class="text-base font-extrabold text-slate-900 tracking-tight">SalesTrack</h1>
-                  <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cloud Connected • Real-Time</p>
+                  <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cloud Connected</p>
                 </div>
               </div>
 
@@ -427,12 +318,6 @@
             </div>
 
             <div class="space-y-4">
-              <div class="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 text-center relative overflow-hidden">
-                <i class="fa-solid fa-cloud text-4xl text-blue-200 absolute -bottom-2 -right-2"></i>
-                <h4 class="text-xs font-extrabold text-blue-900">Cloud Live Sync</h4>
-                <p class="text-[11px] text-blue-600 mt-1 font-medium">Automatic bi-directional sync</p>
-              </div>
-
               <button onclick="handleLogout()" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
                 <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
               </button>
@@ -447,14 +332,12 @@
                 <span class="text-xs font-extrabold text-slate-800 uppercase tracking-wider capitalize">${activeTab.replace('_', ' ')}</span>
               </div>
               <div class="flex items-center gap-4">
-                <button onclick="fetchFromSheet()" title="Click to instant sync with Google Sheet" class="cursor-pointer text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-emerald-200 transition-colors">
-                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Cloud Live
+                <button onclick="fetchFromSheet()" class="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1 animate-pulse"></span> Cloud Live
                 </button>
                 <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200">
-                  <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                    ${u.name.charAt(0)}
-                  </div>
-                  <div class="text-left">
+                  <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs">${u.name.charAt(0)}</div>
+                  <div>
                     <p class="text-xs font-bold text-slate-800 leading-none">${u.name}</p>
                     <span class="text-[10px] font-semibold text-slate-400 uppercase">${u.role === 'admin' ? 'Admin (TL)' : 'Agent'}</span>
                   </div>
@@ -468,105 +351,33 @@
           </div>
         </div>
 
-        <!-- Submit / Edit / DELETE Daily Report Modal -->
+        <!-- Submit / Edit Modal -->
         <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-2.5">
-                <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm font-bold">
-                  <i class="fa-solid fa-file-lines"></i>
-                </div>
-                <div>
-                  <h3 id="modalTitle" class="text-sm font-extrabold text-slate-900">Daily Sales Report</h3>
-                  <p class="text-[11px] text-slate-400">প্রতি দিনের ১টি রিপোর্ট (এডিট বা ডিলিট করা যাবে)</p>
-                </div>
-              </div>
-              <button onclick="closeModal('submitModal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-
-            <form id="eodReportForm" onsubmit="handleSalesSubmit(event)" class="space-y-3.5">
-              <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
-                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Select Agent</label>
-                <select id="subAgentId" onchange="onReportTargetChanged()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                  ${getStored('users', []).filter(usr => usr.role === 'agent').map(usr => `
-                    <option value="${usr.id}">${usr.name} (ID: ${usr.id} • ${usr.team})</option>
-                  `).join('')}
-                </select>
-              </div>
-
-              <div>
-                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Report Date (তারিখ নির্বাচন)</label>
-                <input type="date" id="subDate" required onchange="onReportTargetChanged()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                <p id="existingNotice" class="text-[10px] font-bold text-amber-600 mt-1 hidden">
-                  <i class="fa-solid fa-circle-exclamation mr-1"></i> এই তারিখে ইতিমধ্যে রিপোর্ট রয়েছে। আপনি এটি এডিট বা ডিলিট করতে পারবেন।
-                </p>
-              </div>
-
-              <div class="grid grid-cols-3 gap-3">
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Total Leads</label>
-                  <input type="number" id="subLeads" required min="1" placeholder="50" oninput="calculatePreviewRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Total Orders</label>
-                  <input type="number" id="subOrders" required min="0" placeholder="10" oninput="calculatePreviewRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount (৳)</label>
-                  <input type="number" id="subAmount" required min="0" placeholder="25000" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                <div>
-                  <p class="text-[10px] font-bold text-slate-400 uppercase">Daily Goal Achieved</p>
-                  <p id="prevAchieve" class="text-base font-black text-amber-500 mt-0.5">0%</p>
-                </div>
-                <div>
-                  <p class="text-[10px] font-bold text-slate-400 uppercase">Conversion Ratio</p>
-                  <p id="prevRatio" class="text-base font-black text-blue-600 mt-0.5">0.00%</p>
-                </div>
-              </div>
-
-              <div class="flex items-center justify-between pt-2">
-                <div>
-                  <button type="button" id="deleteReportBtn" onclick="handleDeleteCurrentReport()" class="hidden px-4 py-2 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1.5">
-                    <i class="fa-solid fa-trash-can"></i> <span>Delete Report</span>
-                  </button>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
-                  <button type="submit" id="submitBtnText" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 flex items-center gap-2">
-                    <i class="fa-solid fa-paper-plane"></i> <span>Submit Report</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <!-- Set Target Modal (Admin) -->
-        <div id="targetModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-base font-extrabold text-slate-900">Set Agent Monthly Target</h3>
-              <button onclick="closeModal('targetModal')" class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
+              <h3 class="text-sm font-extrabold text-slate-900">Daily Sales Report</h3>
+              <button onclick="closeModal('submitModal')" class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <form onsubmit="handleSaveTarget(event)" class="space-y-4">
-              <input type="hidden" id="tgtAgentId">
-              <div>
-                <p id="tgtAgentName" class="text-xs font-bold text-blue-600 mb-2"></p>
-                <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Monthly Orders Target</label>
-                <input type="number" id="tgtMonthlyOrders" required min="1" oninput="calculateDailyBreakdown()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
+            <form onsubmit="handleSalesSubmit(event)" class="space-y-3.5">
+              <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
+                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Select Agent</label>
+                <select id="subAgentId" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
+                  ${getStored('users', []).filter(usr => usr.role === 'agent').map(usr => `<option value="${usr.id}">${usr.name} (ID: ${usr.id} • ${usr.team})</option>`).join('')}
+                </select>
               </div>
               <div>
-                <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Monthly Sales Amount (BDT)</label>
-                <input type="number" id="tgtMonthlyAmount" required min="1" oninput="calculateDailyBreakdown()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
+                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Report Date</label>
+                <input type="date" id="subDate" required class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
               </div>
-              <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md">
-                Save & Update Target
-              </button>
+              <div class="grid grid-cols-3 gap-3">
+                <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Leads</label><input type="number" id="subLeads" required min="1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Orders</label><input type="number" id="subOrders" required min="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount (৳)</label><input type="number" id="subAmount" required min="0" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+              </div>
+              <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600">Cancel</button>
+                <button type="submit" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600">Submit Report</button>
+              </div>
             </form>
           </div>
         </div>
@@ -575,70 +386,11 @@
 
     function openReportModal(targetAgentId, targetDateStr) {
       const u = getFreshUser();
-      const dateInput = document.getElementById('subDate');
-      dateInput.value = dateToInputVal(targetDateStr || getTodayFormatted());
-
-      if (u.role === 'admin') {
-        const select = document.getElementById('subAgentId');
-        if (targetAgentId) select.value = targetAgentId;
+      document.getElementById('subDate').value = dateToInputVal(targetDateStr || getTodayFormatted());
+      if (u.role === 'admin' && targetAgentId) {
+        document.getElementById('subAgentId').value = targetAgentId;
       }
-
-      onReportTargetChanged();
       openModal('submitModal');
-    }
-
-    function onReportTargetChanged() {
-      const u = getFreshUser();
-      const allSales = getStored('sales_records', []);
-
-      let agentId = u.id;
-      if (u.role === 'admin') {
-        agentId = document.getElementById('subAgentId').value;
-      }
-
-      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
-      const existing = allSales.find(s => s.userId === agentId && s.date === dateStr);
-
-      const notice = document.getElementById('existingNotice');
-      const btnText = document.querySelector('#submitBtnText span');
-      const delBtn = document.getElementById('deleteReportBtn');
-
-      if (existing) {
-        document.getElementById('subLeads').value = existing.leads;
-        document.getElementById('subOrders').value = existing.orders;
-        document.getElementById('subAmount').value = existing.amount;
-        notice.classList.remove('hidden');
-        delBtn.classList.remove('hidden');
-        btnText.textContent = `Update Report (${dateStr})`;
-      } else {
-        document.getElementById('subLeads').value = '';
-        document.getElementById('subOrders').value = '';
-        document.getElementById('subAmount').value = '';
-        notice.classList.add('hidden');
-        delBtn.classList.add('hidden');
-        btnText.textContent = 'Submit Report';
-      }
-      calculatePreviewRatio();
-    }
-
-    function calculatePreviewRatio() {
-      const u = getFreshUser();
-      const allUsers = getStored('users', []);
-      let targetUser = u;
-      if (u.role === 'admin') {
-        const selId = document.getElementById('subAgentId')?.value;
-        targetUser = allUsers.find(usr => usr.id === selId) || u;
-      }
-
-      const t = getUserTargetInfo(targetUser);
-      const l = Number(document.getElementById('subLeads').value) || 0;
-      const o = Number(document.getElementById('subOrders').value) || 0;
-      const ratio = l > 0 ? ((o / l) * 100).toFixed(2) : '0.00';
-      document.getElementById('prevRatio').textContent = ratio + '%';
-
-      const dOrdersTarget = t.dailyOrdersTarget;
-      const achieve = dOrdersTarget > 0 ? Math.round((o / dOrdersTarget) * 100) : 0;
-      document.getElementById('prevAchieve').textContent = achieve + '%';
     }
 
     async function handleSalesSubmit(e) {
@@ -646,36 +398,32 @@
       const u = getFreshUser();
       const allUsers = getStored('users', []);
 
-      let agent = u;
+      let targetAgent = u;
       if (u.role === 'admin') {
         const selId = document.getElementById('subAgentId').value;
-        agent = allUsers.find(usr => usr.id === selId) || u;
+        targetAgent = allUsers.find(usr => usr.id === selId) || u;
       }
 
-      const t = getUserTargetInfo(agent);
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
       const leads = Number(document.getElementById('subLeads').value) || 0;
       const orders = Number(document.getElementById('subOrders').value) || 0;
       const amount = Number(document.getElementById('subAmount').value) || 0;
-      const ratio = leads > 0 ? ((orders / leads) * 100).toFixed(2) : 0;
-      const dOrdersTarget = t.dailyOrdersTarget;
-      const achieve = dOrdersTarget > 0 ? Math.round((orders / dOrdersTarget) * 100) : 0;
+      const ratio = leads > 0 ? Number(((orders / leads) * 100).toFixed(2)) : 0;
 
       let sales = getStored('sales_records', []);
-      const existingIdx = sales.findIndex(s => s.userId === agent.id && s.date === dateStr);
+      const existingIdx = sales.findIndex(s => s.userId === targetAgent.id && s.date === dateStr);
 
       const entry = {
-        id: existingIdx !== -1 ? sales[existingIdx].id : 'rec_' + agent.id + '_' + Date.now(),
-        userId: agent.id,
-        userName: agent.name,
-        team: agent.team,
+        id: existingIdx !== -1 ? sales[existingIdx].id : 'rec_' + targetAgent.id + '_' + Date.now(),
+        userId: targetAgent.id,
+        userName: targetAgent.name,
+        team: targetAgent.team,
         date: dateStr,
         time: new Date().toLocaleTimeString(),
         leads,
         orders,
         amount,
-        ratio: Number(ratio),
-        achievement: achieve
+        ratio
       };
 
       if (existingIdx !== -1) sales[existingIdx] = entry;
@@ -685,30 +433,7 @@
       render();
 
       await postToSheet('DAILY_SALES_SUBMIT', entry);
-      alert(`ধন্যবাদ! ${agent.name}-এর ${dateStr} তারিখের রিপোর্ট সফলভাবে ক্লাউডে সেভ হয়েছে।`);
-      closeModal('submitModal');
-      setTimeout(fetchFromSheet, 1500);
-    }
-
-    async function handleDeleteCurrentReport(userIdParam, dateParam) {
-      const u = getFreshUser();
-      let agentId = userIdParam || u.id;
-      if (!userIdParam && u.role === 'admin') {
-        agentId = document.getElementById('subAgentId').value;
-      }
-      const dateStr = dateParam || inputValToDateStr(document.getElementById('subDate').value);
-
-      if (!confirm(`আপনি কি নিশ্চিতভাবে এই রিপোর্টটি (${dateStr}) মুছে ফেলতে চান? এটি গুগল শিট থেকেও মুছে যাবে।`)) {
-        return;
-      }
-
-      let sales = getStored('sales_records', []);
-      sales = sales.filter(s => !(s.userId === agentId && s.date === dateStr));
-      setStored('sales_records', sales);
-      render();
-
-      await postToSheet('DELETE_SALES_RECORD', { userId: agentId, date: dateStr });
-      alert('রিপোর্টটি সফলভাবে ডিলিট করা হয়েছে!');
+      alert(`ধন্যবাদ! ${targetAgent.name}-এর রিপোর্ট সফলভাবে ক্লাউডে সেভ হয়েছে।`);
       closeModal('submitModal');
       setTimeout(fetchFromSheet, 1500);
     }
@@ -730,23 +455,13 @@
       const u = getFreshUser();
       const t = getUserTargetInfo(u);
       const sales = getStored('sales_records', []);
-      const todayStr = getTodayFormatted();
-      const attendance = getStored('attendance', []);
-      const todaySession = attendance.find(a => a.userId === u.id && a.date === todayStr) || { activeSeconds: 0, breakSeconds: 0, isOnBreak: false };
-
-      const mySales = u.role === 'admin' 
-        ? sales.filter(s => s.team === u.team) 
-        : sales.filter(s => s.userId === u.id);
+      const mySales = u.role === 'admin' ? sales.filter(s => s.team === u.team) : sales.filter(s => s.userId === u.id);
 
       const totalLeads = mySales.reduce((a, c) => a + c.leads, 0);
       const totalOrders = mySales.reduce((a, c) => a + c.orders, 0);
       const totalAmount = mySales.reduce((a, c) => a + c.amount, 0);
-      const avgConversionRatio = totalLeads > 0 ? ((totalOrders / totalLeads) * 100).toFixed(2) : '0.00';
-
       const targetAmount = t.monthlyAmountTarget;
       const targetOrders = t.monthlyOrdersTarget;
-      const dailyOrdersTarget = t.dailyOrdersTarget;
-      const dailyAmountTarget = t.dailyAmountTarget;
       const achievePct = targetAmount > 0 ? Math.min(100, Math.round((totalAmount / targetAmount) * 100)) : 0;
 
       return `
@@ -755,46 +470,22 @@
             <div>
               <div class="flex items-center gap-2">
                 <h2 class="text-2xl font-black text-slate-900 leading-tight">Welcome, ${u.name}! 👋</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">
-                  ${u.team} (${u.role === 'admin' ? `Team Leader • ${t.agentCount} Agents Total Sum` : 'Sales Agent'})
-                </span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${u.team}</span>
               </div>
             </div>
-            
-            <div class="flex flex-wrap items-center gap-3">
-              ${u.role === 'agent' ? `
-              <button onclick="openReportModal()" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 flex items-center gap-2 transition-all">
-                <i class="fa-solid fa-plus text-sm"></i> Submit Daily Report
+            <div>
+              <button onclick="openReportModal()" class="px-5 py-3 rounded-xl text-xs font-bold text-white ${u.role === 'admin' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'} shadow-lg flex items-center gap-2">
+                <i class="fa-solid fa-plus text-sm"></i> ${u.role === 'admin' ? 'Add / Edit Agent Report' : 'Submit Daily Report'}
               </button>
-              ` : `
-              <button onclick="openReportModal()" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all">
-                <i class="fa-solid fa-file-circle-plus text-sm"></i> Add / Edit Agent Report
-              </button>
-              `}
             </div>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div class="highlight-card-blue p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-blue-100">Total Leads</span>
-              <p class="text-3xl font-black tracking-tight text-white mt-4">${totalLeads}</p>
-            </div>
-            <div class="highlight-card-emerald p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-emerald-100">Total Orders</span>
-              <p class="text-3xl font-black tracking-tight text-white mt-4">${totalOrders} / ${targetOrders}</p>
-            </div>
-            <div class="highlight-card-purple p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-purple-100">Total Sales Amount</span>
-              <p class="text-2xl font-black tracking-tight text-white mt-4">৳${totalAmount.toLocaleString()}</p>
-            </div>
-            <div class="highlight-card-indigo p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-indigo-100">Monthly Target (৳)</span>
-              <p class="text-2xl font-black tracking-tight text-white mt-4">৳${targetAmount.toLocaleString()}</p>
-            </div>
-            <div class="highlight-card-amber p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <span class="text-xs font-bold uppercase tracking-wider text-amber-100">Target Achievement</span>
-              <p class="text-3xl font-black tracking-tight text-white mt-4">${achievePct}%</p>
-            </div>
+            <div class="highlight-card-blue p-5 rounded-2xl"><span class="text-xs font-bold uppercase tracking-wider text-blue-100">Total Leads</span><p class="text-3xl font-black text-white mt-4">${totalLeads}</p></div>
+            <div class="highlight-card-emerald p-5 rounded-2xl"><span class="text-xs font-bold uppercase tracking-wider text-emerald-100">Total Orders</span><p class="text-3xl font-black text-white mt-4">${totalOrders} / ${targetOrders}</p></div>
+            <div class="highlight-card-purple p-5 rounded-2xl"><span class="text-xs font-bold uppercase tracking-wider text-purple-100">Sales Amount</span><p class="text-2xl font-black text-white mt-4">৳${totalAmount.toLocaleString()}</p></div>
+            <div class="highlight-card-indigo p-5 rounded-2xl"><span class="text-xs font-bold uppercase tracking-wider text-indigo-100">Monthly Target</span><p class="text-2xl font-black text-white mt-4">৳${targetAmount.toLocaleString()}</p></div>
+            <div class="highlight-card-amber p-5 rounded-2xl"><span class="text-xs font-bold uppercase tracking-wider text-amber-100">Achievement</span><p class="text-3xl font-black text-white mt-4">${achievePct}%</p></div>
           </div>
 
           <div class="card-neo p-6">
@@ -805,12 +496,9 @@
       `;
     }
 
-    function renderAttendanceView() {
-      return `<div class="card-neo p-6"><h2 class="text-lg font-black">Attendance View</h2></div>`;
-    }
-    function renderPerformanceView() {
-      return `<div class="card-neo p-6"><h2 class="text-lg font-black">Performance View</h2></div>`;
-    }
+    function renderAttendanceView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Attendance & Shift Tracking</h2></div>`; }
+    function renderPerformanceView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Performance Analytics</h2></div>`; }
+    
     function renderDailyReportsView() {
       const sales = getStored('sales_records', []);
       return `
@@ -822,12 +510,10 @@
           <div class="card-neo overflow-hidden">
             <table class="w-full text-left text-xs">
               <thead class="bg-slate-50 border-b border-slate-100 uppercase text-slate-400 font-bold">
-                <tr>
-                  <th class="p-4">Report Date</th><th class="p-4">Agent Name</th><th class="p-4">Team</th><th class="p-4">Leads</th><th class="p-4">Orders</th><th class="p-4">Amount (BDT)</th><th class="p-4 text-right">Actions</th>
-                </tr>
+                <tr><th class="p-4">Report Date</th><th class="p-4">Agent Name</th><th class="p-4">Team</th><th class="p-4">Leads</th><th class="p-4">Orders</th><th class="p-4">Amount</th><th class="p-4 text-right">Action</th></tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-medium">
-                ${sales.length === 0 ? '<tr><td colspan="7" class="p-8 text-center text-slate-400">কোন সেলস এন্ট্রি পাওয়া যায়নি।</td></tr>' : ''}
+                ${sales.length === 0 ? '<tr><td colspan="7" class="p-8 text-center text-slate-400">কোন রেকর্ড নেই।</td></tr>' : ''}
                 ${sales.map(s => `
                   <tr>
                     <td class="p-4">${cleanDisplayDate(s.date)}</td>
@@ -836,9 +522,7 @@
                     <td class="p-4">${s.leads}</td>
                     <td class="p-4 font-bold text-blue-600">${s.orders}</td>
                     <td class="p-4 font-bold text-emerald-600">৳${s.amount.toLocaleString()}</td>
-                    <td class="p-4 text-right">
-                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 bg-slate-100 text-slate-600 rounded font-bold">Edit</button>
-                    </td>
+                    <td class="p-4 text-right"><button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 bg-slate-100 rounded font-bold">Edit</button></td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -847,8 +531,10 @@
         </div>
       `;
     }
-    function renderTargetSetupView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Target Setup</h2></div>`; }
-    function renderRankingView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Rankings</h2></div>`; }
+
+    function renderTargetSetupView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Target Management</h2></div>`; }
+    function renderRankingView() { return `<div class="card-neo p-6"><h2 class="text-lg font-black">Agent Rankings</h2></div>`; }
+    
     function renderSettingsView() {
       return `
         <div class="max-w-xl card-neo p-6 space-y-5">
@@ -858,24 +544,27 @@
         </div>
       `;
     }
+
     function saveSettingsWebhook() {
       webhookUrl = document.getElementById('settingsWebhook').value.trim() || DEFAULT_WEBHOOK_URL;
       localStorage.setItem('gb_webhook_url', webhookUrl);
       alert('Updated!'); fetchFromSheet();
     }
+
     function attachCharts() {
       const ctx = document.getElementById('salesTrendChart');
       if (ctx) {
         new Chart(ctx, {
           type: 'bar',
-          data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ data: [10, 20, 30, 25, 40, 50, 35], backgroundColor: '#2563eb' }] },
+          data: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], datasets: [{ data: [15, 25, 35, 30, 45, 55, 40], backgroundColor: '#2563eb' }] },
           options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
       }
     }
+
     function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
     function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
+
     window.addEventListener('load', init);
   </script>
-</body>
 </html>
