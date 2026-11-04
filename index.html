@@ -21,7 +21,7 @@
   <script>
     const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtdDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
 
-    // Data from Images: Team Samad & Team Nazim with their respective grades & target amounts.
+    // User Data from Images (with individual base targets)
     const DEFAULT_USERS = [
       { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123' },
       { id: '10107', name: 'Md Abdus Samad (TL)', role: 'admin', team: 'Team Samad', pass: 'admin123' },
@@ -45,7 +45,7 @@
       { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 }
     ];
 
-    // Facebook Channel Product Targets (per agent) from Image
+    // Facebook Channel Product Targets (per agent)
     const FB_PRODUCTS = {
       ajwa: { name: 'Ajwa', targetKg: 69.03 },
       pinkSalt: { name: 'Pink Salt', targetKg: 10.07 },
@@ -79,10 +79,34 @@
       const p = val.split('-'); if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
       return getTodayFormatted();
     }
+    function cleanDisplayDate(raw) {
+      if (!raw) return getTodayFormatted();
+      let s = String(raw).trim();
+      const p = s.split('/');
+      if (p.length === 3) {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const mIdx = parseInt(p[1], 10) - 1;
+        if (mIdx >= 0 && mIdx < 12) return `${p[0]} ${months[mIdx]} ${p[2]}`;
+      }
+      return s;
+    }
 
-    // Sprint & Target Logic (5% Additional Buffer applied here)
-    function getAgentTargetData(user) {
-      const workingTarget = Math.round(user.baseTarget * 1.05); // 5% extra for return/cancel issue
+    // Sprint & Target Logic (5% Buffer)
+    // For admin, this calculates the TEAM total. For agent, it calculates INDIVIDUAL total.
+    function getTargetData(user) {
+      const allUsers = getStored('users', []);
+      let baseTarget = 0;
+      let agentCount = 1;
+      
+      if (user.role === 'admin') {
+        const teamAgents = allUsers.filter(u => u.role === 'agent' && u.team === user.team);
+        baseTarget = teamAgents.reduce((sum, a) => sum + (a.baseTarget || 0), 0);
+        agentCount = teamAgents.length || 1;
+      } else {
+        baseTarget = user.baseTarget || 0;
+      }
+
+      const workingTarget = Math.round(baseTarget * 1.05); // 5% extra
       const d = new Date().getDate();
       let sprintName, sprintGoal, sprintPct;
 
@@ -90,10 +114,10 @@
       else if (d <= 20) { sprintName = 'Sprint 2 (Days 11-20)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
       else { sprintName = 'Sprint 3 (Days 21-31)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
 
-      return { workingTarget, sprintName, sprintGoal, sprintPct };
+      return { workingTarget, sprintName, sprintGoal, sprintPct, agentCount };
     }
 
-    // Central Sync System
+    // Sync System
     async function postToSheet(action, payload) {
       const fullData = { action, timestamp: new Date().toISOString(), ...payload };
       const params = new URLSearchParams({ action, payload: JSON.stringify(fullData), ...payload });
@@ -126,7 +150,7 @@
     }
 
     function init() {
-      if (currentUser) { renderAppLayout(); pollInterval = setInterval(fetchFromSheet, 3500); }
+      if (currentUser) { renderAppLayout(); pollInterval = setInterval(fetchFromSheet, 4000); }
       else { document.getElementById('app').innerHTML = renderLogin(); }
     }
 
@@ -203,18 +227,11 @@
     function renderDashboard() {
       const u = currentUser;
       const allSales = getStored('sales_records', []);
-      let targetUser = u;
-      let mySales = allSales.filter(s => s.userId === u.id);
+      let mySales = u.role === 'admin' ? allSales.filter(s => s.team === u.team) : allSales.filter(s => s.userId === u.id);
 
-      if (u.role === 'admin') {
-        return `<div class="card-neo p-8 text-center"><h2 class="text-xl font-bold">Admin Dashboard Overview</h2><p class="mt-2 text-slate-500">Go to Team Stats to view agent specific details.</p><button onclick="openReportModal()" class="mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold">Add Data for Agent</button></div>`;
-      }
-
-      // Agent specific calculations
-      const tInfo = getAgentTargetData(u);
+      const tInfo = getTargetData(u);
       
-      // Calculate Sprint Achievements
-      const currentMonthStr = getTodayFormatted().substring(3); // gets MM/YYYY
+      const currentMonthStr = getTodayFormatted().substring(3);
       const thisMonthSales = mySales.filter(s => s.date.endsWith(currentMonthStr));
       
       const sprintSalesAmount = thisMonthSales.reduce((acc, curr) => {
@@ -229,7 +246,6 @@
       const sprintPct = tInfo.sprintGoal > 0 ? Math.min(100, Math.round((sprintSalesAmount / tInfo.sprintGoal) * 100)) : 0;
       const monthPct = tInfo.workingTarget > 0 ? Math.min(100, Math.round((monthTotalAmount / tInfo.workingTarget) * 100)) : 0;
 
-      // Calculate Product Achievements (Total KG)
       const pTotals = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
       thisMonthSales.forEach(s => {
         pTotals.ajwa += (s.ajwa || 0); pTotals.pinkSalt += (s.pinkSalt || 0);
@@ -242,17 +258,19 @@
           <div class="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border">
             <div>
               <h2 class="text-2xl font-black text-slate-800">Welcome, ${u.name}</h2>
-              <p class="text-sm font-bold text-slate-500 mt-1">Grade: ${u.grade} • Base Target: ৳${u.baseTarget.toLocaleString()} <span class="text-amber-600 font-extrabold">(+5% Buffer: ৳${tInfo.workingTarget.toLocaleString()})</span></p>
+              <p class="text-sm font-bold text-slate-500 mt-1">
+                ${u.role === 'admin' ? `Team Performance: ${u.team} (${tInfo.agentCount} Agents)` : `Grade: ${u.grade}`} • Base Target: ৳${(u.role === 'admin' ? Math.round(tInfo.workingTarget/1.05) : u.baseTarget).toLocaleString()} <span class="text-amber-600 font-extrabold">(+5% Buffer: ৳${tInfo.workingTarget.toLocaleString()})</span>
+              </p>
             </div>
-            <button onclick="openReportModal()" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg">Submit Sales Data</button>
+            <button onclick="openReportModal()" class="px-6 py-3 ${u.role === 'admin' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-xl font-bold shadow-lg">
+              ${u.role === 'admin' ? 'Add Data for Agent' : 'Submit Sales Data'}
+            </button>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Sprint Progress -->
             <div class="card-neo p-6 bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-100">
               <h3 class="text-xs font-black uppercase text-indigo-800 tracking-widest mb-1">Current Sprint Focus</h3>
               <p class="text-lg font-bold text-slate-900">${tInfo.sprintName} (Target: ${tInfo.sprintPct * 100}%)</p>
-              
               <div class="mt-6">
                 <div class="flex justify-between text-sm font-bold mb-2">
                   <span class="text-slate-700">Sprint Target: ৳${tInfo.sprintGoal.toLocaleString()}</span>
@@ -263,11 +281,9 @@
               </div>
             </div>
 
-            <!-- Monthly Progress -->
             <div class="card-neo p-6 bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100">
-              <h3 class="text-xs font-black uppercase text-emerald-800 tracking-widest mb-1">Monthly Total (With 5% Return Buffer)</h3>
+              <h3 class="text-xs font-black uppercase text-emerald-800 tracking-widest mb-1">Monthly Total (With 5% Buffer)</h3>
               <p class="text-lg font-bold text-slate-900">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</p>
-              
               <div class="mt-6">
                 <div class="flex justify-between text-sm font-bold mb-2">
                   <span class="text-slate-700">Month Revenue</span>
@@ -279,19 +295,20 @@
             </div>
           </div>
 
-          <h3 class="text-lg font-black text-slate-800 mt-8 mb-4">Product Incentive Targets (FB Channel)</h3>
+          <h3 class="text-lg font-black text-slate-800 mt-8 mb-4">Product Targets (${u.role === 'admin' ? 'Team Sum' : 'Individual'}) (FB Channel)</h3>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
             ${Object.keys(FB_PRODUCTS).map(k => {
               const p = FB_PRODUCTS[k];
               const achieved = pTotals[k];
-              const pct = Math.min(100, Math.round((achieved / p.targetKg) * 100));
-              const isEligible = pct >= 90; // 90% is entry level for most
+              const target = p.targetKg * tInfo.agentCount; // Scale target by number of agents
+              const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
+              const isEligible = pct >= 90;
               return `
                 <div class="card-neo p-5 ${isEligible ? 'border-amber-300 bg-amber-50/30' : ''}">
                   <h4 class="font-bold text-slate-800">${p.name}</h4>
-                  <p class="text-xs text-slate-500 font-semibold mb-3">Target: ${p.targetKg} kg</p>
+                  <p class="text-xs text-slate-500 font-semibold mb-3">Target: ${target.toFixed(2)} kg</p>
                   <div class="flex justify-between text-sm font-black mb-1">
-                    <span class="${isEligible ? 'text-amber-600' : 'text-slate-700'}">${achieved} kg</span>
+                    <span class="${isEligible ? 'text-amber-600' : 'text-slate-700'}">${achieved.toFixed(2)} kg</span>
                     <span class="text-slate-400">${pct}%</span>
                   </div>
                   <div class="progress-bg h-1.5"><div class="bg-slate-800 h-1.5 rounded-full ${isEligible ? 'bg-amber-500' : ''}" style="width: ${pct}%"></div></div>
@@ -305,7 +322,7 @@
 
     function renderReports() {
       const u = currentUser;
-      const sales = getStored('sales_records', []).filter(s => u.role === 'admin' ? true : s.userId === u.id);
+      const sales = getStored('sales_records', []).filter(s => u.role === 'admin' ? s.team === u.team : s.userId === u.id);
       
       return `
         <div class="space-y-6">
@@ -319,6 +336,7 @@
                 <tr><th class="p-4">Date</th><th class="p-4">Agent</th><th class="p-4">Leads</th><th class="p-4">Orders</th><th class="p-4">Amount</th><th class="p-4">Products (kg)</th><th class="p-4 text-right">Action</th></tr>
               </thead>
               <tbody class="divide-y font-medium">
+                ${sales.length === 0 ? '<tr><td colspan="7" class="p-8 text-center text-slate-400">কোন রেকর্ড নেই।</td></tr>' : ''}
                 ${sales.map(s => `
                   <tr>
                     <td class="p-4">${cleanDisplayDate(s.date)}</td>
@@ -327,7 +345,7 @@
                     <td class="p-4 font-bold text-blue-600">${s.orders}</td>
                     <td class="p-4 font-black text-emerald-600">৳${s.amount.toLocaleString()}</td>
                     <td class="p-4 text-[10px] text-slate-500">
-                      Ajwa:${s.ajwa} | PinkSalt:${s.pinkSalt} | Honey:${s.sunHoney} | Ghee:${s.gawaGhee}
+                      Ajwa:${s.ajwa||0} | PinkSalt:${s.pinkSalt||0} | Honey:${(s.sunHoney||0)+(s.bsHoney||0)} | Ghee:${s.gawaGhee||0}
                     </td>
                     <td class="p-4 text-right">
                       <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 bg-slate-100 text-slate-700 rounded font-bold hover:bg-slate-200">Edit / Delete</button>
@@ -342,12 +360,12 @@
     }
 
     function renderTeamStats() {
-      const users = getStored('users', []).filter(u => u.role === 'agent');
+      const users = getStored('users', []).filter(u => u.role === 'agent' && u.team === currentUser.team);
       const sales = getStored('sales_records', []);
       
       return `
         <div class="space-y-6">
-          <h2 class="text-xl font-black text-slate-900">Agent Team Tracking</h2>
+          <h2 class="text-xl font-black text-slate-900">Agent Team Tracking (${currentUser.team})</h2>
           <div class="card-neo overflow-hidden">
             <table class="w-full text-left text-xs">
               <thead class="bg-slate-50 border-b uppercase font-bold text-slate-500">
@@ -369,7 +387,7 @@
 
     function renderSubmitModal() {
       const u = currentUser;
-      const users = getStored('users', []).filter(usr => usr.role === 'agent');
+      const users = getStored('users', []).filter(usr => usr.role === 'agent' && (u.role === 'admin' ? usr.team === u.team : true));
       
       return `
         <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -400,18 +418,19 @@
 
               <div class="border-t pt-4 mt-4">
                 <h4 class="text-xs font-black text-slate-800 uppercase mb-3"><i class="fa-solid fa-box-open mr-1 text-amber-500"></i> Product Targets (Enter KG Sold)</h4>
+                <p class="text-[10px] text-slate-400 mb-2">Note: For grams, use decimal (e.g., 500gm = 0.5, 250gm = 0.25)</p>
                 <div class="grid grid-cols-2 gap-3">
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Ajwa (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Pink Salt (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Black Garlic (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Sun. Honey (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">BS Honey (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Gawa Ghee (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Ajwa (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" placeholder="e.g. 1.5" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Pink Salt (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" placeholder="e.g. 0.5" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Black Garlic (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" placeholder="e.g. 0.25" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Sun. Honey (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" placeholder="e.g. 1" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">BS Honey (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" placeholder="e.g. 0.5" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Gawa Ghee (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" placeholder="e.g. 0.40" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
                 </div>
               </div>
 
               <div class="flex justify-between items-center pt-4">
-                <button type="button" id="deleteReportBtn" onclick="handleDelete()" class="hidden px-4 py-2.5 text-xs font-bold text-red-600 bg-red-50 rounded-xl">Delete Record</button>
+                <button type="button" id="deleteReportBtn" onclick="handleDelete()" class="hidden px-4 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl">Delete Record</button>
                 <div class="flex gap-2 ml-auto">
                   <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
                   <button type="submit" class="px-6 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-xl shadow-lg">Save Data</button>
