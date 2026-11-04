@@ -10,29 +10,27 @@
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap');
     body { font-family: 'Plus Jakarta Sans', 'Hind Siliguri', sans-serif; background-color: #f1f5f9; color: #0f172a; }
     
-    /* Dynamic Sidebar & Cards */
     .sidebar-dark { background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); color: #f8fafc; }
     .card-dynamic { background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05); transition: all 0.25s ease; }
     .card-dynamic:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(15, 23, 42, 0.08); }
     
     .tab-active { 
-      background: linear-gradient(135deg, #f97316 0%, #2563eb 100%); 
+      background: linear-gradient(135deg, #1877f2 0%, #0c63d4 100%); 
       color: #ffffff !important; 
-      box-shadow: 0 8px 20px -4px rgba(37, 99, 235, 0.45); 
+      box-shadow: 0 8px 20px -4px rgba(24, 119, 242, 0.4); 
     }
     
-    /* Vibrant Executive KPI Gradients */
-    .kpi-blue { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(37, 99, 235, 0.35); }
-    .kpi-emerald { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(5, 150, 105, 0.35); }
-    .kpi-purple { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(124, 58, 237, 0.35); }
-    .kpi-indigo { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(79, 70, 229, 0.35); }
-    .kpi-amber { background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(234, 88, 12, 0.35); }
+    .kpi-fb-1 { background: linear-gradient(135deg, #1877f2 0%, #0d6efd 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(24, 119, 242, 0.35); }
+    .kpi-fb-2 { background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(13, 110, 253, 0.35); }
+    .kpi-fb-3 { background: linear-gradient(135deg, #0b5ed7 0%, #0a58ca 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(11, 94, 215, 0.35); }
+    .kpi-fb-4 { background: linear-gradient(135deg, #3b82f6 100%, #1d4ed8 0%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(59, 130, 246, 0.35); }
+    .kpi-fb-5 { background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(30, 64, 175, 0.35); }
 
     .banner-hero { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1e293b 100%); color: white; }
     .sprint-banner { background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%); border: 1px solid #bfdbfe; }
     .monthly-banner { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0; }
+    .incentive-banner { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; }
 
-    /* Soft Tinted Product Cards */
     .prod-amber { background: linear-gradient(145deg, #ffffff 0%, #fffbeb 100%); border: 1px solid #fde68a; }
     .prod-rose { background: linear-gradient(145deg, #ffffff 0%, #fff1f2 100%); border: 1px solid #fecdd3; }
     .prod-purple { background: linear-gradient(145deg, #ffffff 0%, #faf5ff 100%); border: 1px solid #e9d5ff; }
@@ -47,7 +45,6 @@
   <div id="app" class="flex-1 flex flex-col"></div>
 
   <script>
-    // EXACT CORRECT APPS SCRIPT WEBHOOK URL
     const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
 
     localStorage.setItem('gb_webhook_url', DEFAULT_WEBHOOK_URL);
@@ -77,12 +74,12 @@
     ];
 
     const FB_PRODUCTS = {
-      ajwa: { name: 'Ajwa Dates', targetKg: 69.03, style: 'prod-amber', badge: 'bg-amber-500 text-white', bar: 'bg-amber-500', icon: 'fa-seedling', bonus: '90%: 600৳ | 100%: 1000৳' },
-      pinkSalt: { name: 'Pink Salt', targetKg: 10.07, style: 'prod-rose', badge: 'bg-rose-500 text-white', bar: 'bg-rose-500', icon: 'fa-jar', bonus: '100%: 2L Mustard Oil' },
-      blackGarlic: { name: 'Black Garlic', targetKg: 6.09, style: 'prod-purple', badge: 'bg-purple-600 text-white', bar: 'bg-purple-600', icon: 'fa-spa', bonus: '100%: 400gm Gawa Ghee' },
-      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51, style: 'prod-orange', badge: 'bg-orange-500 text-white', bar: 'bg-orange-500', icon: 'fa-droplet', bonus: '90%: 1000৳ | 100%: 2000৳' },
-      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09, style: 'prod-blue', badge: 'bg-blue-600 text-white', bar: 'bg-blue-600', icon: 'fa-bottle-droplet', bonus: '100%: 1000৳' },
-      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56, style: 'prod-emerald', badge: 'bg-emerald-600 text-white', bar: 'bg-emerald-600', icon: 'fa-cheese', bonus: '90%: 1200৳ | 100%: 2000৳' }
+      ajwa: { name: 'Ajwa Dates', targetKg: 69.03, style: 'prod-amber', badge: 'bg-amber-500 text-white', bar: 'bg-amber-500', icon: 'fa-seedling', bonus90: 600, bonus100: 1000 },
+      pinkSalt: { name: 'Pink Salt', targetKg: 10.07, style: 'prod-rose', badge: 'bg-rose-500 text-white', bar: 'bg-rose-500', icon: 'fa-jar', item100: '2L Mustard Oil' },
+      blackGarlic: { name: 'Black Garlic', targetKg: 6.09, style: 'prod-purple', badge: 'bg-purple-600 text-white', bar: 'bg-purple-600', icon: 'fa-spa', item100: '400gm Gawa Ghee' },
+      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51, style: 'prod-orange', badge: 'bg-orange-500 text-white', bar: 'bg-orange-500', icon: 'fa-droplet', bonus90: 1000, bonus100: 2000 },
+      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09, style: 'prod-blue', badge: 'bg-blue-600 text-white', bar: 'bg-blue-600', icon: 'fa-bottle-droplet', bonus100: 1000 },
+      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56, style: 'prod-emerald', badge: 'bg-emerald-600 text-white', bar: 'bg-emerald-600', icon: 'fa-cheese', bonus90: 1200, bonus100: 2000 }
     };
 
     if (!localStorage.getItem('gb_users')) {
@@ -91,7 +88,7 @@
 
     let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
     let activeTab = 'dashboard';
-    let adminFilterScope = 'ALL'; // 'ALL', 'Team Nazim', 'Team Samad'
+    let adminFilterScope = 'ALL';
     let pollInterval = null;
 
     function getStored(key, def) { const r = localStorage.getItem('gb_' + key); return r ? JSON.parse(r) : def; }
@@ -122,7 +119,6 @@
       return s;
     }
 
-    // Dynamic Target Calculator based on User or Admin Scope
     function getTargetData(user, scopeOverride) {
       const allUsers = getStored('users', []);
       let baseTarget = 0;
@@ -138,8 +134,8 @@
         baseTarget = Number(freshUser.baseTarget) || 1232174;
       }
 
-      const workingTarget = Math.round(baseTarget * 1.05); // +5% Extra for Return/Cancel
-      const dailyTarget = Math.round(workingTarget / 26);  // 26 Working days
+      const workingTarget = Math.round(baseTarget * 1.05);
+      const dailyTarget = Math.round(workingTarget / 26);
 
       const d = new Date().getDate();
       let sprintName, sprintGoal, sprintPct;
@@ -151,7 +147,30 @@
       return { baseTarget, workingTarget, dailyTarget, sprintName, sprintGoal, sprintPct, agentCount };
     }
 
-    // TRIPLE-REDUNDANCY CLOUD SYNC
+    // LIVE INCENTIVE & REWARD EARNED CALCULATOR
+    function calculateEarnedIncentives(pTotals, agentCount) {
+      let totalMoney = 0;
+      let earnedRewards = [];
+
+      Object.keys(FB_PRODUCTS).forEach(k => {
+        const p = FB_PRODUCTS[k];
+        const achieved = pTotals[k];
+        const target = p.targetKg * agentCount;
+        const pct = target > 0 ? (achieved / target) * 100 : 0;
+
+        if (pct >= 100) {
+          if (p.bonus100) totalMoney += p.bonus100;
+          if (p.item100) earnedRewards.push(`${p.name} (100%): ${p.item100}`);
+          else earnedRewards.push(`${p.name} (100% Full Bonus)`);
+        } else if (pct >= 90) {
+          if (p.bonus90) totalMoney += p.bonus90;
+          earnedRewards.push(`${p.name} (90% Entry Bonus)`);
+        }
+      });
+
+      return { totalMoney, earnedRewards };
+    }
+
     async function postToSheet(action, payload) {
       const fullData = { action, timestamp: new Date().toISOString(), ...payload };
       const params = new URLSearchParams({ action, payload: JSON.stringify(fullData), ...payload });
@@ -294,7 +313,6 @@
       const u = currentUser;
       const html = `
         <div class="flex-1 flex min-h-screen">
-          <!-- Dynamic Dark Executive Sidebar -->
           <aside class="w-68 sidebar-dark p-5 flex flex-col justify-between shrink-0">
             <div>
               <div class="flex items-center gap-3 px-2 mb-8">
@@ -303,7 +321,7 @@
                 </div>
                 <div>
                   <h1 class="text-base font-black text-white leading-tight">Ghorerbazar</h1>
-                  <p class="text-xs font-extrabold text-orange-400">Facebook Wing</p>
+                  <p class="text-xs font-extrabold text-orange-400">Facebook Team</p>
                 </div>
               </div>
 
@@ -374,7 +392,6 @@
       if (activeTab === 'agents') return renderManageAgents();
     }
 
-    // 1. DASHBOARD VIEW
     function renderDashboard() {
       const u = currentUser;
       const allSales = getStored('sales_records', []);
@@ -417,14 +434,16 @@
         pTotals.gawaGhee += (Number(s.gawaGhee) || 0);
       });
 
+      // Calculate Earned Incentives dynamically
+      const incentiveSummary = calculateEarnedIncentives(pTotals, tInfo.agentCount);
+
       return `
         <div class="space-y-6">
-          <!-- Hero Welcome Banner with Admin Team Switcher -->
           <div class="banner-hero p-6 rounded-3xl shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
             <div>
               <div class="flex flex-wrap items-center gap-2">
                 <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-orange-500 text-white tracking-wider">
-                  ${u.role === 'admin' ? `Viewing: ${adminFilterScope === 'ALL' ? 'Full Facebook Wing (All Teams)' : adminFilterScope}` : u.team}
+                  ${u.role === 'admin' ? `Viewing: ${adminFilterScope === 'ALL' ? 'Full Facebook Team (All Teams)' : adminFilterScope}` : u.team}
                 </span>
                 <span class="text-xs font-bold text-blue-200">
                   ${u.role === 'admin' ? `• ${tInfo.agentCount} Agents Selected` : `• Category Grade: ${u.grade}`}
@@ -441,7 +460,7 @@
             <div class="flex flex-wrap items-center gap-3">
               ${u.role === 'admin' ? `
               <div class="bg-white/10 p-1.5 rounded-2xl flex items-center gap-1 border border-white/15">
-                <button onclick="setAdminScope('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'ALL' ? 'bg-white text-slate-900 shadow' : 'text-white hover:bg-white/10'}">All Wing</button>
+                <button onclick="setAdminScope('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'ALL' ? 'bg-white text-slate-900 shadow' : 'text-white hover:bg-white/10'}">All Team</button>
                 <button onclick="setAdminScope('Team Nazim')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-white hover:bg-white/10'}">Team Nazim</button>
                 <button onclick="setAdminScope('Team Samad')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'Team Samad' ? 'bg-blue-500 text-white shadow' : 'text-white hover:bg-white/10'}">Team Samad</button>
               </div>
@@ -453,9 +472,31 @@
             </div>
           </div>
 
-          <!-- 5 Vibrant Gradient KPI Cards -->
+          <!-- Live Earned Incentive Notification Banner -->
+          <div class="incentive-banner p-5 rounded-3xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div class="flex items-center gap-3.5">
+              <div class="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-xl shadow-md shrink-0">
+                <i class="fa-solid fa-award"></i>
+              </div>
+              <div>
+                <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block">Live Incentive & Bonus Earned</span>
+                <h3 class="text-lg font-black text-slate-900">
+                  ৳${incentiveSummary.totalMoney.toLocaleString()} Cash Bonus 
+                  ${incentiveSummary.earnedRewards.length > 0 ? `+ ${incentiveSummary.earnedRewards.length} Product Rewards` : ''}
+                </h3>
+                <p class="text-[11px] font-bold text-slate-600 mt-0.5">
+                  ${incentiveSummary.earnedRewards.length > 0 ? `Unlocked: ${incentiveSummary.earnedRewards.join(', ')}` : 'প্রোডাক্ট টার্গেটের ৯০% বা ১০০% স্পর্শ করলেই এখানে বোনাস যোগ হবে!'}
+                </p>
+              </div>
+            </div>
+            <span class="px-3.5 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-black shadow">
+              🔥 Incentive Unlocked
+            </span>
+          </div>
+
+          <!-- 5 Unified Facebook Professional Blue Theme KPI Cards (With Conv. Ratio on Orders Card) -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div class="kpi-blue p-5 rounded-2xl flex flex-col justify-between">
+            <div class="kpi-fb-1 p-5 rounded-2xl flex flex-col justify-between">
               <div class="flex justify-between items-center">
                 <span class="text-[11px] font-extrabold uppercase text-blue-100">Total Leads</span>
                 <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-users"></i></div>
@@ -466,51 +507,51 @@
               </div>
             </div>
 
-            <div class="kpi-emerald p-5 rounded-2xl flex flex-col justify-between">
+            <div class="kpi-fb-2 p-5 rounded-2xl flex flex-col justify-between">
               <div class="flex justify-between items-center">
-                <span class="text-[11px] font-extrabold uppercase text-emerald-100">Total Orders</span>
+                <span class="text-[11px] font-extrabold uppercase text-blue-100">Total Orders</span>
                 <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-bag-shopping"></i></div>
               </div>
               <div class="mt-4">
                 <p class="text-3xl font-black text-white">${monthTotalOrders.toLocaleString()}</p>
-                <div class="flex justify-between text-[11px] font-bold text-emerald-100 mt-1">
+                <div class="flex justify-between text-[11px] font-bold text-blue-100 mt-1 pt-1 border-t border-white/20">
                   <span>Conv. Ratio:</span>
                   <span class="text-white font-black">${monthConvRatio}%</span>
                 </div>
               </div>
             </div>
 
-            <div class="kpi-purple p-5 rounded-2xl flex flex-col justify-between">
+            <div class="kpi-fb-3 p-5 rounded-2xl flex flex-col justify-between">
               <div class="flex justify-between items-center">
-                <span class="text-[11px] font-extrabold uppercase text-purple-100">Sales Revenue</span>
+                <span class="text-[11px] font-extrabold uppercase text-blue-100">Sales Revenue</span>
                 <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-bangladeshi-taka-sign"></i></div>
               </div>
               <div class="mt-4">
                 <p class="text-2xl font-black text-white">৳${monthTotalAmount.toLocaleString()}</p>
-                <p class="text-[11px] font-bold text-purple-100 mt-1">Achieved This Month</p>
+                <p class="text-[11px] font-bold text-blue-100 mt-1">Achieved This Month</p>
               </div>
             </div>
 
-            <div class="kpi-indigo p-5 rounded-2xl flex flex-col justify-between">
+            <div class="kpi-fb-4 p-5 rounded-2xl flex flex-col justify-between">
               <div class="flex justify-between items-center">
-                <span class="text-[11px] font-extrabold uppercase text-indigo-100">Target (+5% Buffer)</span>
+                <span class="text-[11px] font-extrabold uppercase text-blue-100">Target (+5% Buffer)</span>
                 <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-bullseye"></i></div>
               </div>
               <div class="mt-4">
                 <p class="text-2xl font-black text-white">৳${tInfo.workingTarget.toLocaleString()}</p>
-                <p class="text-[11px] font-bold text-indigo-100 mt-1">Daily: ৳${tInfo.dailyTarget.toLocaleString()}</p>
+                <p class="text-[11px] font-bold text-blue-100 mt-1">Daily: ৳${tInfo.dailyTarget.toLocaleString()}</p>
               </div>
             </div>
 
-            <div class="kpi-amber p-5 rounded-2xl flex flex-col justify-between">
+            <div class="kpi-fb-5 p-5 rounded-2xl flex flex-col justify-between">
               <div class="flex justify-between items-center">
-                <span class="text-[11px] font-extrabold uppercase text-amber-100">Target Achieved</span>
+                <span class="text-[11px] font-extrabold uppercase text-blue-100">Target Achieved</span>
                 <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-trophy"></i></div>
               </div>
               <div class="mt-4">
                 <div class="flex items-baseline justify-between">
                   <p class="text-3xl font-black text-white">${monthPct}%</p>
-                  <span class="text-[11px] font-bold text-amber-100">Conv: ${monthConvRatio}%</span>
+                  <span class="text-[11px] font-bold text-blue-100">Conv: ${monthConvRatio}%</span>
                 </div>
                 <div class="w-full bg-black/20 rounded-full h-1.5 mt-2">
                   <div class="bg-white h-1.5 rounded-full" style="width: ${monthPct}%"></div>
@@ -572,11 +613,11 @@
             </div>
           </div>
 
-          <!-- Product Targets Tinted Dynamic Grid -->
+          <!-- Product Targets Professional Tinted Grid -->
           <div>
             <div class="flex items-center justify-between mb-4 mt-2">
               <h3 class="text-base font-black text-slate-800">
-                <i class="fa-solid fa-gift text-orange-500 mr-1.5"></i> 
+                <i class="fa-solid fa-gift text-blue-600 mr-1.5"></i> 
                 Facebook Product Incentive Targets (${u.role === 'admin' ? `${adminFilterScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
               </h3>
               <span class="px-3 py-1 rounded-full bg-white border text-xs font-extrabold text-slate-600 shadow-sm">90% = Entry Bonus | 100% = Full Bonus</span>
@@ -588,11 +629,12 @@
                 const achieved = pTotals[k];
                 const target = p.targetKg * tInfo.agentCount; 
                 const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
+                const isUnlocked = pct >= 90;
                 return `
-                  <div class="${p.style} card-dynamic p-5 rounded-3xl">
+                  <div class="${p.style} card-dynamic p-5 rounded-3xl ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
                     <div class="flex justify-between items-start mb-3">
                       <div>
-                        <h4 class="font-black text-base text-slate-900">${p.name}</h4>
+                        <h4 class="font-black text-base text-slate-900">${p.name} ${isUnlocked ? '🔥' : ''}</h4>
                         <p class="text-xs text-slate-500 font-bold">Target: <strong class="text-slate-800">${target.toFixed(2)} kg</strong></p>
                       </div>
                       <div class="w-10 h-10 rounded-2xl ${p.badge} flex items-center justify-center shadow-sm">
@@ -606,7 +648,7 @@
                     <div class="progress-track h-2.5 bg-white border border-slate-200/60 mb-3">
                       <div class="${p.bar} h-2.5 rounded-full" style="width: ${pct}%"></div>
                     </div>
-                    <p class="text-[11px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-orange-500 mr-1"></i> ${p.bonus}</p>
+                    <p class="text-[11px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `${p.bonus90}৳` : ''} ${p.bonus100 ? `${p.bonus100}৳` : ''} ${p.item100 || ''}</strong></p>
                   </div>
                 `;
               }).join('')}
@@ -616,7 +658,6 @@
       `;
     }
 
-    // 2. TEAM VS TEAM COMPARISON & OVERALL RANKING (VISIBLE TO BOTH AGENTS & ADMINS)
     function renderRankingAndComparison() {
       const allUsers = getStored('users', []).filter(u => u.role === 'agent');
       const allSales = getStored('sales_records', []);
@@ -652,7 +693,6 @@
 
       return `
         <div class="space-y-8">
-          <!-- Team vs Team Head-to-Head Comparison -->
           <div>
             <div class="flex items-center justify-between mb-4">
               <div>
@@ -662,7 +702,6 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <!-- Team Nazim Card -->
               <div class="card-dynamic p-6 border-t-4 border-t-orange-500">
                 <div class="flex justify-between items-center mb-4">
                   <div>
@@ -686,7 +725,6 @@
                 <div class="progress-track h-3"><div class="bg-gradient-to-r from-orange-500 to-amber-500 h-3 rounded-full" style="width:${nazimStats.pct}%"></div></div>
               </div>
 
-              <!-- Team Samad Card -->
               <div class="card-dynamic p-6 border-t-4 border-t-blue-600">
                 <div class="flex justify-between items-center mb-4">
                   <div>
@@ -712,7 +750,6 @@
             </div>
           </div>
 
-          <!-- Overall Leaderboard Ranking (All 16+ Agents) -->
           <div>
             <div class="flex justify-between items-center mb-4">
               <div>
@@ -775,7 +812,6 @@
       `;
     }
 
-    // 3. DAILY REPORTS LOG (ADMINS CAN SEE & EDIT ALL AGENTS ACROSS BOTH TEAMS)
     function renderReports() {
       const u = currentUser;
       const allUsers = getStored('users', []);
@@ -798,7 +834,7 @@
             <div class="flex items-center gap-2">
               ${u.role === 'admin' ? `
               <select onchange="setAdminScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
-                <option value="ALL" ${adminFilterScope === 'ALL' ? 'selected' : ''}>All Teams</option>
+                <option value="ALL" ${adminFilterScope === 'ALL' ? 'selected' : ''}>All Team</option>
                 <option value="Team Nazim" ${adminFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
                 <option value="Team Samad" ${adminFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
               </select>
@@ -867,7 +903,6 @@
       `;
     }
 
-    // 4. MANAGE AGENTS / CREATE NEW ID (ADMIN ONLY)
     function renderManageAgents() {
       const allUsers = getStored('users', []);
       return `
@@ -921,7 +956,6 @@
       `;
     }
 
-    // MODAL 1: SALES REPORT SUBMIT / EDIT / DELETE (ADMIN HAS ACCESS TO ALL AGENTS OF BOTH TEAMS)
     function renderSubmitModal() {
       const u = currentUser;
       const allAgents = getStored('users', []).filter(usr => usr.role === 'agent');
@@ -965,7 +999,6 @@
                 </div>
               </div>
 
-              <!-- Live Auto Conversion Ratio & Daily Target Achievement Box -->
               <div class="grid grid-cols-3 gap-2 p-3 bg-blue-50/70 rounded-2xl border border-blue-200 text-center">
                 <div>
                   <span class="text-[10px] font-extrabold uppercase text-slate-500 block">Auto Conv. Ratio</span>
@@ -1013,7 +1046,6 @@
       `;
     }
 
-    // MODAL 2: CREATE / EDIT AGENT ID MODAL (ADMIN ONLY)
     function renderUserModal() {
       return `
         <div id="userModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1086,7 +1118,7 @@
     }
 
     function openUserModal(editId) {
-      const users = getStored('users', []);
+      const users = getStored('users', DEFAULT_USERS);
       const existing = users.find(u => String(u.id) === String(editId));
       if (existing) {
         document.getElementById('usrId').value = existing.id;
@@ -1117,7 +1149,7 @@
         baseTarget: Number(document.getElementById('usrTarget').value) || 0
       };
 
-      let users = getStored('users', []);
+      let users = getStored('users', DEFAULT_USERS);
       const idx = users.findIndex(u => String(u.id) === String(newUser.id));
       if (idx !== -1) users[idx] = newUser; else users.push(newUser);
       setStored('users', users);
@@ -1130,7 +1162,7 @@
 
     async function handleDeleteUser(delId) {
       if (!confirm(`আপনি কি নিশ্চিতভাবে ID: ${delId} ডিলিট করতে চান?`)) return;
-      let users = getStored('users', []);
+      let users = getStored('users', DEFAULT_USERS);
       users = users.filter(u => String(u.id) !== String(delId));
       setStored('users', users);
 
@@ -1140,7 +1172,7 @@
 
     function updateLiveRatio() {
       const u = currentUser;
-      const allUsers = getStored('users', []);
+      const allUsers = getStored('users', DEFAULT_USERS);
       const agentId = u.role === 'admin' ? document.getElementById('subAgentId')?.value : u.id;
       const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
 
@@ -1200,7 +1232,7 @@
     async function handleSalesSubmit(e) {
       e.preventDefault();
       const u = currentUser;
-      const allUsers = getStored('users', []);
+      const allUsers = getStored('users', DEFAULT_USERS);
       const targetAgent = u.role === 'admin' ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
 
       const leads = Number(document.getElementById('subLeads').value) || 0;
