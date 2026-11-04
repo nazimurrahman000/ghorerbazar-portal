@@ -62,6 +62,7 @@
     ];
 
     const DEFAULT_USERS = [
+      { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'SUP', baseTarget: 0 },
       { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123', grade: 'TL', baseTarget: 0 },
       { id: '10107', name: 'Md Abdus Samad (TL)', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 0 },
       
@@ -126,16 +127,41 @@
 
     const SHIFT_OPTIONS = ["7:00 AM", "10:00 AM", "3:00 PM", "Night", "DO"];
 
-    if (!localStorage.getItem('gb_users')) {
-      localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
-    }
+    // Ensure Default Users (including Supervisor 10001) exist in localStorage
+    (function seedDefaultUsers() {
+      const existing = localStorage.getItem('gb_users');
+      if (!existing) {
+        localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
+      } else {
+        try {
+          const parsed = JSON.parse(existing);
+          const map = new Map();
+          DEFAULT_USERS.forEach(u => map.set(String(u.id), u));
+          parsed.forEach(u => map.set(String(u.id), u));
+          localStorage.setItem('gb_users', JSON.stringify(Array.from(map.values())));
+        } catch (e) {
+          localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
+        }
+      }
+    })();
 
     let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
     let activeTab = 'dashboard';
     let selectedMonthKey = localStorage.getItem('gb_selected_month') || '11/2026';
-    let adminFilterScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
+    
+    // Separate Scopes:
+    // 1. dashboardScope: Default is Admin's own team (Team Nazim / Team Samad), or ALL for Supervisor
+    // 2. logsFilterScope: Default is ALWAYS 'ALL' for both Admins & Supervisors on Reports and Attendance tabs
+    let dashboardScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
+    let logsFilterScope = 'ALL';
+
     let pollInterval = null;
     let dutyTimerInterval = null;
+
+    // Role Helper Functions
+    function isFullAdmin(u) { return u && u.role === 'admin'; }
+    function isSupervisor(u) { return u && u.role === 'supervisor'; }
+    function canViewAll(u) { return u && (u.role === 'admin' || u.role === 'supervisor'); }
 
     function getStored(key, def) { const r = localStorage.getItem('gb_' + key); return r ? JSON.parse(r) : def; }
     function setStored(key, val) { localStorage.setItem('gb_' + key, JSON.stringify(val)); }
@@ -351,8 +377,9 @@
       let baseTarget = 0;
       let agentCount = 1;
       
-      if (user.role === 'admin') {
-        const scope = scopeOverride || adminFilterScope || user.team;
+      if (canViewAll(user)) {
+        const defaultTeam = user.role === 'admin' ? user.team : 'ALL';
+        const scope = scopeOverride || dashboardScope || defaultTeam;
         const agents = allUsers.filter(u => u.role === 'agent' && (scope === 'ALL' ? true : u.team === scope));
         baseTarget = agents.reduce((sum, a) => sum + (Number(a.baseTarget) || 0), 0);
         agentCount = agents.length || 1;
@@ -511,9 +538,12 @@
 
     function init() {
       if (currentUser) {
-        if (currentUser.role === 'admin' && (!adminFilterScope || adminFilterScope === 'ALL')) {
-          adminFilterScope = currentUser.team;
+        if (currentUser.role === 'admin') {
+          dashboardScope = currentUser.team;
+        } else if (currentUser.role === 'supervisor') {
+          dashboardScope = 'ALL';
         }
+        logsFilterScope = 'ALL'; // Always default to ALL Team on Daily Sales Reports & Attendance Logs
         if (currentUser.role === 'agent') {
           ensureAgentAttendanceSession(currentUser);
           startLiveDutyClock();
@@ -535,7 +565,8 @@
       if (!user) { alert('Invalid Employee ID or Password!'); return; }
       currentUser = user;
       setStored('session_user', user);
-      adminFilterScope = user.role === 'admin' ? user.team : 'ALL';
+      dashboardScope = user.role === 'admin' ? user.team : 'ALL';
+      logsFilterScope = 'ALL';
       if (user.role === 'agent') {
         ensureAgentAttendanceSession(user);
         startLiveDutyClock();
@@ -564,8 +595,16 @@
       document.getElementById('app').innerHTML = renderLogin();
     }
 
-    function setTab(tab) { activeTab = tab; renderAppLayout(); }
-    function setAdminScope(scope) { adminFilterScope = scope; renderAppLayout(); }
+    function setTab(tab) {
+      activeTab = tab;
+      // Ensure Daily Sales Reports & Attendance Logs default to ALL Team (16) when opened
+      if (tab === 'reports' || tab === 'attendance') {
+        logsFilterScope = 'ALL';
+      }
+      renderAppLayout();
+    }
+    function setDashboardScope(scope) { dashboardScope = scope; renderAppLayout(); }
+    function setLogsScope(scope) { logsFilterScope = scope; renderAppLayout(); }
 
     function renderLogin() {
       return `
@@ -581,13 +620,13 @@
             <form onsubmit="handleLogin(event)" class="space-y-4">
               <div>
                 <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Employee ID</label>
-                <input type="text" id="loginId" required placeholder="e.g. 10122, 10107 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
+                <input type="text" id="loginId" required placeholder="e.g. 10122, 10001 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
               </div>
               <div>
                 <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Password</label>
                 <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
               </div>
-              <button type="submit" class="w-full py-3.5 tab-active text-white font-extrabold rounded-xl shadow-lg transition-all">Sign In & Start Duty</button>
+              <button type="submit" class="w-full py-3.5 tab-active text-white font-extrabold rounded-xl shadow-lg transition-all">Sign In to Portal</button>
             </form>
           </div>
         </div>
@@ -596,6 +635,9 @@
 
     function renderAppLayout() {
       const u = currentUser;
+      const roleBadgeText = u.role === 'admin'
+        ? `Admin (${u.team})`
+        : (u.role === 'supervisor' ? `Supervisor (View All)` : `${u.team} • Grade ${u.grade}`);
 
       const html = `
         <div class="flex-1 flex min-h-screen">
@@ -627,7 +669,7 @@
                 <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-file-invoice text-sm"></i> Daily Sales Reports
                 </button>
-                ${u.role === 'admin' ? `
+                ${canViewAll(u) ? `
                 <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-sliders text-sm text-blue-600"></i> Monthly Setup & IDs
                 </button>
@@ -647,7 +689,6 @@
           </aside>
 
           <div class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
-            <!-- Spacious, Non-Clipped Top Header Bar -->
             <header class="min-h-[72px] py-3 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm shrink-0">
               <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
@@ -661,6 +702,7 @@
                     ${AVAILABLE_MONTHS.map(m => `<option value="${m.key}" ${m.key === selectedMonthKey ? 'selected' : ''}>${m.label}</option>`).join('')}
                   </select>
                 </div>
+                ${isSupervisor(u) ? `<span class="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-800 text-[10px] font-black uppercase"><i class="fa-solid fa-eye mr-1"></i>Supervisor View-Only Mode</span>` : ''}
               </div>
 
               <div class="flex items-center gap-4 shrink-0">
@@ -673,21 +715,20 @@
                   </div>
                   <div class="text-left leading-tight">
                     <p class="text-sm font-extrabold text-slate-900">${u.name}</p>
-                    <p class="text-[11px] font-extrabold text-orange-600 uppercase mt-0.5">${u.role === 'admin' ? `Admin (${u.team})` : `${u.team} • Grade ${u.grade}`}</p>
+                    <p class="text-[11px] font-extrabold ${isSupervisor(u) ? 'text-purple-600' : 'text-orange-600'} uppercase mt-0.5">${roleBadgeText}</p>
                   </div>
                 </div>
               </div>
             </header>
 
-            <!-- Roster-Width Container (max-w-[1540px]) for all tabs so side gaps are minimal and uniform -->
             <main class="p-5 lg:px-7 lg:py-6 max-w-[1540px] w-full mx-auto flex-1">${renderTabContent()}</main>
           </div>
         </div>
-        ${renderSubmitModal()}
-        ${renderBreakModal()}
-        ${renderEditAttendanceModal()}
-        ${renderUserModal()}
-        ${renderProductConfigModal()}
+        ${isFullAdmin(u) || u.role === 'agent' ? renderSubmitModal() : ''}
+        ${u.role === 'agent' ? renderBreakModal() : ''}
+        ${isFullAdmin(u) ? renderEditAttendanceModal() : ''}
+        ${isFullAdmin(u) ? renderUserModal() : ''}
+        ${isFullAdmin(u) ? renderProductConfigModal() : ''}
       `;
       document.getElementById('app').innerHTML = html;
     }
@@ -761,7 +802,7 @@
               <div>
                 <span class="text-[10px] font-black uppercase text-blue-600 block">Active Month Archive</span>
                 <h4 class="text-sm font-black text-slate-900">${(AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label}</h4>
-                <p class="text-[11px] font-semibold text-slate-400">Switch month at top bar to view past reports or edit next month</p>
+                <p class="text-[11px] font-semibold text-slate-400">Switch month at top bar to view past reports or setup next month</p>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
@@ -802,13 +843,13 @@
       const myMonthUser = monthUsers.find(usr => String(usr.id) === String(u.id)) || u;
       
       let mySales = [];
-      if (u.role === 'admin') {
-        mySales = adminFilterScope === 'ALL' ? allSales : allSales.filter(s => s.team === adminFilterScope);
+      if (canViewAll(u)) {
+        mySales = dashboardScope === 'ALL' ? allSales : allSales.filter(s => s.team === dashboardScope);
       } else {
         mySales = allSales.filter(s => String(s.userId) === String(u.id));
       }
 
-      const tInfo = getTargetData(u, adminFilterScope, selectedMonthKey);
+      const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
       const thisMonthSales = mySales.filter(s => s.date.endsWith(selectedMonthKey));
       
       const sprintSalesAmount = thisMonthSales.reduce((acc, curr) => {
@@ -845,11 +886,11 @@
           <div class="banner-hero-light px-5 py-4 rounded-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
             <div>
               <div class="flex flex-wrap items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${adminFilterScope === 'Team Nazim' ? 'bg-orange-500' : (adminFilterScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800')} text-white">
-                  ${u.role === 'admin' ? `${adminFilterScope === 'ALL' ? 'Full Facebook Team (16)' : adminFilterScope}` : u.team}
+                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${dashboardScope === 'Team Nazim' ? 'bg-orange-500' : (dashboardScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800')} text-white">
+                  ${canViewAll(u) ? `${dashboardScope === 'ALL' ? 'Full Facebook Team (16)' : dashboardScope}` : u.team}
                 </span>
                 <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
-                  ${u.role === 'admin' ? `${tInfo.agentCount} Agents` : `Grade: ${myMonthUser.grade}`}
+                  ${canViewAll(u) ? `${tInfo.agentCount} Agents` : `Grade: ${myMonthUser.grade}`}
                 </span>
                 <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
                   Period: ${(AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label}
@@ -871,17 +912,19 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2.5">
-              ${u.role === 'admin' ? `
+              ${canViewAll(u) ? `
               <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-                <button onclick="setAdminScope('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${adminFilterScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
-                <button onclick="setAdminScope('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${adminFilterScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
-                <button onclick="setAdminScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${adminFilterScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (16)</button>
+                <button onclick="setDashboardScope('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
+                <button onclick="setDashboardScope('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
+                <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (16)</button>
               </div>
               ` : ''}
+              ${isFullAdmin(u) || u.role === 'agent' ? `
               <button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2">
                 <i class="fa-solid fa-plus-circle"></i>
-                ${u.role === 'admin' ? 'Add / Edit Agent Data' : 'Submit Daily Report'}
+                ${isFullAdmin(u) ? 'Add / Edit Agent Data' : 'Submit Daily Report'}
               </button>
+              ` : ''}
             </div>
           </div>
 
@@ -1008,10 +1051,10 @@
             <div class="flex items-center justify-between mb-2.5">
               <h3 class="text-xs font-black text-slate-800 uppercase tracking-wide">
                 <i class="fa-solid fa-gift text-blue-600 mr-1.5"></i> 
-                Facebook Product Incentive Targets (${u.role === 'admin' ? `${adminFilterScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
+                Facebook Product Incentive Targets (${canViewAll(u) ? `${dashboardScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
               </h3>
               <div class="flex items-center gap-2">
-                ${u.role === 'admin' ? `<button onclick="openProductConfigModal()" class="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[11px] font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
+                ${isFullAdmin(u) ? `<button onclick="openProductConfigModal()" class="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[11px] font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
                 <span class="px-2.5 py-0.5 rounded-full bg-white border text-[10px] font-extrabold text-slate-600">90% = Entry Bonus | 100% = Full Bonus</span>
               </div>
             </div>
@@ -1053,7 +1096,7 @@
 
     function renderDutyRosterView() {
       const u = currentUser;
-      const isAdmin = u.role === 'admin';
+      const isEditable = isFullAdmin(u); // Only Full Admin can edit roster; Supervisor & Agent view-only
       const roster = getRosterForMonth(selectedMonthKey);
       const days = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
       const dayLabels = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -1091,7 +1134,7 @@
       function renderShiftCell(row, dKey) {
         const val = row[dKey] || '3:00 PM';
         const cellClass = val === 'DO' ? 'roster-do' : (val === 'Night' ? 'roster-night' : 'text-slate-700 font-semibold');
-        if (!isAdmin) {
+        if (!isEditable) {
           return `<td class="px-1.5 py-2 border border-slate-200 text-center text-[11px] whitespace-nowrap ${cellClass}">${val}</td>`;
         }
         return `
@@ -1148,7 +1191,7 @@
             <div>
               <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-calendar-week text-blue-600 mr-2"></i>Duty Roster (${monthTitle})</h2>
               <p class="text-xs font-bold text-slate-500">
-                ${isAdmin ? 'Admin Mode: Click any shift dropdown in the table to change schedule. Changes auto-save & update summaries!' : 'View your weekly shift schedule and Day Off (DO) assignments.'}
+                ${isEditable ? 'Admin Mode: Click any shift dropdown in the table to change schedule. Changes auto-save & update summaries!' : 'View weekly shift schedule and Day Off (DO) assignments.'}
               </p>
             </div>
             <span class="px-3 py-1.5 rounded-xl bg-orange-100 text-orange-800 text-xs font-black">
@@ -1244,6 +1287,7 @@
     }
 
     async function handleRosterShiftChange(empId, dayKey, newShift) {
+      if (!isFullAdmin(currentUser)) return;
       const roster = getRosterForMonth(selectedMonthKey);
       const targetRow = roster.find(r => String(r.id) === String(empId));
       if (!targetRow) return;
@@ -1265,8 +1309,8 @@
       const u = currentUser;
       const allAtt = getStored('attendance_records', []).filter(a => a.date.endsWith(selectedMonthKey));
       let records = [];
-      if (u.role === 'admin') {
-        records = adminFilterScope === 'ALL' ? allAtt : allAtt.filter(a => a.team === adminFilterScope);
+      if (canViewAll(u)) {
+        records = logsFilterScope === 'ALL' ? allAtt : allAtt.filter(a => a.team === logsFilterScope);
       } else {
         records = allAtt.filter(a => String(a.userId) === String(u.id));
       }
@@ -1279,12 +1323,14 @@
               <p class="text-xs font-bold text-slate-500">Live duty tracking from login to logout with break reasons and total duration</p>
             </div>
             <div class="flex items-center gap-2">
-              ${u.role === 'admin' ? `
-              <select onchange="setAdminScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
-                <option value="Team Nazim" ${adminFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
-                <option value="Team Samad" ${adminFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
-                <option value="ALL" ${adminFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+              ${canViewAll(u) ? `
+              <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+                <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
+                <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
               </select>
+              ` : ''}
+              ${isFullAdmin(u) ? `
               <button onclick="openEditAttendanceModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
                 <i class="fa-solid fa-plus mr-1"></i> Add / Edit Attendance
               </button>
@@ -1306,7 +1352,7 @@
                   <th class="p-4">Break Time</th>
                   <th class="p-4">Current Break Reason</th>
                   <th class="p-4">Break History</th>
-                  ${u.role === 'admin' ? `<th class="p-4 text-right">Admin Actions</th>` : ''}
+                  ${isFullAdmin(u) ? `<th class="p-4 text-right">Admin Actions</th>` : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
@@ -1331,7 +1377,7 @@
                       <td class="p-4 font-mono font-black text-amber-600 text-sm">${formatHMS(r.breakSeconds)}</td>
                       <td class="p-4 font-bold text-amber-700">${r.breakReason || '-'}</td>
                       <td class="p-4 text-[11px] text-slate-500 max-w-xs truncate" title="${r.breakLogs || '-'}">${r.breakLogs || '-'}</td>
-                      ${u.role === 'admin' ? `
+                      ${isFullAdmin(u) ? `
                       <td class="p-4 text-right space-x-1">
                         <button onclick="openEditAttendanceModal('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>
                         <button onclick="handleDeleteAttendance('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>
@@ -1444,7 +1490,7 @@
                 <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
                 <p class="text-xs font-bold text-slate-500">Combined leaderboard across both teams sorted by sales revenue and order volume</p>
               </div>
-              ${currentUser.role === 'admin' ? `<button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow">+ Add Agent Data</button>` : ''}
+              ${isFullAdmin(currentUser) ? `<button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow">+ Add Agent Data</button>` : ''}
             </div>
 
             <div class="card-dynamic overflow-hidden overflow-x-auto">
@@ -1460,7 +1506,7 @@
                     <th class="p-3.5">Working Target (+5%)</th>
                     <th class="p-3.5">Achieved Revenue</th>
                     <th class="p-3.5">Achievement</th>
-                    ${currentUser.role === 'admin' ? `<th class="p-3.5 text-right">Admin Action</th>` : ''}
+                    ${isFullAdmin(currentUser) ? `<th class="p-3.5 text-right">Admin Action</th>` : ''}
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 font-semibold">
@@ -1485,7 +1531,7 @@
                           <div class="w-16 progress-track h-2"><div class="bg-blue-600 h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
                         </div>
                       </td>
-                      ${currentUser.role === 'admin' ? `
+                      ${isFullAdmin(currentUser) ? `
                       <td class="p-3.5 text-right">
                         <button onclick="openReportModal('${ag.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 font-extrabold rounded-lg hover:bg-blue-100">Add / Edit Data</button>
                       </td>
@@ -1506,8 +1552,8 @@
       const allSales = getStored('sales_records', []).filter(s => s.date.endsWith(selectedMonthKey));
       
       let sales = [];
-      if (u.role === 'admin') {
-        sales = adminFilterScope === 'ALL' ? allSales : allSales.filter(s => s.team === adminFilterScope);
+      if (canViewAll(u)) {
+        sales = logsFilterScope === 'ALL' ? allSales : allSales.filter(s => s.team === logsFilterScope);
       } else {
         sales = allSales.filter(s => String(s.userId) === String(u.id));
       }
@@ -1520,16 +1566,19 @@
               <p class="text-xs font-bold text-slate-500">Historical & current month logs — switch month from the top bar to view previous months</p>
             </div>
             <div class="flex items-center gap-2">
-              ${u.role === 'admin' ? `
-              <select onchange="setAdminScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
-                <option value="Team Nazim" ${adminFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
-                <option value="Team Samad" ${adminFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
-                <option value="ALL" ${adminFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+              ${canViewAll(u) ? `
+              <!-- Default selected is ALWAYS All Team (16) for both Admins & Supervisors -->
+              <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+                <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
+                <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
               </select>
               ` : ''}
+              ${isFullAdmin(u) || u.role === 'agent' ? `
               <button onclick="openReportModal()" class="px-5 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
                 <i class="fa-solid fa-plus mr-1"></i> Add New Report
               </button>
+              ` : ''}
             </div>
           </div>
 
@@ -1547,7 +1596,7 @@
                   <th class="p-3.5">Daily Target (÷26)</th>
                   <th class="p-3.5">Daily Achieved</th>
                   <th class="p-3.5">Products Sold (kg)</th>
-                  <th class="p-3.5 text-right">Actions</th>
+                  ${isFullAdmin(u) || u.role === 'agent' ? `<th class="p-3.5 text-right">Actions</th>` : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
@@ -1577,11 +1626,13 @@
                     <td class="p-3.5 text-[11px] font-bold text-slate-600">
                       Ajwa: <strong>${s.ajwa||0}</strong> | Salt: <strong>${s.pinkSalt||0}</strong> | Garlic: <strong>${s.blackGarlic||0}</strong> | Sun.H: <strong>${s.sunHoney||0}</strong> | BS.H: <strong>${s.bsHoney||0}</strong> | Ghee: <strong>${s.gawaGhee||0}</strong>
                     </td>
+                    ${isFullAdmin(u) || u.role === 'agent' ? `
                     <td class="p-3.5 text-right">
                       <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
                         <i class="fa-solid fa-pen-to-square mr-1"></i> Edit / Delete
                       </button>
                     </td>
+                    ` : ''}
                   </tr>
                 `}).join('')}
               </tbody>
@@ -1592,6 +1643,7 @@
     }
 
     function renderManageAgents() {
+      const u = currentUser;
       const allUsers = getUsersForMonth(selectedMonthKey);
       const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
 
@@ -1599,17 +1651,21 @@
         <div class="space-y-6">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
-              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Monthly Setup, Grades & Agent IDs (${monthLabel})</h2>
-              <p class="text-xs font-bold text-slate-500">Edit agent grades, monthly targets, or product incentives for <strong>${monthLabel}</strong> without affecting past months</p>
+              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Monthly Setup, Grades & User IDs (${monthLabel})</h2>
+              <p class="text-xs font-bold text-slate-500">
+                ${isFullAdmin(u) ? `Create Agent, Supervisor, or Admin IDs and customize monthly targets for ${monthLabel}` : `View all registered Agent, Supervisor, and Admin accounts & monthly targets for ${monthLabel}`}
+              </p>
             </div>
+            ${isFullAdmin(u) ? `
             <div class="flex items-center gap-2.5">
               <button onclick="openProductConfigModal()" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
                 <i class="fa-solid fa-gift"></i> Edit Product Incentives (${selectedMonthKey})
               </button>
               <button onclick="openUserModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
-                <i class="fa-solid fa-user-plus"></i> Create New Agent / ID
+                <i class="fa-solid fa-user-plus"></i> Create New ID (Agent / Supervisor)
               </button>
             </div>
+            ` : ''}
           </div>
 
           <div class="card-dynamic overflow-hidden overflow-x-auto">
@@ -1621,29 +1677,35 @@
                   <th class="p-3.5">Role</th>
                   <th class="p-3.5">Team</th>
                   <th class="p-3.5">Grade (${selectedMonthKey})</th>
-                  <th class="p-3.5">Password</th>
+                  ${isFullAdmin(u) ? `<th class="p-3.5">Password</th>` : ''}
                   <th class="p-3.5">Base Target (${selectedMonthKey})</th>
                   <th class="p-3.5">Working Target (+5%)</th>
-                  <th class="p-3.5 text-right">Actions</th>
+                  ${isFullAdmin(u) ? `<th class="p-3.5 text-right">Actions</th>` : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
-                ${allUsers.map(usr => `
+                ${allUsers.map(usr => {
+                  const roleBadge = usr.role === 'admin'
+                    ? 'bg-purple-100 text-purple-800'
+                    : (usr.role === 'supervisor' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700');
+                  return `
                   <tr class="hover:bg-slate-50">
                     <td class="p-3.5 font-black text-blue-600">${usr.id}</td>
                     <td class="p-3.5 font-extrabold text-slate-900">${usr.name}</td>
-                    <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${usr.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'}">${usr.role}</span></td>
-                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${usr.team}</span></td>
+                    <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
+                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (usr.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${usr.team}</span></td>
                     <td class="p-3.5 font-black">${usr.grade || 'A'}</td>
-                    <td class="p-3.5 font-mono text-slate-500">${usr.pass}</td>
+                    ${isFullAdmin(u) ? `<td class="p-3.5 font-mono text-slate-500">${usr.pass}</td>` : ''}
                     <td class="p-3.5 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
                     <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
+                    ${isFullAdmin(u) ? `
                     <td class="p-3.5 text-right space-x-1">
-                      <button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit Grade / Target</button>
+                      <button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>
                       ${usr.role !== 'admin' ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
                     </td>
+                    ` : ''}
                   </tr>
-                `).join('')}
+                `}).join('')}
               </tbody>
             </table>
           </div>
@@ -1697,6 +1759,7 @@
 
     async function handleSaveProductConfig(e) {
       e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
       let configs = getStored('monthly_configs', {});
       if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
       if (!configs[selectedMonthKey].products) configs[selectedMonthKey].products = {};
@@ -1819,6 +1882,7 @@
     }
 
     function openEditAttendanceModal(agentId, dateStr) {
+      if (!isFullAdmin(currentUser)) return;
       document.getElementById('attDate').value = dateToInputVal(dateStr || getTodayFormatted());
       if (agentId) document.getElementById('attAgentId').value = agentId;
       onAttModalChange();
@@ -1849,6 +1913,7 @@
 
     async function handleAdminSaveAttendance(e) {
       e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
       const allUsers = getStored('users', DEFAULT_USERS);
       const agId = document.getElementById('attAgentId').value;
       const ag = allUsers.find(u => String(u.id) === String(agId));
@@ -1881,6 +1946,7 @@
     }
 
     async function handleDeleteAttendance(userId, dateStr) {
+      if (!isFullAdmin(currentUser)) return;
       if (!confirm(`Are you sure you want to delete the attendance record for ${dateStr}?`)) return;
       let attList = getStored('attendance_records', []);
       attList = attList.filter(a => !(String(a.userId) === String(userId) && a.date === dateStr));
@@ -1905,7 +1971,7 @@
             </div>
 
             <form onsubmit="handleSalesSubmit(event)" class="space-y-4">
-              <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
+              <div id="agentSelectContainer" class="${isFullAdmin(u) ? '' : 'hidden'}">
                 <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent (Both Teams Available)</label>
                 <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
                   ${allAgents.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id} • ${usr.team})</option>`).join('')}
@@ -1985,15 +2051,15 @@
           <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
             <div class="flex items-center justify-between mb-4 pb-3 border-b">
               <div>
-                <h3 class="text-base font-black text-slate-900">Agent ID & Monthly Target (${selectedMonthKey})</h3>
-                <p class="text-[11px] font-bold text-slate-400">Target & Grade changes apply to ${selectedMonthKey}</p>
+                <h3 class="text-base font-black text-slate-900">Create / Edit User ID (${selectedMonthKey})</h3>
+                <p class="text-[11px] font-bold text-slate-400">Create Agent, Supervisor (View-Only), or Admin IDs</p>
               </div>
               <button type="button" onclick="closeModal('userModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <form onsubmit="handleSaveUser(event)" class="space-y-3.5">
               <div>
                 <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Employee ID (Login ID)</label>
-                <input type="text" id="usrId" required placeholder="e.g. 11205" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                <input type="text" id="usrId" required placeholder="e.g. 10002 or 11205" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
               </div>
               <div>
                 <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Full Name</label>
@@ -2001,12 +2067,23 @@
               </div>
               <div class="grid grid-cols-2 gap-3">
                 <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Role</label>
+                  <select id="usrRole" onchange="onUserRoleSelectChange()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="agent">Sales Agent</option>
+                    <option value="supervisor">Supervisor (View All Only)</option>
+                    <option value="admin">Admin / TL (Full Access)</option>
+                  </select>
+                </div>
+                <div>
                   <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Team</label>
                   <select id="usrTeam" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
                     <option value="Team Nazim">Team Nazim</option>
                     <option value="Team Samad">Team Samad</option>
+                    <option value="All Teams">All Teams (Supervisor)</option>
                   </select>
                 </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
                 <div>
                   <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Grade (${selectedMonthKey})</label>
                   <select id="usrGrade" onchange="autoFillGradeTarget()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
@@ -2015,16 +2092,8 @@
                     <option value="A-">Grade A- (1,232,174)</option>
                     <option value="B">Grade B (1,132,174)</option>
                     <option value="C">Grade C (1,032,175)</option>
+                    <option value="SUP">Supervisor (View Only)</option>
                     <option value="TL">Team Leader (Admin)</option>
-                  </select>
-                </div>
-              </div>
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Role</label>
-                  <select id="usrRole" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
-                    <option value="agent">Sales Agent</option>
-                    <option value="admin">Admin / TL</option>
                   </select>
                 </div>
                 <div>
@@ -2035,11 +2104,11 @@
               <div>
                 <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Monthly Base Target (৳) for ${selectedMonthKey}</label>
                 <input type="number" id="usrTarget" required value="1232174" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
-                <p class="text-[10px] font-bold text-amber-600 mt-1">* An additional 5% return buffer will be added automatically to set the Working Target.</p>
+                <p class="text-[10px] font-bold text-amber-600 mt-1">* For Supervisors/Admins, Base Target is 0. For Agents, +5% buffer is added automatically.</p>
               </div>
               <div class="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onclick="closeModal('userModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg">Save User & Monthly Target</button>
+                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg">Save User ID</button>
               </div>
             </form>
           </div>
@@ -2047,26 +2116,45 @@
       `;
     }
 
+    function onUserRoleSelectChange() {
+      const r = document.getElementById('usrRole').value;
+      if (r === 'supervisor') {
+        document.getElementById('usrTeam').value = 'All Teams';
+        document.getElementById('usrGrade').value = 'SUP';
+        document.getElementById('usrTarget').value = 0;
+      } else if (r === 'admin') {
+        document.getElementById('usrGrade').value = 'TL';
+        document.getElementById('usrTarget').value = 0;
+      } else {
+        document.getElementById('usrGrade').value = 'A-';
+        document.getElementById('usrTarget').value = 1232174;
+      }
+    }
+
     function autoFillGradeTarget() {
       const g = document.getElementById('usrGrade').value;
-      const map = { 'A+': 1619218, 'A': 1332174, 'A-': 1232174, 'B': 1132174, 'C': 1032175, 'TL': 0 };
+      const map = { 'A+': 1619218, 'A': 1332174, 'A-': 1232174, 'B': 1132174, 'C': 1032175, 'SUP': 0, 'TL': 0 };
       if (map[g] !== undefined) document.getElementById('usrTarget').value = map[g];
     }
 
     function openUserModal(editId) {
+      if (!isFullAdmin(currentUser)) return;
       const users = getUsersForMonth(selectedMonthKey);
       const existing = users.find(u => String(u.id) === String(editId));
       if (existing) {
         document.getElementById('usrId').value = existing.id;
         document.getElementById('usrName').value = existing.name;
+        document.getElementById('usrRole').value = existing.role || 'agent';
         document.getElementById('usrTeam').value = existing.team;
         document.getElementById('usrGrade').value = existing.grade || 'A';
-        document.getElementById('usrRole').value = existing.role || 'agent';
         document.getElementById('usrPass').value = existing.pass || '123456';
-        document.getElementById('usrTarget').value = existing.baseTarget || 1232174;
+        document.getElementById('usrTarget').value = existing.baseTarget ?? 1232174;
       } else {
         document.getElementById('usrId').value = '';
         document.getElementById('usrName').value = '';
+        document.getElementById('usrRole').value = 'agent';
+        document.getElementById('usrTeam').value = 'Team Nazim';
+        document.getElementById('usrGrade').value = 'A-';
         document.getElementById('usrPass').value = '123456';
         document.getElementById('usrTarget').value = 1232174;
       }
@@ -2075,6 +2163,7 @@
 
     async function handleSaveUser(e) {
       e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
       const newUser = {
         id: document.getElementById('usrId').value.trim(),
         name: document.getElementById('usrName').value.trim(),
@@ -2098,12 +2187,13 @@
 
       await postToSheet('SAVE_USER', newUser);
       await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]) });
-      alert(`User ID (${newUser.id}) and ${selectedMonthKey} target saved and synced!`);
+      alert(`User ID (${newUser.id}) with role "${newUser.role.toUpperCase()}" saved and synced!`);
       closeModal('userModal');
       renderAppLayout();
     }
 
     async function handleDeleteUser(delId) {
+      if (!isFullAdmin(currentUser)) return;
       if (!confirm(`Are you sure you want to delete User ID: ${delId}?`)) return;
       let users = getStored('users', DEFAULT_USERS);
       users = users.filter(u => String(u.id) !== String(delId));
@@ -2116,7 +2206,7 @@
     function updateLiveRatio() {
       const u = currentUser;
       const allUsers = getUsersForMonth(selectedMonthKey);
-      const agentId = u.role === 'admin' ? document.getElementById('subAgentId')?.value : u.id;
+      const agentId = isFullAdmin(u) ? document.getElementById('subAgentId')?.value : u.id;
       const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
 
       const workingTarget = Math.round((Number(targetAgent.baseTarget) || 1232174) * 1.05);
@@ -2138,8 +2228,9 @@
     function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
 
     function openReportModal(agentId, dateStr) {
+      if (isSupervisor(currentUser)) return;
       document.getElementById('subDate').value = dateToInputVal(dateStr || getTodayFormatted());
-      if (currentUser.role === 'admin' && agentId) {
+      if (isFullAdmin(currentUser) && agentId) {
         document.getElementById('subAgentId').value = agentId;
       }
       onModalChange();
@@ -2148,7 +2239,7 @@
 
     function onModalChange() {
       const u = currentUser;
-      const agentId = u.role === 'admin' ? document.getElementById('subAgentId').value : u.id;
+      const agentId = isFullAdmin(u) ? document.getElementById('subAgentId').value : u.id;
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
       
       const sales = getStored('sales_records', []);
@@ -2175,8 +2266,9 @@
     async function handleSalesSubmit(e) {
       e.preventDefault();
       const u = currentUser;
+      if (isSupervisor(u)) return;
       const allUsers = getUsersForMonth(selectedMonthKey);
-      const targetAgent = u.role === 'admin' ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
+      const targetAgent = isFullAdmin(u) ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
 
       const leads = Number(document.getElementById('subLeads').value) || 0;
       const orders = Number(document.getElementById('subOrders').value) || 0;
@@ -2221,7 +2313,8 @@
 
     async function handleDelete() {
       const u = currentUser;
-      const agentId = u.role === 'admin' ? document.getElementById('subAgentId').value : u.id;
+      if (isSupervisor(u)) return;
+      const agentId = isFullAdmin(u) ? document.getElementById('subAgentId').value : u.id;
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
 
       if (!confirm(`Are you sure you want to delete the report for ${dateStr}?`)) return;
