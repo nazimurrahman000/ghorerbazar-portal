@@ -11,8 +11,7 @@
     body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; color: #0f172a; }
     
     .sidebar-light { background: #ffffff; border-right: 1px solid #e2e8f0; color: #1e293b; }
-    .card-dynamic { background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05); transition: all 0.25s ease; }
-    .card-dynamic:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(15, 23, 42, 0.08); }
+    .card-dynamic { background: #ffffff; border-radius: 18px; border: 1px solid #e2e8f0; box-shadow: 0 8px 20px -5px rgba(15, 23, 42, 0.04); transition: all 0.2s ease; }
     
     .tab-active { 
       background: linear-gradient(135deg, #1877f2 0%, #0c63d4 100%); 
@@ -26,11 +25,10 @@
     .kpi-card-4 { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.35); }
     .kpi-card-5 { background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(234, 88, 12, 0.35); }
 
-    .banner-hero-light { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; color: #0f172a; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.03); }
+    .banner-hero-light { background: #ffffff; border: 1px solid #e2e8f0; color: #0f172a; box-shadow: 0 6px 18px -4px rgba(15, 23, 42, 0.03); }
     .table-header-light { background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #334155; }
     .sprint-banner { background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%); border: 1px solid #bfdbfe; }
     .monthly-banner { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0; }
-    .incentive-banner { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; }
 
     .prod-amber { background: linear-gradient(145deg, #ffffff 0%, #fffbeb 100%); border: 1px solid #fde68a; }
     .prod-rose { background: linear-gradient(145deg, #ffffff 0%, #fff1f2 100%); border: 1px solid #fecdd3; }
@@ -40,6 +38,8 @@
     .prod-emerald { background: linear-gradient(145deg, #ffffff 0%, #ecfdf5 100%); border: 1px solid #a7f3d0; }
 
     .progress-track { background-color: rgba(15, 23, 42, 0.08); border-radius: 9999px; overflow: hidden; }
+    .roster-do { background-color: #fed7aa; color: #9a3412; font-weight: 800; }
+    .roster-night { background-color: #e0e7ff; color: #1e40af; font-weight: 800; }
   </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col">
@@ -50,6 +50,15 @@
 
     localStorage.setItem('gb_webhook_url', DEFAULT_WEBHOOK_URL);
     let webhookUrl = DEFAULT_WEBHOOK_URL;
+
+    const AVAILABLE_MONTHS = [
+      { key: '10/2026', label: 'October 2026' },
+      { key: '11/2026', label: 'November 2026' },
+      { key: '12/2026', label: 'December 2026' },
+      { key: '01/2027', label: 'January 2027' },
+      { key: '02/2027', label: 'February 2027' },
+      { key: '03/2027', label: 'March 2027' }
+    ];
 
     const DEFAULT_USERS = [
       { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123', grade: 'TL', baseTarget: 0 },
@@ -74,7 +83,32 @@
       { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 }
     ];
 
-    const FB_PRODUCTS = {
+    // Exact Default Duty Roster from November 2026 Image
+    const DEFAULT_ROSTER = [
+      // Team Samad
+      { id: '10107', name: 'Md Abdus Samad (TL)', team: 'Team Samad', isTL: true, sat: '10:00 AM', sun: 'DO', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
+      { id: '10098', name: 'Habibur Rahman Shuvo', team: 'Team Samad', sat: '3:00 PM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10136', name: 'Al-Amin Kazi', team: 'Team Samad', sat: '10:00 AM', sun: '10:00 AM', mon: '10:00 AM', tue: '10:00 AM', wed: '10:00 AM', thu: '10:00 AM', fri: 'DO' },
+      { id: '11007', name: 'Zubayer Al Mahmud', team: 'Team Samad', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
+      { id: '11101', name: 'Md. Mehedi Amin', team: 'Team Samad', sat: '7:00 AM', sun: '7:00 AM', mon: '3:00 PM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '11120', name: 'Abu Sayed', team: 'Team Samad', sat: '3:00 PM', sun: '3:00 PM', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '11130', name: 'Rabbir Hossain Molla', team: 'Team Samad', sat: '3:00 PM', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: 'Night', thu: 'DO', fri: '10:00 AM' },
+      { id: '10806', name: 'Abdullah Al Soad', team: 'Team Samad', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10128', name: 'Al-Amin', team: 'Team Samad', sat: '7:00 AM', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+
+      // Team Nazim
+      { id: '10122', name: 'Md. Nazimur Rahman (TL)', team: 'Team Nazim', isTL: true, sat: 'DO', sun: '10:00 AM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
+      { id: '10191', name: 'Shagor Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
+      { id: '10289', name: 'Abdullah Dipu', team: 'Team Nazim', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '11044', name: 'Hasibul Islam Eraz', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '7:00 AM', wed: '7:00 AM', thu: 'Night', fri: 'DO' },
+      { id: '10741', name: 'Kamruzzaman Shujon', team: 'Team Nazim', sat: '3:00 PM', sun: '7:00 AM', mon: '7:00 AM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10803', name: 'Md. Abdullah Mahmud', team: 'Team Nazim', sat: '3:00 PM', sun: '7:00 AM', mon: 'Night', tue: 'DO', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
+      { id: '11042', name: 'Md. Ashiqur Rahman', team: 'Team Nazim', sat: 'DO', sun: '3:00 PM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
+      { id: '10328', name: 'Sheikh MD Rayhan', team: 'Team Nazim', sat: '7:00 AM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
+      { id: '10135', name: 'Ranju Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '10:00 AM', tue: '7:00 AM', wed: '3:00 PM', thu: 'Night', fri: 'DO' }
+    ];
+
+    const DEFAULT_PRODUCTS = {
       ajwa: { name: 'Ajwa Dates', targetKg: 69.03, style: 'prod-amber', badge: 'bg-amber-500 text-white', bar: 'bg-amber-500', icon: 'fa-seedling', bonus90: 600, bonus100: 1000 },
       pinkSalt: { name: 'Pink Salt', targetKg: 10.07, style: 'prod-rose', badge: 'bg-rose-500 text-white', bar: 'bg-rose-500', icon: 'fa-jar', item100: '2L Mustard Oil' },
       blackGarlic: { name: 'Black Garlic', targetKg: 6.09, style: 'prod-purple', badge: 'bg-purple-600 text-white', bar: 'bg-purple-600', icon: 'fa-spa', item100: '400gm Gawa Ghee' },
@@ -92,12 +126,15 @@
       "Personal / Emergency Break"
     ];
 
+    const SHIFT_OPTIONS = ["7:00 AM", "10:00 AM", "3:00 PM", "Night", "DO"];
+
     if (!localStorage.getItem('gb_users')) {
       localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
     }
 
     let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
     let activeTab = 'dashboard';
+    let selectedMonthKey = localStorage.getItem('gb_selected_month') || '11/2026';
     let adminFilterScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
     let pollInterval = null;
     let dutyTimerInterval = null;
@@ -110,6 +147,20 @@
     }
     function getNowTimeStr() {
       return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    // Sanitizes any corrupted "Sat Dec 30 1899 ... (বাংলাদেশ মানক সময়)" strings into pure English HH:MM:SS AM/PM
+    function sanitizeTimeDisplay(raw) {
+      if (!raw || raw === '--:--') return '--:--';
+      let s = String(raw).replace(/^'/, '').trim();
+      if (s.includes('1899') || s.includes('GMT') || s.includes('মানক')) {
+        const d = new Date(s.replace(/\s*\(.*?\)\s*/g, ''));
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        const m = s.match(/(\d{1,2}:\d{2}:\d{2})/);
+        if (m) return m[1];
+      }
+      return s;
     }
     function dateToInputVal(dateStr) {
       if (!dateStr) return new Date().toISOString().split('T')[0];
@@ -140,6 +191,54 @@
       return `${h}:${m}:${s}`;
     }
 
+    // MONTH-WISE CONFIG GETTER (Preserves previous months' targets, grades & product targets)
+    function getActiveProductsForMonth(mKey) {
+      const configs = getStored('monthly_configs', {});
+      const mCfg = configs[mKey || selectedMonthKey] || {};
+      const prodOverrides = mCfg.products || {};
+      const result = {};
+      Object.keys(DEFAULT_PRODUCTS).forEach(k => {
+        result[k] = { ...DEFAULT_PRODUCTS[k], ...(prodOverrides[k] || {}) };
+      });
+      return result;
+    }
+
+    function getUsersForMonth(mKey) {
+      const baseUsers = getStored('users', DEFAULT_USERS);
+      const configs = getStored('monthly_configs', {});
+      const mCfg = configs[mKey || selectedMonthKey] || {};
+      const userOverrides = mCfg.users || {};
+      return baseUsers.map(u => {
+        if (userOverrides[u.id]) {
+          return { ...u, grade: userOverrides[u.id].grade || u.grade, baseTarget: Number(userOverrides[u.id].baseTarget ?? u.baseTarget) };
+        }
+        return u;
+      });
+    }
+
+    function getRosterForMonth(mKey) {
+      const mk = mKey || selectedMonthKey;
+      const savedList = getStored('roster_records', []);
+      const monthRows = savedList.filter(r => r.monthKey === mk);
+      const allUsers = getStored('users', DEFAULT_USERS);
+
+      return DEFAULT_ROSTER.map(defRow => {
+        const override = monthRows.find(r => String(r.id) === String(defRow.id));
+        const usr = allUsers.find(u => String(u.id) === String(defRow.id));
+        return {
+          ...defRow,
+          name: usr ? usr.name : defRow.name,
+          ...(override || {})
+        };
+      });
+    }
+
+    function changeSelectedMonth(newMonthKey) {
+      selectedMonthKey = newMonthKey;
+      localStorage.setItem('gb_selected_month', newMonthKey);
+      renderAppLayout();
+    }
+
     // AGENT DUTY & BREAK TRACKING ENGINE
     function ensureAgentAttendanceSession(user) {
       if (!user || user.role !== 'agent') return null;
@@ -165,14 +264,13 @@
         attList.unshift(rec);
         setStored('attendance_records', attList);
         postToSheet('ATTENDANCE_SYNC', rec);
-      } else if (rec.status === 'Completed') {
-        // Re-logged in on the same day -> resume working
-        rec.status = 'Working';
-        rec.logoutTime = '--:--';
-        rec.lastTick = Date.now();
-        setStored('attendance_records', attList);
-        postToSheet('ATTENDANCE_SYNC', rec);
       } else {
+        rec.loginTime = sanitizeTimeDisplay(rec.loginTime);
+        rec.logoutTime = sanitizeTimeDisplay(rec.logoutTime);
+        if (rec.status === 'Completed') {
+          rec.status = 'Working';
+          rec.logoutTime = '--:--';
+        }
         rec.lastTick = Date.now();
         setStored('attendance_records', attList);
       }
@@ -204,16 +302,13 @@
         if (wClock) wClock.textContent = formatHMS(rec.activeSeconds);
         if (bClock) bClock.textContent = formatHMS(rec.breakSeconds);
 
-        // Auto sync attendance to Google Sheet every 25 seconds
         if ((rec.activeSeconds + rec.breakSeconds) % 25 === 0) {
           postToSheet('ATTENDANCE_SYNC', rec);
         }
       }, 1000);
     }
 
-    function openBreakModal() {
-      openModal('breakModal');
-    }
+    function openBreakModal() { openModal('breakModal'); }
 
     async function handleStartBreak(e) {
       e.preventDefault();
@@ -256,8 +351,8 @@
       renderAppLayout();
     }
 
-    function getTargetData(user, scopeOverride) {
-      const allUsers = getStored('users', []);
+    function getTargetData(user, scopeOverride, mKey) {
+      const allUsers = getUsersForMonth(mKey || selectedMonthKey);
       let baseTarget = 0;
       let agentCount = 1;
       
@@ -284,23 +379,24 @@
       return { baseTarget, workingTarget, dailyTarget, sprintName, sprintGoal, sprintPct, agentCount };
     }
 
-    function calculateEarnedIncentives(pTotals, agentCount) {
+    function calculateEarnedIncentives(pTotals, agentCount, mKey) {
       let totalMoney = 0;
       let earnedRewards = [];
+      const activeProds = getActiveProductsForMonth(mKey || selectedMonthKey);
 
-      Object.keys(FB_PRODUCTS).forEach(k => {
-        const p = FB_PRODUCTS[k];
+      Object.keys(activeProds).forEach(k => {
+        const p = activeProds[k];
         const achieved = pTotals[k];
         const target = p.targetKg * agentCount;
         const pct = target > 0 ? (achieved / target) * 100 : 0;
 
         if (pct >= 100) {
-          if (p.bonus100) totalMoney += p.bonus100;
-          if (p.item100) earnedRewards.push(`${p.name} (100%): ${p.item100}`);
-          else earnedRewards.push(`${p.name} (100% Full Bonus)`);
+          if (p.bonus100) totalMoney += Number(p.bonus100);
+          if (p.item100) earnedRewards.push(`${p.name}: ${p.item100}`);
+          else earnedRewards.push(`${p.name} (100%)`);
         } else if (pct >= 90) {
-          if (p.bonus90) totalMoney += p.bonus90;
-          earnedRewards.push(`${p.name} (90% Entry Bonus)`);
+          if (p.bonus90) totalMoney += Number(p.bonus90);
+          earnedRewards.push(`${p.name} (90%)`);
         }
       });
 
@@ -373,8 +469,9 @@
       if (Array.isArray(res.attendanceRecords)) {
         const localAtt = getStored('attendance_records', []);
         const today = getTodayFormatted();
-        // Preserve active running seconds for the logged-in agent so cloud poll doesn't jump backwards
         const mergedAtt = res.attendanceRecords.map(cloudRec => {
+          cloudRec.loginTime = sanitizeTimeDisplay(cloudRec.loginTime);
+          cloudRec.logoutTime = sanitizeTimeDisplay(cloudRec.logoutTime);
           if (currentUser && currentUser.role === 'agent' && String(cloudRec.userId) === String(currentUser.id) && cloudRec.date === today) {
             const myLocal = localAtt.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
             if (myLocal && myLocal.status !== 'Completed' && (myLocal.activeSeconds > cloudRec.activeSeconds || myLocal.breakSeconds > cloudRec.breakSeconds)) {
@@ -385,6 +482,20 @@
         });
         if (JSON.stringify(mergedAtt) !== JSON.stringify(localAtt)) {
           setStored('attendance_records', mergedAtt);
+          changed = true;
+        }
+      }
+      if (Array.isArray(res.rosterRecords) && res.rosterRecords.length > 0) {
+        const localRoster = getStored('roster_records', []);
+        if (JSON.stringify(res.rosterRecords) !== JSON.stringify(localRoster)) {
+          setStored('roster_records', res.rosterRecords);
+          changed = true;
+        }
+      }
+      if (res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
+        const localCfg = getStored('monthly_configs', {});
+        if (JSON.stringify(res.monthlyConfigs) !== JSON.stringify(localCfg)) {
+          setStored('monthly_configs', res.monthlyConfigs);
           changed = true;
         }
       }
@@ -415,7 +526,7 @@
         renderAppLayout();
         fetchFromSheet();
         if (pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(fetchFromSheet, 3500);
+        pollInterval = setInterval(fetchFromSheet, 4000);
       } else {
         document.getElementById('app').innerHTML = renderLogin();
       }
@@ -490,11 +601,13 @@
 
     function renderAppLayout() {
       const u = currentUser;
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || { label: selectedMonthKey }).label;
+
       const html = `
         <div class="flex-1 flex min-h-screen">
-          <aside class="w-68 sidebar-light p-5 flex flex-col justify-between shrink-0 shadow-sm">
+          <aside class="w-64 sidebar-light p-5 flex flex-col justify-between shrink-0 shadow-sm">
             <div>
-              <div class="flex items-center gap-3 px-2 mb-8">
+              <div class="flex items-center gap-3 px-2 mb-7">
                 <div class="w-10 h-10 rounded-xl tab-active text-white flex items-center justify-center font-bold shadow-md">
                   <i class="fa-brands fa-facebook-f text-lg"></i>
                 </div>
@@ -504,33 +617,36 @@
                 </div>
               </div>
 
-              <nav class="space-y-2">
-                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+              <nav class="space-y-1.5">
+                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard & Targets
                 </button>
-                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('roster')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'roster' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-calendar-week text-sm text-indigo-600"></i> Duty Roster
+                </button>
+                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
                 </button>
-                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Team vs Team & Ranking
                 </button>
-                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-file-invoice text-sm"></i> Daily Sales Reports
                 </button>
                 ${u.role === 'admin' ? `
-                <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <i class="fa-solid fa-user-plus text-sm text-blue-600"></i> Manage Agents (Create ID)
+                <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-sliders text-sm text-blue-600"></i> Monthly Setup & IDs
                 </button>
                 ` : ''}
               </nav>
             </div>
 
             <div class="space-y-3">
-              <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-center">
+              <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-center">
                 <p class="text-[11px] font-extrabold text-emerald-600"><i class="fa-solid fa-rotate mr-1 animate-spin"></i> Live Cloud Sync</p>
-                <p class="text-[10px] text-slate-400 mt-0.5">Central Google Sheet Active</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">Month-Wise Sheet Archive</p>
               </div>
-              <button onclick="handleLogout()" class="w-full py-3 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow transition-colors">
+              <button onclick="handleLogout()" class="w-full py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow transition-colors">
                 <i class="fa-solid fa-power-off mr-1"></i> ${u.role === 'agent' ? 'End Duty & Logout' : 'Logout'}
               </button>
             </div>
@@ -538,11 +654,20 @@
 
           <div class="flex-1 flex flex-col h-screen overflow-y-auto">
             <header class="h-16 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-extrabold text-slate-400 uppercase">Ghorerbazar Facebook</span>
+              <div class="flex items-center gap-3">
+                <span class="text-xs font-extrabold text-slate-400 uppercase">Ghorerbazar FB</span>
                 <span class="text-slate-300">/</span>
                 <h2 class="text-xs font-black uppercase text-blue-600">${activeTab}</h2>
+                <span class="text-slate-300">•</span>
+                <!-- Global Month Selector for Historical & Future Month-Wise Tracking -->
+                <div class="flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl">
+                  <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
+                  <select onchange="changeSelectedMonth(this.value)" class="bg-transparent text-xs font-extrabold text-blue-800 focus:outline-none cursor-pointer">
+                    ${AVAILABLE_MONTHS.map(m => `<option value="${m.key}" ${m.key === selectedMonthKey ? 'selected' : ''}>${m.label}</option>`).join('')}
+                  </select>
+                </div>
               </div>
+
               <div class="flex items-center gap-4">
                 <button onclick="fetchFromSheet()" class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-lg flex items-center gap-1.5 hover:bg-emerald-100">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Sync Now
@@ -558,73 +683,120 @@
                 </div>
               </div>
             </header>
-            <main class="p-8 max-w-7xl w-full mx-auto">${renderTabContent()}</main>
+            <main class="p-6 lg:p-8 max-w-7xl w-full mx-auto">${renderTabContent()}</main>
           </div>
         </div>
         ${renderSubmitModal()}
         ${renderBreakModal()}
         ${renderEditAttendanceModal()}
         ${renderUserModal()}
+        ${renderProductConfigModal()}
       `;
       document.getElementById('app').innerHTML = html;
     }
 
     function renderTabContent() {
       if (activeTab === 'dashboard') return renderDashboard();
+      if (activeTab === 'roster') return renderDutyRosterView();
       if (activeTab === 'attendance') return renderAttendanceView();
       if (activeTab === 'ranking') return renderRankingAndComparison();
       if (activeTab === 'reports') return renderReports();
       if (activeTab === 'agents') return renderManageAgents();
     }
 
-    // AGENT LIVE DUTY & BREAK BAR COMPONENT
-    function renderAgentLiveDutyWidget() {
+    // COMPACT SIDE-BY-SIDE WIDGETS (Duty Timer on Left, Incentive Tracker on Right)
+    function renderCompactTopWidgets(incentiveSummary) {
       const u = currentUser;
-      if (!u || u.role !== 'agent') return '';
       const today = getTodayFormatted();
       const attList = getStored('attendance_records', []);
-      const rec = attList.find(a => String(a.userId) === String(u.id) && a.date === today) || ensureAgentAttendanceSession(u);
-      const isBreak = rec.status === 'On Break';
+      const rec = (u && u.role === 'agent')
+        ? (attList.find(a => String(a.userId) === String(u.id) && a.date === today) || ensureAgentAttendanceSession(u))
+        : null;
+      const isBreak = rec && rec.status === 'On Break';
 
       return `
-        <div class="card-dynamic p-5 border-l-4 ${isBreak ? 'border-l-amber-500 bg-amber-50/40' : 'border-l-emerald-500'} flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-          <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl ${isBreak ? 'bg-amber-500' : 'bg-emerald-600'} text-white flex items-center justify-center text-xl shadow-md shrink-0">
-              <i class="fa-solid ${isBreak ? 'fa-mug-hot' : 'fa-user-clock'}"></i>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          ${u.role === 'agent' && rec ? `
+          <!-- Compact Duty & Break Card (Side 1) -->
+          <div class="card-dynamic px-5 py-4 border-l-4 ${isBreak ? 'border-l-amber-500 bg-amber-50/30' : 'border-l-emerald-500'} flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3.5">
+              <div class="w-10 h-10 rounded-xl ${isBreak ? 'bg-amber-500' : 'bg-emerald-600'} text-white flex items-center justify-center text-base shadow-sm shrink-0">
+                <i class="fa-solid ${isBreak ? 'fa-mug-hot' : 'fa-user-clock'}"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${isBreak ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+                    ${isBreak ? `Break: ${rec.breakReason}` : 'Duty Active'}
+                  </span>
+                  <span class="text-[11px] font-bold text-slate-400">In: ${sanitizeTimeDisplay(rec.loginTime)}</span>
+                </div>
+                <div class="flex items-center gap-4 mt-1">
+                  <div>
+                    <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Working</span>
+                    <span id="live-work-timer" class="text-lg font-black font-mono text-emerald-600">${formatHMS(rec.activeSeconds)}</span>
+                  </div>
+                  <div class="pl-4 border-l border-slate-200">
+                    <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Break</span>
+                    <span id="live-break-timer" class="text-lg font-black font-mono text-amber-600">${formatHMS(rec.breakSeconds)}</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${isBreak ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
-                  ${isBreak ? `On Break (${rec.breakReason})` : 'Duty Active • Working'}
-                </span>
-                <span class="text-xs font-bold text-slate-400">Login: ${rec.loginTime}</span>
-              </div>
-              <div class="flex flex-wrap items-center gap-6 mt-1.5">
-                <div>
-                  <span class="text-[10px] font-extrabold uppercase text-slate-400 block">Working Hours</span>
-                  <span id="live-work-timer" class="text-2xl font-black font-mono text-emerald-600">${formatHMS(rec.activeSeconds)}</span>
-                </div>
-                <div class="pl-6 border-l border-slate-200">
-                  <span class="text-[10px] font-extrabold uppercase text-slate-400 block">Break Time</span>
-                  <span id="live-break-timer" class="text-2xl font-black font-mono text-amber-600">${formatHMS(rec.breakSeconds)}</span>
-                </div>
-              </div>
+            <div class="flex items-center gap-2 shrink-0">
+              ${isBreak ? `
+                <button onclick="handleResumeWork()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
+                  <i class="fa-solid fa-play"></i> Resume
+                </button>
+              ` : `
+                <button onclick="openBreakModal()" class="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
+                  <i class="fa-solid fa-mug-saucer"></i> Break
+                </button>
+              `}
+              <button onclick="handleLogout()" title="End Duty & Logout" class="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-extrabold">
+                <i class="fa-solid fa-power-off"></i>
+              </button>
             </div>
           </div>
+          ` : `
+          <!-- Admin Quick Roster & Month Status Card (Side 1) -->
+          <div class="card-dynamic px-5 py-4 border-l-4 border-l-blue-600 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3.5">
+              <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base shadow-sm shrink-0">
+                <i class="fa-solid fa-calendar-check"></i>
+              </div>
+              <div>
+                <span class="text-[10px] font-black uppercase text-blue-600 block">Active Month Period</span>
+                <h4 class="text-sm font-black text-slate-900">${(AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label}</h4>
+                <p class="text-[11px] font-semibold text-slate-400">All sales & targets are archived month-wise</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="setTab('roster')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-extrabold">View Roster</button>
+              <button onclick="setTab('agents')" class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-xs font-extrabold">Edit Targets</button>
+            </div>
+          </div>
+          `}
 
-          <div class="flex flex-wrap items-center gap-3">
-            ${isBreak ? `
-              <button onclick="handleResumeWork()" class="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-extrabold shadow-lg flex items-center gap-2 animate-bounce">
-                <i class="fa-solid fa-play"></i> Back to Work (Resume Duty)
-              </button>
-            ` : `
-              <button onclick="openBreakModal()" class="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-extrabold shadow-md flex items-center gap-2">
-                <i class="fa-solid fa-mug-saucer"></i> Take a Break
-              </button>
-            `}
-            <button onclick="handleLogout()" class="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl text-xs font-extrabold flex items-center gap-1.5">
-              <i class="fa-solid fa-power-off"></i> End Duty & Logout
-            </button>
+          <!-- Compact Incentive & Bonus Card (Side 2) -->
+          <div class="incentive-banner px-5 py-4 rounded-2xl shadow-sm flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3.5 min-w-0">
+              <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base shadow-sm shrink-0">
+                <i class="fa-solid fa-award"></i>
+              </div>
+              <div class="min-w-0">
+                <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block">Earned Incentive (${selectedMonthKey})</span>
+                <h3 class="text-sm font-black text-slate-900 truncate">
+                  ৳${incentiveSummary.totalMoney.toLocaleString()} Cash Bonus 
+                  ${incentiveSummary.earnedRewards.length > 0 ? `+ ${incentiveSummary.earnedRewards.length} Rewards` : ''}
+                </h3>
+                <p class="text-[11px] font-bold text-slate-600 truncate">
+                  ${incentiveSummary.earnedRewards.length > 0 ? `Unlocked: ${incentiveSummary.earnedRewards.join(', ')}` : 'Hit 90% or 100% product target to unlock bonus'}
+                </p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 bg-amber-500 text-white rounded-lg text-[10px] font-black shrink-0">
+              🔥 Bonus
+            </span>
           </div>
         </div>
       `;
@@ -633,6 +805,8 @@
     function renderDashboard() {
       const u = currentUser;
       const allSales = getStored('sales_records', []);
+      const monthUsers = getUsersForMonth(selectedMonthKey);
+      const myMonthUser = monthUsers.find(usr => String(usr.id) === String(u.id)) || u;
       
       let mySales = [];
       if (u.role === 'admin') {
@@ -641,10 +815,8 @@
         mySales = allSales.filter(s => String(s.userId) === String(u.id));
       }
 
-      const tInfo = getTargetData(u, adminFilterScope);
-      
-      const currentMonthStr = getTodayFormatted().substring(3);
-      const thisMonthSales = mySales.filter(s => s.date.endsWith(currentMonthStr));
+      const tInfo = getTargetData(u, adminFilterScope, selectedMonthKey);
+      const thisMonthSales = mySales.filter(s => s.date.endsWith(selectedMonthKey));
       
       const sprintSalesAmount = thisMonthSales.reduce((acc, curr) => {
         const d = parseInt(curr.date.split('/')[0], 10);
@@ -672,67 +844,60 @@
         pTotals.gawaGhee += (Number(s.gawaGhee) || 0);
       });
 
-      const incentiveSummary = calculateEarnedIncentives(pTotals, tInfo.agentCount);
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      const incentiveSummary = calculateEarnedIncentives(pTotals, tInfo.agentCount, selectedMonthKey);
 
       return `
-        <div class="space-y-6">
-          <div class="banner-hero-light p-6 rounded-3xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div class="space-y-5">
+          <!-- Clean & Organized Welcome Header Box (With Tidy Pill Badges instead of cluttered text) -->
+          <div class="banner-hero-light p-5 rounded-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
             <div>
               <div class="flex flex-wrap items-center gap-2">
-                <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase ${adminFilterScope === 'Team Nazim' ? 'bg-orange-500' : (adminFilterScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800')} text-white tracking-wider">
-                  ${u.role === 'admin' ? `Viewing Target: ${adminFilterScope === 'ALL' ? 'Full Facebook Team (16 Agents)' : adminFilterScope + (adminFilterScope === u.team ? ' (My Team)' : '')}` : u.team}
+                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${adminFilterScope === 'Team Nazim' ? 'bg-orange-500' : (adminFilterScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800')} text-white">
+                  ${u.role === 'admin' ? `${adminFilterScope === 'ALL' ? 'Full Facebook Team (16)' : adminFilterScope}` : u.team}
                 </span>
-                <span class="text-xs font-bold text-slate-500">
-                  ${u.role === 'admin' ? `• ${tInfo.agentCount} Agents Included` : `• Category Grade: ${u.grade}`}
+                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
+                  ${u.role === 'admin' ? `${tInfo.agentCount} Agents` : `Grade: ${myMonthUser.grade}`}
+                </span>
+                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
+                  Period: ${(AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label}
                 </span>
               </div>
-              <h2 class="text-2xl font-black text-slate-900 mt-2">Welcome, ${u.name}! 👋</h2>
-              <p class="text-xs font-semibold text-slate-500 mt-1">
-                Base Target: <strong>৳${tInfo.baseTarget.toLocaleString()}</strong> • 
-                Working Target (+5% Buffer): <strong class="text-blue-600">৳${tInfo.workingTarget.toLocaleString()}</strong> • 
-                Daily Target (÷26): <strong class="text-emerald-600">৳${tInfo.dailyTarget.toLocaleString()}/day</strong>
-              </p>
+              <h2 class="text-xl font-black text-slate-900 mt-1.5">Welcome, ${u.name}! 👋</h2>
+              
+              <!-- Clean Organized Target Pills -->
+              <div class="flex flex-wrap items-center gap-2 mt-2">
+                <div class="px-3 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-slate-600">
+                  Base: <strong class="text-slate-900">৳${tInfo.baseTarget.toLocaleString()}</strong>
+                </div>
+                <div class="px-3 py-1 rounded-lg bg-blue-50/70 border border-blue-200 text-xs font-bold text-blue-700">
+                  Working (+5%): <strong>৳${tInfo.workingTarget.toLocaleString()}</strong>
+                </div>
+                <div class="px-3 py-1 rounded-lg bg-emerald-50/70 border border-emerald-200 text-xs font-bold text-emerald-700">
+                  Daily Goal (÷26): <strong>৳${tInfo.dailyTarget.toLocaleString()}</strong>
+                </div>
+              </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-center gap-2.5">
               ${u.role === 'admin' ? `
-              <div class="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1 border border-slate-200">
-                <button onclick="setAdminScope('Team Nazim')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
-                <button onclick="setAdminScope('Team Samad')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
-                <button onclick="setAdminScope('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All Team (16)</button>
+              <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+                <button onclick="setAdminScope('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${adminFilterScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
+                <button onclick="setAdminScope('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${adminFilterScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
+                <button onclick="setAdminScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${adminFilterScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (16)</button>
               </div>
               ` : ''}
-              <button onclick="openReportModal()" class="px-5 py-3.5 tab-active text-white rounded-2xl text-xs font-extrabold shadow-lg flex items-center gap-2 hover:scale-105 transition-transform">
-                <i class="fa-solid fa-plus-circle text-sm"></i>
+              <button onclick="openReportModal()" class="px-5 py-3 tab-active text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2">
+                <i class="fa-solid fa-plus-circle"></i>
                 ${u.role === 'admin' ? 'Add / Edit Agent Data' : 'Submit Daily Report'}
               </button>
             </div>
           </div>
 
-          <!-- Agent Live Duty & Break Control Bar -->
-          ${renderAgentLiveDutyWidget()}
+          <!-- Compact Side-by-Side Duty Timer & Incentive Tracker -->
+          ${renderCompactTopWidgets(incentiveSummary)}
 
-          <div class="incentive-banner p-5 rounded-3xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div class="flex items-center gap-3.5">
-              <div class="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-xl shadow-md shrink-0">
-                <i class="fa-solid fa-award"></i>
-              </div>
-              <div>
-                <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block">Live Incentive & Bonus Earned</span>
-                <h3 class="text-lg font-black text-slate-900">
-                  ৳${incentiveSummary.totalMoney.toLocaleString()} Cash Bonus 
-                  ${incentiveSummary.earnedRewards.length > 0 ? `+ ${incentiveSummary.earnedRewards.length} Product Rewards` : ''}
-                </h3>
-                <p class="text-[11px] font-bold text-slate-600 mt-0.5">
-                  ${incentiveSummary.earnedRewards.length > 0 ? `Unlocked: ${incentiveSummary.earnedRewards.join(', ')}` : 'Reach 90% or 100% of any product target to unlock cash bonuses and rewards automatically!'}
-                </p>
-              </div>
-            </div>
-            <span class="px-3.5 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-black shadow">
-              🔥 Incentive Tracker
-            </span>
-          </div>
-
+          <!-- 5 Vibrant Multi-Color KPI Cards -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div class="kpi-card-1 p-5 rounded-2xl flex flex-col justify-between">
               <div class="flex justify-between items-center">
@@ -741,7 +906,7 @@
               </div>
               <div class="mt-4">
                 <p class="text-3xl font-black text-white">${monthTotalLeads.toLocaleString()}</p>
-                <p class="text-[11px] font-bold text-blue-100 mt-1">Inbound Inquiries</p>
+                <p class="text-[11px] font-bold text-blue-100 mt-1">Inbound (${selectedMonthKey})</p>
               </div>
             </div>
 
@@ -766,7 +931,7 @@
               </div>
               <div class="mt-4">
                 <p class="text-2xl font-black text-white">৳${monthTotalAmount.toLocaleString()}</p>
-                <p class="text-[11px] font-bold text-purple-100 mt-1">Achieved This Month</p>
+                <p class="text-[11px] font-bold text-purple-100 mt-1">Achieved (${selectedMonthKey})</p>
               </div>
             </div>
 
@@ -798,51 +963,51 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="sprint-banner p-6 rounded-3xl shadow-sm">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="sprint-banner p-5 rounded-2xl shadow-sm">
               <div class="flex justify-between items-start">
                 <div>
-                  <span class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white">Current 10-Day Sprint</span>
-                  <h3 class="text-xl font-black text-slate-900 mt-2">${tInfo.sprintName} (${tInfo.sprintPct * 100}% Goal)</h3>
+                  <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-blue-600 text-white">Current 10-Day Sprint</span>
+                  <h3 class="text-lg font-black text-slate-900 mt-1.5">${tInfo.sprintName} (${tInfo.sprintPct * 100}% Goal)</h3>
                 </div>
-                <div class="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-lg shadow-md">
+                <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base shadow-sm">
                   <i class="fa-solid fa-bolt"></i>
                 </div>
               </div>
-              <div class="mt-5">
-                <div class="flex justify-between text-xs font-extrabold mb-2">
-                  <span class="text-slate-600">Sprint Target: <strong class="text-slate-900 text-sm">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
-                  <span class="text-slate-600">Achieved: <strong class="text-blue-700 text-sm">৳${sprintSalesAmount.toLocaleString()}</strong></span>
+              <div class="mt-4">
+                <div class="flex justify-between text-xs font-extrabold mb-1.5">
+                  <span class="text-slate-600">Sprint Target: <strong class="text-slate-900">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
+                  <span class="text-slate-600">Achieved: <strong class="text-blue-700">৳${sprintSalesAmount.toLocaleString()}</strong></span>
                 </div>
-                <div class="progress-track h-3 bg-white">
-                  <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-3 rounded-full transition-all" style="width: ${sprintPct}%"></div>
+                <div class="progress-track h-2.5 bg-white">
+                  <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2.5 rounded-full transition-all" style="width: ${sprintPct}%"></div>
                 </div>
-                <div class="flex justify-between items-center mt-2.5 text-xs font-bold text-slate-600">
+                <div class="flex justify-between items-center mt-2 text-xs font-bold text-slate-600">
                   <span>Remaining: ৳${Math.max(0, tInfo.sprintGoal - sprintSalesAmount).toLocaleString()}</span>
                   <span class="text-blue-700 font-black">${sprintPct}% Completed</span>
                 </div>
               </div>
             </div>
 
-            <div class="monthly-banner p-6 rounded-3xl shadow-sm">
+            <div class="monthly-banner p-5 rounded-2xl shadow-sm">
               <div class="flex justify-between items-start">
                 <div>
-                  <span class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-emerald-600 text-white">Monthly Total (+5% Return Buffer)</span>
-                  <h3 class="text-xl font-black text-slate-900 mt-2">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</h3>
+                  <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-emerald-600 text-white">Monthly Total (+5% Return Buffer)</span>
+                  <h3 class="text-lg font-black text-slate-900 mt-1.5">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</h3>
                 </div>
-                <div class="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-lg shadow-md">
+                <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-base shadow-sm">
                   <i class="fa-solid fa-chart-line"></i>
                 </div>
               </div>
-              <div class="mt-5">
-                <div class="flex justify-between text-xs font-extrabold mb-2">
-                  <span class="text-slate-600">Base Target: <strong class="text-slate-900 text-sm">৳${tInfo.baseTarget.toLocaleString()}</strong></span>
-                  <span class="text-slate-600">Revenue: <strong class="text-emerald-700 text-sm">৳${monthTotalAmount.toLocaleString()}</strong></span>
+              <div class="mt-4">
+                <div class="flex justify-between text-xs font-extrabold mb-1.5">
+                  <span class="text-slate-600">Base Target: <strong class="text-slate-900">৳${tInfo.baseTarget.toLocaleString()}</strong></span>
+                  <span class="text-slate-600">Revenue: <strong class="text-emerald-700">৳${monthTotalAmount.toLocaleString()}</strong></span>
                 </div>
-                <div class="progress-track h-3 bg-white">
-                  <div class="bg-gradient-to-r from-emerald-600 to-teal-500 h-3 rounded-full transition-all" style="width: ${monthPct}%"></div>
+                <div class="progress-track h-2.5 bg-white">
+                  <div class="bg-gradient-to-r from-emerald-600 to-teal-500 h-2.5 rounded-full transition-all" style="width: ${monthPct}%"></div>
                 </div>
-                <div class="flex justify-between items-center mt-2.5 text-xs font-bold text-slate-600">
+                <div class="flex justify-between items-center mt-2 text-xs font-bold text-slate-600">
                   <span>Remaining: ৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</span>
                   <span class="text-emerald-700 font-black">${monthPct}% Achieved</span>
                 </div>
@@ -851,38 +1016,41 @@
           </div>
 
           <div>
-            <div class="flex items-center justify-between mb-4 mt-2">
-              <h3 class="text-base font-black text-slate-800">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-black text-slate-800 uppercase tracking-wide">
                 <i class="fa-solid fa-gift text-blue-600 mr-1.5"></i> 
                 Facebook Product Incentive Targets (${u.role === 'admin' ? `${adminFilterScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
               </h3>
-              <span class="px-3 py-1 rounded-full bg-white border text-xs font-extrabold text-slate-600 shadow-sm">90% = Entry Bonus | 100% = Full Bonus</span>
+              <div class="flex items-center gap-2">
+                ${u.role === 'admin' ? `<button onclick="openProductConfigModal()" class="px-3 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
+                <span class="px-3 py-1 rounded-full bg-white border text-[11px] font-extrabold text-slate-600">90% = Entry Bonus | 100% = Full Bonus</span>
+              </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              ${Object.keys(FB_PRODUCTS).map(k => {
-                const p = FB_PRODUCTS[k];
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              ${Object.keys(activeProds).map(k => {
+                const p = activeProds[k];
                 const achieved = pTotals[k];
                 const target = p.targetKg * tInfo.agentCount; 
                 const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
                 const isUnlocked = pct >= 90;
                 return `
-                  <div class="${p.style} card-dynamic p-5 rounded-3xl ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
-                    <div class="flex justify-between items-start mb-3">
+                  <div class="${p.style} card-dynamic p-5 ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
+                    <div class="flex justify-between items-start mb-2.5">
                       <div>
-                        <h4 class="font-black text-base text-slate-900">${p.name} ${isUnlocked ? '🔥' : ''}</h4>
+                        <h4 class="font-black text-sm text-slate-900">${p.name} ${isUnlocked ? '🔥' : ''}</h4>
                         <p class="text-xs text-slate-500 font-bold">Target: <strong class="text-slate-800">${target.toFixed(2)} kg</strong></p>
                       </div>
-                      <div class="w-10 h-10 rounded-2xl ${p.badge} flex items-center justify-center shadow-sm">
+                      <div class="w-9 h-9 rounded-xl ${p.badge} flex items-center justify-center shadow-sm">
                         <i class="fa-solid ${p.icon}"></i>
                       </div>
                     </div>
                     <div class="flex justify-between items-baseline mb-2">
-                      <span class="text-2xl font-black text-slate-900">${achieved.toFixed(2)} <span class="text-xs font-bold text-slate-500">kg sold</span></span>
-                      <span class="px-2.5 py-0.5 rounded-lg ${p.badge} text-xs font-black">${pct}%</span>
+                      <span class="text-xl font-black text-slate-900">${achieved.toFixed(2)} <span class="text-xs font-bold text-slate-500">kg sold</span></span>
+                      <span class="px-2 py-0.5 rounded-md ${p.badge} text-xs font-black">${pct}%</span>
                     </div>
-                    <div class="progress-track h-2.5 bg-white border border-slate-200/60 mb-3">
-                      <div class="${p.bar} h-2.5 rounded-full" style="width: ${pct}%"></div>
+                    <div class="progress-track h-2 bg-white border border-slate-200/60 mb-2.5">
+                      <div class="${p.bar} h-2 rounded-full" style="width: ${pct}%"></div>
                     </div>
                     <p class="text-[11px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `90%: ৳${p.bonus90} | ` : ''}${p.bonus100 ? `100%: ৳${p.bonus100}` : ''}${p.item100 ? `100%: ${p.item100}` : ''}</strong></p>
                   </div>
@@ -894,10 +1062,224 @@
       `;
     }
 
-    // ATTENDANCE & DUTY LOGS VIEW
+    // DUTY ROSTER VIEW (Agent Read-Only, Admin Editable + Auto Summary Tables matching Image)
+    function renderDutyRosterView() {
+      const u = currentUser;
+      const isAdmin = u.role === 'admin';
+      const roster = getRosterForMonth(selectedMonthKey);
+      const days = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
+      const dayLabels = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+      const samadRows = roster.filter(r => r.team === 'Team Samad');
+      const nazimRows = roster.filter(r => r.team === 'Team Nazim');
+
+      function computeRosterSummary(rows, excludeTL) {
+        const filtered = excludeTL ? rows.filter(r => !r.isTL && r.id !== '10107' && r.id !== '10122') : rows;
+        const counts = {
+          morning: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          general: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          evening: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          night: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          doCount: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 }
+        };
+        filtered.forEach(r => {
+          days.forEach(d => {
+            const val = String(r[d] || '').toUpperCase();
+            if (val.includes('7:00')) counts.morning[d]++;
+            else if (val.includes('10:00')) counts.general[d]++;
+            else if (val.includes('3:00')) counts.evening[d]++;
+            else if (val.includes('NIGHT') || val.includes('11:00')) counts.night[d]++;
+            else if (val === 'DO' || val.includes('OFF')) counts.doCount[d]++;
+          });
+        });
+        return counts;
+      }
+
+      // Per-team summaries exclude the TL row (matching exact 8-agent totals in the screenshot)
+      const samadSum = computeRosterSummary(samadRows, true);
+      const nazimSum = computeRosterSummary(nazimRows, true);
+      const combinedAll = computeRosterSummary(roster, false);
+      const combinedNoTL = computeRosterSummary(roster, true);
+
+      function renderShiftCell(row, dKey) {
+        const val = row[dKey] || '3:00 PM';
+        const cellClass = val === 'DO' ? 'roster-do' : (val === 'Night' ? 'roster-night' : 'text-slate-700 font-semibold');
+        if (!isAdmin) {
+          return `<td class="p-2.5 border border-slate-200 text-center ${cellClass}">${val}</td>`;
+        }
+        return `
+          <td class="p-1.5 border border-slate-200 text-center ${cellClass}">
+            <select onchange="handleRosterShiftChange('${row.id}', '${dKey}', this.value)" class="w-full bg-transparent text-center text-xs font-bold focus:outline-none cursor-pointer">
+              ${SHIFT_OPTIONS.map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('')}
+            </select>
+          </td>
+        `;
+      }
+
+      function renderTeamSummaryTable(title, sumObj) {
+        const rowsSpec = [
+          { time: '7:00 AM', shift: 'Morning', key: 'morning' },
+          { time: '10:00 AM', shift: 'General Time', key: 'general' },
+          { time: '3:00 PM', shift: 'Evening', key: 'evening' },
+          { time: '11:00 PM', shift: 'Night', key: 'night' },
+          { time: 'Day Off', shift: 'Day Off', key: 'doCount' }
+        ];
+        return `
+          <div class="card-dynamic overflow-hidden overflow-x-auto mt-4">
+            <div class="bg-slate-100 px-4 py-2.5 border-b border-slate-200 font-black text-xs text-slate-800 text-center uppercase">${title}</div>
+            <table class="w-full text-xs text-center border-collapse">
+              <thead class="bg-slate-50 font-extrabold text-slate-600">
+                <tr>
+                  <th class="p-2 border border-slate-200">Duty Time</th>
+                  <th class="p-2 border border-slate-200">Duty Shift</th>
+                  ${dayLabels.map(dl => `<th class="p-2 border border-slate-200">${dl}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody class="font-bold text-slate-700">
+                ${rowsSpec.map(rs => `
+                  <tr>
+                    <td class="p-2 border border-slate-200">${rs.time}</td>
+                    <td class="p-2 border border-slate-200">${rs.shift}</td>
+                    ${days.map(d => `<td class="p-2 border border-slate-200">${sumObj[rs.key][d]}</td>`).join('')}
+                  </tr>
+                `).join('')}
+                <tr class="bg-slate-100 font-black text-slate-900">
+                  <td colspan="2" class="p-2 border border-slate-200">In Total (Agents)</td>
+                  ${days.map(d => `<td class="p-2 border border-slate-200">${sumObj.morning[d] + sumObj.general[d] + sumObj.evening[d] + sumObj.night[d] + sumObj.doCount[d]}</td>`).join('')}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      const monthTitle = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-calendar-week text-blue-600 mr-2"></i>Duty Roster (${monthTitle})</h2>
+              <p class="text-xs font-bold text-slate-500">
+                ${isAdmin ? 'Admin Mode: Click any shift dropdown in the table to change schedule. Changes auto-save & update summaries!' : 'View your weekly shift schedule and Day Off (DO) assignments.'}
+              </p>
+            </div>
+            <span class="px-3.5 py-1.5 rounded-xl bg-orange-100 text-orange-800 text-xs font-black">
+              DO = Day Off • Night = 11:00 PM
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <!-- Team Samad Roster -->
+            <div>
+              <div class="card-dynamic overflow-hidden overflow-x-auto">
+                <div class="bg-blue-600 text-white px-4 py-3 font-black text-sm text-center">Team: Facebook (Abdus Samad)</div>
+                <table class="w-full text-xs border-collapse whitespace-nowrap">
+                  <thead class="bg-slate-50 font-extrabold text-slate-600">
+                    <tr>
+                      <th class="p-2.5 border border-slate-200">Emp. ID</th>
+                      <th class="p-2.5 border border-slate-200 text-left">Name</th>
+                      ${dayLabels.map(dl => `<th class="p-2.5 border border-slate-200">${dl}</th>`).join('')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${samadRows.map(r => `
+                      <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
+                        <td class="p-2.5 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
+                        <td class="p-2.5 border border-slate-200 font-bold text-slate-900">${r.name}</td>
+                        ${days.map(d => renderShiftCell(r, d)).join('')}
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+              ${renderTeamSummaryTable('Team Samad — Roster Summary', samadSum)}
+            </div>
+
+            <!-- Team Nazim Roster -->
+            <div>
+              <div class="card-dynamic overflow-hidden overflow-x-auto">
+                <div class="bg-orange-500 text-white px-4 py-3 font-black text-sm text-center">Team: Facebook (Nazim)</div>
+                <table class="w-full text-xs border-collapse whitespace-nowrap">
+                  <thead class="bg-slate-50 font-extrabold text-slate-600">
+                    <tr>
+                      <th class="p-2.5 border border-slate-200">Emp. ID</th>
+                      <th class="p-2.5 border border-slate-200 text-left">Name</th>
+                      ${dayLabels.map(dl => `<th class="p-2.5 border border-slate-200">${dl}</th>`).join('')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${nazimRows.map(r => `
+                      <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
+                        <td class="p-2.5 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
+                        <td class="p-2.5 border border-slate-200 font-bold text-slate-900">${r.name}</td>
+                        ${days.map(d => renderShiftCell(r, d)).join('')}
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+              ${renderTeamSummaryTable('Team Nazim — Roster Summary', nazimSum)}
+            </div>
+          </div>
+
+          <!-- Combined Facebook Team Roster Summary -->
+          <div class="card-dynamic overflow-hidden overflow-x-auto max-w-4xl mx-auto">
+            <div class="bg-slate-900 text-white px-4 py-3 font-black text-sm text-center uppercase tracking-wider">Facebook Team Roster Summary (Combined)</div>
+            <table class="w-full text-xs text-center border-collapse">
+              <thead class="bg-slate-100 font-extrabold text-slate-700">
+                <tr>
+                  <th class="p-2.5 border border-slate-200">Duty Time</th>
+                  <th class="p-2.5 border border-slate-200">Duty Shift</th>
+                  ${dayLabels.map(dl => `<th class="p-2.5 border border-slate-200">${dl}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody class="font-bold text-slate-700">
+                <tr class="bg-orange-50/40"><td class="p-2.5 border border-slate-200">7:00 AM</td><td class="p-2.5 border border-slate-200">Morning</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.morning[d]}</td>`).join('')}</tr>
+                <tr class="bg-orange-50/40"><td class="p-2.5 border border-slate-200">10:00 AM</td><td class="p-2.5 border border-slate-200">General Time</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.general[d]}</td>`).join('')}</tr>
+                <tr class="bg-orange-50/40"><td class="p-2.5 border border-slate-200">3:00 PM</td><td class="p-2.5 border border-slate-200">Evening</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.evening[d]}</td>`).join('')}</tr>
+                <tr><td class="p-2.5 border border-slate-200">11:00 PM</td><td class="p-2.5 border border-slate-200">Night</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.night[d]}</td>`).join('')}</tr>
+                <tr><td class="p-2.5 border border-slate-200">Day Off</td><td class="p-2.5 border border-slate-200">Day Off</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.doCount[d]}</td>`).join('')}</tr>
+                <tr class="bg-slate-100 font-black text-slate-900">
+                  <td colspan="2" class="p-2.5 border border-slate-200">In Total (Agents)</td>
+                  ${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.morning[d] + combinedNoTL.general[d] + combinedNoTL.evening[d] + combinedNoTL.night[d] + combinedNoTL.doCount[d]}</td>`).join('')}
+                </tr>
+                <tr class="bg-emerald-50 font-black text-emerald-800">
+                  <td colspan="2" class="p-2.5 border border-slate-200">In Total (Daily Active Agents)</td>
+                  ${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.morning[d] + combinedNoTL.general[d] + combinedNoTL.evening[d] + combinedNoTL.night[d]}</td>`).join('')}
+                </tr>
+                <tr class="bg-blue-50 font-black text-blue-800">
+                  <td colspan="2" class="p-2.5 border border-slate-200">In Total Active (Including TL)</td>
+                  ${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedAll.morning[d] + combinedAll.general[d] + combinedAll.evening[d] + combinedAll.night[d]}</td>`).join('')}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleRosterShiftChange(empId, dayKey, newShift) {
+      const roster = getRosterForMonth(selectedMonthKey);
+      const targetRow = roster.find(r => String(r.id) === String(empId));
+      if (!targetRow) return;
+
+      targetRow[dayKey] = newShift;
+      targetRow.monthKey = selectedMonthKey;
+
+      let savedList = getStored('roster_records', []);
+      const idx = savedList.findIndex(r => r.monthKey === selectedMonthKey && String(r.id) === String(empId));
+      if (idx !== -1) savedList[idx] = targetRow;
+      else savedList.push(targetRow);
+      setStored('roster_records', savedList);
+
+      renderAppLayout();
+      await postToSheet('SAVE_ROSTER_ROW', targetRow);
+    }
+
     function renderAttendanceView() {
       const u = currentUser;
-      const allAtt = getStored('attendance_records', []);
+      const allAtt = getStored('attendance_records', []).filter(a => a.date.endsWith(selectedMonthKey));
       let records = [];
       if (u.role === 'admin') {
         records = adminFilterScope === 'ALL' ? allAtt : allAtt.filter(a => a.team === adminFilterScope);
@@ -907,11 +1289,9 @@
 
       return `
         <div class="space-y-6">
-          ${renderAgentLiveDutyWidget()}
-
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h2 class="text-xl font-black text-slate-900"><i class="fa-regular fa-clock text-emerald-600 mr-2"></i>Daily Attendance, Working Hours & Break Logs</h2>
+              <h2 class="text-xl font-black text-slate-900"><i class="fa-regular fa-clock text-emerald-600 mr-2"></i>Attendance & Duty Logs (${selectedMonthKey})</h2>
               <p class="text-xs font-bold text-slate-500">Live duty tracking from login to logout with break reasons and total duration</p>
             </div>
             <div class="flex items-center gap-2">
@@ -946,7 +1326,7 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
-                ${records.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No attendance records logged yet.</td></tr>' : ''}
+                ${records.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No attendance records logged for this month yet.</td></tr>' : ''}
                 ${records.map(r => {
                   let statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800"><span class="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block mr-1 animate-ping"></span>Working</span>`;
                   if (r.status === 'On Break') {
@@ -961,8 +1341,8 @@
                       <td class="p-4 font-extrabold text-slate-900">${r.userName} <span class="text-slate-400 text-[10px]">(${r.userId})</span></td>
                       <td class="p-4"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${r.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${r.team}</span></td>
                       <td class="p-4">${statusBadge}</td>
-                      <td class="p-4 font-bold text-slate-700">${r.loginTime || '--:--'}</td>
-                      <td class="p-4 font-bold text-slate-700">${r.logoutTime || '--:--'}</td>
+                      <td class="p-4 font-bold text-slate-700">${sanitizeTimeDisplay(r.loginTime)}</td>
+                      <td class="p-4 font-bold text-slate-700">${sanitizeTimeDisplay(r.logoutTime)}</td>
                       <td class="p-4 font-mono font-black text-emerald-600 text-sm">${formatHMS(r.activeSeconds)}</td>
                       <td class="p-4 font-mono font-black text-amber-600 text-sm">${formatHMS(r.breakSeconds)}</td>
                       <td class="p-4 font-bold text-amber-700">${r.breakReason || '-'}</td>
@@ -984,10 +1364,9 @@
     }
 
     function renderRankingAndComparison() {
-      const allUsers = getStored('users', []).filter(u => u.role === 'agent');
+      const allUsers = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
       const allSales = getStored('sales_records', []);
-      const currentMonthStr = getTodayFormatted().substring(3);
-      const monthSales = allSales.filter(s => s.date.endsWith(currentMonthStr));
+      const monthSales = allSales.filter(s => s.date.endsWith(selectedMonthKey));
 
       function calcTeamStats(teamName) {
         const tAgents = allUsers.filter(a => a.team === teamName);
@@ -1021,8 +1400,8 @@
           <div>
             <div class="flex items-center justify-between mb-4">
               <div>
-                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>Team vs Team Live Comparison</h2>
-                <p class="text-xs font-bold text-slate-500">Team Nazim vs Team Samad — Real-time monthly performance comparison</p>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>Team vs Team Comparison (${selectedMonthKey})</h2>
+                <p class="text-xs font-bold text-slate-500">Team Nazim vs Team Samad — Monthly performance head-to-head</p>
               </div>
             </div>
 
@@ -1078,7 +1457,7 @@
           <div>
             <div class="flex justify-between items-center mb-4">
               <div>
-                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (All Agents)</h2>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
                 <p class="text-xs font-bold text-slate-500">Combined leaderboard across both teams sorted by sales revenue and order volume</p>
               </div>
               ${currentUser.role === 'admin' ? `<button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow">+ Add Agent Data</button>` : ''}
@@ -1139,8 +1518,8 @@
 
     function renderReports() {
       const u = currentUser;
-      const allUsers = getStored('users', []);
-      const allSales = getStored('sales_records', []);
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const allSales = getStored('sales_records', []).filter(s => s.date.endsWith(selectedMonthKey));
       
       let sales = [];
       if (u.role === 'admin') {
@@ -1153,8 +1532,8 @@
         <div class="space-y-6">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h2 class="text-xl font-black text-slate-900">Daily Sales & Conversion Logs</h2>
-              <p class="text-xs font-bold text-slate-500">Track daily leads, orders, conversion ratios, daily target achievements, and edit/delete records</p>
+              <h2 class="text-xl font-black text-slate-900">Daily Sales & Conversion Logs (${selectedMonthKey})</h2>
+              <p class="text-xs font-bold text-slate-500">Historical & current month logs — switch month from the top bar to view previous months</p>
             </div>
             <div class="flex items-center gap-2">
               ${u.role === 'admin' ? `
@@ -1188,7 +1567,7 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
-                ${sales.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted yet.</td></tr>' : ''}
+                ${sales.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports found for this month.</td></tr>' : ''}
                 ${sales.map(s => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
                   const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
@@ -1228,18 +1607,26 @@
       `;
     }
 
+    // ADMIN MONTHLY SETUP, TARGETS, PRODUCT INCENTIVE CONFIG & AGENT IDs
     function renderManageAgents() {
-      const allUsers = getStored('users', []);
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
       return `
         <div class="space-y-6">
-          <div class="flex justify-between items-center">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
-              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-users-gear text-blue-600 mr-2"></i>Manage Agents & Create New ID</h2>
-              <p class="text-xs font-bold text-slate-500">Create new agent or admin accounts, update monthly targets, or remove existing users</p>
+              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Monthly Setup, Grades & Agent IDs (${monthLabel})</h2>
+              <p class="text-xs font-bold text-slate-500">Edit agent grades, monthly targets, or product incentives for <strong>${monthLabel}</strong> without affecting past months</p>
             </div>
-            <button onclick="openUserModal()" class="px-5 py-3 tab-active text-white rounded-2xl text-xs font-extrabold shadow-lg flex items-center gap-2">
-              <i class="fa-solid fa-user-plus"></i> Create New Agent / ID
-            </button>
+            <div class="flex items-center gap-2.5">
+              <button onclick="openProductConfigModal()" class="px-4 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
+                <i class="fa-solid fa-gift"></i> Edit Product Incentives (${selectedMonthKey})
+              </button>
+              <button onclick="openUserModal()" class="px-4 py-3 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
+                <i class="fa-solid fa-user-plus"></i> Create New Agent / ID
+              </button>
+            </div>
           </div>
 
           <div class="card-dynamic overflow-hidden overflow-x-auto">
@@ -1250,9 +1637,9 @@
                   <th class="p-4">Name</th>
                   <th class="p-4">Role</th>
                   <th class="p-4">Team</th>
-                  <th class="p-4">Grade</th>
+                  <th class="p-4">Grade (${selectedMonthKey})</th>
                   <th class="p-4">Password</th>
-                  <th class="p-4">Base Target</th>
+                  <th class="p-4">Base Target (${selectedMonthKey})</th>
                   <th class="p-4">Working Target (+5%)</th>
                   <th class="p-4 text-right">Actions</th>
                 </tr>
@@ -1269,7 +1656,7 @@
                     <td class="p-4 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
                     <td class="p-4 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
                     <td class="p-4 text-right space-x-1">
-                      <button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>
+                      <button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit Grade / Target</button>
                       ${usr.role !== 'admin' ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
                     </td>
                   </tr>
@@ -1281,7 +1668,73 @@
       `;
     }
 
-    // BREAK REASON SELECTION MODAL
+    // PRODUCT INCENTIVE MONTHLY CONFIG MODAL
+    function renderProductConfigModal() {
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      return `
+        <div id="productConfigModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <div>
+                <h3 class="text-base font-black text-slate-900">Edit Product Targets & Bonuses (${selectedMonthKey})</h3>
+                <p class="text-xs font-bold text-slate-400">Customize per-agent KG targets and cash bonuses for this month</p>
+              </div>
+              <button type="button" onclick="closeModal('productConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleSaveProductConfig(event)" class="space-y-3">
+              ${Object.keys(activeProds).map(k => {
+                const p = activeProds[k];
+                return `
+                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-3 items-center">
+                    <div>
+                      <span class="text-xs font-black text-slate-800 block">${p.name}</span>
+                      <span class="text-[10px] font-bold text-slate-400">Per Agent Target</span>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Target (KG)</label>
+                      <input type="number" step="0.01" id="cfg_kg_${k}" value="${p.targetKg}" required class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">100% Bonus (৳)</label>
+                      <input type="number" id="cfg_b100_${k}" value="${p.bonus100 || 0}" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('productConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save Monthly Product Config</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function openProductConfigModal() { openModal('productConfigModal'); }
+
+    async function handleSaveProductConfig(e) {
+      e.preventDefault();
+      let configs = getStored('monthly_configs', {});
+      if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
+      if (!configs[selectedMonthKey].products) configs[selectedMonthKey].products = {};
+
+      Object.keys(DEFAULT_PRODUCTS).forEach(k => {
+        const kgVal = Number(document.getElementById(`cfg_kg_${k}`).value) || DEFAULT_PRODUCTS[k].targetKg;
+        const b100Val = Number(document.getElementById(`cfg_b100_${k}`).value) || 0;
+        configs[selectedMonthKey].products[k] = {
+          targetKg: kgVal,
+          bonus100: b100Val
+        };
+      });
+
+      setStored('monthly_configs', configs);
+      await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]) });
+      alert(`Product targets for ${selectedMonthKey} saved and synced!`);
+      closeModal('productConfigModal');
+      renderAppLayout();
+    }
+
     function renderBreakModal() {
       return `
         <div id="breakModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1319,7 +1772,6 @@
       `;
     }
 
-    // ADMIN EDIT / ADD ATTENDANCE MODAL
     function renderEditAttendanceModal() {
       const allAgents = getStored('users', []).filter(u => u.role === 'agent');
       return `
@@ -1397,8 +1849,8 @@
       const attList = getStored('attendance_records', []);
       const ex = attList.find(a => String(a.userId) === String(agId) && a.date === dateStr);
       if (ex) {
-        document.getElementById('attLogin').value = ex.loginTime || '09:00:00 AM';
-        document.getElementById('attLogout').value = ex.logoutTime || '--:--';
+        document.getElementById('attLogin').value = sanitizeTimeDisplay(ex.loginTime);
+        document.getElementById('attLogout').value = sanitizeTimeDisplay(ex.logoutTime);
         document.getElementById('attWorkMins').value = Math.round((Number(ex.activeSeconds) || 0) / 60);
         document.getElementById('attBreakMins').value = Math.round((Number(ex.breakSeconds) || 0) / 60);
         document.getElementById('attStatus').value = ex.status || 'Working';
@@ -1457,7 +1909,7 @@
 
     function renderSubmitModal() {
       const u = currentUser;
-      const allAgents = getStored('users', []).filter(usr => usr.role === 'agent');
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
       
       return `
         <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1550,7 +2002,10 @@
         <div id="userModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
             <div class="flex items-center justify-between mb-4 pb-3 border-b">
-              <h3 class="text-base font-black text-slate-900">Create / Edit Agent ID</h3>
+              <div>
+                <h3 class="text-base font-black text-slate-900">Agent ID & Monthly Target (${selectedMonthKey})</h3>
+                <p class="text-[11px] font-bold text-slate-400">Target & Grade changes apply to ${selectedMonthKey}</p>
+              </div>
               <button type="button" onclick="closeModal('userModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <form onsubmit="handleSaveUser(event)" class="space-y-3.5">
@@ -1571,7 +2026,7 @@
                   </select>
                 </div>
                 <div>
-                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Category Grade</label>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Grade (${selectedMonthKey})</label>
                   <select id="usrGrade" onchange="autoFillGradeTarget()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
                     <option value="A+">Grade A+ (1,619,218)</option>
                     <option value="A">Grade A (1,332,174)</option>
@@ -1596,13 +2051,13 @@
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Monthly Base Target (৳)</label>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Monthly Base Target (৳) for ${selectedMonthKey}</label>
                 <input type="number" id="usrTarget" required value="1232174" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
                 <p class="text-[10px] font-bold text-amber-600 mt-1">* An additional 5% return buffer will be added automatically to set the Working Target.</p>
               </div>
               <div class="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onclick="closeModal('userModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg">Save User ID</button>
+                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg">Save User & Monthly Target</button>
               </div>
             </form>
           </div>
@@ -1617,7 +2072,7 @@
     }
 
     function openUserModal(editId) {
-      const users = getStored('users', DEFAULT_USERS);
+      const users = getUsersForMonth(selectedMonthKey);
       const existing = users.find(u => String(u.id) === String(editId));
       if (existing) {
         document.getElementById('usrId').value = existing.id;
@@ -1653,8 +2108,16 @@
       if (idx !== -1) users[idx] = newUser; else users.push(newUser);
       setStored('users', users);
 
+      // Also archive Grade & BaseTarget for the selected month in monthly_configs
+      let configs = getStored('monthly_configs', {});
+      if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
+      if (!configs[selectedMonthKey].users) configs[selectedMonthKey].users = {};
+      configs[selectedMonthKey].users[newUser.id] = { grade: newUser.grade, baseTarget: newUser.baseTarget };
+      setStored('monthly_configs', configs);
+
       await postToSheet('SAVE_USER', newUser);
-      alert(`User ID (${newUser.id}) has been saved and synced to the cloud!`);
+      await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]) });
+      alert(`User ID (${newUser.id}) and ${selectedMonthKey} target saved and synced!`);
       closeModal('userModal');
       renderAppLayout();
     }
@@ -1671,7 +2134,7 @@
 
     function updateLiveRatio() {
       const u = currentUser;
-      const allUsers = getStored('users', DEFAULT_USERS);
+      const allUsers = getUsersForMonth(selectedMonthKey);
       const agentId = u.role === 'admin' ? document.getElementById('subAgentId')?.value : u.id;
       const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
 
@@ -1731,18 +2194,26 @@
     async function handleSalesSubmit(e) {
       e.preventDefault();
       const u = currentUser;
-      const allUsers = getStored('users', DEFAULT_USERS);
+      const allUsers = getUsersForMonth(selectedMonthKey);
       const targetAgent = u.role === 'admin' ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
 
       const leads = Number(document.getElementById('subLeads').value) || 0;
       const orders = Number(document.getElementById('subOrders').value) || 0;
       const amount = Number(document.getElementById('subAmount').value) || 0;
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+
+      // Automatically switch view to the submitted report's month if needed
+      const submittedMonthKey = dateStr.substring(3);
+      if (submittedMonthKey && submittedMonthKey.length === 7) {
+        selectedMonthKey = submittedMonthKey;
+        localStorage.setItem('gb_selected_month', selectedMonthKey);
+      }
 
       const entry = {
         userId: String(targetAgent.id),
         userName: targetAgent.name,
         team: targetAgent.team,
-        date: inputValToDateStr(document.getElementById('subDate').value),
+        date: dateStr,
         leads: leads,
         orders: orders,
         amount: amount,
