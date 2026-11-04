@@ -61,7 +61,6 @@
       { key: '03/2027', label: 'March 2027' }
     ];
 
-    // Clean Admin Names (No "(TL)" suffix in name) & Proper Grades ("TL" for Admins, "Supervisor" for Supervisors)
     const DEFAULT_USERS = [
       { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
       { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: 'admin123', grade: 'TL', baseTarget: 0 },
@@ -128,16 +127,18 @@
 
     const SHIFT_OPTIONS = ["7:00 AM", "10:00 AM", "3:00 PM", "Night", "DO"];
 
-    // Normalize User Object so Admins always have clean name & Grade "TL", and Supervisors always have Grade "Supervisor"
+    // Strictly enforce Admin grade = "TL", Supervisor grade = "Supervisor", and strip "(TL)" from Admin names
     function normalizeUserRecord(u) {
       if (!u) return u;
       const copy = { ...u };
-      if (copy.role === 'admin') {
+      if (copy.role === 'admin' || String(copy.id) === '10122' || String(copy.id) === '10107') {
+        copy.role = 'admin';
         copy.name = String(copy.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
         copy.grade = 'TL';
-      } else if (copy.role === 'supervisor') {
+      } else if (copy.role === 'supervisor' || String(copy.id) === '10001') {
+        copy.role = 'supervisor';
         copy.grade = 'Supervisor';
-      } else if (!copy.grade) {
+      } else if (!copy.grade || copy.grade === 'SUP' || copy.grade === 'TL') {
         copy.grade = 'A';
       }
       return copy;
@@ -173,10 +174,51 @@
 
     let pollInterval = null;
     let dutyTimerInterval = null;
+    let pendingConfirmCallback = null;
 
+    // Permission & Role Helpers
+    function isSuperAdmin(u) { return u && String(u.id) === '10122'; } // Nazim has full super-admin control
     function isFullAdmin(u) { return u && u.role === 'admin'; }
     function isSupervisor(u) { return u && u.role === 'supervisor'; }
     function canViewAll(u) { return u && (u.role === 'admin' || u.role === 'supervisor'); }
+
+    // Determines if current user can delete a target user ID
+    function canDeleteTargetUser(actor, targetUser) {
+      if (!actor || !targetUser || !isFullAdmin(actor)) return false;
+      // Nobody can delete their own currently logged-in ID or Nazim's primary Super Admin ID (10122)
+      if (String(targetUser.id) === String(actor.id) || String(targetUser.id) === '10122') return false;
+      // Nazim (10122) can delete any other user (including Supervisor & Samad)
+      if (isSuperAdmin(actor)) return true;
+      // Samad (or other Co-Admins) can ONLY delete 'agent' role accounts, NOT 'supervisor' or 'admin'
+      return targetUser.role === 'agent';
+    }
+
+    // Determines if current user can edit a target user ID
+    function canEditTargetUser(actor, targetUser) {
+      if (!actor || !targetUser || !isFullAdmin(actor)) return false;
+      if (isSuperAdmin(actor)) return true;
+      // Samad can edit his own account or any agent account, but cannot edit Nazim or Supervisors
+      if (String(targetUser.id) === String(actor.id)) return true;
+      return targetUser.role === 'agent';
+    }
+
+    // Custom Two-Step Warning Confirmation Modal Trigger
+    function openConfirmWarningModal(title, message, badgeText, onConfirmAction) {
+      pendingConfirmCallback = onConfirmAction;
+      document.getElementById('warnModalTitle').textContent = title || 'Confirm Permanent Deletion';
+      document.getElementById('warnModalMessage').textContent = message || 'Are you sure you want to permanently delete this record? This action cannot be undone.';
+      document.getElementById('warnModalBadge').textContent = badgeText || 'Security Warning';
+      openModal('confirmWarningModal');
+    }
+
+    async function executeConfirmedAction() {
+      const fn = pendingConfirmCallback;
+      pendingConfirmCallback = null;
+      closeModal('confirmWarningModal');
+      if (typeof fn === 'function') {
+        await fn();
+      }
+    }
 
     function getStored(key, def) { const r = localStorage.getItem('gb_' + key); return r ? JSON.parse(r) : def; }
     function setStored(key, val) { localStorage.setItem('gb_' + key, JSON.stringify(val)); }
@@ -229,7 +271,6 @@
       return `${h}:${m}:${s}`;
     }
 
-    // LIVE ONLINE STATUS CHECKER FOR ANY USER ID
     function getUserOnlineStatus(userId) {
       const uid = String(userId);
       if (currentUser && String(currentUser.id) === uid) {
@@ -244,12 +285,10 @@
       const now = Date.now();
       const onlineList = getStored('online_users', []);
       const oRec = onlineList.find(o => String(o.id) === uid);
-      // Consider online if pinged within the last 3 minutes (180,000 ms)
       if (oRec && oRec.state !== 'Offline' && oRec.lastSeen && (now - Number(oRec.lastSeen)) < 180000) {
         return oRec.state === 'On Break' ? 'On Break' : 'Online';
       }
 
-      // Fallback check from today's active Attendance_Logs for agents
       const today = getTodayFormatted();
       const attRec = getStored('attendance_records', []).find(a => String(a.userId) === uid && a.date === today);
       if (attRec && attRec.status !== 'Completed') {
@@ -526,7 +565,6 @@
       } catch (e) {}
     }
 
-    // Piggyback current user's online heartbeat on every cloud poll
     function fetchFromSheet() {
       const cbName = 'gb_cb_' + Date.now();
       window[cbName] = function(res) {
@@ -722,7 +760,6 @@
         ? `TL (${u.team})`
         : (u.role === 'supervisor' ? `Supervisor (View All)` : `${u.team} • Grade ${u.grade}`);
 
-      // Compute currently online users for top bar indicator
       const allUsersList = getUsersForMonth(selectedMonthKey);
       const activeOnlineUsers = allUsersList.filter(usr => {
         const st = getUserOnlineStatus(usr.id);
@@ -799,7 +836,6 @@
               </div>
 
               <div class="flex items-center gap-3 shrink-0">
-                <!-- Live Online Users Counter Pill -->
                 <button onclick="canViewAll(currentUser) ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl flex items-center gap-2 transition-colors">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
                   <span>${activeOnlineUsers.length} Online</span>
@@ -828,6 +864,7 @@
         ${isFullAdmin(u) ? renderEditAttendanceModal() : ''}
         ${isFullAdmin(u) ? renderUserModal() : ''}
         ${isFullAdmin(u) ? renderProductConfigModal() : ''}
+        ${renderConfirmWarningModal()}
       `;
       document.getElementById('app').innerHTML = html;
     }
@@ -839,6 +876,36 @@
       if (activeTab === 'ranking') return renderRankingAndComparison();
       if (activeTab === 'reports') return renderReports();
       if (activeTab === 'agents') return renderManageAgents();
+    }
+
+    // CUSTOM 2-STEP WARNING CONFIRMATION MODAL (Prevents 1-Click Accidental Deletes)
+    function renderConfirmWarningModal() {
+      return `
+        <div id="confirmWarningModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-red-200 animate-fadeIn">
+            <div class="flex items-center gap-3.5 mb-4">
+              <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-xl shrink-0 shadow-sm">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+              </div>
+              <div>
+                <span id="warnModalBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-red-100 text-red-700">Security Warning</span>
+                <h3 id="warnModalTitle" class="text-base font-black text-slate-900 mt-1">Confirm Permanent Deletion</h3>
+              </div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-red-50/70 border border-red-100 text-xs font-bold text-slate-700 leading-relaxed mb-5" id="warnModalMessage">
+              Are you sure you want to permanently delete this record?
+            </div>
+            <div class="flex justify-end items-center gap-2.5 pt-2 border-t border-slate-100">
+              <button type="button" onclick="closeModal('confirmWarningModal')" class="px-4 py-2.5 text-xs font-extrabold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                No, Keep It (Cancel)
+              </button>
+              <button type="button" onclick="executeConfirmedAction()" class="px-5 py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-lg flex items-center gap-1.5 transition-colors">
+                <i class="fa-solid fa-trash-can"></i> Yes, Permanently Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     function renderCompactTopWidgets(incentiveSummary) {
@@ -1727,9 +1794,12 @@
                       Ajwa: <strong>${s.ajwa||0}</strong> | Salt: <strong>${s.pinkSalt||0}</strong> | Garlic: <strong>${s.blackGarlic||0}</strong> | Sun.H: <strong>${s.sunHoney||0}</strong> | BS.H: <strong>${s.bsHoney||0}</strong> | Ghee: <strong>${s.gawaGhee||0}</strong>
                     </td>
                     ${isFullAdmin(u) || u.role === 'agent' ? `
-                    <td class="p-3.5 text-right">
+                    <td class="p-3.5 text-right space-x-1">
                       <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
-                        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit / Delete
+                        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
+                      </button>
+                      <button onclick="handleDirectDeleteReport('${s.userId}', '${s.userName}', '${s.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100 transition-colors">
+                        <i class="fa-solid fa-trash-can mr-1"></i> Delete
                       </button>
                     </td>
                     ` : ''}
@@ -1790,6 +1860,8 @@
                     ? 'bg-purple-100 text-purple-800'
                     : (usr.role === 'supervisor' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700');
                   const displayGrade = usr.role === 'admin' ? 'TL' : (usr.role === 'supervisor' ? 'Supervisor' : (usr.grade || 'A'));
+                  const canEdit = canEditTargetUser(u, usr);
+                  const canDel = canDeleteTargetUser(u, usr);
 
                   return `
                   <tr class="hover:bg-slate-50">
@@ -1799,13 +1871,13 @@
                     <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
                     <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (usr.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${usr.team}</span></td>
                     <td class="p-3.5 font-black ${usr.role === 'admin' ? 'text-purple-700' : (usr.role === 'supervisor' ? 'text-indigo-700' : 'text-slate-900')}">${displayGrade}</td>
-                    ${isFullAdmin(u) ? `<td class="p-3.5 font-mono text-slate-500">${usr.pass}</td>` : ''}
+                    ${isFullAdmin(u) ? `<td class="p-3.5 font-mono text-slate-500">${canEdit ? usr.pass : '••••••'}</td>` : ''}
                     <td class="p-3.5 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
                     <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
                     ${isFullAdmin(u) ? `
                     <td class="p-3.5 text-right space-x-1">
-                      <button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit Grade / Target</button>
-                      ${usr.role !== 'admin' ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
+                      ${canEdit ? `<button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>` : `<span class="px-2.5 py-1 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-lg"><i class="fa-solid fa-lock mr-1"></i>Protected</span>`}
+                      ${canDel ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
                     </td>
                     ` : ''}
                   </tr>
@@ -2049,14 +2121,24 @@
       renderAppLayout();
     }
 
-    async function handleDeleteAttendance(userId, dateStr) {
+    function handleDeleteAttendance(userId, dateStr) {
       if (!isFullAdmin(currentUser)) return;
-      if (!confirm(`Are you sure you want to delete the attendance record for ${dateStr}?`)) return;
-      let attList = getStored('attendance_records', []);
-      attList = attList.filter(a => !(String(a.userId) === String(userId) && a.date === dateStr));
-      setStored('attendance_records', attList);
-      await postToSheet('DELETE_ATTENDANCE', { userId: String(userId), date: dateStr });
-      renderAppLayout();
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetAg = allUsers.find(u => String(u.id) === String(userId));
+      const agName = targetAg ? targetAg.name : `ID ${userId}`;
+
+      openConfirmWarningModal(
+        'Delete Attendance Log?',
+        `Warning: You are about to permanently delete the attendance & duty log for ${agName} (${userId}) on ${dateStr}. Please confirm to proceed.`,
+        'Attendance Deletion Warning',
+        async () => {
+          let attList = getStored('attendance_records', []);
+          attList = attList.filter(a => !(String(a.userId) === String(userId) && a.date === dateStr));
+          setStored('attendance_records', attList);
+          await postToSheet('DELETE_ATTENDANCE', { userId: String(userId), date: dateStr });
+          renderAppLayout();
+        }
+      );
     }
 
     function renderSubmitModal() {
@@ -2150,6 +2232,7 @@
     }
 
     function renderUserModal() {
+      const isNazim = isSuperAdmin(currentUser);
       return `
         <div id="userModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
@@ -2175,7 +2258,7 @@
                   <select id="usrRole" onchange="onUserRoleSelectChange()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
                     <option value="agent">Sales Agent</option>
                     <option value="supervisor">Supervisor (View All Only)</option>
-                    <option value="admin">Admin / TL (Full Access)</option>
+                    ${isNazim ? `<option value="admin">Admin / TL (Full Access)</option>` : ''}
                   </select>
                 </div>
                 <div>
@@ -2246,6 +2329,10 @@
       const users = getUsersForMonth(selectedMonthKey);
       const existing = users.find(u => String(u.id) === String(editId));
       if (existing) {
+        if (!canEditTargetUser(currentUser, existing)) {
+          alert('Permission Denied: Only Nazim (Super Admin) can edit Supervisor or other Admin accounts.');
+          return;
+        }
         document.getElementById('usrId').value = existing.id;
         document.getElementById('usrName').value = existing.name;
         document.getElementById('usrRole').value = existing.role || 'agent';
@@ -2268,12 +2355,19 @@
     async function handleSaveUser(e) {
       e.preventDefault();
       if (!isFullAdmin(currentUser)) return;
+      const targetId = document.getElementById('usrId').value.trim();
+      const existingUser = getStored('users', DEFAULT_USERS).find(u => String(u.id) === String(targetId));
+      if (existingUser && !canEditTargetUser(currentUser, existingUser)) {
+        alert('Permission Denied: You cannot overwrite a protected Supervisor or Admin ID.');
+        return;
+      }
+
       const roleVal = document.getElementById('usrRole').value;
       const gradeVal = roleVal === 'admin' ? 'TL' : (roleVal === 'supervisor' ? 'Supervisor' : document.getElementById('usrGrade').value);
       const rawName = document.getElementById('usrName').value.trim();
 
       const newUser = normalizeUserRecord({
-        id: document.getElementById('usrId').value.trim(),
+        id: targetId,
         name: rawName,
         team: document.getElementById('usrTeam').value,
         grade: gradeVal,
@@ -2300,15 +2394,29 @@
       renderAppLayout();
     }
 
-    async function handleDeleteUser(delId) {
+    function handleDeleteUser(delId) {
       if (!isFullAdmin(currentUser)) return;
-      if (!confirm(`Are you sure you want to delete User ID: ${delId}?`)) return;
-      let users = getStored('users', DEFAULT_USERS);
-      users = users.filter(u => String(u.id) !== String(delId));
-      setStored('users', users);
+      const users = getUsersForMonth(selectedMonthKey);
+      const targetUser = users.find(u => String(u.id) === String(delId));
+      if (!targetUser) return;
 
-      await postToSheet('DELETE_USER', { id: String(delId) });
-      renderAppLayout();
+      if (!canDeleteTargetUser(currentUser, targetUser)) {
+        alert('Permission Denied: Only Nazim (Super Admin) is authorized to delete Supervisor or Admin accounts!');
+        return;
+      }
+
+      openConfirmWarningModal(
+        `Delete User ID (${targetUser.id})?`,
+        `Warning: You are about to permanently delete ${targetUser.name} (ID: ${targetUser.id}, Role: ${targetUser.role.toUpperCase()}). They will immediately lose login access. Please confirm to proceed.`,
+        'User Account Deletion',
+        async () => {
+          let storedUsers = getStored('users', DEFAULT_USERS);
+          storedUsers = storedUsers.filter(u => String(u.id) !== String(delId));
+          setStored('users', storedUsers);
+          await postToSheet('DELETE_USER', { id: String(delId) });
+          renderAppLayout();
+        }
+      );
     }
 
     function updateLiveRatio() {
@@ -2419,24 +2527,34 @@
       setTimeout(fetchFromSheet, 1500);
     }
 
-    async function handleDelete() {
+    function handleDirectDeleteReport(agentId, agentName, dateStr) {
+      if (isSupervisor(currentUser)) return;
+      openConfirmWarningModal(
+        `Delete Sales Report (${dateStr})?`,
+        `Warning: You are about to permanently delete the sales & product report for ${agentName} (${agentId}) dated ${dateStr}. This will deduct the amount from monthly & sprint achievements.`,
+        'Sales Data Deletion Warning',
+        async () => {
+          let sales = getStored('sales_records', []);
+          sales = sales.filter(s => !(String(s.userId) === String(agentId) && s.date === dateStr));
+          setStored('sales_records', sales);
+
+          await postToSheet('DELETE_SALES_RECORD', { userId: String(agentId), date: dateStr });
+          closeModal('submitModal');
+          renderAppLayout();
+          setTimeout(fetchFromSheet, 1500);
+        }
+      );
+    }
+
+    function handleDelete() {
       const u = currentUser;
       if (isSupervisor(u)) return;
       const agentId = isFullAdmin(u) ? document.getElementById('subAgentId').value : u.id;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetAg = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
 
-      if (!confirm(`Are you sure you want to delete the report for ${dateStr}?`)) return;
-      
-      let sales = getStored('sales_records', []);
-      sales = sales.filter(s => !(String(s.userId) === String(agentId) && s.date === dateStr));
-      setStored('sales_records', sales);
-
-      await postToSheet('DELETE_SALES_RECORD', { userId: String(agentId), date: dateStr });
-      
-      alert('Report deleted successfully!');
-      closeModal('submitModal');
-      renderAppLayout();
-      setTimeout(fetchFromSheet, 1500);
+      handleDirectDeleteReport(agentId, targetAg.name, dateStr);
     }
 
     window.addEventListener('load', init);
