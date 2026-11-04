@@ -3,22 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ghorerbazar - SalesTrack Pro Dashboard</title>
+  <title>SalesTrack Pro - FB Agents Incentive Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap');
-    body { font-family: 'Plus Jakarta Sans', 'Hind Siliguri', sans-serif; background-color: #f8fafc; }
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
     .glass-sidebar { background: #ffffff; border-right: 1px solid #e2e8f0; }
-    .card-neo { background: #ffffff; border-radius: 20px; border: 1px solid #eef2f8; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.03); }
-    .tab-active { background: #2563eb; color: #ffffff !important; box-shadow: 0 8px 20px -6px rgba(37, 99, 235, 0.5); }
-    
-    .highlight-card-blue { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(37, 99, 235, 0.35); }
-    .highlight-card-emerald { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(5, 150, 105, 0.35); }
-    .highlight-card-purple { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(124, 58, 237, 0.35); }
-    .highlight-card-amber { background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(234, 88, 12, 0.35); }
-    .highlight-card-indigo { background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%); color: #ffffff; box-shadow: 0 12px 28px -6px rgba(79, 70, 229, 0.35); }
+    .card-neo { background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .tab-active { background: #2563eb; color: #ffffff !important; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+    .progress-bg { background-color: #e2e8f0; border-radius: 9999px; overflow: hidden; }
   </style>
 </head>
 <body class="text-slate-800 antialiased min-h-screen flex flex-col">
@@ -27,1159 +21,316 @@
   <script>
     const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtdDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
 
+    // Data from Images: Team Samad & Team Nazim with their respective grades & target amounts.
     const DEFAULT_USERS = [
       { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123' },
       { id: '10107', name: 'Md Abdus Samad (TL)', role: 'admin', team: 'Team Samad', pass: 'admin123' },
       
-      { id: '10191', name: 'Shagor Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', monthlyOrdersTarget: 650, monthlyAmountTarget: 1300000 },
-      { id: '10289', name: 'Abdullah Dipu', role: 'agent', team: 'Team Nazim', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '11044', name: 'Hasibul Islam Eraz', role: 'agent', team: 'Team Nazim', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '10741', name: 'Kamruzzaman Shujon', role: 'agent', team: 'Team Nazim', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '10803', name: 'Md. Abdullah Mahmud', role: 'agent', team: 'Team Nazim', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '11042', name: 'Md. Ashiqur Rahman', role: 'agent', team: 'Team Nazim', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '10328', name: 'Sheikh MD Rayhan', role: 'agent', team: 'Team Nazim', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '10135', name: 'Ranju Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
+      { id: '10191', name: 'Shagor Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A-', baseTarget: 1232174 },
+      { id: '10289', name: 'Abdullah Dipu', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A+', baseTarget: 1619218 },
+      { id: '11044', name: 'Hasibul Islam Eraz', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'B', baseTarget: 1132174 },
+      { id: '10741', name: 'Kamruzzaman Shujon', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'C', baseTarget: 1032175 },
+      { id: '10803', name: 'Md. Abdullah Mahmud', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
+      { id: '11042', name: 'Md. Ashiqur Rahman', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'B', baseTarget: 1132174 },
+      { id: '10328', name: 'Sheikh MD Rayhan', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
+      { id: '10135', name: 'Ranju Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
 
-      { id: '10098', name: 'Habibur Rahman Shuvo', role: 'agent', team: 'Team Samad', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '10136', name: 'Al-Amin Kazi', role: 'agent', team: 'Team Samad', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '11007', name: 'Zubayer Al Mahmud', role: 'agent', team: 'Team Samad', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '11101', name: 'Md. Mehedi Amin', role: 'agent', team: 'Team Samad', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '11120', name: 'Abu Sayed', role: 'agent', team: 'Team Samad', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '11130', name: 'Rabbir Hossain Molla', role: 'agent', team: 'Team Samad', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '10806', name: 'Abdullah Al Soad', role: 'agent', team: 'Team Samad', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 },
-      { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', monthlyOrdersTarget: 260, monthlyAmountTarget: 320000 }
+      { id: '10098', name: 'Habibur Rahman Shuvo', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A-', baseTarget: 1232174 },
+      { id: '10136', name: 'Al-Amin Kazi', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A+', baseTarget: 1619218 },
+      { id: '11007', name: 'Zubayer Al Mahmud', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'C', baseTarget: 1032175 },
+      { id: '11101', name: 'Md. Mehedi Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'C', baseTarget: 1032175 },
+      { id: '11120', name: 'Abu Sayed', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'C', baseTarget: 1032175 },
+      { id: '11130', name: 'Rabbir Hossain Molla', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'B', baseTarget: 1132174 },
+      { id: '10806', name: 'Abdullah Al Soad', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 },
+      { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 }
     ];
 
-    function getStored(k, d) { const r = localStorage.getItem('gb_' + k); return r ? JSON.parse(r) : d; }
-    function setStored(k, v) { localStorage.setItem('gb_' + k, JSON.stringify(v)); }
+    // Facebook Channel Product Targets (per agent) from Image
+    const FB_PRODUCTS = {
+      ajwa: { name: 'Ajwa', targetKg: 69.03 },
+      pinkSalt: { name: 'Pink Salt', targetKg: 10.07 },
+      blackGarlic: { name: 'Black Garlic', targetKg: 6.09 },
+      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51 },
+      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09 },
+      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56 }
+    };
 
-    if (!localStorage.getItem('gb_users')) {
-      setStored('users', DEFAULT_USERS);
-    }
-
-    let currentUser = getStored('session_user', null);
+    let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
     let activeTab = 'dashboard';
-    let timerInterval = null;
-    let pollInterval = null;
     let webhookUrl = localStorage.getItem('gb_webhook_url') || DEFAULT_WEBHOOK_URL;
+    let pollInterval = null;
 
+    if (!localStorage.getItem('gb_users')) localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
+
+    function getStored(key, def) { const r = localStorage.getItem('gb_' + key); return r ? JSON.parse(r) : def; }
+    function setStored(key, val) { localStorage.setItem('gb_' + key, JSON.stringify(val)); }
+
+    // Date Utilities
     function getTodayFormatted() {
-      const d = new Date();
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
+      const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
     }
-
-    function cleanDisplayDate(raw) {
-      if (!raw) return getTodayFormatted();
-      let s = String(raw).trim();
-      if (s.includes("GMT") || s.includes("T")) {
-        try {
-          const d = new Date(s);
-          if (!isNaN(d.getTime())) {
-            const day = String(d.getDate()).padStart(2, '0');
-            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-            return `${day} ${months[d.getMonth()]} ${d.getFullYear()}`;
-          }
-        } catch(e) {}
-      }
-      const p = s.split('/');
-      if (p.length === 3) {
-        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const mIdx = parseInt(p[1], 10) - 1;
-        if (mIdx >= 0 && mIdx < 12) {
-          return `${p[0]} ${months[mIdx]} ${p[2]}`;
-        }
-      }
-      return s;
-    }
-
     function dateToInputVal(dateStr) {
       if (!dateStr) return new Date().toISOString().split('T')[0];
-      const p = dateStr.split('/');
-      if (p.length === 3) return `${p[2]}-${p[1]}-${p[0]}`;
+      const p = dateStr.split('/'); if (p.length === 3) return `${p[2]}-${p[1]}-${p[0]}`;
       return new Date().toISOString().split('T')[0];
     }
-
     function inputValToDateStr(val) {
       if (!val) return getTodayFormatted();
-      const p = val.split('-');
-      if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+      const p = val.split('-'); if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
       return getTodayFormatted();
     }
 
-    function getUserTargetInfo(user) {
-      const allUsers = getStored('users', []);
-      if (user.role === 'admin') {
-        const teamAgents = allUsers.filter(u => u.role === 'agent' && u.team === user.team);
-        const monthlyAmount = teamAgents.reduce((sum, a) => sum + (Number(a.monthlyAmountTarget) || 0), 0);
-        const monthlyOrders = teamAgents.reduce((sum, a) => sum + (Number(a.monthlyOrdersTarget) || 0), 0);
-        return {
-          monthlyAmountTarget: monthlyAmount,
-          monthlyOrdersTarget: monthlyOrders,
-          dailyAmountTarget: Math.round(monthlyAmount / 26),
-          dailyOrdersTarget: Math.round(monthlyOrders / 26),
-          agentCount: teamAgents.length
-        };
-      } else {
-        const fresh = allUsers.find(u => u.id === user.id) || user;
-        const monthlyAmount = Number(fresh.monthlyAmountTarget) || 320000;
-        const monthlyOrders = Number(fresh.monthlyOrdersTarget) || 260;
-        return {
-          monthlyAmountTarget: monthlyAmount,
-          monthlyOrdersTarget: monthlyOrders,
-          dailyAmountTarget: Math.round(monthlyAmount / 26),
-          dailyOrdersTarget: Math.round(monthlyOrders / 26),
-          agentCount: 1
-        };
-      }
+    // Sprint & Target Logic (5% Additional Buffer applied here)
+    function getAgentTargetData(user) {
+      const workingTarget = Math.round(user.baseTarget * 1.05); // 5% extra for return/cancel issue
+      const d = new Date().getDate();
+      let sprintName, sprintGoal, sprintPct;
+
+      if (d <= 10) { sprintName = 'Sprint 1 (Days 1-10)'; sprintPct = 0.40; sprintGoal = Math.round(workingTarget * 0.40); }
+      else if (d <= 20) { sprintName = 'Sprint 2 (Days 11-20)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
+      else { sprintName = 'Sprint 3 (Days 21-31)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
+
+      return { workingTarget, sprintName, sprintGoal, sprintPct };
     }
 
-    function getFreshUser() {
-      if (!currentUser) return null;
-      const users = getStored('users', []);
-      const match = users.find(u => u.id === currentUser.id);
-      if (match) {
-        currentUser = { ...currentUser, ...match };
-        setStored('session_user', currentUser);
-      }
-      return currentUser;
-    }
-
-    // 100% DIRECT FETCH SYNC (NO CORS BLOCK WITH NO-CORS)
+    // Central Sync System
     async function postToSheet(action, payload) {
-      try {
-        const params = new URLSearchParams({
-          action: action,
-          timestamp: new Date().toISOString(),
-          ...payload
-        });
-        
-        // Use fetch with no-cors so it fires successfully to Google Apps Script
-        await fetch(`${webhookUrl}?${params.toString()}`, {
-          method: 'GET',
-          mode: 'no-cors'
-        });
-        
-        // Also trigger image beacon backup
-        new Image().src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
-      } catch (e) {
-        console.warn('Sync error:', e);
-      }
+      const fullData = { action, timestamp: new Date().toISOString(), ...payload };
+      const params = new URLSearchParams({ action, payload: JSON.stringify(fullData), ...payload });
+      fetch(`${webhookUrl}?${params.toString()}`, { method: 'GET', mode: 'no-cors' }).catch(() => {});
     }
 
     function fetchFromSheet() {
-      fetch(`${webhookUrl}?t=${Date.now()}`)
-        .then(r => r.json())
-        .then(res => {
-          if (res && res.status === 'success') {
-            handleCloudDataReceived(res);
-          }
-        })
-        .catch(() => {});
+      const cbName = 'gb_cb_' + Date.now();
+      window[cbName] = function(res) {
+        delete window[cbName]; if (script.parentNode) script.parentNode.removeChild(script);
+        if (res && res.status === 'success') handleCloudData(res);
+      };
+      const script = document.createElement('script');
+      script.src = `${webhookUrl}?callback=${cbName}&t=${Date.now()}`;
+      script.onerror = function() {
+        if (script.parentNode) script.parentNode.removeChild(script);
+        fetch(`${webhookUrl}?t=${Date.now()}`).then(r => r.json()).then(res => { if (res && res.status === 'success') handleCloudData(res); }).catch(()=>{});
+      };
+      document.body.appendChild(script);
     }
 
-    function handleCloudDataReceived(res) {
-      let hasChanges = false;
-      if (Array.isArray(res.salesRecords) && res.salesRecords.length > 0) {
+    function handleCloudData(res) {
+      if (Array.isArray(res.salesRecords)) {
         const local = getStored('sales_records', []);
         if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
           setStored('sales_records', res.salesRecords);
-          hasChanges = true;
+          if (currentUser) renderAppLayout();
         }
       }
-
-      if (res.targets && typeof res.targets === 'object') {
-        let users = getStored('users', []);
-        let updated = false;
-        users = users.map(u => {
-          if (res.targets[u.id]) {
-            const t = res.targets[u.id];
-            if (u.monthlyOrdersTarget !== t.monthlyOrdersTarget || u.monthlyAmountTarget !== t.monthlyAmountTarget) {
-              updated = true;
-              return { ...u, monthlyOrdersTarget: t.monthlyOrdersTarget, monthlyAmountTarget: t.monthlyAmountTarget };
-            }
-          }
-          return u;
-        });
-        if (updated) {
-          setStored('users', users);
-          hasChanges = true;
-        }
-      }
-
-      if (hasChanges && currentUser) {
-        getFreshUser();
-        render();
-      }
-    }
-
-    function startBackgroundSync() {
-      if (pollInterval) clearInterval(pollInterval);
-      fetchFromSheet();
-      pollInterval = setInterval(fetchFromSheet, 4000);
     }
 
     function init() {
-      getFreshUser();
-      render();
-      if (currentUser && currentUser.role === 'agent') startShiftTimer();
-      startBackgroundSync();
-    }
-
-    function render() {
-      const app = document.getElementById('app');
-      if (!currentUser) {
-        app.innerHTML = renderLogin();
-      } else {
-        getFreshUser();
-        app.innerHTML = renderAppLayout();
-        attachCharts();
-      }
-    }
-
-    function renderLogin() {
-      return `
-        <div class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-100 via-orange-50/30 to-blue-50/40">
-          <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-8">
-            <div class="text-center mb-8">
-              <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/30 mb-4">
-                <i class="fa-solid fa-basket-shopping text-3xl"></i>
-              </div>
-              <h1 class="text-2xl font-black tracking-tight text-slate-900">Ghorerbazar</h1>
-              <p class="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Sign In to SalesTrack</p>
-            </div>
-            <form onsubmit="handleLogin(event)" class="space-y-4">
-              <div>
-                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">User ID (Emp ID)</label>
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                    <i class="fa-regular fa-id-badge text-lg"></i>
-                  </span>
-                  <input type="text" id="loginId" required placeholder="e.g. 10122 or 10191" 
-                    class="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all">
-                </div>
-              </div>
-              <div>
-                <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Password</label>
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                    <i class="fa-solid fa-lock text-base"></i>
-                  </span>
-                  <input type="password" id="loginPass" required placeholder="••••••••" 
-                    class="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all">
-                  <button type="button" onclick="togglePassVisibility()" class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-slate-600">
-                    <i id="passIcon" class="fa-regular fa-eye"></i>
-                  </button>
-                </div>
-              </div>
-              <div id="loginError" class="hidden text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200 font-semibold text-center"></div>
-              <button type="submit" 
-                class="w-full py-3.5 px-4 bg-orange-500 hover:bg-orange-600 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2">
-                <span>Sign In</span>
-                <i class="fa-solid fa-arrow-right"></i>
-              </button>
-            </form>
-          </div>
-        </div>
-      `;
-    }
-
-    function togglePassVisibility() {
-      const i = document.getElementById('loginPass');
-      const ic = document.getElementById('passIcon');
-      if (i.type === 'password') { i.type = 'text'; ic.className = 'fa-regular fa-eye-slash'; }
-      else { i.type = 'password'; ic.className = 'fa-regular fa-eye'; }
+      if (currentUser) { renderAppLayout(); pollInterval = setInterval(fetchFromSheet, 3500); }
+      else { document.getElementById('app').innerHTML = renderLogin(); }
     }
 
     function handleLogin(e) {
       e.preventDefault();
       const id = document.getElementById('loginId').value.trim();
       const pass = document.getElementById('loginPass').value.trim();
-      const errBox = document.getElementById('loginError');
-
-      const users = getStored('users', []);
-      const user = users.find(u => u.id === id && u.pass === pass);
-
-      if (!user) {
-        errBox.textContent = 'ভুল User ID অথবা Password!';
-        errBox.classList.remove('hidden');
-        return;
-      }
-
-      currentUser = user;
-      setStored('session_user', user);
-
-      if (user.role === 'agent') {
-        const attendance = getStored('attendance', []);
-        const todayStr = getTodayFormatted();
-        let session = attendance.find(a => a.userId === user.id && a.date === todayStr);
-        if (!session) {
-          session = {
-            userId: user.id,
-            userName: user.name,
-            team: user.team,
-            date: todayStr,
-            loginTime: new Date().toLocaleTimeString(),
-            activeSeconds: 0,
-            breakSeconds: 0,
-            isOnBreak: false
-          };
-          attendance.push(session);
-          setStored('attendance', attendance);
-          postToSheet('AGENT_LOGIN', session);
-        }
-      }
-
-      render();
-      if (currentUser.role === 'agent') startShiftTimer();
-      startBackgroundSync();
+      const user = getStored('users', []).find(u => u.id === id && u.pass === pass);
+      if (!user) { alert('ভুল আইডি বা পাসওয়ার্ড!'); return; }
+      currentUser = user; setStored('session_user', user);
+      init();
     }
 
     function handleLogout() {
-      if (timerInterval) clearInterval(timerInterval);
-      if (pollInterval) clearInterval(pollInterval);
-      if (currentUser && currentUser.role === 'agent') {
-        postToSheet('AGENT_LOGOUT', { userId: currentUser.id, name: currentUser.name, time: new Date().toLocaleTimeString() });
-      }
-      currentUser = null;
-      localStorage.removeItem('gb_session_user');
-      activeTab = 'dashboard';
-      render();
+      clearInterval(pollInterval); currentUser = null; localStorage.removeItem('gb_session_user');
+      document.getElementById('app').innerHTML = renderLogin();
     }
 
-    function startShiftTimer() {
-      if (timerInterval) clearInterval(timerInterval);
-      timerInterval = setInterval(() => {
-        const attendance = getStored('attendance', []);
-        const todayStr = getTodayFormatted();
-        const session = attendance.find(a => a.userId === currentUser.id && a.date === todayStr);
-        if (session) {
-          if (session.isOnBreak) session.breakSeconds = (session.breakSeconds || 0) + 1;
-          else session.activeSeconds = (session.activeSeconds || 0) + 1;
-          setStored('attendance', attendance);
-          
-          const shiftEl = document.getElementById('timer-working-clock');
-          if (shiftEl) shiftEl.textContent = formatTime(session.activeSeconds);
-        }
-      }, 1000);
-    }
+    function setTab(tab) { activeTab = tab; renderAppLayout(); }
 
-    function formatTime(sec) {
-      const h = String(Math.floor(sec / 3600)).padStart(2, '0');
-      const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
-      const s = String(sec % 60).padStart(2, '0');
-      return `${h}:${m}:${s}`;
-    }
-
-    function toggleBreak() {
-      const attendance = getStored('attendance', []);
-      const todayStr = getTodayFormatted();
-      const session = attendance.find(a => a.userId === currentUser.id && a.date === todayStr);
-      if (session) {
-        session.isOnBreak = !session.isOnBreak;
-        setStored('attendance', attendance);
-        postToSheet('BREAK_TOGGLE', { userId: currentUser.id, isOnBreak: session.isOnBreak, time: new Date().toLocaleTimeString() });
-        render();
-      }
-    }
-
-    function setTab(tab) {
-      activeTab = tab;
-      render();
+    function renderLogin() {
+      return `
+        <div class="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+          <div class="w-full max-w-sm bg-white rounded-3xl shadow-xl p-8">
+            <h1 class="text-2xl font-black text-center text-slate-900 mb-6">SalesTrack Pro<br><span class="text-sm font-medium text-slate-500">FB Agents Dashboard</span></h1>
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+              <input type="text" id="loginId" required placeholder="User ID" class="w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm font-semibold">
+              <input type="password" id="loginPass" required placeholder="Password" class="w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm font-semibold">
+              <button type="submit" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl">Login</button>
+            </form>
+          </div>
+        </div>
+      `;
     }
 
     function renderAppLayout() {
-      const u = getFreshUser();
-      return `
+      const u = currentUser;
+      const html = `
         <div class="flex-1 flex min-h-screen">
-          <aside class="w-64 glass-sidebar flex flex-col justify-between p-5 z-20">
+          <aside class="w-64 glass-sidebar p-5 flex flex-col justify-between">
             <div>
-              <div class="flex items-center gap-3 px-2 mb-8">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-orange-500/20">
-                  <i class="fa-solid fa-chart-line text-lg"></i>
-                </div>
-                <div>
-                  <h1 class="text-base font-extrabold text-slate-900 tracking-tight">SalesTrack</h1>
-                  <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cloud Connected • Real-Time</p>
-                </div>
-              </div>
-
-              <nav class="space-y-1.5">
-                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-house text-sm"></i> Dashboard
-                </button>
-                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-regular fa-clock text-sm"></i> Attendance & Live
-                </button>
-                <button onclick="setTab('performance')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'performance' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-chart-pie text-sm"></i> Performance
-                </button>
-                <button onclick="setTab('daily_reports')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'daily_reports' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-file-invoice text-sm"></i> Daily Reports
-                </button>
-                <button onclick="setTab('target')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'target' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-bullseye text-sm"></i> Target Setup
-                </button>
-                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-trophy text-sm"></i> Ranking & Teams
-                </button>
-                ${u.role === 'admin' ? `
-                <button onclick="setTab('settings')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'settings' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}">
-                  <i class="fa-solid fa-gear text-sm"></i> Settings & Cloud Sync
-                </button>
-                ` : ''}
+              <h1 class="text-xl font-black text-slate-900 mb-8 px-2">SalesTrack <span class="text-blue-600">FB</span></h1>
+              <nav class="space-y-2">
+                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-chart-pie"></i> Dashboard</button>
+                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold ${activeTab === 'reports' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-list"></i> Daily Reports</button>
+                ${u.role === 'admin' ? `<button onclick="setTab('team')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold ${activeTab === 'team' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-users"></i> Team Stats</button>` : ''}
               </nav>
             </div>
-
-            <div class="space-y-4">
-              <div class="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 text-center relative overflow-hidden">
-                <i class="fa-solid fa-cloud text-4xl text-blue-200 absolute -bottom-2 -right-2"></i>
-                <h4 class="text-xs font-extrabold text-blue-900">Cloud Live Sync</h4>
-                <p class="text-[11px] text-blue-600 mt-1 font-medium">Automatic bi-directional sync</p>
-              </div>
-
-              <button onclick="handleLogout()" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
-                <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
-              </button>
-            </div>
+            <button onclick="handleLogout()" class="w-full py-3 text-sm font-bold text-red-600 bg-red-50 rounded-xl">Logout</button>
           </aside>
 
-          <div class="flex-1 flex flex-col min-w-0 overflow-y-auto">
-            <header class="h-16 px-8 flex items-center justify-between border-b border-slate-200 bg-white sticky top-0 z-10">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Workspace</span>
-                <span class="text-slate-300">/</span>
-                <span class="text-xs font-extrabold text-slate-800 uppercase tracking-wider capitalize">${activeTab.replace('_', ' ')}</span>
-              </div>
+          <div class="flex-1 flex flex-col h-screen overflow-y-auto">
+            <header class="h-16 px-8 flex items-center justify-between bg-white border-b sticky top-0 z-10">
+              <h2 class="text-sm font-extrabold uppercase capitalize">${activeTab}</h2>
               <div class="flex items-center gap-4">
-                <button onclick="fetchFromSheet()" title="Click to instant sync with Google Sheet" class="cursor-pointer text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg flex items-center gap-2 border border-emerald-200 transition-colors">
-                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Cloud Live
-                </button>
-                <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200">
-                  <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                    ${u.name.charAt(0)}
-                  </div>
-                  <div class="text-left">
-                    <p class="text-xs font-bold text-slate-800 leading-none">${u.name}</p>
-                    <span class="text-[10px] font-semibold text-slate-400 uppercase">${u.role === 'admin' ? 'Admin (TL)' : 'Agent'}</span>
-                  </div>
-                </div>
+                <span class="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg animate-pulse">Cloud Live</span>
+                <span class="text-sm font-bold">${u.name} (${u.role === 'admin' ? 'Admin' : u.grade})</span>
               </div>
             </header>
-
-            <main class="p-8 flex-1">
-              ${renderTabContent()}
-            </main>
+            <main class="p-8">${renderTabContent()}</main>
           </div>
         </div>
-
-        <!-- Submit / Edit / DELETE Daily Report Modal -->
-        <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-2.5">
-                <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm font-bold">
-                  <i class="fa-solid fa-file-lines"></i>
-                </div>
-                <div>
-                  <h3 id="modalTitle" class="text-sm font-extrabold text-slate-900">Daily Sales Report</h3>
-                  <p class="text-[11px] text-slate-400">প্রতি দিনের ১টি রিপোর্ট (এডিট বা ডিলিট করা যাবে)</p>
-                </div>
-              </div>
-              <button onclick="closeModal('submitModal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-
-            <form id="eodReportForm" onsubmit="handleSalesSubmit(event)" class="space-y-3.5">
-              <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
-                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Select Agent</label>
-                <select id="subAgentId" onchange="onReportTargetChanged()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                  ${getStored('users', []).filter(usr => usr.role === 'agent').map(usr => `
-                    <option value="${usr.id}">${usr.name} (ID: ${usr.id} • ${usr.team})</option>
-                  `).join('')}
-                </select>
-              </div>
-
-              <div>
-                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Report Date (তারিখ নির্বাচন)</label>
-                <input type="date" id="subDate" required onchange="onReportTargetChanged()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                <p id="existingNotice" class="text-[10px] font-bold text-amber-600 mt-1 hidden">
-                  <i class="fa-solid fa-circle-exclamation mr-1"></i> এই তারিখে ইতিমধ্যে রিপোর্ট রয়েছে। আপনি এটি এডিট বা ডিলিট করতে পারবেন।
-                </p>
-              </div>
-
-              <div class="grid grid-cols-3 gap-3">
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Total Leads</label>
-                  <input type="number" id="subLeads" required min="1" placeholder="50" oninput="calculatePreviewRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Total Orders</label>
-                  <input type="number" id="subOrders" required min="0" placeholder="10" oninput="calculatePreviewRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount (৳)</label>
-                  <input type="number" id="subAmount" required min="0" placeholder="25000" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500">
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                <div>
-                  <p class="text-[10px] font-bold text-slate-400 uppercase">Daily Goal Achieved</p>
-                  <p id="prevAchieve" class="text-base font-black text-amber-500 mt-0.5">0%</p>
-                </div>
-                <div>
-                  <p class="text-[10px] font-bold text-slate-400 uppercase">Conversion Ratio</p>
-                  <p id="prevRatio" class="text-base font-black text-blue-600 mt-0.5">0.00%</p>
-                </div>
-              </div>
-
-              <div class="flex items-center justify-between pt-2">
-                <div>
-                  <button type="button" id="deleteReportBtn" onclick="handleDeleteCurrentReport()" class="hidden px-4 py-2 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 transition-colors flex items-center gap-1.5">
-                    <i class="fa-solid fa-trash-can"></i> <span>Delete Report</span>
-                  </button>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
-                  <button type="submit" id="submitBtnText" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 flex items-center gap-2">
-                    <i class="fa-solid fa-paper-plane"></i> <span>Submit Report</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <!-- Set Target Modal (Admin) -->
-        <div id="targetModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="text-base font-extrabold text-slate-900">Set Agent Monthly Target</h3>
-              <button onclick="closeModal('targetModal')" class="text-slate-400"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <form onsubmit="handleSaveTarget(event)" class="space-y-4">
-              <input type="hidden" id="tgtAgentId">
-              <div>
-                <p id="tgtAgentName" class="text-xs font-bold text-blue-600 mb-2"></p>
-                <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Monthly Orders Target</label>
-                <input type="number" id="tgtMonthlyOrders" required min="1" oninput="calculateDailyBreakdown()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
-              </div>
-              <div>
-                <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Monthly Sales Amount (BDT)</label>
-                <input type="number" id="tgtMonthlyAmount" required min="1" oninput="calculateDailyBreakdown()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
-              </div>
-              <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs">
-                <span class="font-bold text-amber-800">অটো ডেইলি টার্গেট (Monthly ÷ 26 Days):</span>
-                <div class="mt-1 flex justify-between font-bold text-slate-700">
-                  <span>Daily Orders: <span id="calcDailyOrders" class="text-amber-700">0</span></span>
-                  <span>Daily Amount: ৳ <span id="calcDailyAmount" class="text-emerald-700">0</span></span>
-                </div>
-              </div>
-              <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md">
-                Save & Update Target
-              </button>
-            </form>
-          </div>
-        </div>
+        ${renderSubmitModal()}
       `;
-    }
-
-    function openReportModal(targetAgentId, targetDateStr) {
-      const u = getFreshUser();
-      const dateInput = document.getElementById('subDate');
-      dateInput.value = dateToInputVal(targetDateStr || getTodayFormatted());
-
-      if (u.role === 'admin') {
-        const select = document.getElementById('subAgentId');
-        if (targetAgentId) select.value = targetAgentId;
-      }
-
-      onReportTargetChanged();
-      openModal('submitModal');
-    }
-
-    function onReportTargetChanged() {
-      const u = getFreshUser();
-      const allSales = getStored('sales_records', []);
-
-      let agentId = u.id;
-      if (u.role === 'admin') {
-        agentId = document.getElementById('subAgentId').value;
-      }
-
-      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
-      const existing = allSales.find(s => s.userId === agentId && s.date === dateStr);
-
-      const notice = document.getElementById('existingNotice');
-      const btnText = document.querySelector('#submitBtnText span');
-      const delBtn = document.getElementById('deleteReportBtn');
-
-      if (existing) {
-        document.getElementById('subLeads').value = existing.leads;
-        document.getElementById('subOrders').value = existing.orders;
-        document.getElementById('subAmount').value = existing.amount;
-        notice.classList.remove('hidden');
-        delBtn.classList.remove('hidden');
-        btnText.textContent = `Update Report (${dateStr})`;
-      } else {
-        document.getElementById('subLeads').value = '';
-        document.getElementById('subOrders').value = '';
-        document.getElementById('subAmount').value = '';
-        notice.classList.add('hidden');
-        delBtn.classList.add('hidden');
-        btnText.textContent = 'Submit Report';
-      }
-      calculatePreviewRatio();
-    }
-
-    function calculatePreviewRatio() {
-      const u = getFreshUser();
-      const allUsers = getStored('users', []);
-      let targetUser = u;
-      if (u.role === 'admin') {
-        const selId = document.getElementById('subAgentId')?.value;
-        targetUser = allUsers.find(usr => usr.id === selId) || u;
-      }
-
-      const t = getUserTargetInfo(targetUser);
-      const l = Number(document.getElementById('subLeads').value) || 0;
-      const o = Number(document.getElementById('subOrders').value) || 0;
-      const ratio = l > 0 ? ((o / l) * 100).toFixed(2) : '0.00';
-      document.getElementById('prevRatio').textContent = ratio + '%';
-
-      const dOrdersTarget = t.dailyOrdersTarget;
-      const achieve = dOrdersTarget > 0 ? Math.round((o / dOrdersTarget) * 100) : 0;
-      document.getElementById('prevAchieve').textContent = achieve + '%';
-    }
-
-    function calculateDailyBreakdown() {
-      const mo = Number(document.getElementById('tgtMonthlyOrders').value) || 0;
-      const ma = Number(document.getElementById('tgtMonthlyAmount').value) || 0;
-      document.getElementById('calcDailyOrders').textContent = Math.round(mo / 26);
-      document.getElementById('calcDailyAmount').textContent = Math.round(ma / 26).toLocaleString();
-    }
-
-    function openTargetModal(agentId) {
-      const users = getStored('users', []);
-      const agent = users.find(u => u.id === agentId);
-      if (!agent) return;
-      document.getElementById('tgtAgentId').value = agent.id;
-      document.getElementById('tgtAgentName').textContent = `${agent.name} (ID: ${agent.id} • ${agent.team})`;
-      document.getElementById('tgtMonthlyOrders').value = agent.monthlyOrdersTarget || 260;
-      document.getElementById('tgtMonthlyAmount').value = agent.monthlyAmountTarget || 320000;
-      calculateDailyBreakdown();
-      openModal('targetModal');
-    }
-
-    async function handleSaveTarget(e) {
-      e.preventDefault();
-      const id = document.getElementById('tgtAgentId').value;
-      const mo = Number(document.getElementById('tgtMonthlyOrders').value) || 260;
-      const ma = Number(document.getElementById('tgtMonthlyAmount').value) || 320000;
-
-      const users = getStored('users', []);
-      const idx = users.findIndex(u => u.id === id);
-      if (idx !== -1) {
-        users[idx].monthlyOrdersTarget = mo;
-        users[idx].monthlyAmountTarget = ma;
-        setStored('users', users);
-
-        if (currentUser && currentUser.id === id) {
-          currentUser.monthlyOrdersTarget = mo;
-          currentUser.monthlyAmountTarget = ma;
-          setStored('session_user', currentUser);
-        }
-
-        await postToSheet('UPDATE_TARGET', { userId: id, monthlyOrdersTarget: mo, monthlyAmountTarget: ma, dailyOrdersTarget: Math.round(mo/26), dailyAmountTarget: Math.round(ma/26) });
-        alert('টার্গেট ক্লাউডে সফলভাবে আপডেট হয়েছে!');
-        closeModal('targetModal');
-        render();
-        setTimeout(fetchFromSheet, 1000);
-      }
-    }
-
-    async function handleSalesSubmit(e) {
-      e.preventDefault();
-      const u = getFreshUser();
-      const allUsers = getStored('users', []);
-
-      let agent = u;
-      if (u.role === 'admin') {
-        const selId = document.getElementById('subAgentId').value;
-        agent = allUsers.find(usr => usr.id === selId) || u;
-      }
-
-      const t = getUserTargetInfo(agent);
-      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
-      const leads = Number(document.getElementById('subLeads').value) || 0;
-      const orders = Number(document.getElementById('subOrders').value) || 0;
-      const amount = Number(document.getElementById('subAmount').value) || 0;
-      const ratio = leads > 0 ? ((orders / leads) * 100).toFixed(2) : 0;
-      const dOrdersTarget = t.dailyOrdersTarget;
-      const achieve = dOrdersTarget > 0 ? Math.round((orders / dOrdersTarget) * 100) : 0;
-
-      let sales = getStored('sales_records', []);
-      const existingIdx = sales.findIndex(s => s.userId === agent.id && s.date === dateStr);
-
-      const entry = {
-        id: existingIdx !== -1 ? sales[existingIdx].id : 'rec_' + agent.id + '_' + Date.now(),
-        userId: agent.id,
-        userName: agent.name,
-        team: agent.team,
-        date: dateStr,
-        time: new Date().toLocaleTimeString(),
-        leads,
-        orders,
-        amount,
-        ratio: Number(ratio),
-        achievement: achieve
-      };
-
-      if (existingIdx !== -1) sales[existingIdx] = entry;
-      else sales.unshift(entry);
-
-      setStored('sales_records', sales);
-      render();
-
-      await postToSheet('DAILY_SALES_SUBMIT', entry);
-      alert(`ধন্যবাদ! ${agent.name}-এর ${dateStr} তারিখের রিপোর্ট সফলভাবে ক্লাউডে সেভ হয়েছে।`);
-      closeModal('submitModal');
-      setTimeout(fetchFromSheet, 1500);
-    }
-
-    async function handleDeleteCurrentReport(userIdParam, dateParam) {
-      const u = getFreshUser();
-      let agentId = userIdParam || u.id;
-      if (!userIdParam && u.role === 'admin') {
-        agentId = document.getElementById('subAgentId').value;
-      }
-      const dateStr = dateParam || inputValToDateStr(document.getElementById('subDate').value);
-
-      if (!confirm(`আপনি কি নিশ্চিতভাবে এই রিপোর্টটি (${dateStr}) মুছে ফেলতে চান? এটি গুগল শিট থেকেও মুছে যাবে।`)) {
-        return;
-      }
-
-      let sales = getStored('sales_records', []);
-      sales = sales.filter(s => !(s.userId === agentId && s.date === dateStr));
-      setStored('sales_records', sales);
-      render();
-
-      await postToSheet('DELETE_SALES_RECORD', { userId: agentId, date: dateStr });
-      alert('রিপোর্টটি সফলভাবে ডিলিট করা হয়েছে!');
-      closeModal('submitModal');
-      setTimeout(fetchFromSheet, 1500);
+      document.getElementById('app').innerHTML = html;
     }
 
     function renderTabContent() {
-      switch(activeTab) {
-        case 'dashboard': return renderDashboardView();
-        case 'attendance': return renderAttendanceView();
-        case 'performance': return renderPerformanceView();
-        case 'daily_reports': return renderDailyReportsView();
-        case 'target': return renderTargetSetupView();
-        case 'ranking': return renderRankingView();
-        case 'settings': return renderSettingsView();
-        default: return renderDashboardView();
+      if (activeTab === 'dashboard') return renderDashboard();
+      if (activeTab === 'reports') return renderReports();
+      if (activeTab === 'team') return renderTeamStats();
+    }
+
+    function renderDashboard() {
+      const u = currentUser;
+      const allSales = getStored('sales_records', []);
+      let targetUser = u;
+      let mySales = allSales.filter(s => s.userId === u.id);
+
+      if (u.role === 'admin') {
+        return `<div class="card-neo p-8 text-center"><h2 class="text-xl font-bold">Admin Dashboard Overview</h2><p class="mt-2 text-slate-500">Go to Team Stats to view agent specific details.</p><button onclick="openReportModal()" class="mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-bold">Add Data for Agent</button></div>`;
       }
-    }
 
-    function renderDashboardView() {
-      const u = getFreshUser();
-      const t = getUserTargetInfo(u);
-      const sales = getStored('sales_records', []);
-      const todayStr = getTodayFormatted();
-      const attendance = getStored('attendance', []);
-      const todaySession = attendance.find(a => a.userId === u.id && a.date === todayStr) || { activeSeconds: 0, breakSeconds: 0, isOnBreak: false };
+      // Agent specific calculations
+      const tInfo = getAgentTargetData(u);
+      
+      // Calculate Sprint Achievements
+      const currentMonthStr = getTodayFormatted().substring(3); // gets MM/YYYY
+      const thisMonthSales = mySales.filter(s => s.date.endsWith(currentMonthStr));
+      
+      const sprintSalesAmount = thisMonthSales.reduce((acc, curr) => {
+        const d = parseInt(curr.date.split('/')[0]);
+        if (tInfo.sprintName.includes('Sprint 1') && d <= 10) return acc + curr.amount;
+        if (tInfo.sprintName.includes('Sprint 2') && d > 10 && d <= 20) return acc + curr.amount;
+        if (tInfo.sprintName.includes('Sprint 3') && d > 20) return acc + curr.amount;
+        return acc;
+      }, 0);
 
-      const mySales = u.role === 'admin' 
-        ? sales.filter(s => s.team === u.team) 
-        : sales.filter(s => s.userId === u.id);
+      const monthTotalAmount = thisMonthSales.reduce((acc, curr) => acc + curr.amount, 0);
+      const sprintPct = tInfo.sprintGoal > 0 ? Math.min(100, Math.round((sprintSalesAmount / tInfo.sprintGoal) * 100)) : 0;
+      const monthPct = tInfo.workingTarget > 0 ? Math.min(100, Math.round((monthTotalAmount / tInfo.workingTarget) * 100)) : 0;
 
-      const totalLeads = mySales.reduce((a, c) => a + c.leads, 0);
-      const totalOrders = mySales.reduce((a, c) => a + c.orders, 0);
-      const totalAmount = mySales.reduce((a, c) => a + c.amount, 0);
-      const avgConversionRatio = totalLeads > 0 ? ((totalOrders / totalLeads) * 100).toFixed(2) : '0.00';
-
-      const targetAmount = t.monthlyAmountTarget;
-      const targetOrders = t.monthlyOrdersTarget;
-      const dailyOrdersTarget = t.dailyOrdersTarget;
-      const dailyAmountTarget = t.dailyAmountTarget;
-      const achievePct = targetAmount > 0 ? Math.min(100, Math.round((totalAmount / targetAmount) * 100)) : 0;
+      // Calculate Product Achievements (Total KG)
+      const pTotals = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
+      thisMonthSales.forEach(s => {
+        pTotals.ajwa += (s.ajwa || 0); pTotals.pinkSalt += (s.pinkSalt || 0);
+        pTotals.blackGarlic += (s.blackGarlic || 0); pTotals.sunHoney += (s.sunHoney || 0);
+        pTotals.bsHoney += (s.bsHoney || 0); pTotals.gawaGhee += (s.gawaGhee || 0);
+      });
 
       return `
         <div class="space-y-6">
-          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+          <div class="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border">
             <div>
-              <div class="flex items-center gap-2">
-                <h2 class="text-2xl font-black text-slate-900 leading-tight">Welcome, ${u.name}! 👋</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">
-                  ${u.team} (${u.role === 'admin' ? `Team Leader • ${t.agentCount} Agents Total Sum` : 'Sales Agent'})
-                </span>
-              </div>
-              <p class="text-xs text-slate-500 font-medium mt-1">
-                ${u.role === 'admin' 
-                  ? `আপনার অধীনে থাকা সকল এজেন্টের মোট টার্গেট সামেশন (Sum) ও লাইভ সেলস ডাটা প্রদর্শিত হচ্ছে।` 
-                  : `২৬ কর্মদিবসের হিসেবে আপনার দৈনিক ও মাসিক সেলস টার্গেট ও পারফরম্যান্স ওভারভিউ।`}
-              </p>
+              <h2 class="text-2xl font-black text-slate-800">Welcome, ${u.name}</h2>
+              <p class="text-sm font-bold text-slate-500 mt-1">Grade: ${u.grade} • Base Target: ৳${u.baseTarget.toLocaleString()} <span class="text-amber-600 font-extrabold">(+5% Buffer: ৳${tInfo.workingTarget.toLocaleString()})</span></p>
             </div>
-            
-            <div class="flex flex-wrap items-center gap-3">
-              <div class="px-4 py-2.5 bg-blue-50/90 border border-blue-200 rounded-xl text-left">
-                <span class="text-[10px] uppercase font-black text-blue-700 block tracking-wider">🎯 Daily Amount Target</span>
-                <p class="text-sm font-black text-blue-900 mt-0.5">৳${dailyAmountTarget.toLocaleString()} <span class="text-xs font-bold text-blue-600">(${dailyOrdersTarget} Orders)</span></p>
-              </div>
-
-              <div class="px-4 py-2.5 bg-purple-50/90 border border-purple-200 rounded-xl text-left">
-                <span class="text-[10px] uppercase font-black text-purple-700 block tracking-wider">🏆 Monthly Target Sum</span>
-                <p class="text-sm font-black text-purple-900 mt-0.5">৳${targetAmount.toLocaleString()} <span class="text-xs font-bold text-purple-600">(${targetOrders} Orders)</span></p>
-              </div>
-
-              ${u.role === 'agent' ? `
-              <button onclick="openReportModal()" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/20 flex items-center gap-2 transition-all">
-                <i class="fa-solid fa-plus text-sm"></i> Submit Daily Report
-              </button>
-              ` : `
-              <button onclick="openReportModal()" class="px-5 py-3 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition-all">
-                <i class="fa-solid fa-file-circle-plus text-sm"></i> Add / Edit Agent Report
-              </button>
-              `}
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div class="highlight-card-blue p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold uppercase tracking-wider text-blue-100">Total Leads</span>
-                <div class="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-lg text-white">
-                  <i class="fa-solid fa-users"></i>
-                </div>
-              </div>
-              <div class="mt-4">
-                <p class="text-3xl font-black tracking-tight text-white">${totalLeads}</p>
-                <div class="flex items-center justify-between text-[11px] font-bold text-blue-100 mt-1.5 pt-1.5 border-t border-white/20">
-                  <span>Customer Inbound</span>
-                  <span class="text-xs font-black">Active</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="highlight-card-emerald p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold uppercase tracking-wider text-emerald-100">Total Orders</span>
-                <div class="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-lg text-white">
-                  <i class="fa-solid fa-bag-shopping"></i>
-                </div>
-              </div>
-              <div class="mt-4">
-                <div class="flex items-baseline gap-1.5">
-                  <p class="text-3xl font-black tracking-tight text-white">${totalOrders}</p>
-                  <span class="text-xs font-bold text-emerald-100">/ ${targetOrders} Goal</span>
-                </div>
-                <div class="flex items-center justify-between text-[11px] font-bold text-emerald-100 mt-1.5 pt-1.5 border-t border-white/20">
-                  <span>Conv. Ratio:</span>
-                  <span class="font-black text-white text-xs">${avgConversionRatio}%</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="highlight-card-purple p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold uppercase tracking-wider text-purple-100">Total Sales Amount</span>
-                <div class="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-lg text-white">
-                  <i class="fa-solid fa-bangladeshi-taka-sign"></i>
-                </div>
-              </div>
-              <div class="mt-4">
-                <p class="text-2xl font-black tracking-tight text-white">৳${totalAmount.toLocaleString()}</p>
-                <div class="flex items-center justify-between text-[11px] font-bold text-purple-100 mt-1.5 pt-1.5 border-t border-white/20">
-                  <span>Current Achieved</span>
-                  <span class="font-black text-white text-xs">${achievePct}%</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="highlight-card-indigo p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold uppercase tracking-wider text-indigo-100">Monthly Target (৳)</span>
-                <div class="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-lg text-white">
-                  <i class="fa-solid fa-bullseye"></i>
-                </div>
-              </div>
-              <div class="mt-4">
-                <p class="text-2xl font-black tracking-tight text-white">৳${targetAmount.toLocaleString()}</p>
-                <div class="flex items-center justify-between text-[11px] font-bold text-indigo-100 mt-1.5 pt-1.5 border-t border-white/20">
-                  <span>Daily (Amount ÷ 26):</span>
-                  <span class="font-black text-white text-xs">৳${dailyAmountTarget.toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="highlight-card-amber p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold uppercase tracking-wider text-amber-100">Target Achievement</span>
-                <div class="w-10 h-10 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center text-lg text-white">
-                  <i class="fa-solid fa-trophy"></i>
-                </div>
-              </div>
-              <div class="mt-4">
-                <div class="flex items-baseline justify-between">
-                  <p class="text-3xl font-black tracking-tight text-white">${achievePct}%</p>
-                  <span class="text-[11px] font-bold text-amber-100">${totalOrders}/${targetOrders} Orders</span>
-                </div>
-                <div class="w-full bg-black/20 rounded-full h-1.5 mt-2">
-                  <div class="bg-white h-1.5 rounded-full" style="width: ${achievePct}%"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div class="lg:col-span-2 space-y-6">
-              <div class="card-neo p-6">
-                <div class="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 class="text-sm font-extrabold text-slate-900">${u.role === 'admin' ? `${u.team} Sales Trend` : 'My Sales Performance Trend'}</h3>
-                    <p class="text-[11px] text-slate-400 font-semibold">Weekly volume & orders progression</p>
-                  </div>
-                  <span class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-600">Weekly View</span>
-                </div>
-                <div class="h-60 w-full">
-                  <canvas id="salesTrendChart"></canvas>
-                </div>
-              </div>
-
-              <div class="card-neo p-4 flex flex-wrap items-center justify-between gap-3">
-                <p class="text-xs font-extrabold text-slate-600 uppercase">Quick Actions:</p>
-                <div class="flex items-center gap-2.5">
-                  ${u.role === 'agent' ? `
-                  <button onclick="toggleBreak()" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 flex items-center gap-2 shadow-sm">
-                    <i class="fa-solid ${todaySession.isOnBreak ? 'fa-play' : 'fa-mug-saucer'}"></i>
-                    ${todaySession.isOnBreak ? 'Resume Work' : 'Take Break'}
-                  </button>
-                  ` : `
-                  <button onclick="openReportModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-2 shadow-sm">
-                    <i class="fa-solid fa-pen-to-square"></i> Create/Edit Report for Agent
-                  </button>
-                  `}
-                  <button onclick="setTab('daily_reports')" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 flex items-center gap-2 shadow-sm">
-                    <i class="fa-solid fa-list-check"></i> View Report
-                  </button>
-                  <button onclick="setTab('target')" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 flex items-center gap-2 shadow-sm">
-                    <i class="fa-solid fa-bullseye"></i> ${u.role === 'admin' ? 'Agent Targets' : 'Check Target'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div class="space-y-6">
-              <div class="card-neo p-6 text-center">
-                <div class="flex items-center justify-between mb-2">
-                  <h3 class="text-sm font-extrabold text-slate-900 text-left">
-                    ${u.role === 'admin' ? `${u.team} Target Goal` : 'Personal Target Goal'}
-                  </h3>
-                  <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">26 Days Split</span>
-                </div>
-                
-                <div class="flex items-center justify-center my-4">
-                  <div class="relative flex items-center justify-center">
-                    <svg class="w-32 h-32 transform -rotate-90">
-                      <circle cx="64" cy="64" r="50" stroke="#f1f5f9" stroke-width="10" fill="transparent"/>
-                      <circle cx="64" cy="64" r="50" stroke="#059669" stroke-width="10" stroke-dasharray="314" stroke-dashoffset="${314 - (314 * achievePct / 100)}" stroke-linecap="round" fill="transparent"/>
-                    </svg>
-                    <div class="absolute text-center">
-                      <span class="text-2xl font-black text-slate-800">${achievePct}%</span>
-                      <p class="text-[10px] uppercase font-bold text-slate-400">Achieved</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3 text-left pt-3 border-t border-slate-100">
-                  <div class="p-2.5 rounded-xl bg-blue-50/60 border border-blue-100">
-                    <p class="text-[10px] font-black uppercase text-blue-700">Daily Target (Amount)</p>
-                    <p class="text-xs font-black text-slate-900 mt-1">৳${dailyAmountTarget.toLocaleString()}</p>
-                    <p class="text-[10px] font-bold text-slate-500">${dailyOrdersTarget} Orders / day</p>
-                  </div>
-                  <div class="p-2.5 rounded-xl bg-purple-50/60 border border-purple-100">
-                    <p class="text-[10px] font-black uppercase text-purple-700">Monthly Target (Amount)</p>
-                    <p class="text-xs font-black text-slate-900 mt-1">৳${targetAmount.toLocaleString()}</p>
-                    <p class="text-[10px] font-bold text-slate-500">${targetOrders} Orders</p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="card-neo p-6">
-                <h3 class="text-sm font-extrabold text-slate-900 mb-3">Live Duty Status</h3>
-                <div class="flex items-center gap-2 mb-2">
-                  <span class="w-2.5 h-2.5 rounded-full ${todaySession.isOnBreak ? 'bg-amber-400 animate-ping' : 'bg-emerald-500 animate-pulse'}"></span>
-                  <span class="text-xs font-bold ${todaySession.isOnBreak ? 'text-amber-600' : 'text-emerald-600'}">
-                    ${todaySession.isOnBreak ? 'Currently On Break' : 'Duty Time Running'}
-                  </span>
-                </div>
-                <p id="timer-working-clock" class="text-3xl font-black font-mono text-slate-800 my-2">
-                  ${formatTime(todaySession.activeSeconds)}
-                </p>
-                <p class="text-[11px] text-slate-400 font-semibold mb-4">Shift session: ${todaySession.loginTime || 'Active'}</p>
-                
-                <button onclick="handleLogout()" class="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold shadow-md shadow-red-500/20 flex items-center justify-center gap-2">
-                  <i class="fa-solid fa-power-off"></i> Clock Out / Logout
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    function renderAttendanceView() {
-      const users = getStored('users', []).filter(u => u.role === 'agent');
-      const attendance = getStored('attendance', []);
-      const todayStr = getTodayFormatted();
-
-      return `
-        <div class="space-y-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-xl font-black text-slate-900">Attendance & Live Shift Tracking</h2>
-              <p class="text-xs text-slate-400 font-semibold">Real-time working hours, breaks, and shift status</p>
-            </div>
-          </div>
-
-          <div class="card-neo overflow-hidden">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 border-b border-slate-100 uppercase text-slate-400 font-bold">
-                <tr>
-                  <th class="p-4">Agent Name</th>
-                  <th class="p-4">Team</th>
-                  <th class="p-4">Status</th>
-                  <th class="p-4">Login Time</th>
-                  <th class="p-4">Active Working Time</th>
-                  <th class="p-4">Break Time</th>
-                  ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Action</th>' : ''}
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 font-medium">
-                ${users.map(u => {
-                  const s = attendance.find(a => a.userId === u.id && a.date === todayStr);
-                  let badge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-400">Offline</span>';
-                  if (s) {
-                    badge = s.isOnBreak 
-                      ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 animate-pulse">On Break</span>'
-                      : '<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Online</span>';
-                  }
-                  return `
-                    <tr class="hover:bg-slate-50/50">
-                      <td class="p-4 font-bold text-slate-800">
-                        <span class="hover:text-blue-600 cursor-pointer" onclick="openReportModal('${u.id}')">${u.name}</span>
-                        <div class="text-[10px] text-slate-400 font-mono">ID: ${u.id}</div>
-                      </td>
-                      <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${u.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${u.team}</span></td>
-                      <td class="p-4">${badge}</td>
-                      <td class="p-4 font-semibold text-slate-600">${s ? s.loginTime : '--:--'}</td>
-                      <td class="p-4 font-mono font-bold text-emerald-600">${s ? formatTime(s.activeSeconds) : '00:00:00'}</td>
-                      <td class="p-4 font-mono font-bold text-amber-600">${s ? formatTime(s.breakSeconds) : '00:00:00'}</td>
-                      ${currentUser && currentUser.role === 'admin' ? `
-                      <td class="p-4 text-right">
-                        <button onclick="openReportModal('${u.id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100">
-                          <i class="fa-solid fa-pen-to-square"></i> Add/Edit Report
-                        </button>
-                      </td>
-                      ` : ''}
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-    }
-
-    function renderPerformanceView() {
-      return `
-        <div class="space-y-6">
-          <div>
-            <h2 class="text-xl font-black text-slate-900">Conversion & Performance Analytics</h2>
-            <p class="text-xs text-slate-400 font-semibold">Detailed breakdown of conversion rates, leads efficiency, and order volume</p>
+            <button onclick="openReportModal()" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg">Submit Sales Data</button>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="card-neo p-6">
-              <h3 class="text-sm font-extrabold text-slate-900 mb-4">Conversion Rate Distribution</h3>
-              <div class="h-64">
-                <canvas id="conversionPieChart"></canvas>
+            <!-- Sprint Progress -->
+            <div class="card-neo p-6 bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-100">
+              <h3 class="text-xs font-black uppercase text-indigo-800 tracking-widest mb-1">Current Sprint Focus</h3>
+              <p class="text-lg font-bold text-slate-900">${tInfo.sprintName} (Target: ${tInfo.sprintPct * 100}%)</p>
+              
+              <div class="mt-6">
+                <div class="flex justify-between text-sm font-bold mb-2">
+                  <span class="text-slate-700">Sprint Target: ৳${tInfo.sprintGoal.toLocaleString()}</span>
+                  <span class="text-blue-700">Achieved: ৳${sprintSalesAmount.toLocaleString()}</span>
+                </div>
+                <div class="progress-bg h-3"><div class="bg-blue-600 h-3 rounded-full" style="width: ${sprintPct}%"></div></div>
+                <p class="text-right text-xs font-black text-slate-500 mt-1">${sprintPct}% Completed</p>
               </div>
             </div>
-            <div class="card-neo p-6 flex flex-col justify-center">
-              <h3 class="text-sm font-extrabold text-slate-900 mb-2">Performance Formula Applied</h3>
-              <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono space-y-2 mb-4">
-                <p>• Conversion Ratio = (Total Orders ÷ Total Leads) × 100%</p>
-                <p>• Team Leader Target = Sum of all Agents' Targets in that Team</p>
-                <p>• Daily Target = Monthly Target Amount ÷ 26 Working Days</p>
-                <p>• Achievement Ratio = (Actual Revenue ÷ Monthly Target Amount) × 100%</p>
+
+            <!-- Monthly Progress -->
+            <div class="card-neo p-6 bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100">
+              <h3 class="text-xs font-black uppercase text-emerald-800 tracking-widest mb-1">Monthly Total (With 5% Return Buffer)</h3>
+              <p class="text-lg font-bold text-slate-900">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</p>
+              
+              <div class="mt-6">
+                <div class="flex justify-between text-sm font-bold mb-2">
+                  <span class="text-slate-700">Month Revenue</span>
+                  <span class="text-emerald-700">৳${monthTotalAmount.toLocaleString()}</span>
+                </div>
+                <div class="progress-bg h-3"><div class="bg-emerald-600 h-3 rounded-full" style="width: ${monthPct}%"></div></div>
+                <p class="text-right text-xs font-black text-slate-500 mt-1">${monthPct}% of Total Target</p>
               </div>
-              <p class="text-xs text-slate-500 font-medium leading-relaxed">
-                টিম লিডারদের টার্গেট ও রিয়েল-টাইম সেলস স্বয়ংক্রিয়ভাবে তাদের অধীনে থাকা এজেন্টদের মোট যোগফল হিসেবে আপডেট হচ্ছে।
-              </p>
             </div>
+          </div>
+
+          <h3 class="text-lg font-black text-slate-800 mt-8 mb-4">Product Incentive Targets (FB Channel)</h3>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+            ${Object.keys(FB_PRODUCTS).map(k => {
+              const p = FB_PRODUCTS[k];
+              const achieved = pTotals[k];
+              const pct = Math.min(100, Math.round((achieved / p.targetKg) * 100));
+              const isEligible = pct >= 90; // 90% is entry level for most
+              return `
+                <div class="card-neo p-5 ${isEligible ? 'border-amber-300 bg-amber-50/30' : ''}">
+                  <h4 class="font-bold text-slate-800">${p.name}</h4>
+                  <p class="text-xs text-slate-500 font-semibold mb-3">Target: ${p.targetKg} kg</p>
+                  <div class="flex justify-between text-sm font-black mb-1">
+                    <span class="${isEligible ? 'text-amber-600' : 'text-slate-700'}">${achieved} kg</span>
+                    <span class="text-slate-400">${pct}%</span>
+                  </div>
+                  <div class="progress-bg h-1.5"><div class="bg-slate-800 h-1.5 rounded-full ${isEligible ? 'bg-amber-500' : ''}" style="width: ${pct}%"></div></div>
+                </div>
+              `;
+            }).join('')}
           </div>
         </div>
       `;
     }
 
-    function renderDailyReportsView() {
-      const sales = getStored('sales_records', []);
-
+    function renderReports() {
+      const u = currentUser;
+      const sales = getStored('sales_records', []).filter(s => u.role === 'admin' ? true : s.userId === u.id);
+      
       return `
         <div class="space-y-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-xl font-black text-slate-900">Agent Daily Reports Log</h2>
-              <p class="text-xs text-slate-400 font-semibold">সকল এজেন্টের তারিখ অনুযায়ী দৈনিক রিপোর্ট, এডিট ও ডিলিট হিস্ট্রি</p>
-            </div>
-            <button onclick="openReportModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md">
-              <i class="fa-solid fa-plus mr-1"></i> New / Edit Report
-            </button>
+          <div class="flex justify-between items-center">
+            <h2 class="text-xl font-black text-slate-900">Daily Sales Logs</h2>
+            <button onclick="openReportModal()" class="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold">New Report</button>
           </div>
-
-          <div class="card-neo overflow-hidden">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 border-b border-slate-100 uppercase text-slate-400 font-bold">
-                <tr>
-                  <th class="p-4">Report Date</th>
-                  <th class="p-4">Agent Name</th>
-                  <th class="p-4">Team</th>
-                  <th class="p-4">Leads</th>
-                  <th class="p-4">Orders</th>
-                  <th class="p-4">Amount (BDT)</th>
-                  <th class="p-4">Conversion Ratio</th>
-                  <th class="p-4 text-right">Actions</th>
-                </tr>
+          <div class="card-neo overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="bg-slate-50 border-b font-bold text-slate-500 uppercase">
+                <tr><th class="p-4">Date</th><th class="p-4">Agent</th><th class="p-4">Leads</th><th class="p-4">Orders</th><th class="p-4">Amount</th><th class="p-4">Products (kg)</th><th class="p-4 text-right">Action</th></tr>
               </thead>
-              <tbody class="divide-y divide-slate-100 font-medium">
-                ${sales.length === 0 ? '<tr><td colspan="8" class="p-8 text-center text-slate-400">কোন সেলস এন্ট্রি এখনো সাবমিট করা হয়নি।</td></tr>' : ''}
+              <tbody class="divide-y font-medium">
                 ${sales.map(s => `
-                  <tr class="hover:bg-slate-50/50">
-                    <td class="p-4 font-bold text-slate-800">${cleanDisplayDate(s.date)} <span class="text-[10px] text-slate-400 font-normal">(${s.time})</span></td>
-                    <td class="p-4 font-bold text-slate-800">${s.userName} <span class="text-[10px] text-slate-400">(${s.userId})</span></td>
-                    <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${s.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${s.team}</span></td>
+                  <tr>
+                    <td class="p-4">${cleanDisplayDate(s.date)}</td>
+                    <td class="p-4 font-bold text-slate-800">${s.userName}</td>
                     <td class="p-4">${s.leads}</td>
                     <td class="p-4 font-bold text-blue-600">${s.orders}</td>
-                    <td class="p-4 font-bold text-emerald-600">৳${s.amount.toLocaleString()}</td>
-                    <td class="p-4">
-                      <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold ${s.ratio >= 20 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}">
-                        ${s.ratio}%
-                      </span>
+                    <td class="p-4 font-black text-emerald-600">৳${s.amount.toLocaleString()}</td>
+                    <td class="p-4 text-[10px] text-slate-500">
+                      Ajwa:${s.ajwa} | PinkSalt:${s.pinkSalt} | Honey:${s.sunHoney} | Ghee:${s.gawaGhee}
                     </td>
-                    <td class="p-4 text-right space-x-1.5">
-                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600">
-                        <i class="fa-solid fa-pen-to-square"></i> Edit
-                      </button>
-                      <button onclick="handleDeleteCurrentReport('${s.userId}', '${s.date}')" class="px-3 py-1 rounded-lg text-xs font-bold bg-red-50 hover:bg-red-100 text-red-600">
-                        <i class="fa-solid fa-trash-can"></i> Delete
-                      </button>
+                    <td class="p-4 text-right">
+                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 bg-slate-100 text-slate-700 rounded font-bold hover:bg-slate-200">Edit / Delete</button>
                     </td>
                   </tr>
                 `).join('')}
@@ -1190,165 +341,24 @@
       `;
     }
 
-    function renderTargetSetupView() {
-      const users = getStored('users', []).filter(u => u.role === 'agent');
-
-      const nazimAgents = users.filter(u => u.team === 'Team Nazim');
-      const samadAgents = users.filter(u => u.team === 'Team Samad');
-
-      const nazimTotalAmount = nazimAgents.reduce((s, a) => s + (Number(a.monthlyAmountTarget) || 0), 0);
-      const nazimTotalOrders = nazimAgents.reduce((s, a) => s + (Number(a.monthlyOrdersTarget) || 0), 0);
-
-      const samadTotalAmount = samadAgents.reduce((s, a) => s + (Number(a.monthlyAmountTarget) || 0), 0);
-      const samadTotalOrders = samadAgents.reduce((s, a) => s + (Number(a.monthlyOrdersTarget) || 0), 0);
-
-      return `
-        <div class="space-y-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h2 class="text-xl font-black text-slate-900">Target Management (Automatic Team Leader Summation)</h2>
-              <p class="text-xs text-slate-400 font-semibold">টিম লিডারদের টার্গেট স্বয়ংক্রিয়ভাবে তাদের অধীনে থাকা এজেন্টদের টার্গেটের যোগফল (Sum) হিসেবে হিসাব হবে</p>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div class="p-5 rounded-2xl bg-orange-50/70 border border-orange-200">
-              <span class="text-xs font-black uppercase tracking-wider text-orange-800">Team Nazim Leader Goal (Md. Nazimur Rahman)</span>
-              <div class="flex items-baseline justify-between mt-2">
-                <span class="text-2xl font-black text-slate-900">৳${nazimTotalAmount.toLocaleString()}</span>
-                <span class="text-sm font-bold text-orange-700">${nazimTotalOrders} Orders (${nazimAgents.length} Agents)</span>
-              </div>
-              <p class="text-[11px] font-semibold text-slate-500 mt-1">Daily Target Sum: ৳${Math.round(nazimTotalAmount/26).toLocaleString()} (${Math.round(nazimTotalOrders/26)} Orders/day)</p>
-            </div>
-
-            <div class="p-5 rounded-2xl bg-blue-50/70 border border-blue-200">
-              <span class="text-xs font-black uppercase tracking-wider text-blue-800">Team Samad Leader Goal (Md Abdus Samad)</span>
-              <div class="flex items-baseline justify-between mt-2">
-                <span class="text-2xl font-black text-slate-900">৳${samadTotalAmount.toLocaleString()}</span>
-                <span class="text-sm font-bold text-blue-700">${samadTotalOrders} Orders (${samadAgents.length} Agents)</span>
-              </div>
-              <p class="text-[11px] font-semibold text-slate-500 mt-1">Daily Target Sum: ৳${Math.round(samadTotalAmount/26).toLocaleString()} (${Math.round(samadTotalOrders/26)} Orders/day)</p>
-            </div>
-          </div>
-
-          <div class="card-neo overflow-hidden">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 border-b border-slate-100 uppercase text-slate-400 font-bold">
-                <tr>
-                  <th class="p-4">Agent Name</th>
-                  <th class="p-4">Team</th>
-                  <th class="p-4">Monthly Target (Amount)</th>
-                  <th class="p-4">Daily Target (Amount ÷ 26)</th>
-                  <th class="p-4">Monthly Orders</th>
-                  <th class="p-4">Daily Orders</th>
-                  ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Action</th>' : ''}
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 font-medium">
-                ${users.map(u => {
-                  const mOrders = u.monthlyOrdersTarget || 260;
-                  const dOrders = Math.round(mOrders / 26);
-                  const mAmount = u.monthlyAmountTarget || 320000;
-                  const dAmount = Math.round(mAmount / 26);
-
-                  return `
-                    <tr class="hover:bg-slate-50/50">
-                      <td class="p-4 font-bold text-slate-800">${u.name} <div class="text-[10px] text-slate-400">ID: ${u.id}</div></td>
-                      <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${u.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${u.team}</span></td>
-                      <td class="p-4 font-extrabold text-emerald-600">৳${mAmount.toLocaleString()}</td>
-                      <td class="p-4 font-bold text-slate-700 bg-emerald-50/30">৳${dAmount.toLocaleString()} / day</td>
-                      <td class="p-4 font-extrabold text-blue-600">${mOrders} Orders</td>
-                      <td class="p-4 font-bold text-slate-700 bg-amber-50/50">${dOrders} / day</td>
-                      ${currentUser && currentUser.role === 'admin' ? `
-                        <td class="p-4 text-right">
-                          <button onclick="openTargetModal('${u.id}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
-                            <i class="fa-solid fa-pen-to-square"></i> Set Target
-                          </button>
-                        </td>
-                      ` : ''}
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-    }
-
-    function renderRankingView() {
+    function renderTeamStats() {
       const users = getStored('users', []).filter(u => u.role === 'agent');
       const sales = getStored('sales_records', []);
-
-      const agentRanks = users.map(u => {
-        const uSales = sales.filter(s => s.userId === u.id);
-        const orders = uSales.reduce((a, c) => a + c.orders, 0);
-        const amount = uSales.reduce((a, c) => a + c.amount, 0);
-        const leads = uSales.reduce((a, c) => a + c.leads, 0);
-        const ratio = leads > 0 ? Number(((orders / leads) * 100).toFixed(1)) : 0;
-        const target = u.monthlyAmountTarget || 320000;
-        const achieve = target > 0 ? Math.round((amount / target) * 100) : 0;
-        return { ...u, orders, amount, leads, ratio, achieve };
-      });
-
-      agentRanks.sort((a, b) => b.amount - a.amount || b.orders - a.orders);
-
+      
       return `
         <div class="space-y-6">
-          <div>
-            <h2 class="text-xl font-black text-slate-900">Overall Agent Rankings & Leaderboard</h2>
-            <p class="text-xs text-slate-400 font-semibold">Real-time performance hierarchy across all teams (Sorted by Revenue Amount)</p>
-          </div>
-
+          <h2 class="text-xl font-black text-slate-900">Agent Team Tracking</h2>
           <div class="card-neo overflow-hidden">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 border-b border-slate-100 uppercase text-slate-400 font-bold">
-                <tr>
-                  <th class="p-4">Rank</th>
-                  <th class="p-4">Agent Name</th>
-                  <th class="p-4">Team</th>
-                  <th class="p-4">Total Amount (৳)</th>
-                  <th class="p-4">Total Orders</th>
-                  <th class="p-4">Conversion Rate</th>
-                  <th class="p-4">Amount Achievement</th>
-                  ${currentUser && currentUser.role === 'admin' ? '<th class="p-4 text-right">Action</th>' : ''}
-                </tr>
+              <thead class="bg-slate-50 border-b uppercase font-bold text-slate-500">
+                <tr><th class="p-4">Agent</th><th class="p-4">Grade</th><th class="p-4">Working Target (w/ 5%)</th><th class="p-4">Total Revenue Achieved</th></tr>
               </thead>
-              <tbody class="divide-y divide-slate-100 font-medium">
-                ${agentRanks.map((ag, index) => {
-                  let rankBadge = `<span class="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs">${index + 1}</span>`;
-                  if (index === 0) rankBadge = `<span class="w-6 h-6 rounded-full bg-amber-400 text-white flex items-center justify-center font-bold text-xs shadow-md"><i class="fa-solid fa-crown text-[10px]"></i></span>`;
-                  if (index === 1) rankBadge = `<span class="w-6 h-6 rounded-full bg-slate-300 text-slate-800 flex items-center justify-center font-bold text-xs">2</span>`;
-                  if (index === 2) rankBadge = `<span class="w-6 h-6 rounded-full bg-amber-700 text-white flex items-center justify-center font-bold text-xs">3</span>`;
-
-                  return `
-                    <tr class="hover:bg-slate-50/50">
-                      <td class="p-4">${rankBadge}</td>
-                      <td class="p-4 font-bold text-slate-800">
-                        <span class="hover:text-blue-600 cursor-pointer" onclick="openReportModal('${ag.id}')">${ag.name}</span> 
-                        <span class="text-[10px] text-slate-400">(${ag.id})</span>
-                      </td>
-                      <td class="p-4"><span class="px-2 py-0.5 rounded font-bold ${ag.team === 'Team Nazim' ? 'badge-soft-orange' : 'badge-soft-blue'}">${ag.team}</span></td>
-                      <td class="p-4 font-black text-emerald-600 text-sm">৳${ag.amount.toLocaleString()}</td>
-                      <td class="p-4 font-bold text-slate-900">${ag.orders}</td>
-                      <td class="p-4 font-bold text-blue-600">${ag.ratio}%</td>
-                      <td class="p-4">
-                        <div class="flex items-center gap-2">
-                          <span class="font-extrabold text-slate-700">${ag.achieve}%</span>
-                          <div class="w-20 bg-slate-100 rounded-full h-1.5">
-                            <div class="bg-blue-600 h-1.5 rounded-full" style="width: ${Math.min(100, ag.achieve)}%"></div>
-                          </div>
-                        </div>
-                      </td>
-                      ${currentUser && currentUser.role === 'admin' ? `
-                      <td class="p-4 text-right">
-                        <button onclick="openReportModal('${ag.id}')" class="px-3 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100">
-                          Add Report
-                        </button>
-                      </td>
-                      ` : ''}
-                    </tr>
-                  `;
+              <tbody class="divide-y font-medium">
+                ${users.map(ag => {
+                  const agSales = sales.filter(s => s.userId === ag.id);
+                  const rev = agSales.reduce((a, c) => a + c.amount, 0);
+                  const workingTgt = Math.round(ag.baseTarget * 1.05);
+                  return `<tr><td class="p-4 font-bold">${ag.name} (${ag.id})</td><td class="p-4 font-black">${ag.grade}</td><td class="p-4">৳${workingTgt.toLocaleString()}</td><td class="p-4 font-black text-emerald-600">৳${rev.toLocaleString()}</td></tr>`;
                 }).join('')}
               </tbody>
             </table>
@@ -1357,82 +367,144 @@
       `;
     }
 
-    function renderSettingsView() {
+    function renderSubmitModal() {
+      const u = currentUser;
+      const users = getStored('users', []).filter(usr => usr.role === 'agent');
+      
       return `
-        <div class="max-w-xl card-neo p-6 space-y-5">
-          <div>
-            <h2 class="text-lg font-black text-slate-900">Google Sheets Storage & Central Cloud Sync</h2>
-            <p class="text-xs text-slate-400 font-semibold mt-1">Webhook URL to sync all real-time submissions automatically across all computers</p>
+        <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-base font-extrabold text-slate-900">Enter Sales & Product Data</h3>
+              <button onclick="closeModal('submitModal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleSalesSubmit(event)" class="space-y-4">
+              
+              <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Select Agent</label>
+                <select id="subAgentId" onchange="onModalChange()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                  ${users.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id})</option>`).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Date</label>
+                <input type="date" id="subDate" required onchange="onModalChange()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+              </div>
+
+              <div class="grid grid-cols-3 gap-3">
+                <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Leads</label><input type="number" id="subLeads" required min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold"></div>
+                <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Orders</label><input type="number" id="subOrders" required min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold"></div>
+                <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Total Amount (৳)</label><input type="number" id="subAmount" required min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold"></div>
+              </div>
+
+              <div class="border-t pt-4 mt-4">
+                <h4 class="text-xs font-black text-slate-800 uppercase mb-3"><i class="fa-solid fa-box-open mr-1 text-amber-500"></i> Product Targets (Enter KG Sold)</h4>
+                <div class="grid grid-cols-2 gap-3">
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Ajwa (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Pink Salt (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Black Garlic (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Sun. Honey (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">BS Honey (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Gawa Ghee (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                </div>
+              </div>
+
+              <div class="flex justify-between items-center pt-4">
+                <button type="button" id="deleteReportBtn" onclick="handleDelete()" class="hidden px-4 py-2.5 text-xs font-bold text-red-600 bg-red-50 rounded-xl">Delete Record</button>
+                <div class="flex gap-2 ml-auto">
+                  <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                  <button type="submit" class="px-6 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-xl shadow-lg">Save Data</button>
+                </div>
+              </div>
+            </form>
           </div>
-          <div>
-            <label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Google Apps Script Web App URL</label>
-            <input type="url" id="settingsWebhook" value="${webhookUrl}" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-blue-500">
-          </div>
-          <button onclick="saveSettingsWebhook()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md">
-            Save & Connect Cloud
-          </button>
         </div>
       `;
-    }
-
-    function saveSettingsWebhook() {
-      const url = document.getElementById('settingsWebhook').value.trim();
-      webhookUrl = url || DEFAULT_WEBHOOK_URL;
-      localStorage.setItem('gb_webhook_url', webhookUrl);
-      alert('Webhook URL updated! Now fetching live cloud data...');
-      fetchFromSheet();
-    }
-
-    function attachCharts() {
-      if (activeTab === 'dashboard') {
-        const ctx = document.getElementById('salesTrendChart');
-        if (ctx) {
-          new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-              datasets: [{
-                label: 'Sales Revenue (৳)',
-                data: [15000, 28000, 42000, 35000, 58000, 62000, 48000],
-                backgroundColor: '#2563eb',
-                borderRadius: 8
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false } },
-              scales: {
-                y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
-                x: { grid: { display: false }, ticks: { font: { size: 10 } } }
-              }
-            }
-          });
-        }
-      } else if (activeTab === 'performance') {
-        const ctxP = document.getElementById('conversionPieChart');
-        if (ctxP) {
-          new Chart(ctxP, {
-            type: 'doughnut',
-            data: {
-              labels: ['Converted Orders', 'Unconverted Leads'],
-              datasets: [{
-                data: [58, 362],
-                backgroundColor: ['#059669', '#e2e8f0']
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { position: 'bottom' } }
-            }
-          });
-        }
-      }
     }
 
     function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
     function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
+
+    function openReportModal(agentId, dateStr) {
+      document.getElementById('subDate').value = dateToInputVal(dateStr || getTodayFormatted());
+      if (currentUser.role === 'admin' && agentId) { document.getElementById('subAgentId').value = agentId; }
+      onModalChange();
+      openModal('submitModal');
+    }
+
+    function onModalChange() {
+      const u = currentUser;
+      const agentId = u.role === 'admin' ? document.getElementById('subAgentId').value : u.id;
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+      
+      const sales = getStored('sales_records', []);
+      const existing = sales.find(s => s.userId === agentId && s.date === dateStr);
+      
+      if (existing) {
+        document.getElementById('subLeads').value = existing.leads || '';
+        document.getElementById('subOrders').value = existing.orders || '';
+        document.getElementById('subAmount').value = existing.amount || '';
+        document.getElementById('subAjwa').value = existing.ajwa || '';
+        document.getElementById('subPinkSalt').value = existing.pinkSalt || '';
+        document.getElementById('subBlackGarlic').value = existing.blackGarlic || '';
+        document.getElementById('subSunHoney').value = existing.sunHoney || '';
+        document.getElementById('subBSHoney').value = existing.bsHoney || '';
+        document.getElementById('subGawaGhee').value = existing.gawaGhee || '';
+        document.getElementById('deleteReportBtn').classList.remove('hidden');
+      } else {
+        ['subLeads','subOrders','subAmount','subAjwa','subPinkSalt','subBlackGarlic','subSunHoney','subBSHoney','subGawaGhee'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('deleteReportBtn').classList.add('hidden');
+      }
+    }
+
+    async function handleSalesSubmit(e) {
+      e.preventDefault();
+      const u = currentUser;
+      const allUsers = getStored('users', []);
+      const targetAgent = u.role === 'admin' ? allUsers.find(usr => usr.id === document.getElementById('subAgentId').value) : u;
+
+      const entry = {
+        userId: targetAgent.id,
+        userName: targetAgent.name,
+        team: targetAgent.team,
+        date: inputValToDateStr(document.getElementById('subDate').value),
+        leads: Number(document.getElementById('subLeads').value) || 0,
+        orders: Number(document.getElementById('subOrders').value) || 0,
+        amount: Number(document.getElementById('subAmount').value) || 0,
+        ratio: Number(document.getElementById('subLeads').value) > 0 ? Number((Number(document.getElementById('subOrders').value) / Number(document.getElementById('subLeads').value) * 100).toFixed(2)) : 0,
+        ajwa: Number(document.getElementById('subAjwa').value) || 0,
+        pinkSalt: Number(document.getElementById('subPinkSalt').value) || 0,
+        blackGarlic: Number(document.getElementById('subBlackGarlic').value) || 0,
+        sunHoney: Number(document.getElementById('subSunHoney').value) || 0,
+        bsHoney: Number(document.getElementById('subBSHoney').value) || 0,
+        gawaGhee: Number(document.getElementById('subGawaGhee').value) || 0
+      };
+
+      await postToSheet('DAILY_SALES_SUBMIT', entry);
+      
+      let sales = getStored('sales_records', []);
+      const idx = sales.findIndex(s => s.userId === entry.userId && s.date === entry.date);
+      if (idx !== -1) sales[idx] = entry; else sales.unshift(entry);
+      setStored('sales_records', sales);
+      
+      alert(`ডেটা সেভ হয়েছে!`); closeModal('submitModal'); renderAppLayout(); fetchFromSheet();
+    }
+
+    async function handleDelete() {
+      const u = currentUser;
+      const agentId = u.role === 'admin' ? document.getElementById('subAgentId').value : u.id;
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+
+      if (!confirm(`এই রিপোর্ট ডিলিট করবেন?`)) return;
+      await postToSheet('DELETE_SALES_RECORD', { userId: agentId, date: dateStr });
+      
+      let sales = getStored('sales_records', []);
+      sales = sales.filter(s => !(s.userId === agentId && s.date === dateStr));
+      setStored('sales_records', sales);
+      
+      alert('রিপোর্ট ডিলিট হয়েছে!'); closeModal('submitModal'); renderAppLayout(); fetchFromSheet();
+    }
 
     window.addEventListener('load', init);
   </script>
