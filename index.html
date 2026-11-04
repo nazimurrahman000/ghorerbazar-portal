@@ -596,8 +596,6 @@
 
     function renderAppLayout() {
       const u = currentUser;
-      // Balanced container width: standard executive width for Dashboard, slightly wider for Roster so tables don't scroll
-      const containerMaxW = activeTab === 'roster' ? 'max-w-[1520px]' : 'max-w-[1340px]';
 
       const html = `
         <div class="flex-1 flex min-h-screen">
@@ -649,37 +647,40 @@
           </aside>
 
           <div class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
-            <header class="h-14 px-6 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-              <div class="flex items-center gap-3">
-                <span class="text-xs font-extrabold text-slate-400 uppercase">Ghorerbazar FB</span>
+            <!-- Spacious, Non-Clipped Top Header Bar -->
+            <header class="min-h-[72px] py-3 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm shrink-0">
+              <div class="flex items-center gap-3 flex-wrap">
+                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
                 <span class="text-slate-300">/</span>
-                <h2 class="text-xs font-black uppercase text-blue-600">${activeTab}</h2>
+                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab}</h2>
                 <span class="text-slate-300">•</span>
-                <div class="flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg" title="Switch month to view past performance history or set up next month's targets & roster">
+                <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
                   <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
-                  <span class="text-[10px] font-extrabold uppercase text-slate-500">Month:</span>
+                  <span class="text-[11px] font-extrabold uppercase text-slate-500">Month:</span>
                   <select onchange="changeSelectedMonth(this.value)" class="bg-transparent text-xs font-black text-blue-800 focus:outline-none cursor-pointer">
                     ${AVAILABLE_MONTHS.map(m => `<option value="${m.key}" ${m.key === selectedMonthKey ? 'selected' : ''}>${m.label}</option>`).join('')}
                   </select>
                 </div>
               </div>
 
-              <div class="flex items-center gap-4">
-                <button onclick="fetchFromSheet()" class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-lg flex items-center gap-1.5 hover:bg-emerald-100">
+              <div class="flex items-center gap-4 shrink-0">
+                <button onclick="fetchFromSheet()" class="px-3.5 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-xl flex items-center gap-2 hover:bg-emerald-100 transition-colors">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Sync Now
                 </button>
-                <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200">
-                  <div class="w-8 h-8 rounded-xl tab-active text-white flex items-center justify-center font-black text-xs">
+                <div class="flex items-center gap-3 pl-4 border-l border-slate-200 py-1">
+                  <div class="w-10 h-10 rounded-xl tab-active text-white flex items-center justify-center font-black text-sm shadow-sm shrink-0">
                     ${u.name.charAt(0)}
                   </div>
-                  <div class="text-left">
-                    <p class="text-xs font-extrabold text-slate-900 leading-none">${u.name}</p>
-                    <span class="text-[10px] font-bold text-orange-600 uppercase">${u.role === 'admin' ? `Admin (${u.team})` : `${u.team} • Grade ${u.grade}`}</span>
+                  <div class="text-left leading-tight">
+                    <p class="text-sm font-extrabold text-slate-900">${u.name}</p>
+                    <p class="text-[11px] font-extrabold text-orange-600 uppercase mt-0.5">${u.role === 'admin' ? `Admin (${u.team})` : `${u.team} • Grade ${u.grade}`}</p>
                   </div>
                 </div>
               </div>
             </header>
-            <main class="p-5 lg:p-6 ${containerMaxW} w-full mx-auto flex-1">${renderTabContent()}</main>
+
+            <!-- Roster-Width Container (max-w-[1540px]) for all tabs so side gaps are minimal and uniform -->
+            <main class="p-5 lg:px-7 lg:py-6 max-w-[1540px] w-full mx-auto flex-1">${renderTabContent()}</main>
           </div>
         </div>
         ${renderSubmitModal()}
@@ -886,7 +887,6 @@
 
           ${renderCompactTopWidgets(incentiveSummary)}
 
-          <!-- Compact Balanced 5 KPI Cards -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             <div class="kpi-card-1 p-4 rounded-2xl flex flex-col justify-between">
               <div class="flex justify-between items-center">
