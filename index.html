@@ -63,7 +63,7 @@
 
     const DEFAULT_USERS = [
       { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
-      { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: 'admin123', grade: 'TL', baseTarget: 0 },
+      { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: '123nazim', grade: 'TL', baseTarget: 0 },
       { id: '10107', name: 'Md Abdus Samad', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 0 },
       
       { id: '10191', name: 'Shagor Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A-', baseTarget: 1232174 },
@@ -134,6 +134,10 @@
         copy.role = 'admin';
         copy.name = String(copy.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
         copy.grade = 'TL';
+        // Ensure Nazim's password upgrades from old default 'admin123' to '123nazim'
+        if (String(copy.id) === '10122' && (!copy.pass || copy.pass === 'admin123')) {
+          copy.pass = '123nazim';
+        }
       } else if (copy.role === 'supervisor' || String(copy.id) === '10001') {
         copy.role = 'supervisor';
         copy.grade = 'Supervisor';
@@ -180,7 +184,6 @@
     let monthlyPerfTeamScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
     let monthlyPerfAgentId = 'ALL';
 
-    // Activity Logs Filters
     let activityTeamFilter = 'ALL';
 
     let pollInterval = null;
@@ -196,14 +199,11 @@
     }
 
     // STRICT ROLE & PRIVACY HELPERS
-    function isSuperAdmin(u) { return u && String(u.id) === '10122'; } // Nazim (10122)
-    function isFullAdmin(u) { return u && u.role === 'admin'; } // Nazim (10122) or Samad (10107)
+    function isSuperAdmin(u) { return u && String(u.id) === '10122'; }
+    function isFullAdmin(u) { return u && u.role === 'admin'; }
     function isSupervisor(u) { return u && u.role === 'supervisor'; }
     function canViewAll(u) { return u && (u.role === 'admin' || u.role === 'supervisor'); }
 
-    // Can actor view targetUser's password?
-    // Nazim (10122) can see everyone's password.
-    // Samad (10107) can see everyone's password EXCEPT Nazim's (10122).
     function canViewTargetPassword(actor, targetUser) {
       if (!actor || !targetUser || !isFullAdmin(actor)) return false;
       if (isSuperAdmin(actor)) return true;
@@ -211,7 +211,6 @@
       return true;
     }
 
-    // Can actor delete targetUser?
     function canDeleteTargetUser(actor, targetUser) {
       if (!actor || !targetUser || !isFullAdmin(actor)) return false;
       if (String(targetUser.id) === String(actor.id) || String(targetUser.id) === '10122') return false;
@@ -219,7 +218,6 @@
       return targetUser.role === 'agent';
     }
 
-    // Can actor edit targetUser?
     function canEditTargetUser(actor, targetUser) {
       if (!actor || !targetUser || !isFullAdmin(actor)) return false;
       if (isSuperAdmin(actor)) return true;
@@ -293,7 +291,6 @@
       return `${h}:${m}:${s}`;
     }
 
-    // RECORD ACTIVITY LOG (Locally + Cloud Sync)
     function recordActivityLog(actionTitle, detailsText, sendStandaloneSync = false) {
       if (!currentUser) return {};
       const logEntry = {
@@ -752,7 +749,7 @@
       e.preventDefault();
       const id = document.getElementById('loginId').value.trim();
       const pass = document.getElementById('loginPass').value.trim();
-      const rawUser = getStored('users', DEFAULT_USERS).find(u => String(u.id) === id && u.pass === pass);
+      const rawUser = getStored('users', DEFAULT_USERS).map(normalizeUserRecord).find(u => String(u.id) === id && u.pass === pass);
       if (!rawUser) { alert('Invalid Employee ID or Password!'); return; }
       const user = normalizeUserRecord(rawUser);
       currentUser = user;
@@ -1379,7 +1376,6 @@
       `;
     }
 
-    // MONTHLY PERFORMANCE TAB (With Date-Wise Breakdown + Total Sum Footer for Agents & Selected Agent)
     function renderMonthlyPerformanceView() {
       const u = currentUser;
       const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
@@ -1405,7 +1401,6 @@
 
       const agentRows = displayedAgents.map(ag => {
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
-        // Deduplicate date entries per agent
         const dateMap = new Map();
         agSales.forEach(s => { if (!dateMap.has(s.date)) dateMap.set(s.date, s); });
         const uniqueDailyLogs = Array.from(dateMap.values()).sort((a, b) => {
@@ -1489,7 +1484,6 @@
             ` : ''}
           </div>
 
-          <!-- Monthly Summary Table -->
           <div class="card-dynamic overflow-hidden overflow-x-auto">
             <table class="w-full text-left text-xs whitespace-nowrap">
               <thead class="table-header-light uppercase font-extrabold">
@@ -1554,9 +1548,7 @@
           ${singleAgentObj ? (() => {
             const dTargetSingle = Math.round(singleAgentObj.workTgt / 26);
             const sumDailyTgtSingle = dTargetSingle * singleAgentObj.dailyLogs.length;
-            const sumDailyAchSingle = sumDailyTgtSingle > 0 ? Math.round((singleAgentObj.rev / sumDailyTgtSingle) * 100) : 0;
             return `
-            <!-- Date-Wise Monthly Performance Table with Total Sum Footer -->
             <div class="space-y-3 mt-6">
               <div class="flex items-center justify-between bg-white px-5 py-3.5 rounded-2xl border border-slate-200">
                 <div>
@@ -1603,7 +1595,6 @@
                       `;
                     }).join('')}
                   </tbody>
-                  <!-- TOTAL SUM FOOTER FOR DATE-WISE TABLE -->
                   <tfoot class="bg-slate-900 text-white font-black text-xs">
                     <tr>
                       <td class="p-4 uppercase tracking-wider text-amber-400">
@@ -1629,7 +1620,6 @@
       `;
     }
 
-    // NEW TAB: ACTIVITY LOGS (Admins & Supervisors see all logs including own; Agents see only their own logs)
     function renderActivityLogsView() {
       const u = currentUser;
       const allLogs = getStored('activity_logs', []);
@@ -2344,11 +2334,9 @@
       `;
     }
 
-    // MONTHLY SETUP & IDs TAB (Supervisor cannot see Admin IDs; Samad cannot see Nazim's password)
     function renderManageAgents() {
       const u = currentUser;
       let allUsers = getUsersForMonth(selectedMonthKey);
-      // Supervisors cannot see Admin IDs (10122, 10107) in the list
       if (isSupervisor(u)) {
         allUsers = allUsers.filter(usr => usr.role !== 'admin');
       }
@@ -2906,7 +2894,6 @@
       }
 
       let roleVal = document.getElementById('usrRole').value;
-      // Prevent Samad (or non-SuperAdmin) from creating an 'admin' role account
       if (roleVal === 'admin' && !isSuperAdmin(currentUser) && String(targetId) !== String(currentUser.id)) {
         alert('Permission Denied: Only Nazim (Super Admin) can create Admin accounts. You can create Agent or Supervisor IDs.');
         return;
