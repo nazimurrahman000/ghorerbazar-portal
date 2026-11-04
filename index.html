@@ -1,668 +1,2605 @@
-function doGet(e) { return handleRequest(e); }
-function doPost(e) { return handleRequest(e); }
-
-// MASTER DYNAMIC SHEET STYLING ENGINE
-function styleSheetModern(sheet, headers, themeColor, colWidths) {
-  var maxCols = headers.length;
-  var headerRange = sheet.getRange(1, 1, 1, maxCols);
-  headerRange.setValues([headers])
-             .setBackground(themeColor || "#0f172a")
-             .setFontColor("#ffffff")
-             .setFontFamily("Arial")
-             .setFontSize(10)
-             .setFontWeight("bold")
-             .setHorizontalAlignment("center")
-             .setVerticalAlignment("middle");
-  
-  sheet.setFrozenRows(1);
-  sheet.setRowHeight(1, 36);
-
-  // Set custom comfortable column widths so data is never cramped
-  if (colWidths && colWidths.length === maxCols) {
-    for (var c = 0; c < maxCols; c++) {
-      sheet.setColumnWidth(c + 1, colWidths[c]);
-    }
-  }
-
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var numRows = lastRow - 1;
-    var dataRange = sheet.getRange(2, 1, numRows, maxCols);
-    dataRange.setFontFamily("Arial")
-             .setFontSize(10)
-             .setVerticalAlignment("middle")
-             .setHorizontalAlignment("center")
-             .setBorder(true, true, true, true, true, true, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
-
-    // Apply clean alternating row colors (Zebra Striping)
-    var bgColors = [];
-    for (var r = 0; r < numRows; r++) {
-      var rowColor = (r % 2 === 0) ? "#ffffff" : "#f8fafc";
-      var rowArr = [];
-      for (var col = 0; col < maxCols; col++) rowArr.push(rowColor);
-      bgColors.push(rowArr);
-    }
-    dataRange.setBackgrounds(bgColors);
-  }
-}
-
-function secondsToHMS(sec) {
-  sec = Number(sec) || 0;
-  var h = Math.floor(sec / 3600);
-  var m = Math.floor((sec % 3600) / 60);
-  var s = Math.floor(sec % 60);
-  return (h < 10 ? "0" + h : h) + ":" + (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
-}
-
-function cleanSheetTime(val) {
-  if (!val) return "--:--";
-  if (Object.prototype.toString.call(val) === "[object Date]") {
-    return Utilities.formatDate(val, "Asia/Dhaka", "hh:mm:ss a");
-  }
-  var s = String(val).replace(/^'/, "").trim();
-  if (s.indexOf("1899") !== -1 || s.indexOf("GMT") !== -1) {
-    var d = new Date(s);
-    if (!isNaN(d.getTime())) {
-      return Utilities.formatDate(d, "Asia/Dhaka", "hh:mm:ss a");
-    }
-  }
-  return s || "--:--";
-}
-
-function seedDefaultUsersIfEmpty(userSheet) {
-  if (userSheet.getLastRow() <= 1) {
-    var defaults = [
-      ["10001", "Facebook Supervisor", "supervisor", "All Teams", "sup123", "Supervisor", 0],
-      ["10122", "Md. Nazimur Rahman", "admin", "Team Nazim", "123nazim", "TL", 0],
-      ["10107", "Md Abdus Samad", "admin", "Team Samad", "admin123", "TL", 0],
-      ["10191", "Shagor Ahmed", "agent", "Team Nazim", "123456", "A-", 1232174],
-      ["10289", "Abdullah Dipu", "agent", "Team Nazim", "123456", "A+", 1619218],
-      ["11044", "Hasibul Islam Eraz", "agent", "Team Nazim", "123456", "B", 1132174],
-      ["10741", "Kamruzzaman Shujon", "agent", "Team Nazim", "123456", "C", 1032175],
-      ["10803", "Md. Abdullah Mahmud", "agent", "Team Nazim", "123456", "A", 1332174],
-      ["11042", "Md. Ashiqur Rahman", "agent", "Team Nazim", "123456", "B", 1132174],
-      ["10328", "Sheikh MD Rayhan", "agent", "Team Nazim", "123456", "A", 1332174],
-      ["10135", "Ranju Ahmed", "agent", "Team Nazim", "123456", "A", 1332174],
-      ["10098", "Habibur Rahman Shuvo", "agent", "Team Samad", "123456", "A-", 1232174],
-      ["10136", "Al-Amin Kazi", "agent", "Team Samad", "123456", "A+", 1619218],
-      ["11007", "Zubayer Al Mahmud", "agent", "Team Samad", "123456", "C", 1032175],
-      ["11101", "Md. Mehedi Amin", "agent", "Team Samad", "123456", "C", 1032175],
-      ["11120", "Abu Sayed", "agent", "Team Samad", "123456", "C", 1032175],
-      ["11130", "Rabbir Hossain Molla", "agent", "Team Samad", "123456", "B", 1132174],
-      ["10806", "Abdullah Al Soad", "agent", "Team Samad", "123456", "A", 1332174],
-      ["10128", "Al-Amin", "agent", "Team Samad", "123456", "A", 1332174]
-    ];
-    userSheet.getRange(2, 1, defaults.length, 7).setValues(defaults);
-  }
-}
-
-function styleSalesSheetSpecifics(sheet) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var numRows = lastRow - 1;
-    sheet.getRange(2, 4, numRows, 1).setHorizontalAlignment("left").setFontWeight("bold");
-    sheet.getRange(2, 7, numRows, 2).setNumberFormat("#,##0");
-    sheet.getRange(2, 9, numRows, 1).setHorizontalAlignment("right").setNumberFormat("#,##0").setFontWeight("bold").setFontColor("#047857");
-    sheet.getRange(2, 10, numRows, 1).setNumberFormat("0.00").setFontWeight("bold").setFontColor("#1d4ed8");
-    sheet.getRange(2, 11, numRows, 6).setNumberFormat("0.00");
-  }
-}
-
-function styleUsersSheetSpecifics(sheet) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var numRows = lastRow - 1;
-    sheet.getRange(2, 1, numRows, 1).setFontWeight("bold").setFontColor("#1d4ed8");
-    sheet.getRange(2, 2, numRows, 1).setHorizontalAlignment("left").setFontWeight("bold");
-    sheet.getRange(2, 6, numRows, 1).setFontWeight("bold");
-    sheet.getRange(2, 7, numRows, 1).setHorizontalAlignment("right").setNumberFormat("#,##0").setFontWeight("bold");
-  }
-}
-
-function styleAttendanceSheetSpecifics(sheet) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var numRows = lastRow - 1;
-    sheet.getRange(2, 3, numRows, 1).setHorizontalAlignment("left").setFontWeight("bold");
-    sheet.getRange(2, 7, numRows, 1).setFontWeight("bold").setFontColor("#047857");
-    sheet.getRange(2, 8, numRows, 1).setFontWeight("bold").setFontColor("#b45309");
-    sheet.getRange(2, 11, numRows, 1).setHorizontalAlignment("left");
-
-    // Color-code Status column (Col 9)
-    var statuses = sheet.getRange(2, 9, numRows, 1).getValues();
-    var bgArr = [];
-    var fgArr = [];
-    for (var i = 0; i < statuses.length; i++) {
-      var st = String(statuses[i][0] || "").trim();
-      if (st === "Working") { bgArr.push(["#dcfce7"]); fgArr.push(["#166534"]); }
-      else if (st === "On Break") { bgArr.push(["#fef3c7"]); fgArr.push(["#92400e"]); }
-      else { bgArr.push(["#e2e8f0"]); fgArr.push(["#334155"]); }
-    }
-    sheet.getRange(2, 9, numRows, 1).setBackgrounds(bgArr).setFontColors(fgArr).setFontWeight("bold");
-  }
-}
-
-function styleRosterSheetSpecifics(sheet) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var numRows = lastRow - 1;
-    sheet.getRange(2, 3, numRows, 1).setHorizontalAlignment("left").setFontWeight("bold");
-    var shiftRange = sheet.getRange(2, 5, numRows, 7);
-    var vals = shiftRange.getValues();
-    var bgs = [];
-    var fgs = [];
-    for (var r = 0; r < vals.length; r++) {
-      var bRow = [], fRow = [];
-      for (var c = 0; c < 7; c++) {
-        var v = String(vals[r][c] || "").replace(/'/g, "").trim().toUpperCase();
-        if (v === "DO") { bRow.push("#fed7aa"); fRow.push("#9a3412"); }
-        else if (v.indexOf("NIGHT") !== -1) { bRow.push("#e0e7ff"); fRow.push("#1e40af"); }
-        else { bRow.push((r % 2 === 0) ? "#ffffff" : "#f8fafc"); fRow.push("#0f172a"); }
-      }
-      bgs.push(bRow);
-      fgs.push(fRow);
-    }
-    shiftRange.setBackgrounds(bgs).setFontColors(fgs).setFontWeight("bold");
-  }
-}
-
-function styleActivityLogsSpecifics(sheet) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var numRows = lastRow - 1;
-    sheet.getRange(2, 4, numRows, 1).setHorizontalAlignment("left").setFontWeight("bold");
-    sheet.getRange(2, 7, numRows, 1).setFontWeight("bold").setFontColor("#4338ca");
-    sheet.getRange(2, 8, numRows, 1).setHorizontalAlignment("left");
-  }
-}
-
-function appendActivityLog(logSheet, p, defaultActionTitle, defaultDetails) {
-  var now = new Date();
-  var dateStr = p.logDate || Utilities.formatDate(now, "Asia/Dhaka", "dd/MM/yyyy");
-  var timeStr = p.logTime || Utilities.formatDate(now, "Asia/Dhaka", "hh:mm:ss a");
-  var actorId = String(p.actorId || p.pingUserId || p.userId || "").trim();
-  var actorName = String(p.actorName || p.pingName || p.userName || "").trim();
-  var actorRole = String(p.actorRole || p.pingRole || "agent").trim();
-  var actorTeam = String(p.actorTeam || p.pingTeam || p.team || "").trim();
-  var actTitle = String(p.logAction || defaultActionTitle || "System Activity");
-  var actDetails = String(p.logDetails || defaultDetails || "");
-
-  if (!actorId) return;
-  logSheet.appendRow([
-    "'" + dateStr,
-    "'" + timeStr,
-    actorId,
-    actorName,
-    actorRole,
-    actorTeam,
-    actTitle,
-    actDetails
-  ]);
-}
-
-function handleRequest(e) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // 1. Setup Sales_Logs
-  var salesHeaders = [
-    "Timestamp", "Action", "Emp ID", "Agent Name", "Team", "Report Date", 
-    "Leads", "Orders", "Amount (BDT)", "Conv. Ratio (%)", 
-    "Ajwa (kg)", "Pink Salt (kg)", "Black Garlic (kg)", "Sundarban Honey (kg)", "Black Seed Honey (kg)", "Gawa Ghee (kg)", "Status"
-  ];
-  var salesWidths = [155, 135, 80, 175, 110, 105, 75, 75, 120, 115, 95, 100, 115, 140, 145, 115, 95];
-  var sheet = ss.getSheetByName("Sales_Logs") || ss.insertSheet("Sales_Logs");
-
-  // 2. Setup Users_List
-  var userHeaders = ["Emp ID", "Name", "Role", "Team", "Password", "Grade", "Base Target (BDT)"];
-  var userWidths = [90, 185, 100, 120, 110, 95, 140];
-  var userSheet = ss.getSheetByName("Users_List") || ss.insertSheet("Users_List");
-  seedDefaultUsersIfEmpty(userSheet);
-
-  // 3. Setup Attendance_Logs
-  var attHeaders = [
-    "Date", "Emp ID", "Agent Name", "Team", "Login Time", "Logout Time", 
-    "Working Time", "Break Time", "Current Status", "Break Reason", "Break History", 
-    "ActiveSecs", "BreakSecs", "LastTickMs"
-  ];
-  var attWidths = [100, 85, 175, 110, 110, 110, 110, 105, 115, 150, 260, 90, 90, 120];
-  var attSheet = ss.getSheetByName("Attendance_Logs") || ss.insertSheet("Attendance_Logs");
-
-  // 4. Setup Duty_Roster
-  var rosterHeaders = ["MonthKey", "Emp ID", "Name", "Team", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-  var rosterWidths = [95, 85, 175, 110, 100, 100, 100, 100, 100, 100, 100];
-  var rosterSheet = ss.getSheetByName("Duty_Roster") || ss.insertSheet("Duty_Roster");
-
-  // 5. Setup Monthly_Configs
-  var cfgHeaders = ["MonthKey", "ConfigJSON", "UpdatedAt"];
-  var cfgWidths = [100, 420, 160];
-  var cfgSheet = ss.getSheetByName("Monthly_Configs") || ss.insertSheet("Monthly_Configs");
-
-  // 6. Setup Online_Status
-  var onlineHeaders = ["Emp ID", "Name", "Role", "Team", "State", "LastSeenMs"];
-  var onlineWidths = [90, 180, 100, 120, 110, 130];
-  var onlineSheet = ss.getSheetByName("Online_Status") || ss.insertSheet("Online_Status");
-
-  // 7. Setup Activity_Logs
-  var actLogHeaders = ["Date", "Time", "Emp ID", "Name", "Role", "Team", "Action", "Details"];
-  var actLogWidths = [100, 110, 85, 175, 95, 115, 165, 380];
-  var actLogSheet = ss.getSheetByName("Activity_Logs") || ss.insertSheet("Activity_Logs");
-  
-  var p = {};
-  if (e && e.parameter) {
-    p = e.parameter;
-    if (p.payload) {
-      try { p = JSON.parse(p.payload); } catch(err) {}
-    }
-  }
-
-  var action = p.action || "";
-
-  // Record Online Presence Heartbeat
-  var pingUid = String(p.pingUserId || p.userId || "").trim();
-  if (pingUid && action !== "DELETE_USER" && action !== "DELETE_ATTENDANCE" && action !== "DELETE_SALES_RECORD") {
-    var oLast = onlineSheet.getLastRow();
-    var oFound = false;
-    var pState = String(p.pingState || p.status || "Online");
-    if (action === "USER_LOGOUT") pState = "Offline";
-    var nowMs = Date.now();
-
-    if (oLast > 1) {
-      var oRows = onlineSheet.getRange(2, 1, oLast - 1, 1).getValues();
-      for (var oi = 0; oi < oRows.length; oi++) {
-        if (String(oRows[oi][0]).trim() === pingUid) {
-          onlineSheet.getRange(oi + 2, 1, 1, 6).setValues([[
-            pingUid,
-            String(p.pingName || p.userName || ""),
-            String(p.pingRole || ""),
-            String(p.pingTeam || p.team || ""),
-            pState,
-            pState === "Offline" ? 0 : nowMs
-          ]]);
-          oFound = true;
-          break;
-        }
-      }
-    }
-    if (!oFound && (p.pingName || p.userName)) {
-      onlineSheet.appendRow([
-        pingUid,
-        String(p.pingName || p.userName || ""),
-        String(p.pingRole || ""),
-        String(p.pingTeam || p.team || ""),
-        pState,
-        pState === "Offline" ? 0 : nowMs
-      ]);
-    }
-  }
-
-  // Record Activity Log when any action occurs
-  if (action === "ACTIVITY_LOG" || p.logAction) {
-    appendActivityLog(actLogSheet, p, p.logAction, p.logDetails);
-    styleSheetModern(actLogSheet, actLogHeaders, "#4f46e5", actLogWidths);
-    styleActivityLogsSpecifics(actLogSheet);
-  }
-
-  // 1. Save or Update Daily Sales Report
-  if (action === "DAILY_SALES_SUBMIT") {
-    var uId = String(p.userId || "").trim();
-    var repDate = String(p.date || "").replace(/'/g, "").trim();
-    var lastRow = sheet.getLastRow();
-    var updated = false;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ghorerbazar Facebook - Dynamic Sales & Incentive Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; color: #0f172a; }
     
-    if (lastRow > 1) {
-      var rows = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
-      for (var r = 0; r < rows.length; r++) {
-        var rowId = String(rows[r][2]).trim();
-        var rowDate = String(rows[r][5]).replace(/'/g, "").trim();
-        if (rowId === uId && (rowDate === repDate || rowDate === p.date)) {
-          var tr = r + 2;
-          sheet.getRange(tr, 1, 1, 17).setValues([[
-            Utilities.formatDate(new Date(), "Asia/Dhaka", "dd/MM/yyyy, hh:mm:ss a"),
-            "DAILY_SALES_SUBMIT", uId, String(p.userName || ""), String(p.team || ""), "'" + repDate,
-            Number(p.leads) || 0, Number(p.orders) || 0, Number(p.amount) || 0, Number(p.ratio) || 0,
-            Number(p.ajwa) || 0, Number(p.pinkSalt) || 0, Number(p.blackGarlic) || 0, Number(p.sunHoney) || 0, Number(p.bsHoney) || 0, Number(p.gawaGhee) || 0,
-            "Updated"
-          ]]);
-          updated = true;
-          break;
-        }
-      }
+    .sidebar-light { background: #ffffff; border-right: 1px solid #e2e8f0; color: #1e293b; }
+    .card-dynamic { background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px -3px rgba(15, 23, 42, 0.04); transition: all 0.2s ease; }
+    
+    .tab-active { 
+      background: linear-gradient(135deg, #1877f2 0%, #0c63d4 100%); 
+      color: #ffffff !important; 
+      box-shadow: 0 6px 16px -4px rgba(24, 119, 242, 0.4); 
     }
+    
+    .kpi-card-1 { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; box-shadow: 0 8px 18px -5px rgba(37, 99, 235, 0.35); }
+    .kpi-card-2 { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; box-shadow: 0 8px 18px -5px rgba(5, 150, 105, 0.35); }
+    .kpi-card-3 { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: #ffffff; box-shadow: 0 8px 18px -5px rgba(124, 58, 237, 0.35); }
+    .kpi-card-4 { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: #ffffff; box-shadow: 0 8px 18px -5px rgba(79, 70, 229, 0.35); }
+    .kpi-card-5 { background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); color: #ffffff; box-shadow: 0 8px 18px -5px rgba(234, 88, 12, 0.35); }
 
-    if (!updated) {
-      sheet.appendRow([
-        Utilities.formatDate(new Date(), "Asia/Dhaka", "dd/MM/yyyy, hh:mm:ss a"),
-        "DAILY_SALES_SUBMIT", uId, String(p.userName || ""), String(p.team || ""), "'" + repDate,
-        Number(p.leads) || 0, Number(p.orders) || 0, Number(p.amount) || 0, Number(p.ratio) || 0,
-        Number(p.ajwa) || 0, Number(p.pinkSalt) || 0, Number(p.blackGarlic) || 0, Number(p.sunHoney) || 0, Number(p.bsHoney) || 0, Number(p.gawaGhee) || 0,
-        "New Entry"
-      ]);
-    }
-    styleSheetModern(sheet, salesHeaders, "#1e3a8a", salesWidths);
-    styleSalesSheetSpecifics(sheet);
-  }
-  // 2. Delete Sales Record
-  else if (action === "DELETE_SALES_RECORD") {
-    var uId = String(p.userId || "").trim();
-    var repDate = String(p.date || "").replace(/'/g, "").trim();
-    if (sheet.getLastRow() > 1) {
-      var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
-      for (var r = 0; r < rows.length; r++) {
-        if (String(rows[r][2]).trim() === uId && String(rows[r][5]).replace(/'/g, "").trim() === repDate) {
-          sheet.deleteRow(r + 2);
-          break;
-        }
-      }
-    }
-    styleSheetModern(sheet, salesHeaders, "#1e3a8a", salesWidths);
-    styleSalesSheetSpecifics(sheet);
-  }
-  // 3. Save or Update Attendance Record
-  else if (action === "ATTENDANCE_SYNC") {
-    var aId = String(p.userId || "").trim();
-    var aDate = String(p.date || "").replace(/'/g, "").trim();
-    var aLast = attSheet.getLastRow();
-    var aUpdated = false;
-    var actSecs = Number(p.activeSeconds) || 0;
-    var brkSecs = Number(p.breakSeconds) || 0;
-    var cleanIn = cleanSheetTime(p.loginTime);
-    var cleanOut = cleanSheetTime(p.logoutTime);
+    .banner-hero-light { background: #ffffff; border: 1px solid #e2e8f0; color: #0f172a; box-shadow: 0 4px 14px -4px rgba(15, 23, 42, 0.03); }
+    .table-header-light { background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #334155; }
+    .sprint-banner { background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%); border: 1px solid #bfdbfe; }
+    .monthly-banner { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0; }
+    .incentive-banner { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; }
 
-    var rowVals = [
-      "'" + aDate,
-      aId,
-      String(p.userName || ""),
-      String(p.team || ""),
-      "'" + cleanIn,
-      "'" + cleanOut,
-      "'" + secondsToHMS(actSecs),
-      "'" + secondsToHMS(brkSecs),
-      String(p.status || "Working"),
-      String(p.breakReason || "-"),
-      String(p.breakLogs || "-"),
-      actSecs,
-      brkSecs,
-      Number(p.lastTick) || Date.now()
+    .prod-amber { background: linear-gradient(145deg, #ffffff 0%, #fffbeb 100%); border: 1px solid #fde68a; }
+    .prod-rose { background: linear-gradient(145deg, #ffffff 0%, #fff1f2 100%); border: 1px solid #fecdd3; }
+    .prod-purple { background: linear-gradient(145deg, #ffffff 0%, #faf5ff 100%); border: 1px solid #e9d5ff; }
+    .prod-orange { background: linear-gradient(145deg, #ffffff 0%, #fff7ed 100%); border: 1px solid #fed7aa; }
+    .prod-blue { background: linear-gradient(145deg, #ffffff 0%, #eff6ff 100%); border: 1px solid #bfdbfe; }
+    .prod-emerald { background: linear-gradient(145deg, #ffffff 0%, #ecfdf5 100%); border: 1px solid #a7f3d0; }
+
+    .progress-track { background-color: rgba(15, 23, 42, 0.08); border-radius: 9999px; overflow: hidden; }
+    .roster-do { background-color: #fed7aa; color: #9a3412; font-weight: 800; }
+    .roster-night { background-color: #e0e7ff; color: #1e40af; font-weight: 800; }
+  </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+  <div id="app" class="flex-1 flex flex-col"></div>
+
+  <script>
+    const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
+
+    localStorage.setItem('gb_webhook_url', DEFAULT_WEBHOOK_URL);
+    let webhookUrl = DEFAULT_WEBHOOK_URL;
+
+    const AVAILABLE_MONTHS = [
+      { key: '10/2026', label: 'October 2026' },
+      { key: '11/2026', label: 'November 2026' },
+      { key: '12/2026', label: 'December 2026' },
+      { key: '01/2027', label: 'January 2027' },
+      { key: '02/2027', label: 'February 2027' },
+      { key: '03/2027', label: 'March 2027' }
     ];
 
-    if (aLast > 1) {
-      var aRows = attSheet.getRange(2, 1, aLast - 1, 2).getValues();
-      for (var ar = 0; ar < aRows.length; ar++) {
-        var rDate = String(aRows[ar][0]).replace(/'/g, "").trim();
-        var rId = String(aRows[ar][1]).trim();
-        if (rId === aId && rDate === aDate) {
-          attSheet.getRange(ar + 2, 1, 1, 14).setValues([rowVals]);
-          aUpdated = true;
-          break;
-        }
-      }
-    }
-    if (!aUpdated && aId) {
-      attSheet.appendRow(rowVals);
-    }
-    styleSheetModern(attSheet, attHeaders, "#0f172a", attWidths);
-    styleAttendanceSheetSpecifics(attSheet);
-  }
-  // 4. Delete Attendance Record
-  else if (action === "DELETE_ATTENDANCE") {
-    var aId = String(p.userId || "").trim();
-    var aDate = String(p.date || "").replace(/'/g, "").trim();
-    if (attSheet.getLastRow() > 1) {
-      var aRows = attSheet.getRange(2, 1, attSheet.getLastRow() - 1, 2).getValues();
-      for (var ar = 0; ar < aRows.length; ar++) {
-        if (String(aRows[ar][1]).trim() === aId && String(aRows[ar][0]).replace(/'/g, "").trim() === aDate) {
-          attSheet.deleteRow(ar + 2);
-          break;
-        }
-      }
-    }
-    styleSheetModern(attSheet, attHeaders, "#0f172a", attWidths);
-    styleAttendanceSheetSpecifics(attSheet);
-  }
-  // 5. Save or Update Duty Roster Row
-  else if (action === "SAVE_ROSTER_ROW") {
-    var mKey = String(p.monthKey || "11/2026").replace(/'/g, "").trim();
-    var rEmpId = String(p.id || "").trim();
-    var rLast = rosterSheet.getLastRow();
-    var rUpdated = false;
-    var rVals = [
-      "'" + mKey, rEmpId, String(p.name || ""), String(p.team || ""),
-      "'" + String(p.sat || "3:00 PM"), "'" + String(p.sun || "3:00 PM"), "'" + String(p.mon || "3:00 PM"),
-      "'" + String(p.tue || "3:00 PM"), "'" + String(p.wed || "3:00 PM"), "'" + String(p.thu || "3:00 PM"), "'" + String(p.fri || "3:00 PM")
+    const DEFAULT_USERS = [
+      { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
+      { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: '123nazim', grade: 'TL', baseTarget: 0 },
+      { id: '10107', name: 'Md Abdus Samad', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 0 },
+      
+      { id: '10191', name: 'Shagor Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A-', baseTarget: 1232174 },
+      { id: '10289', name: 'Abdullah Dipu', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A+', baseTarget: 1619218 },
+      { id: '11044', name: 'Hasibul Islam Eraz', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'B', baseTarget: 1132174 },
+      { id: '10741', name: 'Kamruzzaman Shujon', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'C', baseTarget: 1032175 },
+      { id: '10803', name: 'Md. Abdullah Mahmud', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
+      { id: '11042', name: 'Md. Ashiqur Rahman', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'B', baseTarget: 1132174 },
+      { id: '10328', name: 'Sheikh MD Rayhan', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
+      { id: '10135', name: 'Ranju Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
+
+      { id: '10098', name: 'Habibur Rahman Shuvo', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A-', baseTarget: 1232174 },
+      { id: '10136', name: 'Al-Amin Kazi', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A+', baseTarget: 1619218 },
+      { id: '11007', name: 'Zubayer Al Mahmud', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'C', baseTarget: 1032175 },
+      { id: '11101', name: 'Md. Mehedi Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'C', baseTarget: 1032175 },
+      { id: '11120', name: 'Abu Sayed', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'C', baseTarget: 1032175 },
+      { id: '11130', name: 'Rabbir Hossain Molla', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'B', baseTarget: 1132174 },
+      { id: '10806', name: 'Abdullah Al Soad', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 },
+      { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 }
     ];
-    if (rLast > 1) {
-      var rRows = rosterSheet.getRange(2, 1, rLast - 1, 2).getValues();
-      for (var rr = 0; rr < rRows.length; rr++) {
-        var exM = String(rRows[rr][0]).replace(/'/g, "").trim();
-        var exId = String(rRows[rr][1]).trim();
-        if (exM === mKey && exId === rEmpId) {
-          rosterSheet.getRange(rr + 2, 1, 1, 11).setValues([rVals]);
-          rUpdated = true;
-          break;
-        }
-      }
-    }
-    if (!rUpdated && rEmpId) {
-      rosterSheet.appendRow(rVals);
-    }
-    styleSheetModern(rosterSheet, rosterHeaders, "#1e40af", rosterWidths);
-    styleRosterSheetSpecifics(rosterSheet);
-  }
-  // 6. Save Monthly Config
-  else if (action === "SAVE_MONTHLY_CONFIG") {
-    var cmKey = String(p.monthKey || "11/2026").replace(/'/g, "").trim();
-    var cJson = String(p.configJson || "{}");
-    var cLast = cfgSheet.getLastRow();
-    var cUpdated = false;
-    if (cLast > 1) {
-      var cRows = cfgSheet.getRange(2, 1, cLast - 1, 1).getValues();
-      for (var cc = 0; cc < cRows.length; cc++) {
-        if (String(cRows[cc][0]).replace(/'/g, "").trim() === cmKey) {
-          cfgSheet.getRange(cc + 2, 1, 1, 3).setValues([["'" + cmKey, cJson, Utilities.formatDate(new Date(), "Asia/Dhaka", "dd/MM/yyyy, hh:mm:ss a")]]);
-          cUpdated = true;
-          break;
-        }
-      }
-    }
-    if (!cUpdated) {
-      cfgSheet.appendRow(["'" + cmKey, cJson, Utilities.formatDate(new Date(), "Asia/Dhaka", "dd/MM/yyyy, hh:mm:ss a")]);
-    }
-    styleSheetModern(cfgSheet, cfgHeaders, "#334155", cfgWidths);
-  }
-  // 7. Create or Update User / Agent ID
-  else if (action === "SAVE_USER") {
-    var newId = String(p.id || "").trim();
-    var uLast = userSheet.getLastRow();
-    var uUpdated = false;
-    var defaultGrade = p.role === "admin" ? "TL" : (p.role === "supervisor" ? "Supervisor" : "A");
-    if (uLast > 1) {
-      var uRows = userSheet.getRange(2, 1, uLast - 1, 1).getValues();
-      for (var u = 0; u < uRows.length; u++) {
-        if (String(uRows[u][0]).trim() === newId) {
-          userSheet.getRange(u + 2, 1, 1, 7).setValues([[
-            newId, String(p.name || ""), String(p.role || "agent"), String(p.team || "Team Nazim"), String(p.pass || "123456"), String(p.grade || defaultGrade), Number(p.baseTarget) || 0
-          ]]);
-          uUpdated = true;
-          break;
-        }
-      }
-    }
-    if (!uUpdated && newId) {
-      userSheet.appendRow([newId, String(p.name || ""), String(p.role || "agent"), String(p.team || "Team Nazim"), String(p.pass || "123456"), String(p.grade || defaultGrade), Number(p.baseTarget) || 0]);
-    }
-    styleSheetModern(userSheet, userHeaders, "#0f172a", userWidths);
-    styleUsersSheetSpecifics(userSheet);
-  }
-  // 8. Delete User ID
-  else if (action === "DELETE_USER") {
-    var delId = String(p.id || "").trim();
-    if (userSheet.getLastRow() > 1) {
-      var uRows = userSheet.getRange(2, 1, userSheet.getLastRow() - 1, 1).getValues();
-      for (var u = 0; u < uRows.length; u++) {
-        if (String(uRows[u][0]).trim() === delId) {
-          userSheet.deleteRow(u + 2);
-          break;
-        }
-      }
-    }
-    styleSheetModern(userSheet, userHeaders, "#0f172a", userWidths);
-    styleUsersSheetSpecifics(userSheet);
-  }
-  // 9. One-Click Full Workbook Organize
-  else {
-    styleSheetModern(userSheet, userHeaders, "#0f172a", userWidths);
-    styleUsersSheetSpecifics(userSheet);
-  }
 
-  // Read Sales Records
-  var salesRecords = [];
-  if (sheet.getLastRow() > 1) {
-    var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 16).getValues();
-    for (var i = data.length - 1; i >= 0; i--) {
-      if (String(data[i][1]) === "DAILY_SALES_SUBMIT") {
-        var cleanDate = String(data[i][5] || "").replace(/'/g, "").trim();
-        var lds = Number(data[i][6]) || 0;
-        var ords = Number(data[i][7]) || 0;
-        var calcRatio = lds > 0 ? Number(((ords / lds) * 100).toFixed(2)) : 0;
-        salesRecords.push({
-          id: 'rec_' + data[i][2] + '_' + cleanDate,
-          date: cleanDate,
-          time: data[i][0] ? String(data[i][0]).split(", ")[1] || "" : "",
-          userId: String(data[i][2]), userName: String(data[i][3]), team: String(data[i][4]),
-          leads: lds, orders: ords, amount: Number(data[i][8]) || 0, ratio: calcRatio,
-          ajwa: Number(data[i][10]) || 0, pinkSalt: Number(data[i][11]) || 0, blackGarlic: Number(data[i][12]) || 0,
-          sunHoney: Number(data[i][13]) || 0, bsHoney: Number(data[i][14]) || 0, gawaGhee: Number(data[i][15]) || 0
+    const DEFAULT_ROSTER = [
+      { id: '10107', name: 'Md Abdus Samad', team: 'Team Samad', isTL: true, sat: '10:00 AM', sun: 'DO', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
+      { id: '10098', name: 'Habibur Rahman Shuvo', team: 'Team Samad', sat: '3:00 PM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10136', name: 'Al-Amin Kazi', team: 'Team Samad', sat: '10:00 AM', sun: '10:00 AM', mon: '10:00 AM', tue: '10:00 AM', wed: '10:00 AM', thu: '10:00 AM', fri: 'DO' },
+      { id: '11007', name: 'Zubayer Al Mahmud', team: 'Team Samad', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
+      { id: '11101', name: 'Md. Mehedi Amin', team: 'Team Samad', sat: '7:00 AM', sun: '7:00 AM', mon: '3:00 PM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '11120', name: 'Abu Sayed', team: 'Team Samad', sat: '3:00 PM', sun: '3:00 PM', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '11130', name: 'Rabbir Hossain Molla', team: 'Team Samad', sat: '3:00 PM', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: 'Night', thu: 'DO', fri: '10:00 AM' },
+      { id: '10806', name: 'Abdullah Al Soad', team: 'Team Samad', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10128', name: 'Al-Amin', team: 'Team Samad', sat: '7:00 AM', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+
+      { id: '10122', name: 'Md. Nazimur Rahman', team: 'Team Nazim', isTL: true, sat: 'DO', sun: '10:00 AM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
+      { id: '10191', name: 'Shagor Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
+      { id: '10289', name: 'Abdullah Dipu', team: 'Team Nazim', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '11044', name: 'Hasibul Islam Eraz', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '7:00 AM', wed: '7:00 AM', thu: 'Night', fri: 'DO' },
+      { id: '10741', name: 'Kamruzzaman Shujon', team: 'Team Nazim', sat: '3:00 PM', sun: '7:00 AM', mon: '7:00 AM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10803', name: 'Md. Abdullah Mahmud', team: 'Team Nazim', sat: '3:00 PM', sun: '7:00 AM', mon: 'Night', tue: 'DO', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
+      { id: '11042', name: 'Md. Ashiqur Rahman', team: 'Team Nazim', sat: 'DO', sun: '3:00 PM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
+      { id: '10328', name: 'Sheikh MD Rayhan', team: 'Team Nazim', sat: '7:00 AM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
+      { id: '10135', name: 'Ranju Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '10:00 AM', tue: '7:00 AM', wed: '3:00 PM', thu: 'Night', fri: 'DO' }
+    ];
+
+    const DEFAULT_PRODUCTS = {
+      ajwa: { name: 'Ajwa Dates', targetKg: 69.03, style: 'prod-amber', badge: 'bg-amber-500 text-white', bar: 'bg-amber-500', icon: 'fa-seedling', bonus90: 600, bonus100: 1000 },
+      pinkSalt: { name: 'Pink Salt', targetKg: 10.07, style: 'prod-rose', badge: 'bg-rose-500 text-white', bar: 'bg-rose-500', icon: 'fa-jar', item100: '2L Mustard Oil' },
+      blackGarlic: { name: 'Black Garlic', targetKg: 6.09, style: 'prod-purple', badge: 'bg-purple-600 text-white', bar: 'bg-purple-600', icon: 'fa-spa', item100: '400gm Gawa Ghee' },
+      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51, style: 'prod-orange', badge: 'bg-orange-500 text-white', bar: 'bg-orange-500', icon: 'fa-droplet', bonus90: 1000, bonus100: 2000 },
+      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09, style: 'prod-blue', badge: 'bg-blue-600 text-white', bar: 'bg-blue-600', icon: 'fa-bottle-droplet', bonus100: 1000 },
+      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56, style: 'prod-emerald', badge: 'bg-emerald-600 text-white', bar: 'bg-emerald-600', icon: 'fa-cheese', bonus90: 1200, bonus100: 2000 }
+    };
+
+    const BREAK_REASONS = [
+      "Prayer Break",
+      "Lunch / Meal Break",
+      "Tea / Coffee Break",
+      "Washroom Break",
+      "Official / Team Meeting",
+      "Personal / Emergency Break"
+    ];
+
+    const SHIFT_OPTIONS = ["7:00 AM", "10:00 AM", "3:00 PM", "Night", "DO"];
+
+    function normalizeUserRecord(u) {
+      if (!u) return u;
+      const copy = { ...u };
+      if (copy.role === 'admin' || String(copy.id) === '10122' || String(copy.id) === '10107') {
+        copy.role = 'admin';
+        copy.name = String(copy.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
+        copy.grade = 'TL';
+        if (String(copy.id) === '10122' && (!copy.pass || copy.pass === 'admin123')) {
+          copy.pass = '123nazim';
+        }
+      } else if (copy.role === 'supervisor' || String(copy.id) === '10001') {
+        copy.role = 'supervisor';
+        copy.grade = 'Supervisor';
+      } else if (!copy.grade || copy.grade === 'SUP' || copy.grade === 'TL') {
+        copy.grade = 'A';
+      }
+      return copy;
+    }
+
+    (function seedDefaultUsers() {
+      const existing = localStorage.getItem('gb_users');
+      if (!existing) {
+        localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS.map(normalizeUserRecord)));
+      } else {
+        try {
+          const parsed = JSON.parse(existing);
+          const map = new Map();
+          DEFAULT_USERS.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
+          parsed.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
+          localStorage.setItem('gb_users', JSON.stringify(Array.from(map.values())));
+        } catch (e) {
+          localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS.map(normalizeUserRecord)));
+        }
+      }
+    })();
+
+    function getTodayFormatted() {
+      const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+
+    let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
+    if (currentUser) {
+      currentUser = normalizeUserRecord(currentUser);
+      localStorage.setItem('gb_session_user', JSON.stringify(currentUser));
+    }
+
+    let activeTab = 'dashboard';
+    let selectedMonthKey = localStorage.getItem('gb_selected_month') || '11/2026';
+    let dashboardScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
+    
+    let logsFilterScope = 'ALL';
+    let reportsDateFilter = getTodayFormatted();
+
+    let monthlyPerfTeamScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
+    let monthlyPerfAgentId = 'ALL';
+
+    let activityTeamFilter = 'ALL';
+
+    let pollInterval = null;
+    let dutyTimerInterval = null;
+    let pendingConfirmCallback = null;
+
+    function isAnyModalOpen() {
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'confirmWarningModal'];
+      return modalIds.some(id => {
+        const el = document.getElementById(id);
+        return el && !el.classList.contains('hidden');
+      });
+    }
+
+    function isSuperAdmin(u) { return u && String(u.id) === '10122'; }
+    function isFullAdmin(u) { return u && u.role === 'admin'; }
+    function isSupervisor(u) { return u && u.role === 'supervisor'; }
+    function canViewAll(u) { return u && (u.role === 'admin' || u.role === 'supervisor'); }
+
+    function canViewTargetPassword(actor, targetUser) {
+      if (!actor || !targetUser || !isFullAdmin(actor)) return false;
+      if (isSuperAdmin(actor)) return true;
+      if (String(targetUser.id) === '10122') return false;
+      return true;
+    }
+
+    function canDeleteTargetUser(actor, targetUser) {
+      if (!actor || !targetUser || !isFullAdmin(actor)) return false;
+      if (String(targetUser.id) === String(actor.id) || String(targetUser.id) === '10122') return false;
+      if (isSuperAdmin(actor)) return true;
+      return targetUser.role === 'agent';
+    }
+
+    function canEditTargetUser(actor, targetUser) {
+      if (!actor || !targetUser || !isFullAdmin(actor)) return false;
+      if (isSuperAdmin(actor)) return true;
+      if (String(targetUser.id) === '10122') return false;
+      if (String(targetUser.id) === String(actor.id)) return true;
+      return targetUser.role === 'agent';
+    }
+
+    function openConfirmWarningModal(title, message, badgeText, onConfirmAction) {
+      pendingConfirmCallback = onConfirmAction;
+      document.getElementById('warnModalTitle').textContent = title || 'Confirm Permanent Deletion';
+      document.getElementById('warnModalMessage').textContent = message || 'Are you sure you want to permanently delete this record? This action cannot be undone.';
+      document.getElementById('warnModalBadge').textContent = badgeText || 'Security Warning';
+      openModal('confirmWarningModal');
+    }
+
+    async function executeConfirmedAction() {
+      const fn = pendingConfirmCallback;
+      pendingConfirmCallback = null;
+      closeModal('confirmWarningModal');
+      if (typeof fn === 'function') {
+        await fn();
+      }
+    }
+
+    function getStored(key, def) { const r = localStorage.getItem('gb_' + key); return r ? JSON.parse(r) : def; }
+    function setStored(key, val) { localStorage.setItem('gb_' + key, JSON.stringify(val)); }
+
+    function getNowTimeStr() {
+      return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    function sanitizeTimeDisplay(raw) {
+      if (!raw || raw === '--:--') return '--:--';
+      let s = String(raw).replace(/^'/, '').trim();
+      if (s.includes('1899') || s.includes('GMT') || s.includes('মানক')) {
+        const d = new Date(s.replace(/\s*\(.*?\)\s*/g, ''));
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        const m = s.match(/(\d{1,2}:\d{2}:\d{2})/);
+        if (m) return m[1];
+      }
+      return s;
+    }
+    function dateToInputVal(dateStr) {
+      if (!dateStr || dateStr === 'ALL') return new Date().toISOString().split('T')[0];
+      const p = dateStr.split('/'); if (p.length === 3) return `${p[2]}-${p[1]}-${p[0]}`;
+      return new Date().toISOString().split('T')[0];
+    }
+    function inputValToDateStr(val) {
+      if (!val) return getTodayFormatted();
+      const p = val.split('-'); if (p.length === 3) return `${p[2]}/${p[1]}/${p[0]}`;
+      return getTodayFormatted();
+    }
+    function cleanDisplayDate(raw) {
+      if (!raw) return getTodayFormatted();
+      let s = String(raw).trim();
+      const p = s.split('/');
+      if (p.length === 3) {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const mIdx = parseInt(p[1], 10) - 1;
+        if (mIdx >= 0 && mIdx < 12) return `${p[0]} ${months[mIdx]} ${p[2]}`;
+      }
+      return s;
+    }
+    function formatHMS(sec) {
+      sec = Math.max(0, Math.floor(Number(sec) || 0));
+      const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+      const s = String(sec % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function recordActivityLog(actionTitle, detailsText, sendStandaloneSync = false) {
+      if (!currentUser) return {};
+      const logEntry = {
+        date: getTodayFormatted(),
+        time: getNowTimeStr(),
+        userId: String(currentUser.id),
+        userName: currentUser.name,
+        role: currentUser.role,
+        team: currentUser.team,
+        action: actionTitle,
+        details: detailsText
+      };
+      let logs = getStored('activity_logs', []);
+      logs.unshift(logEntry);
+      if (logs.length > 300) logs = logs.slice(0, 300);
+      setStored('activity_logs', logs);
+
+      const meta = {
+        actorId: logEntry.userId,
+        actorName: logEntry.userName,
+        actorRole: logEntry.role,
+        actorTeam: logEntry.team,
+        logDate: logEntry.date,
+        logTime: logEntry.time,
+        logAction: logEntry.action,
+        logDetails: logEntry.details
+      };
+      if (sendStandaloneSync) {
+        postToSheet('ACTIVITY_LOG', meta);
+      }
+      return meta;
+    }
+
+    function getUserOnlineStatus(userId) {
+      const uid = String(userId);
+      if (currentUser && String(currentUser.id) === uid) {
+        if (currentUser.role === 'agent') {
+          const today = getTodayFormatted();
+          const myAtt = getStored('attendance_records', []).find(a => String(a.userId) === uid && a.date === today);
+          if (myAtt && myAtt.status === 'On Break') return 'On Break';
+        }
+        return 'Online';
+      }
+
+      const now = Date.now();
+      const onlineList = getStored('online_users', []);
+      const oRec = onlineList.find(o => String(o.id) === uid);
+      if (oRec && oRec.state !== 'Offline' && oRec.lastSeen && (now - Number(oRec.lastSeen)) < 180000) {
+        return oRec.state === 'On Break' ? 'On Break' : 'Online';
+      }
+
+      const today = getTodayFormatted();
+      const attRec = getStored('attendance_records', []).find(a => String(a.userId) === uid && a.date === today);
+      if (attRec && attRec.status !== 'Completed') {
+        if (attRec.lastTick && (now - Number(attRec.lastTick)) < 180000) {
+          return attRec.status === 'On Break' ? 'On Break' : 'Online';
+        }
+      }
+      return 'Offline';
+    }
+
+    function renderOnlineStatusBadge(userId) {
+      const st = getUserOnlineStatus(userId);
+      if (st === 'Online') {
+        return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>Online</span>`;
+      }
+      if (st === 'On Break') {
+        return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800"><i class="fa-solid fa-mug-hot text-[9px]"></i>On Break</span>`;
+      }
+      return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>Offline</span>`;
+    }
+
+    function getActiveProductsForMonth(mKey) {
+      const configs = getStored('monthly_configs', {});
+      const mCfg = configs[mKey || selectedMonthKey] || {};
+      const prodOverrides = mCfg.products || {};
+      const result = {};
+      Object.keys(DEFAULT_PRODUCTS).forEach(k => {
+        result[k] = { ...DEFAULT_PRODUCTS[k], ...(prodOverrides[k] || {}) };
+      });
+      return result;
+    }
+
+    function getUsersForMonth(mKey) {
+      const baseUsers = getStored('users', DEFAULT_USERS).map(normalizeUserRecord);
+      const configs = getStored('monthly_configs', {});
+      const mCfg = configs[mKey || selectedMonthKey] || {};
+      const userOverrides = mCfg.users || {};
+      return baseUsers.map(u => {
+        let updated = { ...u };
+        if (userOverrides[u.id]) {
+          updated.grade = userOverrides[u.id].grade || u.grade;
+          updated.baseTarget = Number(userOverrides[u.id].baseTarget ?? u.baseTarget);
+        }
+        return normalizeUserRecord(updated);
+      });
+    }
+
+    function getRosterForMonth(mKey) {
+      const mk = mKey || selectedMonthKey;
+      const savedList = getStored('roster_records', []);
+      const monthRows = savedList.filter(r => r.monthKey === mk);
+      const allUsers = getStored('users', DEFAULT_USERS).map(normalizeUserRecord);
+
+      return DEFAULT_ROSTER.map(defRow => {
+        const override = monthRows.find(r => String(r.id) === String(defRow.id));
+        const usr = allUsers.find(u => String(u.id) === String(defRow.id));
+        return {
+          ...defRow,
+          name: usr ? usr.name : defRow.name,
+          ...(override || {})
+        };
+      });
+    }
+
+    function changeSelectedMonth(newMonthKey) {
+      selectedMonthKey = newMonthKey;
+      localStorage.setItem('gb_selected_month', newMonthKey);
+      renderAppLayout();
+    }
+
+    function ensureAgentAttendanceSession(user) {
+      if (!user || user.role !== 'agent') return null;
+      const today = getTodayFormatted();
+      let attList = getStored('attendance_records', []);
+      let rec = attList.find(a => String(a.userId) === String(user.id) && a.date === today);
+
+      if (!rec) {
+        rec = {
+          date: today,
+          userId: String(user.id),
+          userName: user.name,
+          team: user.team,
+          loginTime: getNowTimeStr(),
+          logoutTime: '--:--',
+          status: 'Working',
+          breakReason: '-',
+          breakLogs: '-',
+          activeSeconds: 0,
+          breakSeconds: 0,
+          lastTick: Date.now()
+        };
+        attList.unshift(rec);
+        setStored('attendance_records', attList);
+        postToSheet('ATTENDANCE_SYNC', rec);
+      } else {
+        rec.loginTime = sanitizeTimeDisplay(rec.loginTime);
+        rec.logoutTime = sanitizeTimeDisplay(rec.logoutTime);
+        if (rec.status === 'Completed') {
+          rec.status = 'Working';
+          rec.logoutTime = '--:--';
+        }
+        rec.lastTick = Date.now();
+        setStored('attendance_records', attList);
+      }
+      return rec;
+    }
+
+    function startLiveDutyClock() {
+      if (dutyTimerInterval) clearInterval(dutyTimerInterval);
+      dutyTimerInterval = setInterval(() => {
+        if (!currentUser || currentUser.role !== 'agent') return;
+        const today = getTodayFormatted();
+        let attList = getStored('attendance_records', []);
+        let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+        if (!rec || rec.status === 'Completed') return;
+
+        const now = Date.now();
+        const elapsed = Math.max(1, Math.round((now - (rec.lastTick || now)) / 1000));
+        rec.lastTick = now;
+
+        if (rec.status === 'On Break') {
+          rec.breakSeconds = (Number(rec.breakSeconds) || 0) + elapsed;
+        } else if (rec.status === 'Working') {
+          rec.activeSeconds = (Number(rec.activeSeconds) || 0) + elapsed;
+        }
+        setStored('attendance_records', attList);
+
+        const wClock = document.getElementById('live-work-timer');
+        const bClock = document.getElementById('live-break-timer');
+        if (wClock) wClock.textContent = formatHMS(rec.activeSeconds);
+        if (bClock) bClock.textContent = formatHMS(rec.breakSeconds);
+
+        if ((rec.activeSeconds + rec.breakSeconds) % 25 === 0) {
+          postToSheet('ATTENDANCE_SYNC', rec);
+        }
+      }, 1000);
+    }
+
+    function openBreakModal() { openModal('breakModal'); }
+
+    async function handleStartBreak(e) {
+      e.preventDefault();
+      if (!currentUser) return;
+      const reason = document.getElementById('breakReasonSelect').value;
+      const note = document.getElementById('breakCustomNote').value.trim();
+      const fullReason = note ? `${reason} (${note})` : reason;
+
+      const today = getTodayFormatted();
+      let attList = getStored('attendance_records', []);
+      let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+      if (!rec) rec = ensureAgentAttendanceSession(currentUser);
+
+      rec.status = 'On Break';
+      rec.breakReason = fullReason;
+      rec.lastTick = Date.now();
+      const logEntry = `${fullReason} at ${getNowTimeStr()}`;
+      rec.breakLogs = (!rec.breakLogs || rec.breakLogs === '-') ? logEntry : `${rec.breakLogs} | ${logEntry}`;
+
+      setStored('attendance_records', attList);
+      const logMeta = recordActivityLog('Started Break', `Took a break — Reason: ${fullReason}`);
+      await postToSheet('ATTENDANCE_SYNC', { ...rec, ...logMeta });
+      closeModal('breakModal');
+      renderAppLayout();
+    }
+
+    async function handleResumeWork() {
+      if (!currentUser) return;
+      const today = getTodayFormatted();
+      let attList = getStored('attendance_records', []);
+      let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+      if (!rec) return;
+
+      const prevReason = rec.breakReason || 'Break';
+      rec.status = 'Working';
+      rec.breakReason = '-';
+      rec.lastTick = Date.now();
+      rec.breakLogs = `${rec.breakLogs} (Resumed ${getNowTimeStr()})`;
+
+      setStored('attendance_records', attList);
+      const logMeta = recordActivityLog('Resumed Work', `Returned from break (${prevReason}) and resumed duty`);
+      await postToSheet('ATTENDANCE_SYNC', { ...rec, ...logMeta });
+      renderAppLayout();
+    }
+
+    function getTargetData(user, scopeOverride, mKey) {
+      const allUsers = getUsersForMonth(mKey || selectedMonthKey);
+      let baseTarget = 0;
+      let agentCount = 1;
+      
+      if (canViewAll(user)) {
+        const defaultTeam = user.role === 'admin' ? user.team : 'ALL';
+        const scope = scopeOverride || dashboardScope || defaultTeam;
+        const agents = allUsers.filter(u => u.role === 'agent' && (scope === 'ALL' ? true : u.team === scope));
+        baseTarget = agents.reduce((sum, a) => sum + (Number(a.baseTarget) || 0), 0);
+        agentCount = agents.length || 1;
+      } else {
+        const freshUser = allUsers.find(u => String(u.id) === String(user.id)) || user;
+        baseTarget = Number(freshUser.baseTarget) || 1232174;
+      }
+
+      const workingTarget = Math.round(baseTarget * 1.05);
+      const dailyTarget = Math.round(workingTarget / 26);
+
+      const d = new Date().getDate();
+      let sprintName, sprintGoal, sprintPct;
+
+      if (d <= 10) { sprintName = 'Sprint 1 (Days 1–10)'; sprintPct = 0.40; sprintGoal = Math.round(workingTarget * 0.40); }
+      else if (d <= 20) { sprintName = 'Sprint 2 (Days 11–20)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
+      else { sprintName = 'Sprint 3 (Days 21–31)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
+
+      return { baseTarget, workingTarget, dailyTarget, sprintName, sprintGoal, sprintPct, agentCount };
+    }
+
+    function calculateEarnedIncentives(pTotals, agentCount, mKey) {
+      let totalMoney = 0;
+      let earnedRewards = [];
+      const activeProds = getActiveProductsForMonth(mKey || selectedMonthKey);
+
+      Object.keys(activeProds).forEach(k => {
+        const p = activeProds[k];
+        const achieved = pTotals[k];
+        const target = p.targetKg * agentCount;
+        const pct = target > 0 ? (achieved / target) * 100 : 0;
+
+        if (pct >= 100) {
+          if (p.bonus100) totalMoney += Number(p.bonus100);
+          if (p.item100) earnedRewards.push(`${p.name}: ${p.item100}`);
+          else earnedRewards.push(`${p.name} (100%)`);
+        } else if (pct >= 90) {
+          if (p.bonus90) totalMoney += Number(p.bonus90);
+          earnedRewards.push(`${p.name} (90%)`);
+        }
+      });
+
+      return { totalMoney, earnedRewards };
+    }
+
+    async function postToSheet(action, payload) {
+      const pingInfo = currentUser ? {
+        pingUserId: String(currentUser.id),
+        pingName: currentUser.name,
+        pingRole: currentUser.role,
+        pingTeam: currentUser.team,
+        pingState: getUserOnlineStatus(currentUser.id)
+      } : {};
+      const fullData = { action, timestamp: new Date().toISOString(), ...pingInfo, ...payload };
+      const params = new URLSearchParams({ action, payload: JSON.stringify(fullData), ...pingInfo, ...payload });
+
+      fetch(`${webhookUrl}?${params.toString()}`, { method: 'GET', mode: 'no-cors' }).catch(() => {});
+      new Image().src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
+
+      try {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = webhookUrl;
+        form.target = 'hidden_iframe_target';
+        form.style.display = 'none';
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify(fullData);
+        form.appendChild(input);
+
+        let iframe = document.getElementById('hidden_iframe_target');
+        if (!iframe) {
+          iframe = document.createElement('iframe');
+          iframe.name = 'hidden_iframe_target';
+          iframe.id = 'hidden_iframe_target';
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+        setTimeout(() => { if (form.parentNode) form.parentNode.removeChild(form); }, 2000);
+      } catch (e) {}
+    }
+
+    // VISUAL SYNC SPINNER & TOAST NOTIFICATION
+    function handleManualSyncClick() {
+      const btn = document.getElementById('manualSyncBtn');
+      if (btn) {
+        const icon = btn.querySelector('.fa-cloud-arrow-down');
+        if (icon) icon.classList.add('fa-spin');
+      }
+      fetchFromSheet();
+      setTimeout(() => {
+        if (btn) {
+          const icon = btn.querySelector('.fa-cloud-arrow-down');
+          if (icon) icon.classList.remove('fa-spin');
+        }
+        showToastNotification("Data successfully synced with Google Cloud Sheet!");
+      }, 1200);
+    }
+
+    function showToastNotification(msg) {
+      let toast = document.getElementById('toastNotification');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toastNotification';
+        toast.className = 'fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-700 transition-all duration-300 translate-y-20 opacity-0';
+        toast.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i><span id="toastMsg" class="text-xs font-bold"></span>`;
+        document.body.appendChild(toast);
+      }
+      document.getElementById('toastMsg').textContent = msg;
+      setTimeout(() => {
+        toast.classList.remove('translate-y-20', 'opacity-0');
+      }, 50);
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3500);
+    }
+
+    function fetchFromSheet() {
+      const cbName = 'gb_cb_' + Date.now();
+      window[cbName] = function(res) {
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        if (res && res.status === 'success') handleCloudData(res);
+      };
+      let pingQuery = '';
+      if (currentUser) {
+        const st = getUserOnlineStatus(currentUser.id);
+        pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}`;
+      }
+      const script = document.createElement('script');
+      script.src = `${webhookUrl}?callback=${cbName}&t=${Date.now()}${pingQuery}`;
+      script.onerror = function() {
+        if (script.parentNode) script.parentNode.removeChild(script);
+        fetch(`${webhookUrl}?t=${Date.now()}${pingQuery}`)
+          .then(r => r.json())
+          .then(res => { if (res && res.status === 'success') handleCloudData(res); })
+          .catch(() => {});
+      };
+      document.body.appendChild(script);
+    }
+
+    function handleCloudData(res) {
+      let changed = false;
+      if (Array.isArray(res.salesRecords)) {
+        const local = getStored('sales_records', []);
+        if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
+          setStored('sales_records', res.salesRecords);
+          changed = true;
+        }
+      }
+      if (Array.isArray(res.attendanceRecords)) {
+        const localAtt = getStored('attendance_records', []);
+        const today = getTodayFormatted();
+        const mergedAtt = res.attendanceRecords.map(cloudRec => {
+          cloudRec.loginTime = sanitizeTimeDisplay(cloudRec.loginTime);
+          cloudRec.logoutTime = sanitizeTimeDisplay(cloudRec.logoutTime);
+          if (currentUser && currentUser.role === 'agent' && String(cloudRec.userId) === String(currentUser.id) && cloudRec.date === today) {
+            const myLocal = localAtt.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+            if (myLocal && myLocal.status !== 'Completed' && (myLocal.activeSeconds > cloudRec.activeSeconds || myLocal.breakSeconds > cloudRec.breakSeconds)) {
+              return myLocal;
+            }
+          }
+          return cloudRec;
         });
+        if (JSON.stringify(mergedAtt) !== JSON.stringify(localAtt)) {
+          setStored('attendance_records', mergedAtt);
+          changed = true;
+        }
+      }
+      if (Array.isArray(res.onlineUsers)) {
+        const localOnline = getStored('online_users', []);
+        if (JSON.stringify(res.onlineUsers) !== JSON.stringify(localOnline)) {
+          setStored('online_users', res.onlineUsers);
+          changed = true;
+        }
+      }
+      if (Array.isArray(res.activityLogs) && res.activityLogs.length > 0) {
+        const localLogs = getStored('activity_logs', []);
+        if (JSON.stringify(res.activityLogs) !== JSON.stringify(localLogs)) {
+          setStored('activity_logs', res.activityLogs);
+          changed = true;
+        }
+      }
+      if (Array.isArray(res.rosterRecords) && res.rosterRecords.length > 0) {
+        const localRoster = getStored('roster_records', []);
+        if (JSON.stringify(res.rosterRecords) !== JSON.stringify(localRoster)) {
+          setStored('roster_records', res.rosterRecords);
+          changed = true;
+        }
+      }
+      if (res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
+        const localCfg = getStored('monthly_configs', {});
+        if (JSON.stringify(res.monthlyConfigs) !== JSON.stringify(localCfg)) {
+          setStored('monthly_configs', res.monthlyConfigs);
+          changed = true;
+        }
+      }
+      if (Array.isArray(res.customUsers) && res.customUsers.length > 0) {
+        const currentUsers = getStored('users', DEFAULT_USERS);
+        const mergedMap = new Map();
+        DEFAULT_USERS.forEach(u => mergedMap.set(String(u.id), normalizeUserRecord(u)));
+        currentUsers.forEach(u => mergedMap.set(String(u.id), normalizeUserRecord(u)));
+        res.customUsers.forEach(u => mergedMap.set(String(u.id), normalizeUserRecord(u)));
+        const mergedArr = Array.from(mergedMap.values());
+        if (JSON.stringify(mergedArr) !== JSON.stringify(currentUsers)) {
+          setStored('users', mergedArr);
+          changed = true;
+        }
+      }
+      if (changed && currentUser && !isAnyModalOpen()) {
+        renderAppLayout();
       }
     }
-  }
 
-  // Read Attendance Records
-  var attendanceRecords = [];
-  if (attSheet.getLastRow() > 1) {
-    var aData = attSheet.getRange(2, 1, attSheet.getLastRow() - 1, 14).getValues();
-    for (var k = aData.length - 1; k >= 0; k--) {
-      var cDate = String(aData[k][0] || "").replace(/'/g, "").trim();
-      if (cDate && aData[k][1]) {
-        attendanceRecords.push({
-          date: cDate,
-          userId: String(aData[k][1]).trim(),
-          userName: String(aData[k][2]).trim(),
-          team: String(aData[k][3]).trim(),
-          loginTime: cleanSheetTime(aData[k][4]),
-          logoutTime: cleanSheetTime(aData[k][5]),
-          status: String(aData[k][8] || "Working"),
-          breakReason: String(aData[k][9] || "-"),
-          breakLogs: String(aData[k][10] || "-"),
-          activeSeconds: Number(aData[k][11]) || 0,
-          breakSeconds: Number(aData[k][12]) || 0,
-          lastTick: Number(aData[k][13]) || Date.now()
+    function init() {
+      if (currentUser) {
+        currentUser = normalizeUserRecord(currentUser);
+        if (currentUser.role === 'admin') {
+          dashboardScope = currentUser.team;
+          monthlyPerfTeamScope = currentUser.team;
+        } else if (currentUser.role === 'supervisor') {
+          dashboardScope = 'ALL';
+          monthlyPerfTeamScope = 'ALL';
+        }
+        logsFilterScope = 'ALL';
+        reportsDateFilter = getTodayFormatted();
+        monthlyPerfAgentId = 'ALL';
+
+        if (currentUser.role === 'agent') {
+          ensureAgentAttendanceSession(currentUser);
+          startLiveDutyClock();
+        }
+        renderAppLayout();
+        fetchFromSheet();
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(fetchFromSheet, 4000);
+      } else {
+        document.getElementById('app').innerHTML = renderLogin();
+      }
+    }
+
+    function handleLogin(e) {
+      e.preventDefault();
+      const id = document.getElementById('loginId').value.trim();
+      const pass = document.getElementById('loginPass').value.trim();
+      const rawUser = getStored('users', DEFAULT_USERS).map(normalizeUserRecord).find(u => String(u.id) === id && u.pass === pass);
+      if (!rawUser) { alert('Invalid Employee ID or Password!'); return; }
+      const user = normalizeUserRecord(rawUser);
+      currentUser = user;
+      setStored('session_user', user);
+      dashboardScope = user.role === 'admin' ? user.team : 'ALL';
+      monthlyPerfTeamScope = user.role === 'admin' ? user.team : 'ALL';
+      monthlyPerfAgentId = 'ALL';
+      logsFilterScope = 'ALL';
+      reportsDateFilter = getTodayFormatted();
+
+      recordActivityLog('User Login', `Signed in to the portal (${user.role.toUpperCase()})`, true);
+
+      if (user.role === 'agent') {
+        ensureAgentAttendanceSession(user);
+        startLiveDutyClock();
+      }
+      init();
+    }
+
+    async function handleLogout() {
+      if (currentUser) {
+        if (currentUser.role === 'agent') {
+          if (!confirm('Are you sure you want to End Duty & Logout for today?')) return;
+          const today = getTodayFormatted();
+          let attList = getStored('attendance_records', []);
+          let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+          if (rec) {
+            rec.status = 'Completed';
+            rec.breakReason = '-';
+            rec.logoutTime = getNowTimeStr();
+            setStored('attendance_records', attList);
+            await postToSheet('ATTENDANCE_SYNC', rec);
+          }
+        }
+        const logMeta = recordActivityLog('User Logout', `Logged out of the portal (${currentUser.role.toUpperCase()})`);
+        await postToSheet('USER_LOGOUT', { userId: String(currentUser.id), userName: currentUser.name, team: currentUser.team, ...logMeta });
+      }
+      if (pollInterval) clearInterval(pollInterval);
+      if (dutyTimerInterval) clearInterval(dutyTimerInterval);
+      currentUser = null;
+      localStorage.removeItem('gb_session_user');
+      document.getElementById('app').innerHTML = renderLogin();
+    }
+
+    function setTab(tab) {
+      activeTab = tab;
+      if (tab === 'reports') {
+        logsFilterScope = 'ALL';
+        if (!reportsDateFilter) reportsDateFilter = getTodayFormatted();
+      } else if (tab === 'attendance') {
+        logsFilterScope = 'ALL';
+      } else if (tab === 'monthly_perf') {
+        if (currentUser && currentUser.role === 'admin') {
+          monthlyPerfTeamScope = currentUser.team;
+        } else {
+          monthlyPerfTeamScope = 'ALL';
+        }
+        monthlyPerfAgentId = 'ALL';
+      }
+      renderAppLayout();
+    }
+
+    function setDashboardScope(scope) { dashboardScope = scope; renderAppLayout(); }
+    function setLogsScope(scope) { logsFilterScope = scope; renderAppLayout(); }
+    function setActivityTeamFilter(scope) { activityTeamFilter = scope; renderAppLayout(); }
+    function setReportsDateFilter(dateStr) {
+      reportsDateFilter = dateStr;
+      if (dateStr && dateStr !== 'ALL' && dateStr.length === 10) {
+        const mKey = dateStr.substring(3);
+        if (mKey && mKey.length === 7) {
+          selectedMonthKey = mKey;
+          localStorage.setItem('gb_selected_month', selectedMonthKey);
+        }
+      }
+      renderAppLayout();
+    }
+    function setMonthlyPerfTeam(teamScope) {
+      monthlyPerfTeamScope = teamScope;
+      monthlyPerfAgentId = 'ALL';
+      renderAppLayout();
+    }
+    function setMonthlyPerfAgent(agId) {
+      monthlyPerfAgentId = agId;
+      renderAppLayout();
+    }
+
+    function renderLogin() {
+      return `
+        <div class="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+          <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-slate-800 border border-slate-200">
+            <div class="text-center mb-8">
+              <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl tab-active text-white shadow-lg mb-4">
+                <i class="fa-brands fa-facebook-f text-3xl"></i>
+              </div>
+              <h1 class="text-2xl font-black text-slate-900">Ghorerbazar <span class="text-blue-600">Facebook</span></h1>
+              <p class="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Sales & Incentive Dynamic Portal</p>
+            </div>
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+              <div>
+                <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Employee ID</label>
+                <input type="text" id="loginId" required placeholder="e.g. 10122, 10001 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Password</label>
+                <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
+              </div>
+              <button type="submit" class="w-full py-3.5 tab-active text-white font-extrabold rounded-xl shadow-lg transition-all">Sign In to Portal</button>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAppLayout() {
+      const u = currentUser;
+      const roleBadgeText = u.role === 'admin'
+        ? `TL (${u.team})`
+        : (u.role === 'supervisor' ? `Supervisor (View All)` : `${u.team} • Grade ${u.grade}`);
+
+      const allUsersList = getUsersForMonth(selectedMonthKey);
+      const activeOnlineUsers = allUsersList.filter(usr => {
+        const st = getUserOnlineStatus(usr.id);
+        return st === 'Online' || st === 'On Break';
+      });
+      const onlineNamesTooltip = activeOnlineUsers.length > 0
+        ? activeOnlineUsers.map(usr => `${usr.name} (${getUserOnlineStatus(usr.id)})`).join(' • ')
+        : 'No users online';
+
+      const html = `
+        <div class="flex-1 flex min-h-screen">
+          <aside class="w-60 sidebar-light p-4 flex flex-col justify-between shrink-0 shadow-sm">
+            <div>
+              <div class="flex items-center gap-3 px-2 mb-6">
+                <div class="w-9 h-9 rounded-xl tab-active text-white flex items-center justify-center font-bold shadow-md">
+                  <i class="fa-brands fa-facebook-f text-base"></i>
+                </div>
+                <div>
+                  <h1 class="text-sm font-black text-slate-900 leading-tight">Ghorerbazar</h1>
+                  <p class="text-[11px] font-extrabold text-blue-600">Facebook Team</p>
+                </div>
+              </div>
+
+              <nav class="space-y-1">
+                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard & Targets
+                </button>
+                <button onclick="setTab('monthly_perf')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'monthly_perf' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-chart-column text-sm text-purple-600"></i> Monthly Performance
+                </button>
+                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-file-invoice text-sm text-blue-600"></i> Daily Sales Reports
+                </button>
+                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Team vs Team & Ranking
+                </button>
+                <button onclick="setTab('roster')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'roster' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-calendar-week text-sm text-indigo-600"></i> Duty Roster
+                </button>
+                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
+                </button>
+                <button onclick="setTab('activity_logs')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'activity_logs' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-list-check text-sm text-rose-500"></i> Activity Logs
+                </button>
+                ${canViewAll(u) ? `
+                <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-sliders text-sm text-blue-600"></i> Monthly Setup & IDs
+                </button>
+                ` : ''}
+              </nav>
+            </div>
+
+            <div class="space-y-2.5">
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                <p class="text-[11px] font-extrabold text-emerald-600"><i class="fa-solid fa-rotate mr-1 animate-spin"></i> Live Cloud Sync</p>
+                <p class="text-[10px] text-slate-400">${activeOnlineUsers.length} User(s) Online Now</p>
+              </div>
+              <button onclick="handleLogout()" class="w-full py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow transition-colors">
+                <i class="fa-solid fa-power-off mr-1"></i> ${u.role === 'agent' ? 'End Duty & Logout' : 'Logout'}
+              </button>
+            </div>
+          </aside>
+
+          <div class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
+            <header class="min-h-[72px] py-3 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm shrink-0">
+              <div class="flex items-center gap-3 flex-wrap">
+                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
+                <span class="text-slate-300">/</span>
+                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab.replace('_', ' ')}</h2>
+                <span class="text-slate-300">•</span>
+                <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
+                  <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
+                  <span class="text-[11px] font-extrabold uppercase text-slate-500">Month:</span>
+                  <select onchange="changeSelectedMonth(this.value)" class="bg-transparent text-xs font-black text-blue-800 focus:outline-none cursor-pointer">
+                    ${AVAILABLE_MONTHS.map(m => `<option value="${m.key}" ${m.key === selectedMonthKey ? 'selected' : ''}>${m.label}</option>`).join('')}
+                  </select>
+                </div>
+                ${isSupervisor(u) ? `<span class="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-800 text-[10px] font-black uppercase"><i class="fa-solid fa-eye mr-1"></i>Supervisor View-Only Mode</span>` : ''}
+              </div>
+
+              <div class="flex items-center gap-3 shrink-0">
+                <button onclick="canViewAll(currentUser) ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl flex items-center gap-2 transition-colors">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span>${activeOnlineUsers.length} Online</span>
+                </button>
+
+                <!-- VISUAL SPINNER BUTTON -->
+                <button id="manualSyncBtn" onclick="handleManualSyncClick()" class="px-3.5 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-xl flex items-center gap-2 hover:bg-emerald-100 transition-colors">
+                  <i class="fa-solid fa-cloud-arrow-down text-xs"></i> Sync Now
+                </button>
+                <div class="flex items-center gap-3 pl-4 border-l border-slate-200 py-1">
+                  <div class="w-10 h-10 rounded-xl tab-active text-white flex items-center justify-center font-black text-sm shadow-sm shrink-0">
+                    ${u.name.charAt(0)}
+                  </div>
+                  <div class="text-left leading-tight">
+                    <p class="text-sm font-extrabold text-slate-900">${u.name}</p>
+                    <p class="text-[11px] font-extrabold ${isSupervisor(u) ? 'text-purple-600' : 'text-orange-600'} uppercase mt-0.5">${roleBadgeText}</p>
+                  </div>
+                </div>
+              </div>
+            </header>
+
+            <main class="p-5 lg:px-7 lg:py-6 max-w-[1540px] w-full mx-auto flex-1">${renderTabContent()}</main>
+          </div>
+        </div>
+        ${isFullAdmin(u) || u.role === 'agent' ? renderSubmitModal() : ''}
+        ${u.role === 'agent' ? renderBreakModal() : ''}
+        ${isFullAdmin(u) ? renderEditAttendanceModal() : ''}
+        ${isFullAdmin(u) ? renderUserModal() : ''}
+        ${isFullAdmin(u) ? renderProductConfigModal() : ''}
+        ${renderConfirmWarningModal()}
+      `;
+      document.getElementById('app').innerHTML = html;
+    }
+
+    function renderTabContent() {
+      if (activeTab === 'dashboard') return renderDashboard();
+      if (activeTab === 'monthly_perf') return renderMonthlyPerformanceView();
+      if (activeTab === 'roster') return renderDutyRosterView();
+      if (activeTab === 'attendance') return renderAttendanceView();
+      if (activeTab === 'activity_logs') return renderActivityLogsView();
+      if (activeTab === 'ranking') return renderRankingAndComparison();
+      if (activeTab === 'reports') return renderReports();
+      if (activeTab === 'agents') return renderManageAgents();
+    }
+
+    function renderConfirmWarningModal() {
+      return `
+        <div id="confirmWarningModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-red-200">
+            <div class="flex items-center gap-3.5 mb-4">
+              <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-xl shrink-0 shadow-sm">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+              </div>
+              <div>
+                <span id="warnModalBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-red-100 text-red-700">Security Warning</span>
+                <h3 id="warnModalTitle" class="text-base font-black text-slate-900 mt-1">Confirm Permanent Deletion</h3>
+              </div>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-red-50/70 border border-red-100 text-xs font-bold text-slate-700 leading-relaxed mb-5" id="warnModalMessage">
+              Are you sure you want to permanently delete this record?
+            </div>
+            <div class="flex justify-end items-center gap-2.5 pt-2 border-t border-slate-100">
+              <button type="button" onclick="closeModal('confirmWarningModal')" class="px-4 py-2.5 text-xs font-extrabold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                No, Keep It (Cancel)
+              </button>
+              <button type="button" onclick="executeConfirmedAction()" class="px-5 py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-lg flex items-center gap-1.5 transition-colors">
+                <i class="fa-solid fa-trash-can"></i> Yes, Permanently Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCompactTopWidgets(incentiveSummary) {
+      const u = currentUser;
+      const today = getTodayFormatted();
+      const attList = getStored('attendance_records', []);
+      const rec = (u && u.role === 'agent')
+        ? (attList.find(a => String(a.userId) === String(u.id) && a.date === today) || ensureAgentAttendanceSession(u))
+        : null;
+      const isBreak = rec && rec.status === 'On Break';
+
+      return `
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          ${u.role === 'agent' && rec ? `
+          <div class="card-dynamic px-4 py-3 border-l-4 ${isBreak ? 'border-l-amber-500 bg-amber-50/30' : 'border-l-emerald-500'} flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl ${isBreak ? 'bg-amber-500' : 'bg-emerald-600'} text-white flex items-center justify-center text-sm shadow-sm shrink-0">
+                <i class="fa-solid ${isBreak ? 'fa-mug-hot' : 'fa-user-clock'}"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${isBreak ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+                    ${isBreak ? `Break: ${rec.breakReason}` : 'Duty Active'}
+                  </span>
+                  <span class="text-[11px] font-bold text-slate-400">In: ${sanitizeTimeDisplay(rec.loginTime)}</span>
+                </div>
+                <div class="flex items-center gap-4 mt-0.5">
+                  <div>
+                    <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Working</span>
+                    <span id="live-work-timer" class="text-base font-black font-mono text-emerald-600">${formatHMS(rec.activeSeconds)}</span>
+                  </div>
+                  <div class="pl-4 border-l border-slate-200">
+                    <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Break</span>
+                    <span id="live-break-timer" class="text-base font-black font-mono text-amber-600">${formatHMS(rec.breakSeconds)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              ${isBreak ? `
+                <button onclick="handleResumeWork()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
+                  <i class="fa-solid fa-play"></i> Resume
+                </button>
+              ` : `
+                <button onclick="openBreakModal()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
+                  <i class="fa-solid fa-mug-saucer"></i> Break
+                </button>
+              `}
+              <button onclick="handleLogout()" title="End Duty & Logout" class="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-extrabold">
+                <i class="fa-solid fa-power-off"></i>
+              </button>
+            </div>
+          </div>
+          ` : `
+          <div class="card-dynamic px-4 py-3 border-l-4 border-l-blue-600 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm shadow-sm shrink-0">
+                <i class="fa-solid fa-calendar-check"></i>
+              </div>
+              <div>
+                <span class="text-[10px] font-black uppercase text-blue-600 block">Active Month Archive</span>
+                <h4 class="text-sm font-black text-slate-900">${(AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label}</h4>
+                <p class="text-[11px] font-semibold text-slate-400">Switch month at top bar to view past reports or setup next month</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button onclick="setTab('monthly_perf')" class="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-extrabold">Monthly Summary</button>
+              <button onclick="setTab('activity_logs')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-extrabold">Activity Logs</button>
+            </div>
+          </div>
+          `}
+
+          <div class="incentive-banner px-4 py-3 rounded-2xl shadow-sm flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm shadow-sm shrink-0">
+                <i class="fa-solid fa-award"></i>
+              </div>
+              <div class="min-w-0">
+                <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block">Earned Incentive (${selectedMonthKey})</span>
+                <h3 class="text-sm font-black text-slate-900 truncate">
+                  ৳${incentiveSummary.totalMoney.toLocaleString()} Cash Bonus 
+                  ${incentiveSummary.earnedRewards.length > 0 ? `+ ${incentiveSummary.earnedRewards.length} Rewards` : ''}
+                </h3>
+                <p class="text-[11px] font-bold text-slate-600 truncate">
+                  ${incentiveSummary.earnedRewards.length > 0 ? `Unlocked: ${incentiveSummary.earnedRewards.join(', ')}` : 'Hit 90% or 100% product target to unlock bonus'}
+                </p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 bg-amber-500 text-white rounded-lg text-[10px] font-black shrink-0">
+              🔥 Bonus
+            </span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDashboard() {
+      const u = currentUser;
+      const allSales = getStored('sales_records', []);
+      const monthUsers = getUsersForMonth(selectedMonthKey);
+      const myMonthUser = monthUsers.find(usr => String(usr.id) === String(u.id)) || u;
+      
+      let mySales = [];
+      if (canViewAll(u)) {
+        mySales = dashboardScope === 'ALL' ? allSales : allSales.filter(s => s.team === dashboardScope);
+      } else {
+        mySales = allSales.filter(s => String(s.userId) === String(u.id));
+      }
+
+      const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
+      const thisMonthSales = mySales.filter(s => s.date.endsWith(selectedMonthKey));
+      
+      const sprintSalesAmount = thisMonthSales.reduce((acc, curr) => {
+        const d = parseInt(curr.date.split('/')[0], 10);
+        if (tInfo.sprintName.includes('Sprint 1') && d <= 10) return acc + Number(curr.amount || 0);
+        if (tInfo.sprintName.includes('Sprint 2') && d > 10 && d <= 20) return acc + Number(curr.amount || 0);
+        if (tInfo.sprintName.includes('Sprint 3') && d > 20) return acc + Number(curr.amount || 0);
+        return acc;
+      }, 0);
+
+      const monthTotalAmount = thisMonthSales.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+      const monthTotalOrders = thisMonthSales.reduce((acc, curr) => acc + Number(curr.orders || 0), 0);
+      const monthTotalLeads = thisMonthSales.reduce((acc, curr) => acc + Number(curr.leads || 0), 0);
+      const monthConvRatio = monthTotalLeads > 0 ? ((monthTotalOrders / monthTotalLeads) * 100).toFixed(2) : '0.00';
+      
+      const sprintPct = tInfo.sprintGoal > 0 ? Math.min(100, Math.round((sprintSalesAmount / tInfo.sprintGoal) * 100)) : 0;
+      const monthPct = tInfo.workingTarget > 0 ? Math.min(100, Math.round((monthTotalAmount / tInfo.workingTarget) * 100)) : 0;
+
+      const pTotals = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
+      thisMonthSales.forEach(s => {
+        pTotals.ajwa += (Number(s.ajwa) || 0);
+        pTotals.pinkSalt += (Number(s.pinkSalt) || 0);
+        pTotals.blackGarlic += (Number(s.blackGarlic) || 0);
+        pTotals.sunHoney += (Number(s.sunHoney) || 0);
+        pTotals.bsHoney += (Number(s.bsHoney) || 0);
+        pTotals.gawaGhee += (Number(s.gawaGhee) || 0);
+      });
+
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      const incentiveSummary = calculateEarnedIncentives(pTotals, tInfo.agentCount, selectedMonthKey);
+
+      return `
+        <div class="space-y-4">
+          <div class="banner-hero-light px-5 py-4 rounded-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${dashboardScope === 'Team Nazim' ? 'bg-orange-500' : (dashboardScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800')} text-white">
+                  ${canViewAll(u) ? `${dashboardScope === 'ALL' ? 'Full Facebook Team (16)' : dashboardScope}` : u.team}
+                </span>
+                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
+                  ${canViewAll(u) ? `${tInfo.agentCount} Agents` : `Grade: ${myMonthUser.grade}`}
+                </span>
+                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
+                  Period: ${(AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label}
+                </span>
+              </div>
+              <h2 class="text-lg font-black text-slate-900 mt-1">Welcome, ${u.name}! 👋</h2>
+              
+              <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                <div class="px-2.5 py-0.5 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-600">
+                  Base: <strong class="text-slate-900">৳${tInfo.baseTarget.toLocaleString()}</strong>
+                </div>
+                <div class="px-2.5 py-0.5 rounded-lg bg-blue-50/70 border border-blue-200 text-[11px] font-bold text-blue-700">
+                  Working (+5%): <strong>৳${tInfo.workingTarget.toLocaleString()}</strong>
+                </div>
+                <div class="px-2.5 py-0.5 rounded-lg bg-emerald-50/70 border border-emerald-200 text-[11px] font-bold text-emerald-700">
+                  Daily Goal (÷26): <strong>৳${tInfo.dailyTarget.toLocaleString()}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              ${canViewAll(u) ? `
+              <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+                <button onclick="setDashboardScope('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
+                <button onclick="setDashboardScope('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
+                <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (16)</button>
+              </div>
+              ` : ''}
+              ${isFullAdmin(u) || u.role === 'agent' ? `
+              <button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2">
+                <i class="fa-solid fa-plus-circle"></i>
+                ${isFullAdmin(u) ? 'Add / Edit Agent Data' : 'Submit Daily Report'}
+              </button>
+              ` : ''}
+            </div>
+          </div>
+
+          ${renderCompactTopWidgets(incentiveSummary)}
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            <div class="kpi-card-1 p-4 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[10px] font-extrabold uppercase text-blue-100">Total Leads</span>
+                <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-users"></i></div>
+              </div>
+              <div class="mt-3">
+                <p class="text-2xl font-black text-white">${monthTotalLeads.toLocaleString()}</p>
+                <p class="text-[10px] font-bold text-blue-100 mt-0.5">Inbound (${selectedMonthKey})</p>
+              </div>
+            </div>
+
+            <div class="kpi-card-2 p-4 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[10px] font-extrabold uppercase text-emerald-100">Total Orders</span>
+                <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bag-shopping"></i></div>
+              </div>
+              <div class="mt-3">
+                <p class="text-2xl font-black text-white">${monthTotalOrders.toLocaleString()}</p>
+                <div class="flex justify-between text-[10px] font-bold text-emerald-100 mt-0.5 pt-1 border-t border-white/20">
+                  <span>Conv. Ratio:</span>
+                  <span class="text-white font-black">${monthConvRatio}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="kpi-card-3 p-4 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[10px] font-extrabold uppercase text-purple-100">Sales Revenue</span>
+                <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bangladeshi-taka-sign"></i></div>
+              </div>
+              <div class="mt-3">
+                <p class="text-xl font-black text-white">৳${monthTotalAmount.toLocaleString()}</p>
+                <p class="text-[10px] font-bold text-purple-100 mt-0.5">Achieved (${selectedMonthKey})</p>
+              </div>
+            </div>
+
+            <div class="kpi-card-4 p-4 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[10px] font-extrabold uppercase text-indigo-100">Target (+5% Buffer)</span>
+                <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bullseye"></i></div>
+              </div>
+              <div class="mt-3">
+                <p class="text-xl font-black text-white">৳${tInfo.workingTarget.toLocaleString()}</p>
+                <p class="text-[10px] font-bold text-indigo-100 mt-0.5">Daily: ৳${tInfo.dailyTarget.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div class="kpi-card-5 p-4 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[10px] font-extrabold uppercase text-amber-100">Target Achieved</span>
+                <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-trophy"></i></div>
+              </div>
+              <div class="mt-3">
+                <div class="flex items-baseline justify-between">
+                  <p class="text-2xl font-black text-white">${monthPct}%</p>
+                  <span class="text-[10px] font-bold text-amber-100">Conv: ${monthConvRatio}%</span>
+                </div>
+                <div class="w-full bg-black/20 rounded-full h-1.5 mt-1.5">
+                  <div class="bg-white h-1.5 rounded-full" style="width: ${monthPct}%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="sprint-banner p-4 rounded-2xl shadow-sm">
+              <div class="flex justify-between items-start">
+                <div>
+                  <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-blue-600 text-white">Current 10-Day Sprint</span>
+                  <h3 class="text-base font-black text-slate-900 mt-1">${tInfo.sprintName} (${tInfo.sprintPct * 100}% Goal)</h3>
+                </div>
+                <div class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm shadow-sm">
+                  <i class="fa-solid fa-bolt"></i>
+                </div>
+              </div>
+              <div class="mt-3">
+                <div class="flex justify-between text-xs font-extrabold mb-1">
+                  <span class="text-slate-600">Sprint Target: <strong class="text-slate-900">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
+                  <span class="text-slate-600">Achieved: <strong class="text-blue-700">৳${sprintSalesAmount.toLocaleString()}</strong></span>
+                </div>
+                <div class="progress-track h-2 bg-white">
+                  <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full transition-all" style="width: ${sprintPct}%"></div>
+                </div>
+                <div class="flex justify-between items-center mt-1.5 text-[11px] font-bold text-slate-600">
+                  <span>Remaining: ৳${Math.max(0, tInfo.sprintGoal - sprintSalesAmount).toLocaleString()}</span>
+                  <span class="text-blue-700 font-black">${sprintPct}% Completed</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="monthly-banner p-4 rounded-2xl shadow-sm">
+              <div class="flex justify-between items-start">
+                <div>
+                  <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-600 text-white">Monthly Total (+5% Return Buffer)</span>
+                  <h3 class="text-base font-black text-slate-900 mt-1">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</h3>
+                </div>
+                <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm shadow-sm">
+                  <i class="fa-solid fa-chart-line"></i>
+                </div>
+              </div>
+              <div class="mt-3">
+                <div class="flex justify-between text-xs font-extrabold mb-1">
+                  <span class="text-slate-600">Base Target: <strong class="text-slate-900">৳${tInfo.baseTarget.toLocaleString()}</strong></span>
+                  <span class="text-slate-600">Revenue: <strong class="text-emerald-700">৳${monthTotalAmount.toLocaleString()}</strong></span>
+                </div>
+                <div class="progress-track h-2 bg-white">
+                  <div class="bg-gradient-to-r from-emerald-600 to-teal-500 h-2 rounded-full transition-all" style="width: ${monthPct}%"></div>
+                </div>
+                <div class="flex justify-between items-center mt-1.5 text-[11px] font-bold text-slate-600">
+                  <span>Remaining: ৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</span>
+                  <span class="text-emerald-700 font-black">${monthPct}% Achieved</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-2.5">
+              <h3 class="text-xs font-black text-slate-800 uppercase tracking-wide">
+                <i class="fa-solid fa-gift text-blue-600 mr-1.5"></i> 
+                Facebook Product Incentive Targets (${canViewAll(u) ? `${dashboardScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
+              </h3>
+              <div class="flex items-center gap-2">
+                ${isFullAdmin(u) ? `<button onclick="openProductConfigModal()" class="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[11px] font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
+                <span class="px-2.5 py-0.5 rounded-full bg-white border text-[10px] font-extrabold text-slate-600">90% = Entry Bonus | 100% = Full Bonus</span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              ${Object.keys(activeProds).map(k => {
+                const p = activeProds[k];
+                const achieved = pTotals[k];
+                const target = p.targetKg * tInfo.agentCount; 
+                const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
+                const isUnlocked = pct >= 90;
+                return `
+                  <div class="${p.style} card-dynamic p-4 ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
+                    <div class="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 class="font-black text-sm text-slate-900">${p.name} ${isUnlocked ? '🔥' : ''}</h4>
+                        <p class="text-[11px] text-slate-500 font-bold">Target: <strong class="text-slate-800">${target.toFixed(2)} kg</strong></p>
+                      </div>
+                      <div class="w-8 h-8 rounded-xl ${p.badge} flex items-center justify-center shadow-sm text-xs">
+                        <i class="fa-solid ${p.icon}"></i>
+                      </div>
+                    </div>
+                    <div class="flex justify-between items-baseline mb-1.5">
+                      <span class="text-lg font-black text-slate-900">${achieved.toFixed(2)} <span class="text-[11px] font-bold text-slate-500">kg sold</span></span>
+                      <span class="px-2 py-0.5 rounded-md ${p.badge} text-[11px] font-black">${pct}%</span>
+                    </div>
+                    <div class="progress-track h-1.5 bg-white border border-slate-200/60 mb-2">
+                      <div class="${p.bar} h-1.5 rounded-full" style="width: ${pct}%"></div>
+                    </div>
+                    <p class="text-[10px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `90%: ৳${p.bonus90} | ` : ''}${p.bonus100 ? `100%: ৳${p.bonus100}` : ''}${p.item100 ? `100%: ${p.item100}` : ''}</strong></p>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMonthlyPerformanceView() {
+      const u = currentUser;
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      const monthSales = getStored('sales_records', []).filter(s => s.date.endsWith(selectedMonthKey));
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      let teamFilteredAgents = allAgents;
+      if (canViewAll(u)) {
+        if (monthlyPerfTeamScope !== 'ALL') {
+          teamFilteredAgents = allAgents.filter(a => a.team === monthlyPerfTeamScope);
+        }
+      } else {
+        teamFilteredAgents = allAgents.filter(a => String(a.id) === String(u.id));
+      }
+
+      let displayedAgents = teamFilteredAgents;
+      if (canViewAll(u) && monthlyPerfAgentId !== 'ALL') {
+        displayedAgents = teamFilteredAgents.filter(a => String(a.id) === String(monthlyPerfAgentId));
+      }
+
+      let totBase = 0, totWork = 0, totLeads = 0, totOrders = 0, totRev = 0;
+      let totAjwa = 0, totSalt = 0, totGarlic = 0, totSunH = 0, totBsH = 0, totGhee = 0;
+
+      const agentRows = displayedAgents.map(ag => {
+        const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+        const dateMap = new Map();
+        agSales.forEach(s => { if (!dateMap.has(s.date)) dateMap.set(s.date, s); });
+        const uniqueDailyLogs = Array.from(dateMap.values()).sort((a, b) => {
+          const da = parseInt(a.date.split('/')[0], 10) || 0;
+          const db = parseInt(b.date.split('/')[0], 10) || 0;
+          return da - db;
         });
+
+        const baseTgt = Number(ag.baseTarget) || 1232174;
+        const workTgt = Math.round(baseTgt * 1.05);
+        const leads = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
+        const orders = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
+        const rev = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+        const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+        const rem = Math.max(0, workTgt - rev);
+        const achPct = workTgt > 0 ? Math.round((rev / workTgt) * 100) : 0;
+
+        const ajwa = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.ajwa) || 0), 0);
+        const pinkSalt = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.pinkSalt) || 0), 0);
+        const blackGarlic = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.blackGarlic) || 0), 0);
+        const sunHoney = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.sunHoney) || 0), 0);
+        const bsHoney = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.bsHoney) || 0), 0);
+        const gawaGhee = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.gawaGhee) || 0), 0);
+
+        totBase += baseTgt;
+        totWork += workTgt;
+        totLeads += leads;
+        totOrders += orders;
+        totRev += rev;
+        totAjwa += ajwa;
+        totSalt += pinkSalt;
+        totGarlic += blackGarlic;
+        totSunH += sunHoney;
+        totBsH += bsHoney;
+        totGhee += gawaGhee;
+
+        return {
+          ...ag, baseTgt, workTgt, leads, orders, rev, conv, rem, achPct,
+          ajwa, pinkSalt, blackGarlic, sunHoney, bsHoney, gawaGhee, daysCount: uniqueDailyLogs.length, dailyLogs: uniqueDailyLogs
+        };
+      });
+
+      const totConv = totLeads > 0 ? ((totOrders / totLeads) * 100).toFixed(2) : '0.00';
+      const totRem = Math.max(0, totWork - totRev);
+      const totAchPct = totWork > 0 ? Math.round((totRev / totWork) * 100) : 0;
+
+      const singleAgentObj = displayedAgents.length === 1 ? agentRows[0] : null;
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-xl font-black text-slate-900">
+                <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>Monthly Performance Report (${monthLabel})
+              </h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">
+                ${canViewAll(u) ? `Defaulting to your team (${monthlyPerfTeamScope}). Filter by Team or select a specific Agent to inspect date-wise monthly performance.` : `View your complete monthly summary and date-wise performance table with total sum for ${monthLabel}.`}
+              </p>
+            </div>
+
+            ${canViewAll(u) ? `
+            <div class="flex flex-wrap items-center gap-3">
+              <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
+                <select onchange="setMonthlyPerfTeam(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                  <option value="Team Nazim" ${monthlyPerfTeamScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim (8 Agents)</option>
+                  <option value="Team Samad" ${monthlyPerfTeamScope === 'Team Samad' ? 'selected' : ''}>Team Samad (8 Agents)</option>
+                  <option value="ALL" ${monthlyPerfTeamScope === 'ALL' ? 'selected' : ''}>Overall All Teams (16 Agents)</option>
+                </select>
+              </div>
+
+              <div class="flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-xl">
+                <i class="fa-solid fa-user-check text-purple-600 text-xs"></i>
+                <span class="text-[10px] font-extrabold uppercase text-purple-700">Agent:</span>
+                <select onchange="setMonthlyPerfAgent(this.value)" class="bg-transparent text-xs font-extrabold text-purple-900 focus:outline-none cursor-pointer">
+                  <option value="ALL" ${monthlyPerfAgentId === 'ALL' ? 'selected' : ''}>All Agents (${teamFilteredAgents.length})</option>
+                  ${teamFilteredAgents.map(ag => `<option value="${ag.id}" ${String(monthlyPerfAgentId) === String(ag.id) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Agent Name</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5">Grade</th>
+                  <th class="p-3.5">Base Target</th>
+                  <th class="p-3.5">Working Target (+5%)</th>
+                  <th class="p-3.5 text-center">Leads</th>
+                  <th class="p-3.5 text-center">Orders</th>
+                  <th class="p-3.5 text-center">Conv. Ratio</th>
+                  <th class="p-3.5">Achieved Revenue</th>
+                  <th class="p-3.5">Remaining</th>
+                  <th class="p-3.5">Achieved %</th>
+                  <th class="p-3.5">Products Sold (KG)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${agentRows.map(r => `
+                  <tr class="hover:bg-slate-50/90 ${canViewAll(u) ? 'cursor-pointer' : ''}" onclick="${canViewAll(u) ? `setMonthlyPerfAgent('${r.id}')` : ''}" title="${canViewAll(u) ? 'Click to view date-by-date monthly table for this agent' : ''}">
+                    <td class="p-3.5 font-extrabold text-slate-900">${r.name} <span class="text-slate-400 text-[10px]">(${r.id})</span></td>
+                    <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${r.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${r.team}</span></td>
+                    <td class="p-3.5 font-black text-slate-700">${r.grade}</td>
+                    <td class="p-3.5 font-bold text-slate-500">৳${r.baseTgt.toLocaleString()}</td>
+                    <td class="p-3.5 font-extrabold text-indigo-700">৳${r.workTgt.toLocaleString()}</td>
+                    <td class="p-3.5 text-center font-bold text-slate-700">${r.leads.toLocaleString()}</td>
+                    <td class="p-3.5 text-center font-black text-blue-600">${r.orders.toLocaleString()}</td>
+                    <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${r.conv}%</span></td>
+                    <td class="p-3.5 font-black text-emerald-600 text-sm">৳${r.rev.toLocaleString()}</td>
+                    <td class="p-3.5 font-bold text-slate-500">৳${r.rem.toLocaleString()}</td>
+                    <td class="p-3.5">
+                      <span class="px-2.5 py-1 rounded-md ${r.achPct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${r.achPct}%</span>
+                    </td>
+                    <td class="p-3.5 text-[11px] font-bold text-slate-600">
+                      Ajwa: <strong>${r.ajwa.toFixed(2)}</strong> | Salt: <strong>${r.pinkSalt.toFixed(2)}</strong> | Garlic: <strong>${r.blackGarlic.toFixed(2)}</strong> | Sun.H: <strong>${r.sunHoney.toFixed(2)}</strong> | BS.H: <strong>${r.bsHoney.toFixed(2)}</strong> | Ghee: <strong>${r.gawaGhee.toFixed(2)}</strong>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot class="bg-slate-900 text-white font-black text-xs">
+                <tr>
+                  <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${agentRows.length} ${agentRows.length === 1 ? 'Agent' : 'Agents'})
+                  </td>
+                  <td class="p-4">৳${totBase.toLocaleString()}</td>
+                  <td class="p-4 text-indigo-300">৳${totWork.toLocaleString()}</td>
+                  <td class="p-4 text-center">${totLeads.toLocaleString()}</td>
+                  <td class="p-4 text-center text-blue-300">${totOrders.toLocaleString()}</td>
+                  <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${totConv}%</span></td>
+                  <td class="p-4 text-emerald-400 text-sm">৳${totRev.toLocaleString()}</td>
+                  <td class="p-4 text-slate-300">৳${totRem.toLocaleString()}</td>
+                  <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${totAchPct}%</span></td>
+                  <td class="p-4 text-[11px] text-amber-200">
+                    Ajwa: ${totAjwa.toFixed(2)} | Salt: ${totSalt.toFixed(2)} | Garlic: ${totGarlic.toFixed(2)} | Sun.H: ${totSunH.toFixed(2)} | BS.H: ${totBsH.toFixed(2)} | Ghee: ${totGhee.toFixed(2)} kg
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          ${singleAgentObj ? (() => {
+            const dTargetSingle = Math.round(singleAgentObj.workTgt / 26);
+            const sumDailyTgtSingle = dTargetSingle * singleAgentObj.dailyLogs.length;
+            return `
+            <div class="space-y-3 mt-6">
+              <div class="flex items-center justify-between bg-white px-5 py-3.5 rounded-2xl border border-slate-200">
+                <div>
+                  <h3 class="text-base font-black text-slate-900">
+                    <i class="fa-solid fa-calendar-day text-blue-600 mr-1.5"></i> 
+                    ${singleAgentObj.name}'s Date-Wise Monthly Performance (${monthLabel})
+                  </h3>
+                  <p class="text-xs font-bold text-slate-400">Day-by-day sales, conversion ratio, product weights & grand total sum</p>
+                </div>
+                ${canViewAll(u) ? `<button onclick="setMonthlyPerfAgent('ALL')" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-extrabold"><i class="fa-solid fa-arrow-left mr-1"></i>Back to All Team Members</button>` : ''}
+              </div>
+              <div class="card-dynamic overflow-hidden overflow-x-auto">
+                <table class="w-full text-left text-xs whitespace-nowrap">
+                  <thead class="table-header-light uppercase font-extrabold">
+                    <tr>
+                      <th class="p-3.5">Date</th>
+                      <th class="p-3.5 text-center">Leads</th>
+                      <th class="p-3.5 text-center">Orders</th>
+                      <th class="p-3.5 text-center">Conv. Ratio</th>
+                      <th class="p-3.5">Sales Amount</th>
+                      <th class="p-3.5">Daily Target (÷26)</th>
+                      <th class="p-3.5">Daily Achieved %</th>
+                      <th class="p-3.5">Products Sold (KG)</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 font-semibold">
+                    ${singleAgentObj.dailyLogs.length === 0 ? `<tr><td colspan="8" class="p-8 text-center text-slate-400 font-bold">No daily entries submitted by ${singleAgentObj.name} in ${monthLabel} yet.</td></tr>` : ''}
+                    ${singleAgentObj.dailyLogs.map(dl => {
+                      const dConv = Number(dl.leads) > 0 ? ((Number(dl.orders) / Number(dl.leads)) * 100).toFixed(2) : '0.00';
+                      const dAch = dTargetSingle > 0 ? Math.round((Number(dl.amount) / dTargetSingle) * 100) : 0;
+                      return `
+                        <tr class="hover:bg-slate-50">
+                          <td class="p-3.5 font-extrabold text-slate-800">${cleanDisplayDate(dl.date)}</td>
+                          <td class="p-3.5 text-center font-bold text-slate-700">${dl.leads}</td>
+                          <td class="p-3.5 text-center font-black text-blue-600">${dl.orders}</td>
+                          <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${dConv}%</span></td>
+                          <td class="p-3.5 font-black text-emerald-600">৳${Number(dl.amount).toLocaleString()}</td>
+                          <td class="p-3.5 font-bold text-slate-500">৳${dTargetSingle.toLocaleString()}</td>
+                          <td class="p-3.5"><span class="px-2 py-0.5 rounded ${dAch >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${dAch}%</span></td>
+                          <td class="p-3.5 text-[11px] font-bold text-slate-600">
+                            Ajwa: <strong>${dl.ajwa||0}</strong> | Salt: <strong>${dl.pinkSalt||0}</strong> | Garlic: <strong>${dl.blackGarlic||0}</strong> | Sun.H: <strong>${dl.sunHoney||0}</strong> | BS.H: <strong>${dl.bsHoney||0}</strong> | Ghee: <strong>${dl.gawaGhee||0}</strong>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                  <tfoot class="bg-slate-900 text-white font-black text-xs">
+                    <tr>
+                      <td class="p-4 uppercase tracking-wider text-amber-400">
+                        <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${singleAgentObj.dailyLogs.length} Days)
+                      </td>
+                      <td class="p-4 text-center">${singleAgentObj.leads.toLocaleString()}</td>
+                      <td class="p-4 text-center text-blue-300">${singleAgentObj.orders.toLocaleString()}</td>
+                      <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${singleAgentObj.conv}%</span></td>
+                      <td class="p-4 text-emerald-400 text-sm">৳${singleAgentObj.rev.toLocaleString()}</td>
+                      <td class="p-4 text-slate-300">৳${sumDailyTgtSingle.toLocaleString()} <span class="text-[10px] text-slate-400">(Month: ৳${singleAgentObj.workTgt.toLocaleString()})</span></td>
+                      <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${singleAgentObj.achPct}% of Month</span></td>
+                      <td class="p-4 text-[11px] text-amber-200">
+                        Ajwa: ${singleAgentObj.ajwa.toFixed(2)} | Salt: ${singleAgentObj.pinkSalt.toFixed(2)} | Garlic: ${singleAgentObj.blackGarlic.toFixed(2)} | Sun.H: ${singleAgentObj.sunHoney.toFixed(2)} | BS.H: ${singleAgentObj.bsHoney.toFixed(2)} | Ghee: ${singleAgentObj.gawaGhee.toFixed(2)} kg
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+            `;
+          })() : ''}
+        </div>
+      `;
+    }
+
+    function renderDutyRosterView() {
+      const u = currentUser;
+      const isEditable = isFullAdmin(u);
+      const roster = getRosterForMonth(selectedMonthKey);
+      const days = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
+      const dayLabels = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+      const samadRows = roster.filter(r => r.team === 'Team Samad');
+      const nazimRows = roster.filter(r => r.team === 'Team Nazim');
+
+      function computeRosterSummary(rows, excludeTL) {
+        const filtered = excludeTL ? rows.filter(r => !r.isTL && r.id !== '10107' && r.id !== '10122') : rows;
+        const counts = {
+          morning: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          general: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          evening: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          night: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          doCount: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 }
+        };
+        filtered.forEach(r => {
+          days.forEach(d => {
+            const val = String(r[d] || '').toUpperCase();
+            if (val.includes('7:00')) counts.morning[d]++;
+            else if (val.includes('10:00')) counts.general[d]++;
+            else if (val.includes('3:00')) counts.evening[d]++;
+            else if (val.includes('NIGHT') || val.includes('11:00')) counts.night[d]++;
+            else if (val === 'DO' || val.includes('OFF')) counts.doCount[d]++;
+          });
+        });
+        return counts;
+      }
+
+      const samadSum = computeRosterSummary(samadRows, true);
+      const nazimSum = computeRosterSummary(nazimRows, true);
+      const combinedAll = computeRosterSummary(roster, false);
+      const combinedNoTL = computeRosterSummary(roster, true);
+
+      function renderShiftCell(row, dKey) {
+        const val = row[dKey] || '3:00 PM';
+        const cellClass = val === 'DO' ? 'roster-do' : (val === 'Night' ? 'roster-night' : 'text-slate-700 font-semibold');
+        if (!isEditable) {
+          return `<td class="px-1.5 py-2 border border-slate-200 text-center text-[11px] whitespace-nowrap ${cellClass}">${val}</td>`;
+        }
+        return `
+          <td class="p-1 border border-slate-200 text-center ${cellClass}">
+            <select onchange="handleRosterShiftChange('${row.id}', '${dKey}', this.value)" class="w-full bg-transparent text-center text-[11px] font-bold focus:outline-none cursor-pointer">
+              ${SHIFT_OPTIONS.map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('')}
+            </select>
+          </td>
+        `;
+      }
+
+      function renderTeamSummaryTable(title, sumObj) {
+        const rowsSpec = [
+          { time: '7:00 AM', shift: 'Morning', key: 'morning' },
+          { time: '10:00 AM', shift: 'General Time', key: 'general' },
+          { time: '3:00 PM', shift: 'Evening', key: 'evening' },
+          { time: '11:00 PM', shift: 'Night', key: 'night' },
+          { time: 'Day Off', shift: 'Day Off', key: 'doCount' }
+        ];
+        return `
+          <div class="card-dynamic overflow-hidden mt-4">
+            <div class="bg-slate-100 px-4 py-2 border-b border-slate-200 font-black text-xs text-slate-800 text-center uppercase">${title}</div>
+            <table class="w-full text-[11px] text-center border-collapse">
+              <thead class="bg-slate-50 font-extrabold text-slate-600">
+                <tr>
+                  <th class="p-1.5 border border-slate-200">Duty Time</th>
+                  <th class="p-1.5 border border-slate-200">Duty Shift</th>
+                  ${dayLabels.map(dl => `<th class="p-1.5 border border-slate-200">${dl}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody class="font-bold text-slate-700">
+                ${rowsSpec.map(rs => `
+                  <tr>
+                    <td class="p-1.5 border border-slate-200">${rs.time}</td>
+                    <td class="p-1.5 border border-slate-200">${rs.shift}</td>
+                    ${days.map(d => `<td class="p-1.5 border border-slate-200">${sumObj[rs.key][d]}</td>`).join('')}
+                  </tr>
+                `).join('')}
+                <tr class="bg-slate-100 font-black text-slate-900">
+                  <td colspan="2" class="p-1.5 border border-slate-200">In Total (Agents)</td>
+                  ${days.map(d => `<td class="p-1.5 border border-slate-200">${sumObj.morning[d] + sumObj.general[d] + sumObj.evening[d] + sumObj.night[d] + sumObj.doCount[d]}</td>`).join('')}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      const monthTitle = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      return `
+        <div class="space-y-5">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-calendar-week text-blue-600 mr-2"></i>Duty Roster (${monthTitle})</h2>
+              <p class="text-xs font-bold text-slate-500">
+                ${isEditable ? 'Admin Mode: Click any shift dropdown in the table to change schedule. Changes auto-save & update summaries!' : 'View weekly shift schedule and Day Off (DO) assignments.'}
+              </p>
+            </div>
+            <span class="px-3 py-1.5 rounded-xl bg-orange-100 text-orange-800 text-xs font-black">
+              DO = Day Off • Night = 11:00 PM
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div>
+              <div class="card-dynamic overflow-hidden">
+                <div class="bg-blue-600 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Team: Facebook (Abdus Samad)</div>
+                <table class="w-full text-[11px] border-collapse">
+                  <thead class="bg-slate-50 font-extrabold text-slate-600">
+                    <tr>
+                      <th class="px-1.5 py-2 border border-slate-200">ID</th>
+                      <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
+                      ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${samadRows.map(r => `
+                      <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
+                        <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
+                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name} ${r.isTL ? '<span class="text-[10px] text-blue-600 font-black">(TL)</span>' : ''}</td>
+                        ${days.map(d => renderShiftCell(r, d)).join('')}
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+              ${renderTeamSummaryTable('Team Samad — Roster Summary', samadSum)}
+            </div>
+
+            <div>
+              <div class="card-dynamic overflow-hidden">
+                <div class="bg-orange-500 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Team: Facebook (Nazim)</div>
+                <table class="w-full text-[11px] border-collapse">
+                  <thead class="bg-slate-50 font-extrabold text-slate-600">
+                    <tr>
+                      <th class="px-1.5 py-2 border border-slate-200">ID</th>
+                      <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
+                      ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${nazimRows.map(r => `
+                      <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
+                        <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
+                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name} ${r.isTL ? '<span class="text-[10px] text-orange-600 font-black">(TL)</span>' : ''}</td>
+                        ${days.map(d => renderShiftCell(r, d)).join('')}
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+              ${renderTeamSummaryTable('Team Nazim — Roster Summary', nazimSum)}
+            </div>
+          </div>
+
+          <div class="card-dynamic overflow-hidden max-w-4xl mx-auto">
+            <div class="bg-slate-900 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Facebook Team Roster Summary (Combined)</div>
+            <table class="w-full text-xs text-center border-collapse">
+              <thead class="bg-slate-100 font-extrabold text-slate-700">
+                <tr>
+                  <th class="p-2 border border-slate-200">Duty Time</th>
+                  <th class="p-2 border border-slate-200">Duty Shift</th>
+                  ${dayLabels.map(dl => `<th class="p-2 border border-slate-200">${dl}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody class="font-bold text-slate-700">
+                <tr class="bg-orange-50/40"><td class="p-2 border border-slate-200">7:00 AM</td><td class="p-2 border border-slate-200">Morning</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.morning[d]}</td>`).join('')}</tr>
+                <tr class="bg-orange-50/40"><td class="p-2 border border-slate-200">10:00 AM</td><td class="p-2 border border-slate-200">General Time</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.general[d]}</td>`).join('')}</tr>
+                <tr class="bg-orange-50/40"><td class="p-2 border border-slate-200">3:00 PM</td><td class="p-2 border border-slate-200">Evening</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.evening[d]}</td>`).join('')}</tr>
+                <tr><td class="p-2 border border-slate-200">11:00 PM</td><td class="p-2 border border-slate-200">Night</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.night[d]}</td>`).join('')}</tr>
+                <tr><td class="p-2 border border-slate-200">Day Off</td><td class="p-2 border border-slate-200">Day Off</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.doCount[d]}</td>`).join('')}</tr>
+                <tr class="bg-slate-100 font-black text-slate-900">
+                  <td colspan="2" class="p-2 border border-slate-200">In Total (Agents)</td>
+                  ${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.morning[d] + combinedNoTL.general[d] + combinedNoTL.evening[d] + combinedNoTL.night[d] + combinedNoTL.doCount[d]}</td>`).join('')}
+                </tr>
+                <tr class="bg-emerald-50 font-black text-emerald-800">
+                  <td colspan="2" class="p-2 border border-slate-200">In Total (Daily Active Agents)</td>
+                  ${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.morning[d] + combinedNoTL.general[d] + combinedNoTL.evening[d] + combinedNoTL.night[d]}</td>`).join('')}
+                </tr>
+                <tr class="bg-blue-50 font-black text-blue-800">
+                  <td colspan="2" class="p-2 border border-slate-200">In Total Active (Including TL)</td>
+                  ${days.map(d => `<td class="p-2 border border-slate-200">${combinedAll.morning[d] + combinedAll.general[d] + combinedAll.evening[d] + combinedAll.night[d]}</td>`).join('')}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleRosterShiftChange(empId, dayKey, newShift) {
+      if (!isFullAdmin(currentUser)) return;
+      const roster = getRosterForMonth(selectedMonthKey);
+      const targetRow = roster.find(r => String(r.id) === String(empId));
+      if (!targetRow) return;
+
+      targetRow[dayKey] = newShift;
+      targetRow.monthKey = selectedMonthKey;
+
+      let savedList = getStored('roster_records', []);
+      const idx = savedList.findIndex(r => r.monthKey === selectedMonthKey && String(r.id) === String(empId));
+      if (idx !== -1) savedList[idx] = targetRow;
+      else savedList.push(targetRow);
+      setStored('roster_records', savedList);
+
+      const logMeta = recordActivityLog('Updated Duty Roster', `Changed ${targetRow.name}'s (${empId}) ${dayKey.toUpperCase()} shift to "${newShift}" (${selectedMonthKey})`);
+      renderAppLayout();
+      await postToSheet('SAVE_ROSTER_ROW', { ...targetRow, ...logMeta });
+    }
+
+    function renderAttendanceView() {
+      const u = currentUser;
+      const allAtt = getStored('attendance_records', []).filter(a => a.date.endsWith(selectedMonthKey));
+      let records = [];
+      if (canViewAll(u)) {
+        records = logsFilterScope === 'ALL' ? allAtt : allAtt.filter(a => a.team === logsFilterScope);
+      } else {
+        records = allAtt.filter(a => String(a.userId) === String(u.id));
+      }
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 class="text-xl font-black text-slate-900"><i class="fa-regular fa-clock text-emerald-600 mr-2"></i>Attendance & Duty Logs (${selectedMonthKey})</h2>
+              <p class="text-xs font-bold text-slate-500">Live duty tracking from login to logout with break reasons and total duration</p>
+            </div>
+            <div class="flex items-center gap-2">
+              ${canViewAll(u) ? `
+              <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+                <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
+                <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+              </select>
+              ` : ''}
+              ${isFullAdmin(u) ? `
+              <button onclick="openEditAttendanceModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
+                <i class="fa-solid fa-plus mr-1"></i> Add / Edit Attendance
+              </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-4">Date</th>
+                  <th class="p-4">Agent Name</th>
+                  <th class="p-4">Team</th>
+                  <th class="p-4">Duty Status</th>
+                  <th class="p-4">Login Time</th>
+                  <th class="p-4">Logout Time</th>
+                  <th class="p-4">Working Hours</th>
+                  <th class="p-4">Break Time</th>
+                  <th class="p-4">Current Break Reason</th>
+                  <th class="p-4">Break History</th>
+                  ${isFullAdmin(u) ? `<th class="p-4 text-right">Admin Actions</th>` : ''}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${records.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No attendance records logged for this month yet.</td></tr>' : ''}
+                ${records.map(r => {
+                  let statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800"><span class="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block mr-1 animate-ping"></span>Working</span>`;
+                  if (r.status === 'On Break') {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800"><i class="fa-solid fa-mug-hot mr-1"></i>On Break</span>`;
+                  } else if (r.status === 'Completed') {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-200 text-slate-700"><i class="fa-solid fa-check-double mr-1"></i>Completed</span>`;
+                  }
+
+                  return `
+                    <tr class="hover:bg-slate-50/90">
+                      <td class="p-4 font-bold text-slate-700">${cleanDisplayDate(r.date)}</td>
+                      <td class="p-4 font-extrabold text-slate-900">${r.userName} <span class="text-slate-400 text-[10px]">(${r.userId})</span></td>
+                      <td class="p-4"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${r.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${r.team}</span></td>
+                      <td class="p-4">${statusBadge}</td>
+                      <td class="p-4 font-bold text-slate-700">${sanitizeTimeDisplay(r.loginTime)}</td>
+                      <td class="p-4 font-bold text-slate-700">${sanitizeTimeDisplay(r.logoutTime)}</td>
+                      <td class="p-4 font-mono font-black text-emerald-600 text-sm">${formatHMS(r.activeSeconds)}</td>
+                      <td class="p-4 font-mono font-black text-amber-600 text-sm">${formatHMS(r.breakSeconds)}</td>
+                      <td class="p-4 font-bold text-amber-700">${r.breakReason || '-'}</td>
+                      <td class="p-4 text-[11px] text-slate-500 max-w-xs truncate" title="${r.breakLogs || '-'}">${r.breakLogs || '-'}</td>
+                      ${isFullAdmin(u) ? `
+                      <td class="p-4 text-right space-x-1">
+                        <button onclick="openEditAttendanceModal('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>
+                        <button onclick="handleDeleteAttendance('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>
+                      </td>
+                      ` : ''}
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderRankingAndComparison() {
+      const allUsers = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
+      const allSales = getStored('sales_records', []);
+      const monthSales = allSales.filter(s => s.date.endsWith(selectedMonthKey));
+
+      function calcTeamStats(teamName) {
+        const tAgents = allUsers.filter(a => a.team === teamName);
+        const baseTgt = tAgents.reduce((s, a) => s + Number(a.baseTarget || 0), 0);
+        const workTgt = Math.round(baseTgt * 1.05);
+        const tSales = monthSales.filter(s => s.team === teamName);
+        const leads = tSales.reduce((s, c) => s + Number(c.leads || 0), 0);
+        const orders = tSales.reduce((s, c) => s + Number(c.orders || 0), 0);
+        const revenue = tSales.reduce((s, c) => s + Number(c.amount || 0), 0);
+        const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+        const pct = workTgt > 0 ? Math.min(100, Math.round((revenue / workTgt) * 100)) : 0;
+        return { teamName, agentCount: tAgents.length, workTgt, leads, orders, revenue, conv, pct };
+      }
+
+      const nazimStats = calcTeamStats('Team Nazim');
+      const samadStats = calcTeamStats('Team Samad');
+
+      const rankedAgents = allUsers.map(ag => {
+        const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+        const leads = agSales.reduce((s, c) => s + Number(c.leads || 0), 0);
+        const orders = agSales.reduce((s, c) => s + Number(c.orders || 0), 0);
+        const revenue = agSales.reduce((s, c) => s + Number(c.amount || 0), 0);
+        const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+        const workTgt = Math.round(Number(ag.baseTarget || 1232174) * 1.05);
+        const pct = workTgt > 0 ? Math.round((revenue / workTgt) * 100) : 0;
+        return { ...ag, leads, orders, revenue, conv, workTgt, pct };
+      }).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders);
+
+      return `
+        <div class="space-y-6">
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>Team vs Team Comparison (${selectedMonthKey})</h2>
+                <p class="text-xs font-bold text-slate-500">Team Nazim vs Team Samad — Monthly performance head-to-head</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div class="card-dynamic p-5 border-t-4 border-t-orange-500">
+                <div class="flex justify-between items-center mb-4">
+                  <div>
+                    <span class="px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-black uppercase">Team Nazim</span>
+                    <p class="text-xs font-bold text-slate-400 mt-1">TL: Md. Nazimur Rahman • ${nazimStats.agentCount} Agents</p>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-3xl font-black text-orange-600">${nazimStats.pct}%</span>
+                    <p class="text-[10px] font-bold uppercase text-slate-400">Achieved</p>
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl mb-4 text-center">
+                  <div><span class="text-[10px] font-bold text-slate-400 block">Revenue</span><strong class="text-sm font-black text-emerald-600">৳${nazimStats.revenue.toLocaleString()}</strong></div>
+                  <div class="border-x"><span class="text-[10px] font-bold text-slate-400 block">Orders / Leads</span><strong class="text-sm font-black text-slate-800">${nazimStats.orders} / ${nazimStats.leads}</strong></div>
+                  <div><span class="text-[10px] font-bold text-slate-400 block">Conv. Ratio</span><strong class="text-sm font-black text-blue-600">${nazimStats.conv}%</strong></div>
+                </div>
+                <div class="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
+                  <span>Target (+5%): ৳${nazimStats.workTgt.toLocaleString()}</span>
+                  <span>Remaining: ৳${Math.max(0, nazimStats.workTgt - nazimStats.revenue).toLocaleString()}</span>
+                </div>
+                <div class="progress-track h-2.5"><div class="bg-gradient-to-r from-orange-500 to-amber-500 h-2.5 rounded-full" style="width:${nazimStats.pct}%"></div></div>
+              </div>
+
+              <div class="card-dynamic p-5 border-t-4 border-t-blue-600">
+                <div class="flex justify-between items-center mb-4">
+                  <div>
+                    <span class="px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-black uppercase">Team Samad</span>
+                    <p class="text-xs font-bold text-slate-400 mt-1">TL: Md Abdus Samad • ${samadStats.agentCount} Agents</p>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-3xl font-black text-blue-600">${samadStats.pct}%</span>
+                    <p class="text-[10px] font-bold uppercase text-slate-400">Achieved</p>
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl mb-4 text-center">
+                  <div><span class="text-[10px] font-bold text-slate-400 block">Revenue</span><strong class="text-sm font-black text-emerald-600">৳${samadStats.revenue.toLocaleString()}</strong></div>
+                  <div class="border-x"><span class="text-[10px] font-bold text-slate-400 block">Orders / Leads</span><strong class="text-sm font-black text-slate-800">${samadStats.orders} / ${samadStats.leads}</strong></div>
+                  <div><span class="text-[10px] font-bold text-slate-400 block">Conv. Ratio</span><strong class="text-sm font-black text-blue-600">${samadStats.conv}%</strong></div>
+                </div>
+                <div class="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
+                  <span>Target (+5%): ৳${samadStats.workTgt.toLocaleString()}</span>
+                  <span>Remaining: ৳${Math.max(0, samadStats.workTgt - samadStats.revenue).toLocaleString()}</span>
+                </div>
+                <div class="progress-track h-2.5"><div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2.5 rounded-full" style="width:${samadStats.pct}%"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-4">
+              <div>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
+                <p class="text-xs font-bold text-slate-500">Combined leaderboard across both teams sorted by sales revenue and order volume</p>
+              </div>
+              ${isFullAdmin(currentUser) ? `<button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow">+ Add Agent Data</button>` : ''}
+            </div>
+
+            <div class="card-dynamic overflow-hidden overflow-x-auto">
+              <table class="w-full text-left text-xs whitespace-nowrap">
+                <thead class="table-header-light uppercase font-extrabold">
+                  <tr>
+                    <th class="p-3.5">Rank</th>
+                    <th class="p-3.5">Agent Name</th>
+                    <th class="p-3.5">Live Status</th>
+                    <th class="p-3.5">Team</th>
+                    <th class="p-3.5">Grade</th>
+                    <th class="p-3.5">Leads / Orders</th>
+                    <th class="p-3.5">Conv. Ratio</th>
+                    <th class="p-3.5">Working Target (+5%)</th>
+                    <th class="p-3.5">Achieved Revenue</th>
+                    <th class="p-3.5">Achievement</th>
+                    ${isFullAdmin(currentUser) ? `<th class="p-3.5 text-right">Admin Action</th>` : ''}
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-semibold">
+                  ${rankedAgents.map((ag, idx) => {
+                    let rankBadge = `<span class="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-black">${idx + 1}</span>`;
+                    if (idx === 0) rankBadge = `<span class="w-6 h-6 rounded-full bg-amber-400 text-white flex items-center justify-center font-black shadow"><i class="fa-solid fa-trophy text-[10px]"></i></span>`;
+                    else if (idx === 1) rankBadge = `<span class="w-6 h-6 rounded-full bg-slate-300 text-slate-800 flex items-center justify-center font-black">2</span>`;
+                    else if (idx === 2) rankBadge = `<span class="w-6 h-6 rounded-full bg-amber-700 text-white flex items-center justify-center font-black">3</span>`;
+
+                    return `<tr class="hover:bg-slate-50/90">
+                      <td class="p-3.5">${rankBadge}</td>
+                      <td class="p-3.5 font-extrabold text-slate-900">${ag.name} <span class="text-slate-400 text-[10px]">(${ag.id})</span></td>
+                      <td class="p-3.5">${renderOnlineStatusBadge(ag.id)}</td>
+                      <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${ag.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${ag.team}</span></td>
+                      <td class="p-3.5 font-black text-slate-700">${ag.grade}</td>
+                      <td class="p-3.5">${ag.leads} / <strong class="text-blue-600">${ag.orders}</strong></td>
+                      <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${ag.conv}%</span></td>
+                      <td class="p-3.5 font-bold text-slate-600">৳${ag.workTgt.toLocaleString()}</td>
+                      <td class="p-3.5 font-black text-emerald-600 text-sm">৳${ag.revenue.toLocaleString()}</td>
+                      <td class="p-3.5">
+                        <div class="flex items-center gap-2">
+                          <span class="font-black text-slate-800">${ag.pct}%</span>
+                          <div class="w-16 progress-track h-2"><div class="bg-blue-600 h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
+                        </div>
+                      </td>
+                      ${isFullAdmin(currentUser) ? `
+                      <td class="p-3.5 text-right">
+                        <button onclick="openReportModal('${ag.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Add / Edit Data</button>
+                      </td>
+                      ` : ''}
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderReports() {
+      const u = currentUser;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const rawSales = getStored('sales_records', []);
+      
+      let dateFilteredSales = [];
+      if (reportsDateFilter === 'ALL') {
+        dateFilteredSales = rawSales.filter(s => s.date.endsWith(selectedMonthKey));
+      } else {
+        dateFilteredSales = rawSales.filter(s => s.date === reportsDateFilter);
+      }
+
+      let sales = [];
+      if (canViewAll(u)) {
+        sales = logsFilterScope === 'ALL' ? dateFilteredSales : dateFilteredSales.filter(s => s.team === logsFilterScope);
+      } else {
+        sales = dateFilteredSales.filter(s => String(s.userId) === String(u.id));
+      }
+
+      const uniqueMap = new Map();
+      sales.forEach(s => {
+        const key = `${s.userId}_${s.date}`;
+        if (!uniqueMap.has(key)) uniqueMap.set(key, s);
+      });
+      sales = Array.from(uniqueMap.values());
+
+      let sumLeads = 0, sumOrders = 0, sumAmount = 0, sumDailyTgt = 0;
+      let sumAjwa = 0, sumSalt = 0, sumGarlic = 0, sumSunH = 0, sumBsH = 0, sumGhee = 0;
+
+      sales.forEach(s => {
+        const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
+        const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
+        const agDailyTarget = Math.round(agWorkTarget / 26);
+
+        sumLeads += Number(s.leads) || 0;
+        sumOrders += Number(s.orders) || 0;
+        sumAmount += Number(s.amount) || 0;
+        sumDailyTgt += agDailyTarget;
+        sumAjwa += Number(s.ajwa) || 0;
+        sumSalt += Number(s.pinkSalt) || 0;
+        sumGarlic += Number(s.blackGarlic) || 0;
+        sumSunH += Number(s.sunHoney) || 0;
+        sumBsH += Number(s.bsHoney) || 0;
+        sumGhee += Number(s.gawaGhee) || 0;
+      });
+
+      const sumConv = sumLeads > 0 ? ((sumOrders / sumLeads) * 100).toFixed(2) : '0.00';
+      const sumAchPct = sumDailyTgt > 0 ? Math.round((sumAmount / sumDailyTgt) * 100) : 0;
+      const isShowingToday = reportsDateFilter === getTodayFormatted();
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-xl font-black text-slate-900">
+                <i class="fa-solid fa-file-invoice text-blue-600 mr-2"></i>
+                Daily Sales & Conversion Logs (${reportsDateFilter === 'ALL' ? `Full Month • ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)})
+              </h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">
+                Showing entries for <strong>${reportsDateFilter === 'ALL' ? `All Dates in ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)}</strong> — use the date picker to inspect any specific date
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <i class="fa-solid fa-calendar-day text-blue-600 text-xs"></i>
+                <span class="text-[10px] font-extrabold uppercase text-slate-500">Select Date:</span>
+                <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-800 focus:outline-none cursor-pointer">
+              </div>
+
+              <button onclick="setReportsDateFilter('${getTodayFormatted()}')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${isShowingToday ? 'bg-blue-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+                Today (${cleanDisplayDate(getTodayFormatted())})
+              </button>
+              <button onclick="setReportsDateFilter('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${reportsDateFilter === 'ALL' ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+                All Dates (${selectedMonthKey})
+              </button>
+
+              ${canViewAll(u) ? `
+              <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+                <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
+                <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+              </select>
+              ` : ''}
+
+              ${isFullAdmin(u) || u.role === 'agent' ? `
+              <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
+                <i class="fa-solid fa-plus mr-1"></i> Add New Report
+              </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Date</th>
+                  <th class="p-3.5">Agent</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5">Leads</th>
+                  <th class="p-3.5">Orders</th>
+                  <th class="p-3.5">Conv. Ratio</th>
+                  <th class="p-3.5">Sales Amount</th>
+                  <th class="p-3.5">Daily Target (÷26)</th>
+                  <th class="p-3.5">Daily Achieved</th>
+                  <th class="p-3.5">Products Sold (kg)</th>
+                  ${isFullAdmin(u) || u.role === 'agent' ? `<th class="p-3.5 text-right">Actions</th>` : ''}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${sales.length === 0 ? `<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted for ${reportsDateFilter === 'ALL' ? selectedMonthKey : cleanDisplayDate(reportsDateFilter)} yet.</td></tr>` : ''}
+                ${sales.map(s => {
+                  const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
+                  const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
+                  const agDailyTarget = Math.round(agWorkTarget / 26);
+                  const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
+                  const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
+
+                  return `
+                  <tr class="hover:bg-slate-50/90">
+                    <td class="p-3.5 font-bold text-slate-700">${cleanDisplayDate(s.date)}</td>
+                    <td class="p-3.5 font-extrabold text-slate-900">${s.userName} <span class="text-slate-400 text-[10px]">(${s.userId})</span></td>
+                    <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${s.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${s.team}</span></td>
+                    <td class="p-3.5 font-bold text-slate-700">${s.leads}</td>
+                    <td class="p-3.5 font-black text-blue-600">${s.orders}</td>
+                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-extrabold">${convRatio}%</span></td>
+                    <td class="p-3.5 font-black text-emerald-600">৳${Number(s.amount).toLocaleString()}</td>
+                    <td class="p-3.5 font-bold text-slate-500">৳${agDailyTarget.toLocaleString()}</td>
+                    <td class="p-3.5">
+                      <span class="px-2.5 py-1 rounded-md ${dailyAchPct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">
+                        ${dailyAchPct}%
+                      </span>
+                    </td>
+                    <td class="p-3.5 text-[11px] font-bold text-slate-600">
+                      Ajwa: <strong>${s.ajwa||0}</strong> | Salt: <strong>${s.pinkSalt||0}</strong> | Garlic: <strong>${s.blackGarlic||0}</strong> | Sun.H: <strong>${s.sunHoney||0}</strong> | BS.H: <strong>${s.bsHoney||0}</strong> | Ghee: <strong>${s.gawaGhee||0}</strong>
+                    </td>
+                    ${isFullAdmin(u) || u.role === 'agent' ? `
+                    <td class="p-3.5 text-right space-x-1">
+                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
+                        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
+                      </button>
+                      <button onclick="handleDirectDeleteReport('${s.userId}', '${s.userName}', '${s.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100 transition-colors">
+                        <i class="fa-solid fa-trash-can mr-1"></i> Delete
+                      </button>
+                    </td>
+                    ` : ''}
+                  </tr>
+                `}).join('')}
+              </tbody>
+              ${sales.length > 0 ? `
+              <tfoot class="bg-slate-900 text-white font-black text-xs">
+                <tr>
+                  <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${sales.length} ${sales.length === 1 ? 'Entry' : 'Entries'})
+                  </td>
+                  <td class="p-4">${sumLeads.toLocaleString()}</td>
+                  <td class="p-4 text-blue-300">${sumOrders.toLocaleString()}</td>
+                  <td class="p-4"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${sumConv}%</span></td>
+                  <td class="p-4 text-emerald-400 text-sm">৳${sumAmount.toLocaleString()}</td>
+                  <td class="p-4 text-slate-300">৳${sumDailyTgt.toLocaleString()}</td>
+                  <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${sumAchPct}%</span></td>
+                  <td colspan="${isFullAdmin(u) || u.role === 'agent' ? '2' : '1'}" class="p-4 text-[11px] text-amber-200">
+                    Ajwa: ${sumAjwa.toFixed(2)} | Salt: ${sumSalt.toFixed(2)} | Garlic: ${sumGarlic.toFixed(2)} | Sun.H: ${sumSunH.toFixed(2)} | BS.H: ${sumBsH.toFixed(2)} | Ghee: ${sumGhee.toFixed(2)} kg
+                  </td>
+                </tr>
+              </tfoot>
+              ` : ''}
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // MONTHLY SETUP & IDs TAB (Strictly prevents Samad from deleting/editing Nazim or Supervisors)
+    function renderManageAgents() {
+      const u = currentUser;
+      let allUsers = getUsersForMonth(selectedMonthKey);
+      if (isSupervisor(u)) {
+        allUsers = allUsers.filter(usr => usr.role !== 'admin');
+      }
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Monthly Setup, Grades & User IDs (${monthLabel})</h2>
+              <p class="text-xs font-bold text-slate-500">
+                ${isFullAdmin(u) ? `Create Agent or Supervisor IDs, check live online status, and customize monthly targets for ${monthLabel}` : `View registered Agent & Supervisor accounts, live online status & monthly targets for ${monthLabel}`}
+              </p>
+            </div>
+            ${isFullAdmin(u) ? `
+            <div class="flex items-center gap-2.5">
+              <button onclick="openProductConfigModal()" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
+                <i class="fa-solid fa-gift"></i> Edit Product Incentives (${selectedMonthKey})
+              </button>
+              <button onclick="openUserModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
+                <i class="fa-solid fa-user-plus"></i> Create New ID (${isSuperAdmin(u) ? 'Agent / Supervisor / Admin' : 'Agent / Supervisor'})
+              </button>
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Emp ID</th>
+                  <th class="p-3.5">Name</th>
+                  <th class="p-3.5">Live Status</th>
+                  <th class="p-3.5">Role</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5">Grade (${selectedMonthKey})</th>
+                  ${isFullAdmin(u) ? `<th class="p-3.5">Password</th>` : ''}
+                  <th class="p-3.5">Base Target (${selectedMonthKey})</th>
+                  <th class="p-3.5">Working Target (+5%)</th>
+                  ${isFullAdmin(u) ? `<th class="p-3.5 text-right">Actions</th>` : ''}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${allUsers.map(usr => {
+                  const roleBadge = usr.role === 'admin'
+                    ? 'bg-purple-100 text-purple-800'
+                    : (usr.role === 'supervisor' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700');
+                  const displayGrade = usr.role === 'admin' ? 'TL' : (usr.role === 'supervisor' ? 'Supervisor' : (usr.grade || 'A'));
+                  const canEdit = canEditTargetUser(u, usr);
+                  const canDel = canDeleteTargetUser(u, usr);
+                  const canSeePass = canViewTargetPassword(u, usr);
+
+                  return `
+                  <tr class="hover:bg-slate-50">
+                    <td class="p-3.5 font-black text-blue-600">${usr.id}</td>
+                    <td class="p-3.5 font-extrabold text-slate-900">${usr.name}</td>
+                    <td class="p-3.5">${renderOnlineStatusBadge(usr.id)}</td>
+                    <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
+                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (usr.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${usr.team}</span></td>
+                    <td class="p-3.5 font-black ${usr.role === 'admin' ? 'text-purple-700' : (usr.role === 'supervisor' ? 'text-indigo-700' : 'text-slate-900')}">${displayGrade}</td>
+                    ${isFullAdmin(u) ? `<td class="p-3.5 font-mono text-slate-500">${canSeePass ? usr.pass : '<span class="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-sans font-bold"><i class="fa-solid fa-eye-slash mr-1"></i>Protected</span>'}</td>` : ''}
+                    <td class="p-3.5 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
+                    <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
+                    ${isFullAdmin(u) ? `
+                    <td class="p-3.5 text-right space-x-1">
+                      ${canEdit ? `<button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>` : `<span class="px-2.5 py-1 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-lg"><i class="fa-solid fa-lock mr-1"></i>Protected</span>`}
+                      ${canDel ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
+                    </td>
+                    ` : ''}
+                  </tr>
+                `}).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderProductConfigModal() {
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      return `
+        <div id="productConfigModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <div>
+                <h3 class="text-base font-black text-slate-900">Edit Product Targets & Bonuses (${selectedMonthKey})</h3>
+                <p class="text-xs font-bold text-slate-400">Customize per-agent KG targets and cash bonuses for this month</p>
+              </div>
+              <button type="button" onclick="closeModal('productConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleSaveProductConfig(event)" class="space-y-3">
+              ${Object.keys(activeProds).map(k => {
+                const p = activeProds[k];
+                return `
+                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-3 items-center">
+                    <div>
+                      <span class="text-xs font-black text-slate-800 block">${p.name}</span>
+                      <span class="text-[10px] font-bold text-slate-400">Per Agent Target</span>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Target (KG)</label>
+                      <input type="number" step="0.01" id="cfg_kg_${k}" value="${p.targetKg}" required class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">100% Bonus (৳)</label>
+                      <input type="number" id="cfg_b100_${k}" value="${p.bonus100 || 0}" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('productConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save Monthly Product Config</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function openProductConfigModal() { openModal('productConfigModal'); }
+
+    async function handleSaveProductConfig(e) {
+      e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
+      let configs = getStored('monthly_configs', {});
+      if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
+      if (!configs[selectedMonthKey].products) configs[selectedMonthKey].products = {};
+
+      Object.keys(DEFAULT_PRODUCTS).forEach(k => {
+        const kgVal = Number(document.getElementById(`cfg_kg_${k}`).value) || DEFAULT_PRODUCTS[k].targetKg;
+        const b100Val = Number(document.getElementById(`cfg_b100_${k}`).value) || 0;
+        configs[selectedMonthKey].products[k] = {
+          targetKg: kgVal,
+          bonus100: b100Val
+        };
+      });
+
+      setStored('monthly_configs', configs);
+      const logMeta = recordActivityLog('Updated Product Incentives', `Modified monthly product KG targets & bonuses for ${selectedMonthKey}`);
+      await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]), ...logMeta });
+      alert(`Product targets for ${selectedMonthKey} saved and synced!`);
+      closeModal('productConfigModal');
+      renderAppLayout();
+    }
+
+    function renderBreakModal() {
+      return `
+        <div id="breakModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center"><i class="fa-solid fa-mug-hot"></i></div>
+                <div>
+                  <h3 class="text-base font-black text-slate-900">Take a Break</h3>
+                  <p class="text-xs font-bold text-slate-400">Select your break reason to pause working hours</p>
+                </div>
+              </div>
+              <button type="button" onclick="closeModal('breakModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleStartBreak(event)" class="space-y-4">
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1.5">Select Break Reason</label>
+                <select id="breakReasonSelect" required class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
+                  ${BREAK_REASONS.map(r => `<option value="${r}">${r}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1.5">Short Note (Optional)</label>
+                <input type="text" id="breakCustomNote" placeholder="e.g. Back in 15 mins" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+              </div>
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('breakModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white bg-amber-500 hover:bg-amber-600 rounded-xl shadow-lg">
+                  <i class="fa-solid fa-pause mr-1"></i> Start Break Now
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderEditAttendanceModal() {
+      const allAgents = getStored('users', []).filter(u => u.role === 'agent');
+      return `
+        <div id="editAttModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <h3 class="text-base font-black text-slate-900">Admin: Add / Edit Attendance Record</h3>
+              <button type="button" onclick="closeModal('editAttModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleAdminSaveAttendance(event)" class="space-y-3.5">
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent</label>
+                <select id="attAgentId" onchange="onAttModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs font-extrabold">
+                  ${allAgents.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${a.team})</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Date</label>
+                <input type="date" id="attDate" required onchange="onAttModalChange()" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-xs font-extrabold">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Login Time</label>
+                  <input type="text" id="attLogin" placeholder="09:00:00 AM" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Logout Time</label>
+                  <input type="text" id="attLogout" placeholder="06:00:00 PM" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Working Minutes</label>
+                  <input type="number" id="attWorkMins" min="0" placeholder="480" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Break Minutes</label>
+                  <input type="number" id="attBreakMins" min="0" placeholder="45" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Duty Status</label>
+                  <select id="attStatus" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="Working">Working</option>
+                    <option value="On Break">On Break</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Break Reason</label>
+                  <input type="text" id="attReason" placeholder="-" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+              </div>
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('editAttModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save Attendance</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function openEditAttendanceModal(agentId, dateStr) {
+      if (!isFullAdmin(currentUser)) return;
+      document.getElementById('attDate').value = dateToInputVal(dateStr || getTodayFormatted());
+      if (agentId) document.getElementById('attAgentId').value = agentId;
+      onAttModalChange();
+      openModal('editAttModal');
+    }
+
+    function onAttModalChange() {
+      const agId = document.getElementById('attAgentId').value;
+      const dateStr = inputValToDateStr(document.getElementById('attDate').value);
+      const attList = getStored('attendance_records', []);
+      const ex = attList.find(a => String(a.userId) === String(agId) && a.date === dateStr);
+      if (ex) {
+        document.getElementById('attLogin').value = sanitizeTimeDisplay(ex.loginTime);
+        document.getElementById('attLogout').value = sanitizeTimeDisplay(ex.logoutTime);
+        document.getElementById('attWorkMins').value = Math.round((Number(ex.activeSeconds) || 0) / 60);
+        document.getElementById('attBreakMins').value = Math.round((Number(ex.breakSeconds) || 0) / 60);
+        document.getElementById('attStatus').value = ex.status || 'Working';
+        document.getElementById('attReason').value = ex.breakReason || '-';
+      } else {
+        document.getElementById('attLogin').value = getNowTimeStr();
+        document.getElementById('attLogout').value = '--:--';
+        document.getElementById('attWorkMins').value = 0;
+        document.getElementById('attBreakMins').value = 0;
+        document.getElementById('attStatus').value = 'Working';
+        document.getElementById('attReason').value = '-';
       }
     }
-  }
 
-  // Read Custom Users
-  var customUsers = [];
-  if (userSheet.getLastRow() > 1) {
-    var uData = userSheet.getRange(2, 1, userSheet.getLastRow() - 1, 7).getValues();
-    for (var j = 0; j < uData.length; j++) {
-      var uRole = String(uData[j][2]).trim();
-      var rawGrade = String(uData[j][5]).trim();
-      var fixedGrade = uRole === "admin" ? "TL" : (uRole === "supervisor" ? "Supervisor" : (rawGrade || "A"));
-      var cleanName = uRole === "admin" ? String(uData[j][1]).replace(/\s*\(TL\)\s*/gi, "").trim() : String(uData[j][1]).trim();
-      customUsers.push({
-        id: String(uData[j][0]).trim(),
-        name: cleanName,
-        role: uRole,
-        team: String(uData[j][3]).trim(),
-        pass: String(uData[j][4]).trim(),
-        grade: fixedGrade,
-        baseTarget: Number(uData[j][6]) || 0
-      });
+    async function handleAdminSaveAttendance(e) {
+      e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
+      const allUsers = getStored('users', DEFAULT_USERS);
+      const agId = document.getElementById('attAgentId').value;
+      const ag = allUsers.find(u => String(u.id) === String(agId));
+      const dateStr = inputValToDateStr(document.getElementById('attDate').value);
+
+      let attList = getStored('attendance_records', []);
+      const idx = attList.findIndex(a => String(a.userId) === String(agId) && a.date === dateStr);
+
+      const rec = {
+        date: dateStr,
+        userId: String(ag.id),
+        userName: ag.name,
+        team: ag.team,
+        loginTime: document.getElementById('attLogin').value.trim() || '--:--',
+        logoutTime: document.getElementById('attLogout').value.trim() || '--:--',
+        status: document.getElementById('attStatus').value,
+        breakReason: document.getElementById('attReason').value.trim() || '-',
+        breakLogs: idx !== -1 ? attList[idx].breakLogs : 'Edited by Admin',
+        activeSeconds: (Number(document.getElementById('attWorkMins').value) || 0) * 60,
+        breakSeconds: (Number(document.getElementById('attBreakMins').value) || 0) * 60,
+        lastTick: Date.now()
+      };
+
+      if (idx !== -1) attList[idx] = rec; else attList.unshift(rec);
+      setStored('attendance_records', attList);
+      const logMeta = recordActivityLog('Edited Attendance', `Updated attendance record for ${ag.name} (${ag.id}) on ${dateStr}`);
+      await postToSheet('ATTENDANCE_SYNC', { ...rec, ...logMeta });
+      alert('Attendance record updated and synced!');
+      closeModal('editAttModal');
+      renderAppLayout();
     }
-  }
 
-  // Read Online Users
-  var onlineUsers = [];
-  if (onlineSheet.getLastRow() > 1) {
-    var oData = onlineSheet.getRange(2, 1, onlineSheet.getLastRow() - 1, 6).getValues();
-    for (var q = 0; q < oData.length; q++) {
-      onlineUsers.push({
-        id: String(oData[q][0]).trim(),
-        name: String(oData[q][1]).trim(),
-        role: String(oData[q][2]).trim(),
-        team: String(oData[q][3]).trim(),
-        state: String(oData[q][4] || "Online").trim(),
-        lastSeen: Number(oData[q][5]) || 0
-      });
-    }
-  }
-
-  // Read Activity Logs
-  var activityLogs = [];
-  var actLast = actLogSheet.getLastRow();
-  if (actLast > 1) {
-    var startRow = Math.max(2, actLast - 299);
-    var numRows = actLast - startRow + 1;
-    var actData = actLogSheet.getRange(startRow, 1, numRows, 8).getValues();
-    for (var al = actData.length - 1; al >= 0; al--) {
-      activityLogs.push({
-        date: String(actData[al][0] || "").replace(/'/g, "").trim(),
-        time: cleanSheetTime(actData[al][1]),
-        userId: String(actData[al][2] || "").trim(),
-        userName: String(actData[al][3] || "").trim(),
-        role: String(actData[al][4] || "").trim(),
-        team: String(actData[al][5] || "").trim(),
-        action: String(actData[al][6] || "").trim(),
-        details: String(actData[al][7] || "").trim()
-      });
-    }
-  }
-
-  // Read Roster Overrides
-  var rosterRecords = [];
-  if (rosterSheet.getLastRow() > 1) {
-    var rData = rosterSheet.getRange(2, 1, rosterSheet.getLastRow() - 1, 11).getValues();
-    for (var m = 0; m < rData.length; m++) {
-      rosterRecords.push({
-        monthKey: String(rData[m][0]).replace(/'/g, "").trim(),
-        id: String(rData[m][1]).trim(),
-        name: String(rData[m][2]).trim(),
-        team: String(rData[m][3]).trim(),
-        sat: String(rData[m][4]).replace(/'/g, "").trim(),
-        sun: String(rData[m][5]).replace(/'/g, "").trim(),
-        mon: String(rData[m][6]).replace(/'/g, "").trim(),
-        tue: String(rData[m][7]).replace(/'/g, "").trim(),
-        wed: String(rData[m][8]).replace(/'/g, "").trim(),
-        thu: String(rData[m][9]).replace(/'/g, "").trim(),
-        fri: String(rData[m][10]).replace(/'/g, "").trim()
-      });
-    }
-  }
-
-  // Read Monthly Configs
-  var monthlyConfigs = {};
-  if (cfgSheet.getLastRow() > 1) {
-    var cData = cfgSheet.getRange(2, 1, cfgSheet.getLastRow() - 1, 2).getValues();
-    for (var n = 0; n < cData.length; n++) {
-      var mk = String(cData[n][0]).replace(/'/g, "").trim();
-      try { monthlyConfigs[mk] = JSON.parse(String(cData[n][1])); } catch(e) {}
-    }
-  }
-
-  var output = JSON.stringify({
-    status: "success",
-    salesRecords: salesRecords,
-    attendanceRecords: attendanceRecords,
-    customUsers: customUsers,
-    onlineUsers: onlineUsers,
-    activityLogs: activityLogs,
-    rosterRecords: rosterRecords,
-    monthlyConfigs: monthlyConfigs
-  });
-  if (p.callback) {
-    return ContentService.createTextOutput(p.callback + '(' + output + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-  return ContentService.createTextOutput(output).setMimeType(ContentService.MimeType.JSON);
-}
+    window.addEventListener('load', init);
+  </script>
+</body>
+</html>
