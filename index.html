@@ -174,19 +174,19 @@
     let selectedMonthKey = localStorage.getItem('gb_selected_month') || '11/2026';
     let dashboardScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
     
-    // Daily Sales Reports & Attendance Filters
     let logsFilterScope = 'ALL';
-    let reportsDateFilter = getTodayFormatted(); // Default to current date (Today), or 'ALL' for full month
+    let reportsDateFilter = getTodayFormatted();
 
-    // Monthly Performance Tab Filters
     let monthlyPerfTeamScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
     let monthlyPerfAgentId = 'ALL';
+
+    // Activity Logs Filters
+    let activityTeamFilter = 'ALL';
 
     let pollInterval = null;
     let dutyTimerInterval = null;
     let pendingConfirmCallback = null;
 
-    // MODAL GUARD: Prevents background cloud polling from re-rendering the page while ANY popup modal is open
     function isAnyModalOpen() {
       const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'confirmWarningModal'];
       return modalIds.some(id => {
@@ -195,11 +195,23 @@
       });
     }
 
-    function isSuperAdmin(u) { return u && String(u.id) === '10122'; }
-    function isFullAdmin(u) { return u && u.role === 'admin'; }
+    // STRICT ROLE & PRIVACY HELPERS
+    function isSuperAdmin(u) { return u && String(u.id) === '10122'; } // Nazim (10122)
+    function isFullAdmin(u) { return u && u.role === 'admin'; } // Nazim (10122) or Samad (10107)
     function isSupervisor(u) { return u && u.role === 'supervisor'; }
     function canViewAll(u) { return u && (u.role === 'admin' || u.role === 'supervisor'); }
 
+    // Can actor view targetUser's password?
+    // Nazim (10122) can see everyone's password.
+    // Samad (10107) can see everyone's password EXCEPT Nazim's (10122).
+    function canViewTargetPassword(actor, targetUser) {
+      if (!actor || !targetUser || !isFullAdmin(actor)) return false;
+      if (isSuperAdmin(actor)) return true;
+      if (String(targetUser.id) === '10122') return false;
+      return true;
+    }
+
+    // Can actor delete targetUser?
     function canDeleteTargetUser(actor, targetUser) {
       if (!actor || !targetUser || !isFullAdmin(actor)) return false;
       if (String(targetUser.id) === String(actor.id) || String(targetUser.id) === '10122') return false;
@@ -207,9 +219,11 @@
       return targetUser.role === 'agent';
     }
 
+    // Can actor edit targetUser?
     function canEditTargetUser(actor, targetUser) {
       if (!actor || !targetUser || !isFullAdmin(actor)) return false;
       if (isSuperAdmin(actor)) return true;
+      if (String(targetUser.id) === '10122') return false;
       if (String(targetUser.id) === String(actor.id)) return true;
       return targetUser.role === 'agent';
     }
@@ -277,6 +291,40 @@
       const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
       const s = String(sec % 60).padStart(2, '0');
       return `${h}:${m}:${s}`;
+    }
+
+    // RECORD ACTIVITY LOG (Locally + Cloud Sync)
+    function recordActivityLog(actionTitle, detailsText, sendStandaloneSync = false) {
+      if (!currentUser) return {};
+      const logEntry = {
+        date: getTodayFormatted(),
+        time: getNowTimeStr(),
+        userId: String(currentUser.id),
+        userName: currentUser.name,
+        role: currentUser.role,
+        team: currentUser.team,
+        action: actionTitle,
+        details: detailsText
+      };
+      let logs = getStored('activity_logs', []);
+      logs.unshift(logEntry);
+      if (logs.length > 300) logs = logs.slice(0, 300);
+      setStored('activity_logs', logs);
+
+      const meta = {
+        actorId: logEntry.userId,
+        actorName: logEntry.userName,
+        actorRole: logEntry.role,
+        actorTeam: logEntry.team,
+        logDate: logEntry.date,
+        logTime: logEntry.time,
+        logAction: logEntry.action,
+        logDetails: logEntry.details
+      };
+      if (sendStandaloneSync) {
+        postToSheet('ACTIVITY_LOG', meta);
+      }
+      return meta;
     }
 
     function getUserOnlineStatus(userId) {
@@ -456,7 +504,8 @@
       rec.breakLogs = (!rec.breakLogs || rec.breakLogs === '-') ? logEntry : `${rec.breakLogs} | ${logEntry}`;
 
       setStored('attendance_records', attList);
-      await postToSheet('ATTENDANCE_SYNC', rec);
+      const logMeta = recordActivityLog('Started Break', `Took a break — Reason: ${fullReason}`);
+      await postToSheet('ATTENDANCE_SYNC', { ...rec, ...logMeta });
       closeModal('breakModal');
       renderAppLayout();
     }
@@ -468,13 +517,15 @@
       let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
       if (!rec) return;
 
+      const prevReason = rec.breakReason || 'Break';
       rec.status = 'Working';
       rec.breakReason = '-';
       rec.lastTick = Date.now();
       rec.breakLogs = `${rec.breakLogs} (Resumed ${getNowTimeStr()})`;
 
       setStored('attendance_records', attList);
-      await postToSheet('ATTENDANCE_SYNC', rec);
+      const logMeta = recordActivityLog('Resumed Work', `Returned from break (${prevReason}) and resumed duty`);
+      await postToSheet('ATTENDANCE_SYNC', { ...rec, ...logMeta });
       renderAppLayout();
     }
 
@@ -632,6 +683,13 @@
           changed = true;
         }
       }
+      if (Array.isArray(res.activityLogs) && res.activityLogs.length > 0) {
+        const localLogs = getStored('activity_logs', []);
+        if (JSON.stringify(res.activityLogs) !== JSON.stringify(localLogs)) {
+          setStored('activity_logs', res.activityLogs);
+          changed = true;
+        }
+      }
       if (Array.isArray(res.rosterRecords) && res.rosterRecords.length > 0) {
         const localRoster = getStored('roster_records', []);
         if (JSON.stringify(res.rosterRecords) !== JSON.stringify(localRoster)) {
@@ -658,7 +716,6 @@
           changed = true;
         }
       }
-      // CRITICAL FIX: Never re-render layout if user currently has any popup modal open!
       if (changed && currentUser && !isAnyModalOpen()) {
         renderAppLayout();
       }
@@ -706,6 +763,8 @@
       logsFilterScope = 'ALL';
       reportsDateFilter = getTodayFormatted();
 
+      recordActivityLog('User Login', `Signed in to the portal (${user.role.toUpperCase()})`, true);
+
       if (user.role === 'agent') {
         ensureAgentAttendanceSession(user);
         startLiveDutyClock();
@@ -728,7 +787,8 @@
             await postToSheet('ATTENDANCE_SYNC', rec);
           }
         }
-        await postToSheet('USER_LOGOUT', { userId: String(currentUser.id), userName: currentUser.name, team: currentUser.team });
+        const logMeta = recordActivityLog('User Logout', `Logged out of the portal (${currentUser.role.toUpperCase()})`);
+        await postToSheet('USER_LOGOUT', { userId: String(currentUser.id), userName: currentUser.name, team: currentUser.team, ...logMeta });
       }
       if (pollInterval) clearInterval(pollInterval);
       if (dutyTimerInterval) clearInterval(dutyTimerInterval);
@@ -745,7 +805,6 @@
       } else if (tab === 'attendance') {
         logsFilterScope = 'ALL';
       } else if (tab === 'monthly_perf') {
-        // Default to Admin's own team when entering Monthly Performance tab
         if (currentUser && currentUser.role === 'admin') {
           monthlyPerfTeamScope = currentUser.team;
         } else {
@@ -758,6 +817,7 @@
 
     function setDashboardScope(scope) { dashboardScope = scope; renderAppLayout(); }
     function setLogsScope(scope) { logsFilterScope = scope; renderAppLayout(); }
+    function setActivityTeamFilter(scope) { activityTeamFilter = scope; renderAppLayout(); }
     function setReportsDateFilter(dateStr) {
       reportsDateFilter = dateStr;
       if (dateStr && dateStr !== 'ALL' && dateStr.length === 10) {
@@ -854,6 +914,9 @@
                 <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
                 </button>
+                <button onclick="setTab('activity_logs')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'activity_logs' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-list-check text-sm text-rose-500"></i> Activity Logs
+                </button>
                 ${canViewAll(u) ? `
                 <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-sliders text-sm text-blue-600"></i> Monthly Setup & IDs
@@ -929,6 +992,7 @@
       if (activeTab === 'monthly_perf') return renderMonthlyPerformanceView();
       if (activeTab === 'roster') return renderDutyRosterView();
       if (activeTab === 'attendance') return renderAttendanceView();
+      if (activeTab === 'activity_logs') return renderActivityLogsView();
       if (activeTab === 'ranking') return renderRankingAndComparison();
       if (activeTab === 'reports') return renderReports();
       if (activeTab === 'agents') return renderManageAgents();
@@ -1028,7 +1092,7 @@
             </div>
             <div class="flex items-center gap-2 shrink-0">
               <button onclick="setTab('monthly_perf')" class="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-extrabold">Monthly Summary</button>
-              <button onclick="setTab('roster')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-extrabold">Duty Roster</button>
+              <button onclick="setTab('activity_logs')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-extrabold">Activity Logs</button>
             </div>
           </div>
           `}
@@ -1315,14 +1379,13 @@
       `;
     }
 
-    // NEW TAB: MONTHLY PERFORMANCE REPORT (Admin Default Own Team, Filter by Team or Agent, With Grand Total Sum)
+    // MONTHLY PERFORMANCE TAB (With Date-Wise Breakdown + Total Sum Footer for Agents & Selected Agent)
     function renderMonthlyPerformanceView() {
       const u = currentUser;
       const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
       const monthSales = getStored('sales_records', []).filter(s => s.date.endsWith(selectedMonthKey));
       const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
 
-      // Filter agents by Team & Agent Dropdowns
       let teamFilteredAgents = allAgents;
       if (canViewAll(u)) {
         if (monthlyPerfTeamScope !== 'ALL') {
@@ -1337,27 +1400,35 @@
         displayedAgents = teamFilteredAgents.filter(a => String(a.id) === String(monthlyPerfAgentId));
       }
 
-      // Compute Agent-wise Monthly Summary
       let totBase = 0, totWork = 0, totLeads = 0, totOrders = 0, totRev = 0;
       let totAjwa = 0, totSalt = 0, totGarlic = 0, totSunH = 0, totBsH = 0, totGhee = 0;
 
       const agentRows = displayedAgents.map(ag => {
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+        // Deduplicate date entries per agent
+        const dateMap = new Map();
+        agSales.forEach(s => { if (!dateMap.has(s.date)) dateMap.set(s.date, s); });
+        const uniqueDailyLogs = Array.from(dateMap.values()).sort((a, b) => {
+          const da = parseInt(a.date.split('/')[0], 10) || 0;
+          const db = parseInt(b.date.split('/')[0], 10) || 0;
+          return da - db;
+        });
+
         const baseTgt = Number(ag.baseTarget) || 1232174;
         const workTgt = Math.round(baseTgt * 1.05);
-        const leads = agSales.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
-        const orders = agSales.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
-        const rev = agSales.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+        const leads = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
+        const orders = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
+        const rev = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
         const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
         const rem = Math.max(0, workTgt - rev);
         const achPct = workTgt > 0 ? Math.round((rev / workTgt) * 100) : 0;
 
-        const ajwa = agSales.reduce((acc, c) => acc + (Number(c.ajwa) || 0), 0);
-        const pinkSalt = agSales.reduce((acc, c) => acc + (Number(c.pinkSalt) || 0), 0);
-        const blackGarlic = agSales.reduce((acc, c) => acc + (Number(c.blackGarlic) || 0), 0);
-        const sunHoney = agSales.reduce((acc, c) => acc + (Number(c.sunHoney) || 0), 0);
-        const bsHoney = agSales.reduce((acc, c) => acc + (Number(c.bsHoney) || 0), 0);
-        const gawaGhee = agSales.reduce((acc, c) => acc + (Number(c.gawaGhee) || 0), 0);
+        const ajwa = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.ajwa) || 0), 0);
+        const pinkSalt = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.pinkSalt) || 0), 0);
+        const blackGarlic = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.blackGarlic) || 0), 0);
+        const sunHoney = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.sunHoney) || 0), 0);
+        const bsHoney = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.bsHoney) || 0), 0);
+        const gawaGhee = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.gawaGhee) || 0), 0);
 
         totBase += baseTgt;
         totWork += workTgt;
@@ -1373,7 +1444,7 @@
 
         return {
           ...ag, baseTgt, workTgt, leads, orders, rev, conv, rem, achPct,
-          ajwa, pinkSalt, blackGarlic, sunHoney, bsHoney, gawaGhee, daysCount: agSales.length, dailyLogs: agSales
+          ajwa, pinkSalt, blackGarlic, sunHoney, bsHoney, gawaGhee, daysCount: uniqueDailyLogs.length, dailyLogs: uniqueDailyLogs
         };
       });
 
@@ -1381,7 +1452,6 @@
       const totRem = Math.max(0, totWork - totRev);
       const totAchPct = totWork > 0 ? Math.round((totRev / totWork) * 100) : 0;
 
-      // Single Agent Date-by-Date Breakdown if 1 specific agent is selected (or if an Agent is logged in)
       const singleAgentObj = displayedAgents.length === 1 ? agentRows[0] : null;
 
       return `
@@ -1392,13 +1462,12 @@
                 <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>Monthly Performance Report (${monthLabel})
               </h2>
               <p class="text-xs font-bold text-slate-500 mt-0.5">
-                ${canViewAll(u) ? `Defaulting to your team (${monthlyPerfTeamScope}). Filter by Team or select a specific Agent to inspect full monthly totals.` : `Your complete monthly performance summary and daily breakdown for ${monthLabel}.`}
+                ${canViewAll(u) ? `Defaulting to your team (${monthlyPerfTeamScope}). Filter by Team or select a specific Agent to inspect date-wise monthly performance.` : `View your complete monthly summary and date-wise performance table with total sum for ${monthLabel}.`}
               </p>
             </div>
 
             ${canViewAll(u) ? `
             <div class="flex flex-wrap items-center gap-3">
-              <!-- Team Filter Dropdown / Buttons -->
               <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
                 <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
                 <select onchange="setMonthlyPerfTeam(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
@@ -1408,7 +1477,6 @@
                 </select>
               </div>
 
-              <!-- Agent Name Filter Dropdown -->
               <div class="flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-xl">
                 <i class="fa-solid fa-user-check text-purple-600 text-xs"></i>
                 <span class="text-[10px] font-extrabold uppercase text-purple-700">Agent:</span>
@@ -1421,7 +1489,7 @@
             ` : ''}
           </div>
 
-          <!-- Monthly Agent-Wise Performance Table with Grand Total Sum Footer -->
+          <!-- Monthly Summary Table -->
           <div class="card-dynamic overflow-hidden overflow-x-auto">
             <table class="w-full text-left text-xs whitespace-nowrap">
               <thead class="table-header-light uppercase font-extrabold">
@@ -1442,7 +1510,7 @@
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
                 ${agentRows.map(r => `
-                  <tr class="hover:bg-slate-50/90 cursor-pointer" onclick="canViewAll(currentUser) ? setMonthlyPerfAgent('${r.id}') : null" title="Click to view this agent's date-by-date monthly breakdown">
+                  <tr class="hover:bg-slate-50/90 ${canViewAll(u) ? 'cursor-pointer' : ''}" onclick="${canViewAll(u) ? `setMonthlyPerfAgent('${r.id}')` : ''}" title="${canViewAll(u) ? 'Click to view date-by-date monthly table for this agent' : ''}">
                     <td class="p-3.5 font-extrabold text-slate-900">${r.name} <span class="text-slate-400 text-[10px]">(${r.id})</span></td>
                     <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${r.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${r.team}</span></td>
                     <td class="p-3.5 font-black text-slate-700">${r.grade}</td>
@@ -1462,7 +1530,6 @@
                   </tr>
                 `).join('')}
               </tbody>
-              <!-- GRAND TOTAL SUM FOOTER ROW -->
               <tfoot class="bg-slate-900 text-white font-black text-xs">
                 <tr>
                   <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
@@ -1484,56 +1551,166 @@
             </table>
           </div>
 
-          ${singleAgentObj ? `
-          <!-- Specific Agent's Date-by-Date Monthly Breakdown Table -->
-          <div class="space-y-3 mt-6">
-            <div class="flex items-center justify-between">
-              <h3 class="text-base font-black text-slate-900">
-                <i class="fa-solid fa-calendar-day text-blue-600 mr-1.5"></i> 
-                ${singleAgentObj.name}'s Daily Sales Breakdown (${monthLabel})
-              </h3>
-              ${canViewAll(u) ? `<button onclick="setMonthlyPerfAgent('ALL')" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-extrabold"><i class="fa-solid fa-arrow-left mr-1"></i>Back to All Team Members</button>` : ''}
+          ${singleAgentObj ? (() => {
+            const dTargetSingle = Math.round(singleAgentObj.workTgt / 26);
+            const sumDailyTgtSingle = dTargetSingle * singleAgentObj.dailyLogs.length;
+            const sumDailyAchSingle = sumDailyTgtSingle > 0 ? Math.round((singleAgentObj.rev / sumDailyTgtSingle) * 100) : 0;
+            return `
+            <!-- Date-Wise Monthly Performance Table with Total Sum Footer -->
+            <div class="space-y-3 mt-6">
+              <div class="flex items-center justify-between bg-white px-5 py-3.5 rounded-2xl border border-slate-200">
+                <div>
+                  <h3 class="text-base font-black text-slate-900">
+                    <i class="fa-solid fa-calendar-day text-blue-600 mr-1.5"></i> 
+                    ${singleAgentObj.name}'s Date-Wise Monthly Performance (${monthLabel})
+                  </h3>
+                  <p class="text-xs font-bold text-slate-400">Day-by-day sales, conversion ratio, product weights & grand total sum</p>
+                </div>
+                ${canViewAll(u) ? `<button onclick="setMonthlyPerfAgent('ALL')" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-extrabold"><i class="fa-solid fa-arrow-left mr-1"></i>Back to All Team Members</button>` : ''}
+              </div>
+              <div class="card-dynamic overflow-hidden overflow-x-auto">
+                <table class="w-full text-left text-xs whitespace-nowrap">
+                  <thead class="table-header-light uppercase font-extrabold">
+                    <tr>
+                      <th class="p-3.5">Date</th>
+                      <th class="p-3.5 text-center">Leads</th>
+                      <th class="p-3.5 text-center">Orders</th>
+                      <th class="p-3.5 text-center">Conv. Ratio</th>
+                      <th class="p-3.5">Sales Amount</th>
+                      <th class="p-3.5">Daily Target (÷26)</th>
+                      <th class="p-3.5">Daily Achieved %</th>
+                      <th class="p-3.5">Products Sold (KG)</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 font-semibold">
+                    ${singleAgentObj.dailyLogs.length === 0 ? `<tr><td colspan="8" class="p-8 text-center text-slate-400 font-bold">No daily entries submitted by ${singleAgentObj.name} in ${monthLabel} yet.</td></tr>` : ''}
+                    ${singleAgentObj.dailyLogs.map(dl => {
+                      const dConv = Number(dl.leads) > 0 ? ((Number(dl.orders) / Number(dl.leads)) * 100).toFixed(2) : '0.00';
+                      const dAch = dTargetSingle > 0 ? Math.round((Number(dl.amount) / dTargetSingle) * 100) : 0;
+                      return `
+                        <tr class="hover:bg-slate-50">
+                          <td class="p-3.5 font-extrabold text-slate-800">${cleanDisplayDate(dl.date)}</td>
+                          <td class="p-3.5 text-center font-bold text-slate-700">${dl.leads}</td>
+                          <td class="p-3.5 text-center font-black text-blue-600">${dl.orders}</td>
+                          <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${dConv}%</span></td>
+                          <td class="p-3.5 font-black text-emerald-600">৳${Number(dl.amount).toLocaleString()}</td>
+                          <td class="p-3.5 font-bold text-slate-500">৳${dTargetSingle.toLocaleString()}</td>
+                          <td class="p-3.5"><span class="px-2.5 py-0.5 rounded ${dAch >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${dAch}%</span></td>
+                          <td class="p-3.5 text-[11px] font-bold text-slate-600">
+                            Ajwa: <strong>${dl.ajwa||0}</strong> | Salt: <strong>${dl.pinkSalt||0}</strong> | Garlic: <strong>${dl.blackGarlic||0}</strong> | Sun.H: <strong>${dl.sunHoney||0}</strong> | BS.H: <strong>${dl.bsHoney||0}</strong> | Ghee: <strong>${dl.gawaGhee||0}</strong>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                  <!-- TOTAL SUM FOOTER FOR DATE-WISE TABLE -->
+                  <tfoot class="bg-slate-900 text-white font-black text-xs">
+                    <tr>
+                      <td class="p-4 uppercase tracking-wider text-amber-400">
+                        <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${singleAgentObj.dailyLogs.length} Days)
+                      </td>
+                      <td class="p-4 text-center">${singleAgentObj.leads.toLocaleString()}</td>
+                      <td class="p-4 text-center text-blue-300">${singleAgentObj.orders.toLocaleString()}</td>
+                      <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${singleAgentObj.conv}%</span></td>
+                      <td class="p-4 text-emerald-400 text-sm">৳${singleAgentObj.rev.toLocaleString()}</td>
+                      <td class="p-4 text-slate-300">৳${sumDailyTgtSingle.toLocaleString()} <span class="text-[10px] text-slate-400">(Month: ৳${singleAgentObj.workTgt.toLocaleString()})</span></td>
+                      <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${singleAgentObj.achPct}% of Month</span></td>
+                      <td class="p-4 text-[11px] text-amber-200">
+                        Ajwa: ${singleAgentObj.ajwa.toFixed(2)} | Salt: ${singleAgentObj.pinkSalt.toFixed(2)} | Garlic: ${singleAgentObj.blackGarlic.toFixed(2)} | Sun.H: ${singleAgentObj.sunHoney.toFixed(2)} | BS.H: ${singleAgentObj.bsHoney.toFixed(2)} | Ghee: ${singleAgentObj.gawaGhee.toFixed(2)} kg
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
-            <div class="card-dynamic overflow-hidden overflow-x-auto">
-              <table class="w-full text-left text-xs whitespace-nowrap">
-                <thead class="table-header-light uppercase font-extrabold">
-                  <tr>
-                    <th class="p-3.5">Date</th>
-                    <th class="p-3.5">Leads</th>
-                    <th class="p-3.5">Orders</th>
-                    <th class="p-3.5">Conv. Ratio</th>
-                    <th class="p-3.5">Sales Amount</th>
-                    <th class="p-3.5">Daily Target (÷26)</th>
-                    <th class="p-3.5">Daily Achieved</th>
-                    <th class="p-3.5">Products Sold (KG)</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 font-semibold">
-                  ${singleAgentObj.dailyLogs.length === 0 ? `<tr><td colspan="8" class="p-6 text-center text-slate-400 font-bold">No daily entries submitted by ${singleAgentObj.name} in ${monthLabel}.</td></tr>` : ''}
-                  ${singleAgentObj.dailyLogs.map(dl => {
-                    const dTarget = Math.round(singleAgentObj.workTgt / 26);
-                    const dConv = Number(dl.leads) > 0 ? ((Number(dl.orders) / Number(dl.leads)) * 100).toFixed(2) : '0.00';
-                    const dAch = dTarget > 0 ? Math.round((Number(dl.amount) / dTarget) * 100) : 0;
-                    return `
-                      <tr class="hover:bg-slate-50">
-                        <td class="p-3.5 font-bold text-slate-800">${cleanDisplayDate(dl.date)}</td>
-                        <td class="p-3.5">${dl.leads}</td>
-                        <td class="p-3.5 font-black text-blue-600">${dl.orders}</td>
-                        <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${dConv}%</span></td>
-                        <td class="p-3.5 font-black text-emerald-600">৳${Number(dl.amount).toLocaleString()}</td>
-                        <td class="p-3.5 text-slate-500">৳${dTarget.toLocaleString()}</td>
-                        <td class="p-3.5"><span class="px-2 py-0.5 rounded ${dAch >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${dAch}%</span></td>
-                        <td class="p-3.5 text-[11px] font-bold text-slate-600">
-                          Ajwa: ${dl.ajwa||0} | Salt: ${dl.pinkSalt||0} | Garlic: ${dl.blackGarlic||0} | Sun.H: ${dl.sunHoney||0} | BS.H: ${dl.bsHoney||0} | Ghee: ${dl.gawaGhee||0}
-                        </td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
+            `;
+          })() : ''}
+        </div>
+      `;
+    }
+
+    // NEW TAB: ACTIVITY LOGS (Admins & Supervisors see all logs including own; Agents see only their own logs)
+    function renderActivityLogsView() {
+      const u = currentUser;
+      const allLogs = getStored('activity_logs', []);
+
+      let visibleLogs = [];
+      if (canViewAll(u)) {
+        visibleLogs = activityTeamFilter === 'ALL' ? allLogs : allLogs.filter(l => l.team === activityTeamFilter);
+      } else {
+        visibleLogs = allLogs.filter(l => String(l.userId) === String(u.id));
+      }
+
+      function getActionBadgeStyle(act) {
+        const s = String(act || '').toUpperCase();
+        if (s.includes('DELETE')) return 'bg-red-100 text-red-800 border-red-200';
+        if (s.includes('SALES') || s.includes('REPORT')) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+        if (s.includes('BREAK')) return 'bg-amber-100 text-amber-800 border-amber-200';
+        if (s.includes('RESUME')) return 'bg-teal-100 text-teal-800 border-teal-200';
+        if (s.includes('LOGIN')) return 'bg-blue-100 text-blue-800 border-blue-200';
+        if (s.includes('LOGOUT')) return 'bg-slate-200 text-slate-700 border-slate-300';
+        return 'bg-purple-100 text-purple-800 border-purple-200';
+      }
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-xl font-black text-slate-900">
+                <i class="fa-solid fa-list-check text-rose-500 mr-2"></i>System Activity Logs
+              </h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">
+                ${canViewAll(u) ? 'Complete real-time activity timeline of all Agents, Supervisors, and Admins' : 'Your personal activity timeline (logins, breaks, sales report submissions & updates)'}
+              </p>
             </div>
+
+            ${canViewAll(u) ? `
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-extrabold text-slate-400 uppercase">Filter Team:</span>
+              <select onchange="setActivityTeamFilter(this.value)" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold">
+                <option value="ALL" ${activityTeamFilter === 'ALL' ? 'selected' : ''}>All Users & Teams</option>
+                <option value="Team Nazim" ${activityTeamFilter === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
+                <option value="Team Samad" ${activityTeamFilter === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+                <option value="All Teams" ${activityTeamFilter === 'All Teams' ? 'selected' : ''}>Supervisors</option>
+              </select>
+            </div>
+            ` : ''}
           </div>
-          ` : ''}
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Date</th>
+                  <th class="p-3.5">Exact Time</th>
+                  <th class="p-3.5">User Name & ID</th>
+                  <th class="p-3.5">Role</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5">Action Type</th>
+                  <th class="p-3.5">Activity Details</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${visibleLogs.length === 0 ? `<tr><td colspan="7" class="p-8 text-center text-slate-400 font-bold">No activity logs recorded yet. Actions will appear here automatically.</td></tr>` : ''}
+                ${visibleLogs.map(log => {
+                  const roleBadge = log.role === 'admin'
+                    ? 'bg-purple-100 text-purple-800'
+                    : (log.role === 'supervisor' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700');
+                  return `
+                    <tr class="hover:bg-slate-50/90">
+                      <td class="p-3.5 font-bold text-slate-700">${cleanDisplayDate(log.date)}</td>
+                      <td class="p-3.5 font-mono font-bold text-blue-600">${sanitizeTimeDisplay(log.time)}</td>
+                      <td class="p-3.5 font-extrabold text-slate-900">${log.userName} <span class="text-slate-400 text-[10px]">(${log.userId})</span></td>
+                      <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${log.role || 'agent'}</span></td>
+                      <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${log.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (log.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${log.team || '-'}</span></td>
+                      <td class="p-3.5"><span class="px-2.5 py-1 rounded-lg border text-[11px] font-black ${getActionBadgeStyle(log.action)}">${log.action}</span></td>
+                      <td class="p-3.5 font-bold text-slate-700 whitespace-normal min-w-[260px]">${log.details}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
         </div>
       `;
     }
@@ -1745,8 +1922,9 @@
       else savedList.push(targetRow);
       setStored('roster_records', savedList);
 
+      const logMeta = recordActivityLog('Updated Duty Roster', `Changed ${targetRow.name}'s (${empId}) ${dayKey.toUpperCase()} shift to "${newShift}" (${selectedMonthKey})`);
       renderAppLayout();
-      await postToSheet('SAVE_ROSTER_ROW', targetRow);
+      await postToSheet('SAVE_ROSTER_ROW', { ...targetRow, ...logMeta });
     }
 
     function renderAttendanceView() {
@@ -1992,13 +2170,11 @@
       `;
     }
 
-    // DAILY SALES REPORTS TAB (Defaults to Current Date + Selective Date Picker + All Month Toggle + Total Sum Row)
     function renderReports() {
       const u = currentUser;
       const allUsers = getUsersForMonth(selectedMonthKey);
       const rawSales = getStored('sales_records', []);
       
-      // Filter by Date (Current Date by default, or Full Month if 'ALL' is toggled)
       let dateFilteredSales = [];
       if (reportsDateFilter === 'ALL') {
         dateFilteredSales = rawSales.filter(s => s.date.endsWith(selectedMonthKey));
@@ -2006,7 +2182,6 @@
         dateFilteredSales = rawSales.filter(s => s.date === reportsDateFilter);
       }
 
-      // Filter by Team / User Role
       let sales = [];
       if (canViewAll(u)) {
         sales = logsFilterScope === 'ALL' ? dateFilteredSales : dateFilteredSales.filter(s => s.team === logsFilterScope);
@@ -2014,7 +2189,6 @@
         sales = dateFilteredSales.filter(s => String(s.userId) === String(u.id));
       }
 
-      // Deduplicate in case identical date+userId rows exist in local array
       const uniqueMap = new Map();
       sales.forEach(s => {
         const key = `${s.userId}_${s.date}`;
@@ -2022,7 +2196,6 @@
       });
       sales = Array.from(uniqueMap.values());
 
-      // Calculate Totals for Footer Sum
       let sumLeads = 0, sumOrders = 0, sumAmount = 0, sumDailyTgt = 0;
       let sumAjwa = 0, sumSalt = 0, sumGarlic = 0, sumSunH = 0, sumBsH = 0, sumGhee = 0;
 
@@ -2061,14 +2234,12 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2.5">
-              <!-- Selective Date Picker -->
               <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
                 <i class="fa-solid fa-calendar-day text-blue-600 text-xs"></i>
                 <span class="text-[10px] font-extrabold uppercase text-slate-500">Select Date:</span>
                 <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-800 focus:outline-none cursor-pointer">
               </div>
 
-              <!-- Quick Today & All Month Toggle Buttons -->
               <button onclick="setReportsDateFilter('${getTodayFormatted()}')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${isShowingToday ? 'bg-blue-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
                 Today (${cleanDisplayDate(getTodayFormatted())})
               </button>
@@ -2173,9 +2344,14 @@
       `;
     }
 
+    // MONTHLY SETUP & IDs TAB (Supervisor cannot see Admin IDs; Samad cannot see Nazim's password)
     function renderManageAgents() {
       const u = currentUser;
-      const allUsers = getUsersForMonth(selectedMonthKey);
+      let allUsers = getUsersForMonth(selectedMonthKey);
+      // Supervisors cannot see Admin IDs (10122, 10107) in the list
+      if (isSupervisor(u)) {
+        allUsers = allUsers.filter(usr => usr.role !== 'admin');
+      }
       const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
 
       return `
@@ -2184,7 +2360,7 @@
             <div>
               <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Monthly Setup, Grades & User IDs (${monthLabel})</h2>
               <p class="text-xs font-bold text-slate-500">
-                ${isFullAdmin(u) ? `Create Agent, Supervisor, or Admin IDs, check live online status, and customize monthly targets for ${monthLabel}` : `View all registered Agent, Supervisor, and Admin accounts, live online status & monthly targets for ${monthLabel}`}
+                ${isFullAdmin(u) ? `Create Agent or Supervisor IDs, check live online status, and customize monthly targets for ${monthLabel}` : `View registered Agent & Supervisor accounts, live online status & monthly targets for ${monthLabel}`}
               </p>
             </div>
             ${isFullAdmin(u) ? `
@@ -2193,7 +2369,7 @@
                 <i class="fa-solid fa-gift"></i> Edit Product Incentives (${selectedMonthKey})
               </button>
               <button onclick="openUserModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
-                <i class="fa-solid fa-user-plus"></i> Create New ID (Agent / Supervisor)
+                <i class="fa-solid fa-user-plus"></i> Create New ID (${isSuperAdmin(u) ? 'Agent / Supervisor / Admin' : 'Agent / Supervisor'})
               </button>
             </div>
             ` : ''}
@@ -2223,6 +2399,7 @@
                   const displayGrade = usr.role === 'admin' ? 'TL' : (usr.role === 'supervisor' ? 'Supervisor' : (usr.grade || 'A'));
                   const canEdit = canEditTargetUser(u, usr);
                   const canDel = canDeleteTargetUser(u, usr);
+                  const canSeePass = canViewTargetPassword(u, usr);
 
                   return `
                   <tr class="hover:bg-slate-50">
@@ -2232,7 +2409,7 @@
                     <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
                     <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (usr.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${usr.team}</span></td>
                     <td class="p-3.5 font-black ${usr.role === 'admin' ? 'text-purple-700' : (usr.role === 'supervisor' ? 'text-indigo-700' : 'text-slate-900')}">${displayGrade}</td>
-                    ${isFullAdmin(u) ? `<td class="p-3.5 font-mono text-slate-500">${canEdit ? usr.pass : '••••••'}</td>` : ''}
+                    ${isFullAdmin(u) ? `<td class="p-3.5 font-mono text-slate-500">${canSeePass ? usr.pass : '<span class="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-sans font-bold"><i class="fa-solid fa-eye-slash mr-1"></i>Protected</span>'}</td>` : ''}
                     <td class="p-3.5 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
                     <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
                     ${isFullAdmin(u) ? `
@@ -2311,7 +2488,8 @@
       });
 
       setStored('monthly_configs', configs);
-      await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]) });
+      const logMeta = recordActivityLog('Updated Product Incentives', `Modified monthly product KG targets & bonuses for ${selectedMonthKey}`);
+      await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]), ...logMeta });
       alert(`Product targets for ${selectedMonthKey} saved and synced!`);
       closeModal('productConfigModal');
       renderAppLayout();
@@ -2476,7 +2654,8 @@
 
       if (idx !== -1) attList[idx] = rec; else attList.unshift(rec);
       setStored('attendance_records', attList);
-      await postToSheet('ATTENDANCE_SYNC', rec);
+      const logMeta = recordActivityLog('Edited Attendance', `Updated attendance record for ${ag.name} (${ag.id}) on ${dateStr}`);
+      await postToSheet('ATTENDANCE_SYNC', { ...rec, ...logMeta });
       alert('Attendance record updated and synced!');
       closeModal('editAttModal');
       renderAppLayout();
@@ -2496,7 +2675,8 @@
           let attList = getStored('attendance_records', []);
           attList = attList.filter(a => !(String(a.userId) === String(userId) && a.date === dateStr));
           setStored('attendance_records', attList);
-          await postToSheet('DELETE_ATTENDANCE', { userId: String(userId), date: dateStr });
+          const logMeta = recordActivityLog('Deleted Attendance', `Deleted attendance record for ${agName} (${userId}) on ${dateStr}`);
+          await postToSheet('DELETE_ATTENDANCE', { userId: String(userId), date: dateStr, ...logMeta });
           renderAppLayout();
         }
       );
@@ -2600,7 +2780,9 @@
             <div class="flex items-center justify-between mb-4 pb-3 border-b">
               <div>
                 <h3 class="text-base font-black text-slate-900">Create / Edit User ID (${selectedMonthKey})</h3>
-                <p class="text-[11px] font-bold text-slate-400">Create Agent, Supervisor (View-Only), or Admin IDs</p>
+                <p class="text-[11px] font-bold text-slate-400">
+                  ${isNazim ? 'Create Agent, Supervisor (View-Only), or Admin IDs' : 'Create Sales Agent or Supervisor (View-Only) IDs'}
+                </p>
               </div>
               <button type="button" onclick="closeModal('userModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -2641,7 +2823,7 @@
                     <option value="B">Grade B (1,132,174)</option>
                     <option value="C">Grade C (1,032,175)</option>
                     <option value="Supervisor">Supervisor</option>
-                    <option value="TL">TL (Team Leader)</option>
+                    ${isNazim ? `<option value="TL">TL (Team Leader)</option>` : ''}
                   </select>
                 </div>
                 <div>
@@ -2691,7 +2873,7 @@
       const existing = users.find(u => String(u.id) === String(editId));
       if (existing) {
         if (!canEditTargetUser(currentUser, existing)) {
-          alert('Permission Denied: Only Nazim (Super Admin) can edit Supervisor or other Admin accounts.');
+          alert('Permission Denied: Only Nazim (Super Admin) can edit this account.');
           return;
         }
         document.getElementById('usrId').value = existing.id;
@@ -2719,11 +2901,17 @@
       const targetId = document.getElementById('usrId').value.trim();
       const existingUser = getStored('users', DEFAULT_USERS).find(u => String(u.id) === String(targetId));
       if (existingUser && !canEditTargetUser(currentUser, existingUser)) {
-        alert('Permission Denied: You cannot overwrite a protected Supervisor or Admin ID.');
+        alert('Permission Denied: You cannot overwrite a protected Admin ID.');
         return;
       }
 
-      const roleVal = document.getElementById('usrRole').value;
+      let roleVal = document.getElementById('usrRole').value;
+      // Prevent Samad (or non-SuperAdmin) from creating an 'admin' role account
+      if (roleVal === 'admin' && !isSuperAdmin(currentUser) && String(targetId) !== String(currentUser.id)) {
+        alert('Permission Denied: Only Nazim (Super Admin) can create Admin accounts. You can create Agent or Supervisor IDs.');
+        return;
+      }
+
       const gradeVal = roleVal === 'admin' ? 'TL' : (roleVal === 'supervisor' ? 'Supervisor' : document.getElementById('usrGrade').value);
       const rawName = document.getElementById('usrName').value.trim();
 
@@ -2739,6 +2927,7 @@
 
       let users = getStored('users', DEFAULT_USERS);
       const idx = users.findIndex(u => String(u.id) === String(newUser.id));
+      const isNewAccount = idx === -1;
       if (idx !== -1) users[idx] = newUser; else users.push(newUser);
       setStored('users', users);
 
@@ -2748,7 +2937,12 @@
       configs[selectedMonthKey].users[newUser.id] = { grade: newUser.grade, baseTarget: newUser.baseTarget };
       setStored('monthly_configs', configs);
 
-      await postToSheet('SAVE_USER', newUser);
+      const logMeta = recordActivityLog(
+        isNewAccount ? 'Created User ID' : 'Updated User ID',
+        `${isNewAccount ? 'Created' : 'Updated'} ${newUser.role.toUpperCase()} ID: ${newUser.name} (${newUser.id}), Grade: ${newUser.grade}, Target: ৳${newUser.baseTarget.toLocaleString()}`
+      );
+
+      await postToSheet('SAVE_USER', { ...newUser, ...logMeta });
       await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]) });
       alert(`User ID (${newUser.id}) with Grade "${newUser.grade}" saved and synced!`);
       closeModal('userModal');
@@ -2774,7 +2968,8 @@
           let storedUsers = getStored('users', DEFAULT_USERS);
           storedUsers = storedUsers.filter(u => String(u.id) !== String(delId));
           setStored('users', storedUsers);
-          await postToSheet('DELETE_USER', { id: String(delId) });
+          const logMeta = recordActivityLog('Deleted User ID', `Deleted ${targetUser.role.toUpperCase()} account: ${targetUser.name} (${targetUser.id})`);
+          await postToSheet('DELETE_USER', { id: String(delId), ...logMeta });
           renderAppLayout();
         }
       );
@@ -2858,7 +3053,6 @@
         selectedMonthKey = submittedMonthKey;
         localStorage.setItem('gb_selected_month', selectedMonthKey);
       }
-      // Update Daily Sales Report date filter to match the newly submitted date so user sees it immediately
       reportsDateFilter = dateStr;
 
       const entry = {
@@ -2880,10 +3074,16 @@
 
       let sales = getStored('sales_records', []);
       const idx = sales.findIndex(s => String(s.userId) === String(entry.userId) && s.date === entry.date);
+      const isUpdate = idx !== -1;
       if (idx !== -1) sales[idx] = entry; else sales.unshift(entry);
       setStored('sales_records', sales);
 
-      await postToSheet('DAILY_SALES_SUBMIT', entry);
+      const logMeta = recordActivityLog(
+        isUpdate ? 'Updated Sales Report' : 'Submitted Sales Report',
+        `${isUpdate ? 'Updated' : 'Submitted'} sales report for ${targetAgent.name} (${dateStr}) — Leads: ${leads}, Orders: ${orders}, Amount: ৳${amount.toLocaleString()}`
+      );
+
+      await postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta });
       
       alert(`Report saved and synced to the cloud successfully!`);
       closeModal('submitModal');
@@ -2902,7 +3102,8 @@
           sales = sales.filter(s => !(String(s.userId) === String(agentId) && s.date === dateStr));
           setStored('sales_records', sales);
 
-          await postToSheet('DELETE_SALES_RECORD', { userId: String(agentId), date: dateStr });
+          const logMeta = recordActivityLog('Deleted Sales Report', `Deleted sales report of ${agentName} (${agentId}) dated ${dateStr}`);
+          await postToSheet('DELETE_SALES_RECORD', { userId: String(agentId), date: dateStr, ...logMeta });
           closeModal('submitModal');
           renderAppLayout();
           setTimeout(fetchFromSheet, 1500);
