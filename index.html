@@ -3,23 +3,47 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SalesTrack Pro - FB Agents Incentive Dashboard</title>
+  <title>Ghorerbazar Facebook - Incentive & Sales Portal</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
-    .glass-sidebar { background: #ffffff; border-right: 1px solid #e2e8f0; }
-    .card-neo { background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-    .tab-active { background: #2563eb; color: #ffffff !important; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
-    .progress-bg { background-color: #e2e8f0; border-radius: 9999px; overflow: hidden; }
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap');
+    body { font-family: 'Plus Jakarta Sans', 'Hind Siliguri', sans-serif; background-color: #ffffff; }
+    .glass-sidebar { background: #ffffff; border-right: 1px solid #f1f5f9; box-shadow: 4px 0 24px rgba(0,0,0,0.02); }
+    .card-neo { background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.04); }
+    
+    /* Vibrant Gradients for Tabs & Cards */
+    .tab-active { 
+      background: linear-gradient(135deg, #ea580c 0%, #2563eb 100%); 
+      color: #ffffff !important; 
+      box-shadow: 0 8px 20px -4px rgba(37, 99, 235, 0.4); 
+    }
+    .grad-header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: white; }
+    .grad-sprint { background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: white; box-shadow: 0 12px 28px -6px rgba(37, 99, 235, 0.35); }
+    .grad-monthly { background: linear-gradient(135deg, #059669 0%, #0d9488 100%); color: white; box-shadow: 0 12px 28px -6px rgba(5, 150, 105, 0.35); }
+    
+    /* Product Gradients */
+    .grad-prod-1 { background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%); color: white; box-shadow: 0 10px 20px -5px rgba(234, 88, 12, 0.3); }
+    .grad-prod-2 { background: linear-gradient(135deg, #ec4899 0%, #e11d48 100%); color: white; box-shadow: 0 10px 20px -5px rgba(225, 29, 72, 0.3); }
+    .grad-prod-3 { background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%); color: white; box-shadow: 0 10px 20px -5px rgba(124, 58, 237, 0.3); }
+    .grad-prod-4 { background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%); color: white; box-shadow: 0 10px 20px -5px rgba(202, 138, 4, 0.3); }
+    .grad-prod-5 { background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%); color: white; box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.3); }
+    .grad-prod-6 { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; box-shadow: 0 10px 20px -5px rgba(5, 150, 105, 0.3); }
+    
+    .progress-white-bg { background-color: rgba(255, 255, 255, 0.25); border-radius: 9999px; overflow: hidden; }
   </style>
 </head>
-<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+<body class="text-slate-800 antialiased min-h-screen flex flex-col bg-white">
   <div id="app" class="flex-1 flex flex-col"></div>
 
   <script>
-    const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtdDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
+    // EXACT CORRECT APPS SCRIPT WEBHOOK URL
+    const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
+
+    // Always force update the stored URL so old typo URLs are wiped out
+    localStorage.setItem('gb_webhook_url', DEFAULT_WEBHOOK_URL);
+    let webhookUrl = DEFAULT_WEBHOOK_URL;
 
     // User Data from Images (with individual base targets)
     const DEFAULT_USERS = [
@@ -45,27 +69,25 @@
       { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 }
     ];
 
-    // Facebook Channel Product Targets (per agent)
+    // Facebook Channel Product Targets (per agent) with custom gradient classes & icons
     const FB_PRODUCTS = {
-      ajwa: { name: 'Ajwa', targetKg: 69.03 },
-      pinkSalt: { name: 'Pink Salt', targetKg: 10.07 },
-      blackGarlic: { name: 'Black Garlic', targetKg: 6.09 },
-      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51 },
-      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09 },
-      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56 }
+      ajwa: { name: 'Ajwa Dates', targetKg: 69.03, grad: 'grad-prod-1', icon: 'fa-seedling', bonus: '90%: 600৳ | 100%: 1000৳' },
+      pinkSalt: { name: 'Pink Salt', targetKg: 10.07, grad: 'grad-prod-2', icon: 'fa-jar', bonus: '100%: 2L Mustard Oil' },
+      blackGarlic: { name: 'Black Garlic', targetKg: 6.09, grad: 'grad-prod-3', icon: 'fa-spa', bonus: '100%: 400gm Gawa Ghee' },
+      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51, grad: 'grad-prod-4', icon: 'fa-droplet', bonus: '90%: 1000৳ | 100%: 2000৳' },
+      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09, grad: 'grad-prod-5', icon: 'fa-bottle-droplet', bonus: '100%: 1000৳' },
+      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56, grad: 'grad-prod-6', icon: 'fa-cheese', bonus: '90%: 1200৳ | 100%: 2000৳' }
     };
+
+    localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
 
     let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
     let activeTab = 'dashboard';
-    let webhookUrl = localStorage.getItem('gb_webhook_url') || DEFAULT_WEBHOOK_URL;
     let pollInterval = null;
-
-    if (!localStorage.getItem('gb_users')) localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
 
     function getStored(key, def) { const r = localStorage.getItem('gb_' + key); return r ? JSON.parse(r) : def; }
     function setStored(key, val) { localStorage.setItem('gb_' + key, JSON.stringify(val)); }
 
-    // Date Utilities
     function getTodayFormatted() {
       const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
     }
@@ -91,8 +113,7 @@
       return s;
     }
 
-    // Sprint & Target Logic (5% Buffer)
-    // For admin, this calculates the TEAM total. For agent, it calculates INDIVIDUAL total.
+    // Sprint & Target Logic (5% Buffer Added)
     function getTargetData(user) {
       const allUsers = getStored('users', []);
       let baseTarget = 0;
@@ -103,38 +124,77 @@
         baseTarget = teamAgents.reduce((sum, a) => sum + (a.baseTarget || 0), 0);
         agentCount = teamAgents.length || 1;
       } else {
-        baseTarget = user.baseTarget || 0;
+        const freshUser = allUsers.find(u => u.id === user.id) || user;
+        baseTarget = freshUser.baseTarget || 0;
       }
 
-      const workingTarget = Math.round(baseTarget * 1.05); // 5% extra
+      const workingTarget = Math.round(baseTarget * 1.05); // +5% Extra for Return/Cancel
       const d = new Date().getDate();
       let sprintName, sprintGoal, sprintPct;
 
-      if (d <= 10) { sprintName = 'Sprint 1 (Days 1-10)'; sprintPct = 0.40; sprintGoal = Math.round(workingTarget * 0.40); }
-      else if (d <= 20) { sprintName = 'Sprint 2 (Days 11-20)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
-      else { sprintName = 'Sprint 3 (Days 21-31)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
+      if (d <= 10) { sprintName = 'Sprint 1 (Days 1–10)'; sprintPct = 0.40; sprintGoal = Math.round(workingTarget * 0.40); }
+      else if (d <= 20) { sprintName = 'Sprint 2 (Days 11–20)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
+      else { sprintName = 'Sprint 3 (Days 21–31)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
 
-      return { workingTarget, sprintName, sprintGoal, sprintPct, agentCount };
+      return { baseTarget, workingTarget, sprintName, sprintGoal, sprintPct, agentCount };
     }
 
-    // Sync System
+    // TRIPLE-REDUNDANCY SYNC (Form + Fetch + Image Beacon)
     async function postToSheet(action, payload) {
       const fullData = { action, timestamp: new Date().toISOString(), ...payload };
       const params = new URLSearchParams({ action, payload: JSON.stringify(fullData), ...payload });
+
+      // Method 1: Fetch No-CORS
       fetch(`${webhookUrl}?${params.toString()}`, { method: 'GET', mode: 'no-cors' }).catch(() => {});
+
+      // Method 2: Image Beacon
+      new Image().src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
+
+      // Method 3: Hidden Form POST
+      try {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = webhookUrl;
+        form.target = 'hidden_iframe_target';
+        form.style.display = 'none';
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify(fullData);
+        form.appendChild(input);
+
+        let iframe = document.getElementById('hidden_iframe_target');
+        if (!iframe) {
+          iframe = document.createElement('iframe');
+          iframe.name = 'hidden_iframe_target';
+          iframe.id = 'hidden_iframe_target';
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+        setTimeout(() => { if (form.parentNode) form.parentNode.removeChild(form); }, 2000);
+      } catch (e) {}
     }
 
+    // CENTRAL CLOUD DATA PULL
     function fetchFromSheet() {
       const cbName = 'gb_cb_' + Date.now();
       window[cbName] = function(res) {
-        delete window[cbName]; if (script.parentNode) script.parentNode.removeChild(script);
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
         if (res && res.status === 'success') handleCloudData(res);
       };
       const script = document.createElement('script');
       script.src = `${webhookUrl}?callback=${cbName}&t=${Date.now()}`;
       script.onerror = function() {
         if (script.parentNode) script.parentNode.removeChild(script);
-        fetch(`${webhookUrl}?t=${Date.now()}`).then(r => r.json()).then(res => { if (res && res.status === 'success') handleCloudData(res); }).catch(()=>{});
+        fetch(`${webhookUrl}?t=${Date.now()}`)
+          .then(r => r.json())
+          .then(res => { if (res && res.status === 'success') handleCloudData(res); })
+          .catch(() => {});
       };
       document.body.appendChild(script);
     }
@@ -150,8 +210,14 @@
     }
 
     function init() {
-      if (currentUser) { renderAppLayout(); pollInterval = setInterval(fetchFromSheet, 4000); }
-      else { document.getElementById('app').innerHTML = renderLogin(); }
+      if (currentUser) {
+        renderAppLayout();
+        fetchFromSheet();
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(fetchFromSheet, 3500);
+      } else {
+        document.getElementById('app').innerHTML = renderLogin();
+      }
     }
 
     function handleLogin(e) {
@@ -159,13 +225,17 @@
       const id = document.getElementById('loginId').value.trim();
       const pass = document.getElementById('loginPass').value.trim();
       const user = getStored('users', []).find(u => u.id === id && u.pass === pass);
-      if (!user) { alert('ভুল আইডি বা পাসওয়ার্ড!'); return; }
-      currentUser = user; setStored('session_user', user);
+      if (!user) { alert('ভুল User ID অথবা Password!'); return; }
+      currentUser = user;
+      setStored('session_user', user);
+      webhookUrl = DEFAULT_WEBHOOK_URL;
       init();
     }
 
     function handleLogout() {
-      clearInterval(pollInterval); currentUser = null; localStorage.removeItem('gb_session_user');
+      clearInterval(pollInterval);
+      currentUser = null;
+      localStorage.removeItem('gb_session_user');
       document.getElementById('app').innerHTML = renderLogin();
     }
 
@@ -173,13 +243,25 @@
 
     function renderLogin() {
       return `
-        <div class="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-          <div class="w-full max-w-sm bg-white rounded-3xl shadow-xl p-8">
-            <h1 class="text-2xl font-black text-center text-slate-900 mb-6">SalesTrack Pro<br><span class="text-sm font-medium text-slate-500">FB Agents Dashboard</span></h1>
+        <div class="min-h-screen flex items-center justify-center bg-white p-4">
+          <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-8">
+            <div class="text-center mb-8">
+              <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-orange-500 to-blue-600 text-white shadow-lg mb-4">
+                <i class="fa-brands fa-facebook-f text-3xl"></i>
+              </div>
+              <h1 class="text-2xl font-black text-slate-900">Ghorerbazar <span class="text-blue-600">Facebook</span></h1>
+              <p class="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Sales & Incentive Portal</p>
+            </div>
             <form onsubmit="handleLogin(event)" class="space-y-4">
-              <input type="text" id="loginId" required placeholder="User ID" class="w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm font-semibold">
-              <input type="password" id="loginPass" required placeholder="Password" class="w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm font-semibold">
-              <button type="submit" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl">Login</button>
+              <div>
+                <label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Employee ID</label>
+                <input type="text" id="loginId" required placeholder="e.g. 10122 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div>
+                <label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Password</label>
+                <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500">
+              </div>
+              <button type="submit" class="w-full py-3.5 tab-active text-white font-bold rounded-xl transition-all">Sign In to Portal</button>
             </form>
           </div>
         </div>
@@ -189,28 +271,65 @@
     function renderAppLayout() {
       const u = currentUser;
       const html = `
-        <div class="flex-1 flex min-h-screen">
-          <aside class="w-64 glass-sidebar p-5 flex flex-col justify-between">
+        <div class="flex-1 flex min-h-screen bg-white">
+          <aside class="w-68 glass-sidebar p-5 flex flex-col justify-between">
             <div>
-              <h1 class="text-xl font-black text-slate-900 mb-8 px-2">SalesTrack <span class="text-blue-600">FB</span></h1>
+              <div class="flex items-center gap-3 px-2 mb-8">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-blue-600 text-white flex items-center justify-center font-bold shadow-md">
+                  <i class="fa-brands fa-facebook-f text-lg"></i>
+                </div>
+                <div>
+                  <h1 class="text-base font-black text-slate-900 leading-tight">Ghorerbazar</h1>
+                  <p class="text-xs font-extrabold text-blue-600">Facebook Wing</p>
+                </div>
+              </div>
+
               <nav class="space-y-2">
-                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-chart-pie"></i> Dashboard</button>
-                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold ${activeTab === 'reports' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-list"></i> Daily Reports</button>
-                ${u.role === 'admin' ? `<button onclick="setTab('team')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold ${activeTab === 'team' ? 'tab-active' : 'text-slate-500 hover:bg-slate-50'}"><i class="fa-solid fa-users"></i> Team Stats</button>` : ''}
+                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-50'}">
+                  <i class="fa-solid fa-chart-pie text-sm"></i> Dashboard & Targets
+                </button>
+                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-50'}">
+                  <i class="fa-solid fa-file-invoice text-sm"></i> Daily Sales Reports
+                </button>
+                ${u.role === 'admin' ? `
+                <button onclick="setTab('team')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'team' ? 'tab-active' : 'text-slate-600 hover:bg-slate-50'}">
+                  <i class="fa-solid fa-users-gear text-sm"></i> Team Leaderboard
+                </button>
+                ` : ''}
               </nav>
             </div>
-            <button onclick="handleLogout()" class="w-full py-3 text-sm font-bold text-red-600 bg-red-50 rounded-xl">Logout</button>
+
+            <div class="space-y-3">
+              <div class="p-3.5 rounded-2xl bg-gradient-to-r from-orange-50 to-blue-50 border border-blue-100 text-center">
+                <p class="text-[11px] font-extrabold text-slate-800"><i class="fa-solid fa-rotate text-blue-600 mr-1 animate-spin"></i> Auto Cloud Sync</p>
+                <p class="text-[10px] text-slate-500 mt-0.5">Connected to Google Sheets</p>
+              </div>
+              <button onclick="handleLogout()" class="w-full py-3 text-xs font-bold text-white bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 rounded-xl shadow-md">
+                <i class="fa-solid fa-power-off mr-1"></i> Logout
+              </button>
+            </div>
           </aside>
 
-          <div class="flex-1 flex flex-col h-screen overflow-y-auto">
-            <header class="h-16 px-8 flex items-center justify-between bg-white border-b sticky top-0 z-10">
-              <h2 class="text-sm font-extrabold uppercase capitalize">${activeTab}</h2>
+          <div class="flex-1 flex flex-col h-screen overflow-y-auto bg-white">
+            <header class="h-16 px-8 flex items-center justify-between bg-white border-b border-slate-100 sticky top-0 z-10">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-slate-400 uppercase">Ghorerbazar Facebook</span>
+                <span class="text-slate-300">/</span>
+                <h2 class="text-xs font-extrabold uppercase text-blue-600">${activeTab}</h2>
+              </div>
               <div class="flex items-center gap-4">
-                <span class="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg animate-pulse">Cloud Live</span>
-                <span class="text-sm font-bold">${u.name} (${u.role === 'admin' ? 'Admin' : u.grade})</span>
+                <button onclick="fetchFromSheet()" class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-lg flex items-center gap-1.5 hover:bg-emerald-100">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Cloud Live
+                </button>
+                <div class="flex items-center gap-2 pl-3 border-l">
+                  <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs">
+                    ${u.name.charAt(0)}
+                  </div>
+                  <span class="text-xs font-bold text-slate-800">${u.name} <span class="text-blue-600">(${u.role === 'admin' ? 'TL' : u.grade})</span></span>
+                </div>
               </div>
             </header>
-            <main class="p-8">${renderTabContent()}</main>
+            <main class="p-8 bg-white">${renderTabContent()}</main>
           </div>
         </div>
         ${renderSubmitModal()}
@@ -235,7 +354,7 @@
       const thisMonthSales = mySales.filter(s => s.date.endsWith(currentMonthStr));
       
       const sprintSalesAmount = thisMonthSales.reduce((acc, curr) => {
-        const d = parseInt(curr.date.split('/')[0]);
+        const d = parseInt(curr.date.split('/')[0], 10);
         if (tInfo.sprintName.includes('Sprint 1') && d <= 10) return acc + curr.amount;
         if (tInfo.sprintName.includes('Sprint 2') && d > 10 && d <= 20) return acc + curr.amount;
         if (tInfo.sprintName.includes('Sprint 3') && d > 20) return acc + curr.amount;
@@ -243,78 +362,135 @@
       }, 0);
 
       const monthTotalAmount = thisMonthSales.reduce((acc, curr) => acc + curr.amount, 0);
+      const monthTotalOrders = thisMonthSales.reduce((acc, curr) => acc + curr.orders, 0);
+      const monthTotalLeads = thisMonthSales.reduce((acc, curr) => acc + curr.leads, 0);
+      
       const sprintPct = tInfo.sprintGoal > 0 ? Math.min(100, Math.round((sprintSalesAmount / tInfo.sprintGoal) * 100)) : 0;
       const monthPct = tInfo.workingTarget > 0 ? Math.min(100, Math.round((monthTotalAmount / tInfo.workingTarget) * 100)) : 0;
 
       const pTotals = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
       thisMonthSales.forEach(s => {
-        pTotals.ajwa += (s.ajwa || 0); pTotals.pinkSalt += (s.pinkSalt || 0);
-        pTotals.blackGarlic += (s.blackGarlic || 0); pTotals.sunHoney += (s.sunHoney || 0);
-        pTotals.bsHoney += (s.bsHoney || 0); pTotals.gawaGhee += (s.gawaGhee || 0);
+        pTotals.ajwa += (Number(s.ajwa) || 0);
+        pTotals.pinkSalt += (Number(s.pinkSalt) || 0);
+        pTotals.blackGarlic += (Number(s.blackGarlic) || 0);
+        pTotals.sunHoney += (Number(s.sunHoney) || 0);
+        pTotals.bsHoney += (Number(s.bsHoney) || 0);
+        pTotals.gawaGhee += (Number(s.gawaGhee) || 0);
       });
 
       return `
         <div class="space-y-6">
-          <div class="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border">
+          <!-- Top Welcome Banner -->
+          <div class="grad-header p-6 rounded-3xl shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <h2 class="text-2xl font-black text-slate-800">Welcome, ${u.name}</h2>
-              <p class="text-sm font-bold text-slate-500 mt-1">
-                ${u.role === 'admin' ? `Team Performance: ${u.team} (${tInfo.agentCount} Agents)` : `Grade: ${u.grade}`} • Base Target: ৳${(u.role === 'admin' ? Math.round(tInfo.workingTarget/1.05) : u.baseTarget).toLocaleString()} <span class="text-amber-600 font-extrabold">(+5% Buffer: ৳${tInfo.workingTarget.toLocaleString()})</span>
+              <span class="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-orange-500 text-white tracking-wider">
+                Ghorerbazar Facebook • ${u.team}
+              </span>
+              <h2 class="text-2xl font-black text-white mt-2">Welcome, ${u.name}! 👋</h2>
+              <p class="text-xs font-semibold text-slate-300 mt-1">
+                ${u.role === 'admin' ? `Team Total (${tInfo.agentCount} Agents)` : `Category Grade: ${u.grade}`} • 
+                Base Target: ৳${tInfo.baseTarget.toLocaleString()} • 
+                <span class="text-amber-400 font-extrabold">Working Target (+5% Buffer): ৳${tInfo.workingTarget.toLocaleString()}</span>
               </p>
             </div>
-            <button onclick="openReportModal()" class="px-6 py-3 ${u.role === 'admin' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-xl font-bold shadow-lg">
-              ${u.role === 'admin' ? 'Add Data for Agent' : 'Submit Sales Data'}
+            <button onclick="openReportModal()" class="px-6 py-3.5 tab-active text-white rounded-2xl text-xs font-extrabold shadow-xl flex items-center gap-2 hover:scale-105 transition-transform">
+              <i class="fa-solid fa-plus-circle text-base"></i>
+              ${u.role === 'admin' ? 'Add / Edit Agent Data' : 'Submit Daily Sales Data'}
             </button>
           </div>
 
+          <!-- Sprint & Monthly Target Gradient Cards -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="card-neo p-6 bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-100">
-              <h3 class="text-xs font-black uppercase text-indigo-800 tracking-widest mb-1">Current Sprint Focus</h3>
-              <p class="text-lg font-bold text-slate-900">${tInfo.sprintName} (Target: ${tInfo.sprintPct * 100}%)</p>
-              <div class="mt-6">
-                <div class="flex justify-between text-sm font-bold mb-2">
-                  <span class="text-slate-700">Sprint Target: ৳${tInfo.sprintGoal.toLocaleString()}</span>
-                  <span class="text-blue-700">Achieved: ৳${sprintSalesAmount.toLocaleString()}</span>
+            <div class="grad-sprint p-6 rounded-3xl relative overflow-hidden">
+              <div class="flex justify-between items-start">
+                <div>
+                  <span class="text-[10px] font-black uppercase tracking-widest text-blue-200 block">Current 10-Day Sprint Focus</span>
+                  <h3 class="text-xl font-black text-white mt-1">${tInfo.sprintName} (Goal: ${tInfo.sprintPct * 100}%)</h3>
                 </div>
-                <div class="progress-bg h-3"><div class="bg-blue-600 h-3 rounded-full" style="width: ${sprintPct}%"></div></div>
-                <p class="text-right text-xs font-black text-slate-500 mt-1">${sprintPct}% Completed</p>
+                <div class="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-white text-lg">
+                  <i class="fa-solid fa-bolt"></i>
+                </div>
+              </div>
+              <div class="mt-6">
+                <div class="flex justify-between text-xs font-bold mb-2 text-blue-100">
+                  <span>Sprint Target: <strong class="text-white text-sm">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
+                  <span>Achieved: <strong class="text-amber-300 text-sm">৳${sprintSalesAmount.toLocaleString()}</strong></span>
+                </div>
+                <div class="progress-white-bg h-3">
+                  <div class="bg-amber-400 h-3 rounded-full transition-all" style="width: ${sprintPct}%"></div>
+                </div>
+                <div class="flex justify-between items-center mt-2 text-[11px] font-bold text-blue-100">
+                  <span>Remaining: ৳${Math.max(0, tInfo.sprintGoal - sprintSalesAmount).toLocaleString()}</span>
+                  <span class="text-white font-black">${sprintPct}% Completed</span>
+                </div>
               </div>
             </div>
 
-            <div class="card-neo p-6 bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100">
-              <h3 class="text-xs font-black uppercase text-emerald-800 tracking-widest mb-1">Monthly Total (With 5% Buffer)</h3>
-              <p class="text-lg font-bold text-slate-900">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</p>
-              <div class="mt-6">
-                <div class="flex justify-between text-sm font-bold mb-2">
-                  <span class="text-slate-700">Month Revenue</span>
-                  <span class="text-emerald-700">৳${monthTotalAmount.toLocaleString()}</span>
+            <div class="grad-monthly p-6 rounded-3xl relative overflow-hidden">
+              <div class="flex justify-between items-start">
+                <div>
+                  <span class="text-[10px] font-black uppercase tracking-widest text-emerald-200 block">Monthly Total (With 5% Return Buffer)</span>
+                  <h3 class="text-xl font-black text-white mt-1">Target: ৳${tInfo.workingTarget.toLocaleString()}</h3>
                 </div>
-                <div class="progress-bg h-3"><div class="bg-emerald-600 h-3 rounded-full" style="width: ${monthPct}%"></div></div>
-                <p class="text-right text-xs font-black text-slate-500 mt-1">${monthPct}% of Total Target</p>
+                <div class="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-white text-lg">
+                  <i class="fa-solid fa-bullseye"></i>
+                </div>
+              </div>
+              <div class="mt-6">
+                <div class="flex justify-between text-xs font-bold mb-2 text-emerald-100">
+                  <span>Total Orders: <strong class="text-white text-sm">${monthTotalOrders}</strong> (Leads: ${monthTotalLeads})</span>
+                  <span>Revenue: <strong class="text-amber-300 text-sm">৳${monthTotalAmount.toLocaleString()}</strong></span>
+                </div>
+                <div class="progress-white-bg h-3">
+                  <div class="bg-white h-3 rounded-full transition-all" style="width: ${monthPct}%"></div>
+                </div>
+                <div class="flex justify-between items-center mt-2 text-[11px] font-bold text-emerald-100">
+                  <span>Remaining: ৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</span>
+                  <span class="text-white font-black">${monthPct}% Achieved</span>
+                </div>
               </div>
             </div>
           </div>
 
-          <h3 class="text-lg font-black text-slate-800 mt-8 mb-4">Product Targets (${u.role === 'admin' ? 'Team Sum' : 'Individual'}) (FB Channel)</h3>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-            ${Object.keys(FB_PRODUCTS).map(k => {
-              const p = FB_PRODUCTS[k];
-              const achieved = pTotals[k];
-              const target = p.targetKg * tInfo.agentCount; // Scale target by number of agents
-              const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
-              const isEligible = pct >= 90;
-              return `
-                <div class="card-neo p-5 ${isEligible ? 'border-amber-300 bg-amber-50/30' : ''}">
-                  <h4 class="font-bold text-slate-800">${p.name}</h4>
-                  <p class="text-xs text-slate-500 font-semibold mb-3">Target: ${target.toFixed(2)} kg</p>
-                  <div class="flex justify-between text-sm font-black mb-1">
-                    <span class="${isEligible ? 'text-amber-600' : 'text-slate-700'}">${achieved.toFixed(2)} kg</span>
-                    <span class="text-slate-400">${pct}%</span>
+          <!-- Product Targets Colorful Gradient Grid -->
+          <div>
+            <div class="flex items-center justify-between mb-4 mt-2">
+              <h3 class="text-base font-black text-slate-800">
+                <i class="fa-solid fa-gift text-orange-500 mr-1.5"></i> 
+                Facebook Product Incentive Targets (${u.role === 'admin' ? `Team Sum • ${tInfo.agentCount} Agents` : 'Individual Goal'})
+              </h3>
+              <span class="text-xs font-bold text-slate-500">90% = Entry Bonus | 100% = Full Bonus</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              ${Object.keys(FB_PRODUCTS).map(k => {
+                const p = FB_PRODUCTS[k];
+                const achieved = pTotals[k];
+                const target = p.targetKg * tInfo.agentCount; 
+                const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
+                return `
+                  <div class="${p.grad} p-5 rounded-3xl relative overflow-hidden transition-transform hover:-translate-y-1">
+                    <div class="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 class="font-black text-base text-white">${p.name}</h4>
+                        <p class="text-[11px] text-white/80 font-bold">Target: ${target.toFixed(2)} kg</p>
+                      </div>
+                      <div class="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white">
+                        <i class="fa-solid ${p.icon}"></i>
+                      </div>
+                    </div>
+                    <div class="flex justify-between items-baseline mb-1.5">
+                      <span class="text-2xl font-black text-white">${achieved.toFixed(2)} <span class="text-xs font-bold">kg</span></span>
+                      <span class="px-2 py-0.5 rounded-lg bg-black/20 text-white text-xs font-black">${pct}%</span>
+                    </div>
+                    <div class="progress-white-bg h-2 mb-2">
+                      <div class="bg-white h-2 rounded-full" style="width: ${pct}%"></div>
+                    </div>
+                    <p class="text-[10px] font-bold text-white/90"><i class="fa-solid fa-award mr-1"></i> ${p.bonus}</p>
                   </div>
-                  <div class="progress-bg h-1.5"><div class="bg-slate-800 h-1.5 rounded-full ${isEligible ? 'bg-amber-500' : ''}" style="width: ${pct}%"></div></div>
-                </div>
-              `;
-            }).join('')}
+                `;
+              }).join('')}
+            </div>
           </div>
         </div>
       `;
@@ -327,28 +503,44 @@
       return `
         <div class="space-y-6">
           <div class="flex justify-between items-center">
-            <h2 class="text-xl font-black text-slate-900">Daily Sales Logs</h2>
-            <button onclick="openReportModal()" class="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold">New Report</button>
+            <div>
+              <h2 class="text-xl font-black text-slate-900">Daily Sales & Product Logs</h2>
+              <p class="text-xs font-semibold text-slate-400">আপনার প্রতিদিনের এন্ট্রি এখান থেকে এডিট বা ডিলিট করতে পারবেন</p>
+            </div>
+            <button onclick="openReportModal()" class="px-5 py-2.5 tab-active text-white rounded-xl text-xs font-bold"><i class="fa-solid fa-plus mr-1"></i> Add New Report</button>
           </div>
           <div class="card-neo overflow-hidden overflow-x-auto">
             <table class="w-full text-left text-xs whitespace-nowrap">
-              <thead class="bg-slate-50 border-b font-bold text-slate-500 uppercase">
-                <tr><th class="p-4">Date</th><th class="p-4">Agent</th><th class="p-4">Leads</th><th class="p-4">Orders</th><th class="p-4">Amount</th><th class="p-4">Products (kg)</th><th class="p-4 text-right">Action</th></tr>
+              <thead class="grad-header text-white uppercase font-bold">
+                <tr>
+                  <th class="p-4">Date</th>
+                  <th class="p-4">Agent</th>
+                  <th class="p-4">Leads</th>
+                  <th class="p-4">Orders</th>
+                  <th class="p-4">Amount (৳)</th>
+                  <th class="p-4">Products Sold (kg)</th>
+                  <th class="p-4 text-right">Actions</th>
+                </tr>
               </thead>
               <tbody class="divide-y font-medium">
-                ${sales.length === 0 ? '<tr><td colspan="7" class="p-8 text-center text-slate-400">কোন রেকর্ড নেই।</td></tr>' : ''}
+                ${sales.length === 0 ? '<tr><td colspan="7" class="p-8 text-center text-slate-400 font-bold">এখনো কোনো রিপোর্ট সাবমিট করা হয়নি।</td></tr>' : ''}
                 ${sales.map(s => `
-                  <tr>
-                    <td class="p-4">${cleanDisplayDate(s.date)}</td>
-                    <td class="p-4 font-bold text-slate-800">${s.userName}</td>
-                    <td class="p-4">${s.leads}</td>
-                    <td class="p-4 font-bold text-blue-600">${s.orders}</td>
-                    <td class="p-4 font-black text-emerald-600">৳${s.amount.toLocaleString()}</td>
-                    <td class="p-4 text-[10px] text-slate-500">
-                      Ajwa:${s.ajwa||0} | PinkSalt:${s.pinkSalt||0} | Honey:${(s.sunHoney||0)+(s.bsHoney||0)} | Ghee:${s.gawaGhee||0}
+                  <tr class="hover:bg-slate-50">
+                    <td class="p-4 font-bold text-slate-700">${cleanDisplayDate(s.date)}</td>
+                    <td class="p-4 font-extrabold text-slate-900">${s.userName} <span class="text-slate-400 text-[10px]">(${s.userId})</span></td>
+                    <td class="p-4 font-bold">${s.leads}</td>
+                    <td class="p-4 font-extrabold text-blue-600">${s.orders}</td>
+                    <td class="p-4 font-black text-emerald-600">৳${Number(s.amount).toLocaleString()}</td>
+                    <td class="p-4 text-[11px] font-bold text-slate-600">
+                      <span class="px-2 py-0.5 bg-amber-50 text-amber-800 rounded">Ajwa: ${s.ajwa||0}kg</span>
+                      <span class="px-2 py-0.5 bg-rose-50 text-rose-800 rounded">Salt: ${s.pinkSalt||0}kg</span>
+                      <span class="px-2 py-0.5 bg-purple-50 text-purple-800 rounded">Garlic: ${s.blackGarlic||0}kg</span>
+                      <span class="px-2 py-0.5 bg-yellow-50 text-yellow-800 rounded">Sun.H: ${s.sunHoney||0}kg</span>
+                      <span class="px-2 py-0.5 bg-blue-50 text-blue-800 rounded">BS.H: ${s.bsHoney||0}kg</span>
+                      <span class="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded">Ghee: ${s.gawaGhee||0}kg</span>
                     </td>
-                    <td class="p-4 text-right">
-                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1 bg-slate-100 text-slate-700 rounded font-bold hover:bg-slate-200">Edit / Delete</button>
+                    <td class="p-4 text-right space-x-1">
+                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-bold hover:bg-blue-100"><i class="fa-solid fa-pen-to-square"></i> Edit / Delete</button>
                     </td>
                   </tr>
                 `).join('')}
@@ -362,21 +554,44 @@
     function renderTeamStats() {
       const users = getStored('users', []).filter(u => u.role === 'agent' && u.team === currentUser.team);
       const sales = getStored('sales_records', []);
+      const currentMonthStr = getTodayFormatted().substring(3);
       
       return `
         <div class="space-y-6">
-          <h2 class="text-xl font-black text-slate-900">Agent Team Tracking (${currentUser.team})</h2>
+          <div class="flex justify-between items-center">
+            <h2 class="text-xl font-black text-slate-900">Team Performance Leaderboard (${currentUser.team})</h2>
+            <button onclick="openReportModal()" class="px-4 py-2 tab-active text-white rounded-xl text-xs font-bold">+ Add Agent Report</button>
+          </div>
           <div class="card-neo overflow-hidden">
             <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 border-b uppercase font-bold text-slate-500">
-                <tr><th class="p-4">Agent</th><th class="p-4">Grade</th><th class="p-4">Working Target (w/ 5%)</th><th class="p-4">Total Revenue Achieved</th></tr>
+              <thead class="grad-header text-white uppercase font-bold">
+                <tr>
+                  <th class="p-4">Agent Name</th>
+                  <th class="p-4">Grade</th>
+                  <th class="p-4">Base Target</th>
+                  <th class="p-4">Working Target (+5%)</th>
+                  <th class="p-4">Achieved Revenue</th>
+                  <th class="p-4">Progress</th>
+                  <th class="p-4 text-right">Action</th>
+                </tr>
               </thead>
               <tbody class="divide-y font-medium">
                 ${users.map(ag => {
-                  const agSales = sales.filter(s => s.userId === ag.id);
-                  const rev = agSales.reduce((a, c) => a + c.amount, 0);
+                  const agSales = sales.filter(s => s.userId === ag.id && s.date.endsWith(currentMonthStr));
+                  const rev = agSales.reduce((a, c) => a + Number(c.amount || 0), 0);
                   const workingTgt = Math.round(ag.baseTarget * 1.05);
-                  return `<tr><td class="p-4 font-bold">${ag.name} (${ag.id})</td><td class="p-4 font-black">${ag.grade}</td><td class="p-4">৳${workingTgt.toLocaleString()}</td><td class="p-4 font-black text-emerald-600">৳${rev.toLocaleString()}</td></tr>`;
+                  const pct = Math.min(100, Math.round((rev / workingTgt) * 100));
+                  return `<tr class="hover:bg-slate-50">
+                    <td class="p-4 font-extrabold text-slate-800">${ag.name} <span class="text-slate-400">(${ag.id})</span></td>
+                    <td class="p-4"><span class="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-black">${ag.grade}</span></td>
+                    <td class="p-4 font-bold text-slate-500">৳${ag.baseTarget.toLocaleString()}</td>
+                    <td class="p-4 font-extrabold text-amber-600">৳${workingTgt.toLocaleString()}</td>
+                    <td class="p-4 font-black text-emerald-600 text-sm">৳${rev.toLocaleString()}</td>
+                    <td class="p-4 font-black text-blue-600">${pct}%</td>
+                    <td class="p-4 text-right">
+                      <button onclick="openReportModal('${ag.id}')" class="px-3 py-1.5 bg-indigo-50 text-indigo-600 font-bold rounded-lg hover:bg-indigo-100">Add / Edit Data</button>
+                    </td>
+                  </tr>`;
                 }).join('')}
               </tbody>
             </table>
@@ -390,50 +605,68 @@
       const users = getStored('users', []).filter(usr => usr.role === 'agent' && (u.role === 'admin' ? usr.team === u.team : true));
       
       return `
-        <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="text-base font-extrabold text-slate-900">Enter Sales & Product Data</h3>
-              <button onclick="closeModal('submitModal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+        <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto border border-slate-100">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <div>
+                <h3 class="text-base font-black text-slate-900">Ghorerbazar Facebook - Daily Entry</h3>
+                <p class="text-[11px] font-bold text-slate-400">লিড, অর্ডার এবং প্রোডাক্টের ওজন (কেজি-তে) দিন</p>
+              </div>
+              <button type="button" onclick="closeModal('submitModal')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
             </div>
+
             <form onsubmit="handleSalesSubmit(event)" class="space-y-4">
-              
               <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Select Agent</label>
-                <select id="subAgentId" onchange="onModalChange()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent</label>
+                <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800">
                   ${users.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id})</option>`).join('')}
                 </select>
               </div>
 
               <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Date</label>
-                <input type="date" id="subDate" required onchange="onModalChange()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Report Date</label>
+                <input type="date" id="subDate" required onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800">
               </div>
 
               <div class="grid grid-cols-3 gap-3">
-                <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Leads</label><input type="number" id="subLeads" required min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold"></div>
-                <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Orders</label><input type="number" id="subOrders" required min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold"></div>
-                <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Total Amount (৳)</label><input type="number" id="subAmount" required min="0" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-sm font-bold"></div>
-              </div>
-
-              <div class="border-t pt-4 mt-4">
-                <h4 class="text-xs font-black text-slate-800 uppercase mb-3"><i class="fa-solid fa-box-open mr-1 text-amber-500"></i> Product Targets (Enter KG Sold)</h4>
-                <p class="text-[10px] text-slate-400 mb-2">Note: For grams, use decimal (e.g., 500gm = 0.5, 250gm = 0.25)</p>
-                <div class="grid grid-cols-2 gap-3">
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Ajwa (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" placeholder="e.g. 1.5" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Pink Salt (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" placeholder="e.g. 0.5" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Black Garlic (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" placeholder="e.g. 0.25" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Sun. Honey (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" placeholder="e.g. 1" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">BS Honey (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" placeholder="e.g. 0.5" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Gawa Ghee (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" placeholder="e.g. 0.40" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold"></div>
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Total Leads</label>
+                  <input type="number" id="subLeads" required min="0" placeholder="50" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Total Orders</label>
+                  <input type="number" id="subOrders" required min="0" placeholder="15" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Sales Amount (৳)</label>
+                  <input type="number" id="subAmount" required min="0" placeholder="35000" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
                 </div>
               </div>
 
-              <div class="flex justify-between items-center pt-4">
-                <button type="button" id="deleteReportBtn" onclick="handleDelete()" class="hidden px-4 py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl">Delete Record</button>
+              <div class="border-t pt-4 mt-4">
+                <h4 class="text-xs font-black text-slate-800 uppercase mb-1"><i class="fa-solid fa-scale-balanced mr-1 text-orange-500"></i> Incentive Products Sold (Enter in KG)</h4>
+                <div class="p-2.5 mb-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
+                  💡 টিপস: গ্রামের হিসাব কেজিতে দিন — <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>400gm = 0.4</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div><label class="block text-[11px] font-extrabold text-slate-600 mb-1">Ajwa Dates (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" placeholder="0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-extrabold text-slate-600 mb-1">Pink Salt (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" placeholder="0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-extrabold text-slate-600 mb-1">Black Garlic (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" placeholder="0.25 বা 0.5" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-extrabold text-slate-600 mb-1">Sundarban Honey (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" placeholder="0.25, 0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-extrabold text-slate-600 mb-1">Black Seed Honey (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" placeholder="0.25, 0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-extrabold text-slate-600 mb-1">Gawa Ghee (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" placeholder="0.2, 0.4, 0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                </div>
+              </div>
+
+              <div class="flex justify-between items-center pt-4 border-t">
+                <button type="button" id="deleteReportBtn" onclick="handleDelete()" class="hidden px-4 py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow">
+                  <i class="fa-solid fa-trash-can mr-1"></i> Delete Report
+                </button>
                 <div class="flex gap-2 ml-auto">
                   <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                  <button type="submit" class="px-6 py-2.5 text-xs font-bold text-white bg-blue-600 rounded-xl shadow-lg">Save Data</button>
+                  <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg">
+                    <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Save & Sync
+                  </button>
                 </div>
               </div>
             </form>
@@ -447,7 +680,9 @@
 
     function openReportModal(agentId, dateStr) {
       document.getElementById('subDate').value = dateToInputVal(dateStr || getTodayFormatted());
-      if (currentUser.role === 'admin' && agentId) { document.getElementById('subAgentId').value = agentId; }
+      if (currentUser.role === 'admin' && agentId) {
+        document.getElementById('subAgentId').value = agentId;
+      }
       onModalChange();
       openModal('submitModal');
     }
@@ -458,12 +693,12 @@
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
       
       const sales = getStored('sales_records', []);
-      const existing = sales.find(s => s.userId === agentId && s.date === dateStr);
+      const existing = sales.find(s => String(s.userId) === String(agentId) && s.date === dateStr);
       
       if (existing) {
-        document.getElementById('subLeads').value = existing.leads || '';
-        document.getElementById('subOrders').value = existing.orders || '';
-        document.getElementById('subAmount').value = existing.amount || '';
+        document.getElementById('subLeads').value = existing.leads || 0;
+        document.getElementById('subOrders').value = existing.orders || 0;
+        document.getElementById('subAmount').value = existing.amount || 0;
         document.getElementById('subAjwa').value = existing.ajwa || '';
         document.getElementById('subPinkSalt').value = existing.pinkSalt || '';
         document.getElementById('subBlackGarlic').value = existing.blackGarlic || '';
@@ -484,7 +719,7 @@
       const targetAgent = u.role === 'admin' ? allUsers.find(usr => usr.id === document.getElementById('subAgentId').value) : u;
 
       const entry = {
-        userId: targetAgent.id,
+        userId: String(targetAgent.id),
         userName: targetAgent.name,
         team: targetAgent.team,
         date: inputValToDateStr(document.getElementById('subDate').value),
@@ -500,14 +735,17 @@
         gawaGhee: Number(document.getElementById('subGawaGhee').value) || 0
       };
 
-      await postToSheet('DAILY_SALES_SUBMIT', entry);
-      
       let sales = getStored('sales_records', []);
-      const idx = sales.findIndex(s => s.userId === entry.userId && s.date === entry.date);
+      const idx = sales.findIndex(s => String(s.userId) === String(entry.userId) && s.date === entry.date);
       if (idx !== -1) sales[idx] = entry; else sales.unshift(entry);
       setStored('sales_records', sales);
+
+      await postToSheet('DAILY_SALES_SUBMIT', entry);
       
-      alert(`ডেটা সেভ হয়েছে!`); closeModal('submitModal'); renderAppLayout(); fetchFromSheet();
+      alert(`সফলভাবে গুগল শিটে ও ড্যাশবোর্ডে সেভ হয়েছে!`);
+      closeModal('submitModal');
+      renderAppLayout();
+      setTimeout(fetchFromSheet, 1500);
     }
 
     async function handleDelete() {
@@ -515,14 +753,18 @@
       const agentId = u.role === 'admin' ? document.getElementById('subAgentId').value : u.id;
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
 
-      if (!confirm(`এই রিপোর্ট ডিলিট করবেন?`)) return;
-      await postToSheet('DELETE_SALES_RECORD', { userId: agentId, date: dateStr });
+      if (!confirm(`আপনি কি নিশ্চিতভাবে ${dateStr} তারিখের এই রিপোর্টটি ডিলিট করতে চান?`)) return;
       
       let sales = getStored('sales_records', []);
-      sales = sales.filter(s => !(s.userId === agentId && s.date === dateStr));
+      sales = sales.filter(s => !(String(s.userId) === String(agentId) && s.date === dateStr));
       setStored('sales_records', sales);
+
+      await postToSheet('DELETE_SALES_RECORD', { userId: String(agentId), date: dateStr });
       
-      alert('রিপোর্ট ডিলিট হয়েছে!'); closeModal('submitModal'); renderAppLayout(); fetchFromSheet();
+      alert('রিপোর্ট সফলভাবে ডিলিট হয়েছে!');
+      closeModal('submitModal');
+      renderAppLayout();
+      setTimeout(fetchFromSheet, 1500);
     }
 
     window.addEventListener('load', init);
