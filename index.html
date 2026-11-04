@@ -3,22 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ghorerbazar Facebook - Incentive & Sales Portal</title>
+  <title>Ghorerbazar Facebook - Dynamic Sales & Incentive Portal</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap');
-    body { font-family: 'Plus Jakarta Sans', 'Hind Siliguri', sans-serif; background-color: #f8fafc; color: #1e293b; }
-    .sidebar-clean { background: #ffffff; border-right: 1px solid #e2e8f0; }
-    .card-pro { background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.03), 0 1px 2px -1px rgba(0,0,0,0.03); transition: all 0.2s ease; }
-    .card-pro:hover { border-color: #cbd5e1; box-shadow: 0 4px 12px -2px rgba(0,0,0,0.05); }
+    body { font-family: 'Plus Jakarta Sans', 'Hind Siliguri', sans-serif; background-color: #f1f5f9; color: #0f172a; }
+    
+    /* Dynamic Sidebar & Cards */
+    .sidebar-dark { background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); color: #f8fafc; }
+    .card-dynamic { background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05); transition: all 0.25s ease; }
+    .card-dynamic:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(15, 23, 42, 0.08); }
     
     .tab-active { 
-      background: #2563eb; 
+      background: linear-gradient(135deg, #f97316 0%, #2563eb 100%); 
       color: #ffffff !important; 
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25); 
+      box-shadow: 0 8px 20px -4px rgba(37, 99, 235, 0.45); 
     }
-    .progress-track { background-color: #f1f5f9; border-radius: 9999px; overflow: hidden; }
+    
+    /* Vibrant Executive KPI Gradients */
+    .kpi-blue { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(37, 99, 235, 0.35); }
+    .kpi-emerald { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(5, 150, 105, 0.35); }
+    .kpi-purple { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(124, 58, 237, 0.35); }
+    .kpi-indigo { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(79, 70, 229, 0.35); }
+    .kpi-amber { background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); color: #ffffff; box-shadow: 0 12px 24px -6px rgba(234, 88, 12, 0.35); }
+
+    .banner-hero { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1e293b 100%); color: white; }
+    .sprint-banner { background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%); border: 1px solid #bfdbfe; }
+    .monthly-banner { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0; }
+
+    /* Soft Tinted Product Cards */
+    .prod-amber { background: linear-gradient(145deg, #ffffff 0%, #fffbeb 100%); border: 1px solid #fde68a; }
+    .prod-rose { background: linear-gradient(145deg, #ffffff 0%, #fff1f2 100%); border: 1px solid #fecdd3; }
+    .prod-purple { background: linear-gradient(145deg, #ffffff 0%, #faf5ff 100%); border: 1px solid #e9d5ff; }
+    .prod-orange { background: linear-gradient(145deg, #ffffff 0%, #fff7ed 100%); border: 1px solid #fed7aa; }
+    .prod-blue { background: linear-gradient(145deg, #ffffff 0%, #eff6ff 100%); border: 1px solid #bfdbfe; }
+    .prod-emerald { background: linear-gradient(145deg, #ffffff 0%, #ecfdf5 100%); border: 1px solid #a7f3d0; }
+
+    .progress-track { background-color: rgba(15, 23, 42, 0.08); border-radius: 9999px; overflow: hidden; }
   </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col">
@@ -31,10 +53,9 @@
     localStorage.setItem('gb_webhook_url', DEFAULT_WEBHOOK_URL);
     let webhookUrl = DEFAULT_WEBHOOK_URL;
 
-    // User Data from Images (with individual base targets)
     const DEFAULT_USERS = [
-      { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123' },
-      { id: '10107', name: 'Md Abdus Samad (TL)', role: 'admin', team: 'Team Samad', pass: 'admin123' },
+      { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123', grade: 'TL', baseTarget: 0 },
+      { id: '10107', name: 'Md Abdus Samad (TL)', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 0 },
       
       { id: '10191', name: 'Shagor Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A-', baseTarget: 1232174 },
       { id: '10289', name: 'Abdullah Dipu', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A+', baseTarget: 1619218 },
@@ -55,20 +76,22 @@
       { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 }
     ];
 
-    // Professional Subtle Accents for Products
     const FB_PRODUCTS = {
-      ajwa: { name: 'Ajwa Dates', targetKg: 69.03, color: 'amber', icon: 'fa-seedling', bonus: '90%: 600৳ | 100%: 1000৳' },
-      pinkSalt: { name: 'Pink Salt', targetKg: 10.07, color: 'rose', icon: 'fa-jar', bonus: '100%: 2L Mustard Oil' },
-      blackGarlic: { name: 'Black Garlic', targetKg: 6.09, color: 'purple', icon: 'fa-spa', bonus: '100%: 400gm Gawa Ghee' },
-      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51, color: 'orange', icon: 'fa-droplet', bonus: '90%: 1000৳ | 100%: 2000৳' },
-      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09, color: 'blue', icon: 'fa-bottle-droplet', bonus: '100%: 1000৳' },
-      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56, color: 'emerald', icon: 'fa-cheese', bonus: '90%: 1200৳ | 100%: 2000৳' }
+      ajwa: { name: 'Ajwa Dates', targetKg: 69.03, style: 'prod-amber', badge: 'bg-amber-500 text-white', bar: 'bg-amber-500', icon: 'fa-seedling', bonus: '90%: 600৳ | 100%: 1000৳' },
+      pinkSalt: { name: 'Pink Salt', targetKg: 10.07, style: 'prod-rose', badge: 'bg-rose-500 text-white', bar: 'bg-rose-500', icon: 'fa-jar', bonus: '100%: 2L Mustard Oil' },
+      blackGarlic: { name: 'Black Garlic', targetKg: 6.09, style: 'prod-purple', badge: 'bg-purple-600 text-white', bar: 'bg-purple-600', icon: 'fa-spa', bonus: '100%: 400gm Gawa Ghee' },
+      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51, style: 'prod-orange', badge: 'bg-orange-500 text-white', bar: 'bg-orange-500', icon: 'fa-droplet', bonus: '90%: 1000৳ | 100%: 2000৳' },
+      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09, style: 'prod-blue', badge: 'bg-blue-600 text-white', bar: 'bg-blue-600', icon: 'fa-bottle-droplet', bonus: '100%: 1000৳' },
+      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56, style: 'prod-emerald', badge: 'bg-emerald-600 text-white', bar: 'bg-emerald-600', icon: 'fa-cheese', bonus: '90%: 1200৳ | 100%: 2000৳' }
     };
 
-    localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
+    if (!localStorage.getItem('gb_users')) {
+      localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
+    }
 
     let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
     let activeTab = 'dashboard';
+    let adminFilterScope = 'ALL'; // 'ALL', 'Team Nazim', 'Team Samad'
     let pollInterval = null;
 
     function getStored(key, def) { const r = localStorage.getItem('gb_' + key); return r ? JSON.parse(r) : def; }
@@ -99,23 +122,24 @@
       return s;
     }
 
-    // Sprint, Monthly & Daily Target Logic (+5% Extra Return Buffer & 26 Working Days)
-    function getTargetData(user) {
+    // Dynamic Target Calculator based on User or Admin Scope
+    function getTargetData(user, scopeOverride) {
       const allUsers = getStored('users', []);
       let baseTarget = 0;
       let agentCount = 1;
       
       if (user.role === 'admin') {
-        const teamAgents = allUsers.filter(u => u.role === 'agent' && u.team === user.team);
-        baseTarget = teamAgents.reduce((sum, a) => sum + (a.baseTarget || 0), 0);
-        agentCount = teamAgents.length || 1;
+        const scope = scopeOverride || adminFilterScope;
+        const agents = allUsers.filter(u => u.role === 'agent' && (scope === 'ALL' ? true : u.team === scope));
+        baseTarget = agents.reduce((sum, a) => sum + (Number(a.baseTarget) || 0), 0);
+        agentCount = agents.length || 1;
       } else {
-        const freshUser = allUsers.find(u => u.id === user.id) || user;
-        baseTarget = freshUser.baseTarget || 0;
+        const freshUser = allUsers.find(u => String(u.id) === String(user.id)) || user;
+        baseTarget = Number(freshUser.baseTarget) || 1232174;
       }
 
       const workingTarget = Math.round(baseTarget * 1.05); // +5% Extra for Return/Cancel
-      const dailyTarget = Math.round(workingTarget / 26);  // 26 Working days daily target
+      const dailyTarget = Math.round(workingTarget / 26);  // 26 Working days
 
       const d = new Date().getDate();
       let sprintName, sprintGoal, sprintPct;
@@ -127,7 +151,7 @@
       return { baseTarget, workingTarget, dailyTarget, sprintName, sprintGoal, sprintPct, agentCount };
     }
 
-    // TRIPLE-REDUNDANCY SYNC
+    // TRIPLE-REDUNDANCY CLOUD SYNC
     async function postToSheet(action, payload) {
       const fullData = { action, timestamp: new Date().toISOString(), ...payload };
       const params = new URLSearchParams({ action, payload: JSON.stringify(fullData), ...payload });
@@ -183,13 +207,27 @@
     }
 
     function handleCloudData(res) {
+      let changed = false;
       if (Array.isArray(res.salesRecords)) {
         const local = getStored('sales_records', []);
         if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
           setStored('sales_records', res.salesRecords);
-          if (currentUser) renderAppLayout();
+          changed = true;
         }
       }
+      if (Array.isArray(res.customUsers) && res.customUsers.length > 0) {
+        const currentUsers = getStored('users', DEFAULT_USERS);
+        const mergedMap = new Map();
+        DEFAULT_USERS.forEach(u => mergedMap.set(String(u.id), u));
+        currentUsers.forEach(u => mergedMap.set(String(u.id), u));
+        res.customUsers.forEach(u => mergedMap.set(String(u.id), u));
+        const mergedArr = Array.from(mergedMap.values());
+        if (JSON.stringify(mergedArr) !== JSON.stringify(currentUsers)) {
+          setStored('users', mergedArr);
+          changed = true;
+        }
+      }
+      if (changed && currentUser) renderAppLayout();
     }
 
     function init() {
@@ -207,11 +245,11 @@
       e.preventDefault();
       const id = document.getElementById('loginId').value.trim();
       const pass = document.getElementById('loginPass').value.trim();
-      const user = getStored('users', []).find(u => u.id === id && u.pass === pass);
-      if (!user) { alert('ভুল User ID অথবা Password!'); return; }
+      const user = getStored('users', DEFAULT_USERS).find(u => String(u.id) === id && u.pass === pass);
+      if (!user) { alert('ভুল Employee ID অথবা Password!'); return; }
       currentUser = user;
       setStored('session_user', user);
-      webhookUrl = DEFAULT_WEBHOOK_URL;
+      adminFilterScope = 'ALL';
       init();
     }
 
@@ -223,28 +261,29 @@
     }
 
     function setTab(tab) { activeTab = tab; renderAppLayout(); }
+    function setAdminScope(scope) { adminFilterScope = scope; renderAppLayout(); }
 
     function renderLogin() {
       return `
-        <div class="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-          <div class="w-full max-w-md bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
+        <div class="min-h-screen flex items-center justify-center banner-hero p-4">
+          <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-slate-800">
             <div class="text-center mb-8">
-              <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 text-white shadow-md mb-4">
-                <i class="fa-brands fa-facebook-f text-2xl"></i>
+              <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl tab-active text-white shadow-lg mb-4">
+                <i class="fa-brands fa-facebook-f text-3xl"></i>
               </div>
-              <h1 class="text-2xl font-extrabold text-slate-900">Ghorerbazar <span class="text-blue-600">Facebook</span></h1>
-              <p class="text-xs font-semibold text-slate-400 mt-1 uppercase tracking-wider">Sales & Incentive Management</p>
+              <h1 class="text-2xl font-black text-slate-900">Ghorerbazar <span class="text-blue-600">Facebook</span></h1>
+              <p class="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Sales & Incentive Dynamic Portal</p>
             </div>
             <form onsubmit="handleLogin(event)" class="space-y-4">
               <div>
-                <label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Employee ID</label>
-                <input type="text" id="loginId" required placeholder="e.g. 10122 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white">
+                <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Employee ID</label>
+                <input type="text" id="loginId" required placeholder="e.g. 10122, 10107 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
               </div>
               <div>
-                <label class="block text-xs font-bold uppercase text-slate-600 mb-1.5">Password</label>
-                <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white">
+                <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Password</label>
+                <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
               </div>
-              <button type="submit" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow transition-all">Sign In</button>
+              <button type="submit" class="w-full py-3.5 tab-active text-white font-extrabold rounded-xl shadow-lg transition-all">Sign In to Workspace</button>
             </form>
           </div>
         </div>
@@ -255,62 +294,66 @@
       const u = currentUser;
       const html = `
         <div class="flex-1 flex min-h-screen">
-          <aside class="w-64 sidebar-clean p-5 flex flex-col justify-between">
+          <!-- Dynamic Dark Executive Sidebar -->
+          <aside class="w-68 sidebar-dark p-5 flex flex-col justify-between shrink-0">
             <div>
               <div class="flex items-center gap-3 px-2 mb-8">
-                <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-sm">
+                <div class="w-10 h-10 rounded-xl tab-active text-white flex items-center justify-center font-bold shadow-md">
                   <i class="fa-brands fa-facebook-f text-lg"></i>
                 </div>
                 <div>
-                  <h1 class="text-base font-extrabold text-slate-900 leading-tight">Ghorerbazar</h1>
-                  <p class="text-xs font-bold text-blue-600">Facebook Wing</p>
+                  <h1 class="text-base font-black text-white leading-tight">Ghorerbazar</h1>
+                  <p class="text-xs font-extrabold text-orange-400">Facebook Wing</p>
                 </div>
               </div>
 
-              <nav class="space-y-1.5">
-                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <i class="fa-solid fa-chart-pie text-sm"></i> Dashboard & Targets
+              <nav class="space-y-2">
+                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-300 hover:bg-white/10'}">
+                  <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard & Targets
                 </button>
-                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-300 hover:bg-white/10'}">
+                  <i class="fa-solid fa-trophy text-sm text-amber-400"></i> Team vs Team & Ranking
+                </button>
+                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-300 hover:bg-white/10'}">
                   <i class="fa-solid fa-file-invoice text-sm"></i> Daily Sales Reports
                 </button>
                 ${u.role === 'admin' ? `
-                <button onclick="setTab('team')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeTab === 'team' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <i class="fa-solid fa-users-gear text-sm"></i> Team Leaderboard
+                <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-300 hover:bg-white/10'}">
+                  <i class="fa-solid fa-user-plus text-sm text-emerald-400"></i> Manage Agents (Create ID)
                 </button>
                 ` : ''}
               </nav>
             </div>
 
             <div class="space-y-3">
-              <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-center">
-                <p class="text-[11px] font-bold text-slate-700"><i class="fa-solid fa-cloud-arrow-up text-blue-600 mr-1"></i> Real-Time Sync</p>
-                <p class="text-[10px] text-slate-400 mt-0.5">Connected to Google Sheets</p>
+              <div class="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-center">
+                <p class="text-[11px] font-extrabold text-emerald-400"><i class="fa-solid fa-rotate mr-1 animate-spin"></i> Live Cloud Sync</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">Central Google Sheet Active</p>
               </div>
-              <button onclick="handleLogout()" class="w-full py-2.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors">
-                <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i> Logout
+              <button onclick="handleLogout()" class="w-full py-3 text-xs font-extrabold text-white bg-red-600/90 hover:bg-red-600 rounded-xl shadow transition-colors">
+                <i class="fa-solid fa-power-off mr-1"></i> Logout
               </button>
             </div>
           </aside>
 
           <div class="flex-1 flex flex-col h-screen overflow-y-auto">
-            <header class="h-16 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-10">
+            <header class="h-16 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
               <div class="flex items-center gap-2">
-                <span class="text-xs font-bold text-slate-400 uppercase">Ghorerbazar Facebook</span>
+                <span class="text-xs font-extrabold text-slate-400 uppercase">Ghorerbazar Facebook</span>
                 <span class="text-slate-300">/</span>
-                <h2 class="text-xs font-extrabold uppercase text-slate-800">${activeTab}</h2>
+                <h2 class="text-xs font-black uppercase text-blue-600">${activeTab}</h2>
               </div>
               <div class="flex items-center gap-4">
-                <button onclick="fetchFromSheet()" class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-lg flex items-center gap-1.5 hover:bg-emerald-100">
-                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Cloud Live
+                <button onclick="fetchFromSheet()" class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-lg flex items-center gap-1.5 hover:bg-emerald-100">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Sync Now
                 </button>
                 <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200">
-                  <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                  <div class="w-9 h-9 rounded-xl tab-active text-white flex items-center justify-center font-black text-xs">
                     ${u.name.charAt(0)}
                   </div>
                   <div class="text-left">
-                    <p class="text-xs font-bold text-slate-800 leading-none">${u.name}</p>
-                    <span class="text-[10px] font-bold text-blue-600 uppercase">${u.role === 'admin' ? 'Team Leader' : `Grade ${u.grade}`}</span>
+                    <p class="text-xs font-extrabold text-slate-900 leading-none">${u.name}</p>
+                    <span class="text-[10px] font-bold text-orange-600 uppercase">${u.role === 'admin' ? `Admin (${u.team})` : `${u.team} • Grade ${u.grade}`}</span>
                   </div>
                 </div>
               </div>
@@ -319,22 +362,31 @@
           </div>
         </div>
         ${renderSubmitModal()}
+        ${renderUserModal()}
       `;
       document.getElementById('app').innerHTML = html;
     }
 
     function renderTabContent() {
       if (activeTab === 'dashboard') return renderDashboard();
+      if (activeTab === 'ranking') return renderRankingAndComparison();
       if (activeTab === 'reports') return renderReports();
-      if (activeTab === 'team') return renderTeamStats();
+      if (activeTab === 'agents') return renderManageAgents();
     }
 
+    // 1. DASHBOARD VIEW
     function renderDashboard() {
       const u = currentUser;
       const allSales = getStored('sales_records', []);
-      let mySales = u.role === 'admin' ? allSales.filter(s => s.team === u.team) : allSales.filter(s => String(s.userId) === String(u.id));
+      
+      let mySales = [];
+      if (u.role === 'admin') {
+        mySales = adminFilterScope === 'ALL' ? allSales : allSales.filter(s => s.team === adminFilterScope);
+      } else {
+        mySales = allSales.filter(s => String(s.userId) === String(u.id));
+      }
 
-      const tInfo = getTargetData(u);
+      const tInfo = getTargetData(u, adminFilterScope);
       
       const currentMonthStr = getTodayFormatted().substring(3);
       const thisMonthSales = mySales.filter(s => s.date.endsWith(currentMonthStr));
@@ -365,182 +417,196 @@
         pTotals.gawaGhee += (Number(s.gawaGhee) || 0);
       });
 
-      const colorMap = {
-        amber: { bg: 'bg-amber-50', text: 'text-amber-600', bar: 'bg-amber-500' },
-        rose: { bg: 'bg-rose-50', text: 'text-rose-600', bar: 'bg-rose-500' },
-        purple: { bg: 'bg-purple-50', text: 'text-purple-600', bar: 'bg-purple-600' },
-        orange: { bg: 'bg-orange-50', text: 'text-orange-600', bar: 'bg-orange-500' },
-        blue: { bg: 'bg-blue-50', text: 'text-blue-600', bar: 'bg-blue-600' },
-        emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', bar: 'bg-emerald-600' }
-      };
-
       return `
         <div class="space-y-6">
-          <!-- Top Executive Header Card -->
-          <div class="card-pro p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <!-- Hero Welcome Banner with Admin Team Switcher -->
+          <div class="banner-hero p-6 rounded-3xl shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
             <div>
-              <div class="flex items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-blue-50 text-blue-700 border border-blue-200">
-                  ${u.team}
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-orange-500 text-white tracking-wider">
+                  ${u.role === 'admin' ? `Viewing: ${adminFilterScope === 'ALL' ? 'Full Facebook Wing (All Teams)' : adminFilterScope}` : u.team}
                 </span>
-                <span class="text-xs font-bold text-slate-400">•</span>
-                <span class="text-xs font-bold text-slate-500">${u.role === 'admin' ? `${tInfo.agentCount} Active Agents` : `Category Grade: ${u.grade}`}</span>
+                <span class="text-xs font-bold text-blue-200">
+                  ${u.role === 'admin' ? `• ${tInfo.agentCount} Agents Selected` : `• Category Grade: ${u.grade}`}
+                </span>
               </div>
-              <h2 class="text-2xl font-extrabold text-slate-900 mt-1">Welcome, ${u.name}</h2>
-              <p class="text-xs font-medium text-slate-500 mt-1">
+              <h2 class="text-2xl font-black text-white mt-2">Welcome, ${u.name}! 👋</h2>
+              <p class="text-xs font-semibold text-slate-300 mt-1">
                 Base Target: <strong>৳${tInfo.baseTarget.toLocaleString()}</strong> • 
-                Working Target (+5% Buffer): <strong class="text-blue-600">৳${tInfo.workingTarget.toLocaleString()}</strong> • 
-                Daily Target (÷26): <strong class="text-emerald-600">৳${tInfo.dailyTarget.toLocaleString()}/day</strong>
+                Working Target (+5% Buffer): <strong class="text-amber-400">৳${tInfo.workingTarget.toLocaleString()}</strong> • 
+                Daily Target (÷26): <strong class="text-emerald-400">৳${tInfo.dailyTarget.toLocaleString()}/day</strong>
               </p>
             </div>
-            <button onclick="openReportModal()" class="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-2 transition-all">
-              <i class="fa-solid fa-plus"></i>
-              ${u.role === 'admin' ? 'Add / Edit Agent Report' : 'Submit Daily Sales Report'}
-            </button>
-          </div>
 
-          <!-- 5 Key Performance Indicators (Leads, Orders, Conversion Ratio, Target, Achievement) -->
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <div class="card-pro p-5 border-l-4 border-l-blue-600">
-              <div class="flex justify-between items-center">
-                <span class="text-[11px] font-bold uppercase text-slate-400">Total Leads</span>
-                <i class="fa-solid fa-users text-blue-500 text-sm"></i>
+            <div class="flex flex-wrap items-center gap-3">
+              ${u.role === 'admin' ? `
+              <div class="bg-white/10 p-1.5 rounded-2xl flex items-center gap-1 border border-white/15">
+                <button onclick="setAdminScope('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'ALL' ? 'bg-white text-slate-900 shadow' : 'text-white hover:bg-white/10'}">All Wing</button>
+                <button onclick="setAdminScope('Team Nazim')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-white hover:bg-white/10'}">Team Nazim</button>
+                <button onclick="setAdminScope('Team Samad')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${adminFilterScope === 'Team Samad' ? 'bg-blue-500 text-white shadow' : 'text-white hover:bg-white/10'}">Team Samad</button>
               </div>
-              <p class="text-2xl font-black text-slate-900 mt-2">${monthTotalLeads.toLocaleString()}</p>
-              <p class="text-[11px] font-semibold text-slate-400 mt-1">This Month Inbound</p>
-            </div>
-
-            <div class="card-pro p-5 border-l-4 border-l-indigo-600">
-              <div class="flex justify-between items-center">
-                <span class="text-[11px] font-bold uppercase text-slate-400">Total Orders</span>
-                <i class="fa-solid fa-bag-shopping text-indigo-500 text-sm"></i>
-              </div>
-              <p class="text-2xl font-black text-slate-900 mt-2">${monthTotalOrders.toLocaleString()}</p>
-              <p class="text-[11px] font-semibold text-slate-400 mt-1">Confirmed Orders</p>
-            </div>
-
-            <div class="card-pro p-5 border-l-4 border-l-emerald-600">
-              <div class="flex justify-between items-center">
-                <span class="text-[11px] font-bold uppercase text-slate-400">Conversion Ratio</span>
-                <i class="fa-solid fa-percent text-emerald-500 text-sm"></i>
-              </div>
-              <p class="text-2xl font-black text-emerald-600 mt-2">${monthConvRatio}%</p>
-              <p class="text-[11px] font-semibold text-slate-400 mt-1">Orders ÷ Leads</p>
-            </div>
-
-            <div class="card-pro p-5 border-l-4 border-l-amber-500">
-              <div class="flex justify-between items-center">
-                <span class="text-[11px] font-bold uppercase text-slate-400">Monthly Target (+5%)</span>
-                <i class="fa-solid fa-bullseye text-amber-500 text-sm"></i>
-              </div>
-              <p class="text-xl font-black text-slate-900 mt-2">৳${tInfo.workingTarget.toLocaleString()}</p>
-              <p class="text-[11px] font-semibold text-slate-400 mt-1">Daily: ৳${tInfo.dailyTarget.toLocaleString()}</p>
-            </div>
-
-            <div class="card-pro p-5 border-l-4 border-l-purple-600">
-              <div class="flex justify-between items-center">
-                <span class="text-[11px] font-bold uppercase text-slate-400">Target Achieved</span>
-                <i class="fa-solid fa-trophy text-purple-500 text-sm"></i>
-              </div>
-              <div class="flex items-baseline gap-2 mt-2">
-                <p class="text-2xl font-black text-purple-600">${monthPct}%</p>
-                <span class="text-xs font-bold text-slate-500">৳${monthTotalAmount.toLocaleString()}</span>
-              </div>
-              <div class="progress-track h-1.5 mt-2">
-                <div class="bg-purple-600 h-1.5 rounded-full" style="width: ${monthPct}%"></div>
-              </div>
+              ` : ''}
+              <button onclick="openReportModal()" class="px-5 py-3.5 tab-active text-white rounded-2xl text-xs font-extrabold shadow-lg flex items-center gap-2 hover:scale-105 transition-transform">
+                <i class="fa-solid fa-plus-circle text-sm"></i>
+                ${u.role === 'admin' ? 'Add / Edit Agent Data' : 'Submit Daily Report'}
+              </button>
             </div>
           </div>
 
-          <!-- Sprint & Monthly Target Progress Cards (Clean White Professional) -->
+          <!-- 5 Vibrant Gradient KPI Cards -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="kpi-blue p-5 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[11px] font-extrabold uppercase text-blue-100">Total Leads</span>
+                <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-users"></i></div>
+              </div>
+              <div class="mt-4">
+                <p class="text-3xl font-black text-white">${monthTotalLeads.toLocaleString()}</p>
+                <p class="text-[11px] font-bold text-blue-100 mt-1">Inbound Inquiries</p>
+              </div>
+            </div>
+
+            <div class="kpi-emerald p-5 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[11px] font-extrabold uppercase text-emerald-100">Total Orders</span>
+                <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-bag-shopping"></i></div>
+              </div>
+              <div class="mt-4">
+                <p class="text-3xl font-black text-white">${monthTotalOrders.toLocaleString()}</p>
+                <div class="flex justify-between text-[11px] font-bold text-emerald-100 mt-1">
+                  <span>Conv. Ratio:</span>
+                  <span class="text-white font-black">${monthConvRatio}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="kpi-purple p-5 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[11px] font-extrabold uppercase text-purple-100">Sales Revenue</span>
+                <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-bangladeshi-taka-sign"></i></div>
+              </div>
+              <div class="mt-4">
+                <p class="text-2xl font-black text-white">৳${monthTotalAmount.toLocaleString()}</p>
+                <p class="text-[11px] font-bold text-purple-100 mt-1">Achieved This Month</p>
+              </div>
+            </div>
+
+            <div class="kpi-indigo p-5 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[11px] font-extrabold uppercase text-indigo-100">Target (+5% Buffer)</span>
+                <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-bullseye"></i></div>
+              </div>
+              <div class="mt-4">
+                <p class="text-2xl font-black text-white">৳${tInfo.workingTarget.toLocaleString()}</p>
+                <p class="text-[11px] font-bold text-indigo-100 mt-1">Daily: ৳${tInfo.dailyTarget.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div class="kpi-amber p-5 rounded-2xl flex flex-col justify-between">
+              <div class="flex justify-between items-center">
+                <span class="text-[11px] font-extrabold uppercase text-amber-100">Target Achieved</span>
+                <div class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-white"><i class="fa-solid fa-trophy"></i></div>
+              </div>
+              <div class="mt-4">
+                <div class="flex items-baseline justify-between">
+                  <p class="text-3xl font-black text-white">${monthPct}%</p>
+                  <span class="text-[11px] font-bold text-amber-100">Conv: ${monthConvRatio}%</span>
+                </div>
+                <div class="w-full bg-black/20 rounded-full h-1.5 mt-2">
+                  <div class="bg-white h-1.5 rounded-full" style="width: ${monthPct}%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sprint & Monthly Target Progress Banners -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="card-pro p-6">
+            <div class="sprint-banner p-6 rounded-3xl shadow-sm">
               <div class="flex justify-between items-start">
                 <div>
-                  <span class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase bg-blue-50 text-blue-700">10-Day Sprint Progress</span>
-                  <h3 class="text-lg font-extrabold text-slate-900 mt-2">${tInfo.sprintName} (Goal: ${tInfo.sprintPct * 100}%)</h3>
+                  <span class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white">Current 10-Day Sprint</span>
+                  <h3 class="text-xl font-black text-slate-900 mt-2">${tInfo.sprintName} (${tInfo.sprintPct * 100}% Goal)</h3>
                 </div>
-                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-base">
+                <div class="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-lg shadow-md">
                   <i class="fa-solid fa-bolt"></i>
                 </div>
               </div>
               <div class="mt-5">
-                <div class="flex justify-between text-xs font-bold mb-2">
-                  <span class="text-slate-500">Sprint Target: <strong class="text-slate-800">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
-                  <span class="text-slate-500">Achieved: <strong class="text-blue-600">৳${sprintSalesAmount.toLocaleString()}</strong></span>
+                <div class="flex justify-between text-xs font-extrabold mb-2">
+                  <span class="text-slate-600">Sprint Target: <strong class="text-slate-900 text-sm">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
+                  <span class="text-slate-600">Achieved: <strong class="text-blue-700 text-sm">৳${sprintSalesAmount.toLocaleString()}</strong></span>
                 </div>
-                <div class="progress-track h-2.5">
-                  <div class="bg-blue-600 h-2.5 rounded-full transition-all" style="width: ${sprintPct}%"></div>
+                <div class="progress-track h-3 bg-white">
+                  <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-3 rounded-full transition-all" style="width: ${sprintPct}%"></div>
                 </div>
-                <div class="flex justify-between items-center mt-2.5 text-[11px] font-semibold text-slate-400">
+                <div class="flex justify-between items-center mt-2.5 text-xs font-bold text-slate-600">
                   <span>Remaining: ৳${Math.max(0, tInfo.sprintGoal - sprintSalesAmount).toLocaleString()}</span>
-                  <span class="text-blue-600 font-extrabold">${sprintPct}% Completed</span>
+                  <span class="text-blue-700 font-black">${sprintPct}% Completed</span>
                 </div>
               </div>
             </div>
 
-            <div class="card-pro p-6">
+            <div class="monthly-banner p-6 rounded-3xl shadow-sm">
               <div class="flex justify-between items-start">
                 <div>
-                  <span class="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700">Monthly Revenue Goal (+5% Buffer)</span>
-                  <h3 class="text-lg font-extrabold text-slate-900 mt-2">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</h3>
+                  <span class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-emerald-600 text-white">Monthly Total (+5% Return Buffer)</span>
+                  <h3 class="text-xl font-black text-slate-900 mt-2">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</h3>
                 </div>
-                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-base">
+                <div class="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-lg shadow-md">
                   <i class="fa-solid fa-chart-line"></i>
                 </div>
               </div>
               <div class="mt-5">
-                <div class="flex justify-between text-xs font-bold mb-2">
-                  <span class="text-slate-500">Base Target: <strong class="text-slate-800">৳${tInfo.baseTarget.toLocaleString()}</strong></span>
-                  <span class="text-slate-500">Revenue Achieved: <strong class="text-emerald-600">৳${monthTotalAmount.toLocaleString()}</strong></span>
+                <div class="flex justify-between text-xs font-extrabold mb-2">
+                  <span class="text-slate-600">Base Target: <strong class="text-slate-900 text-sm">৳${tInfo.baseTarget.toLocaleString()}</strong></span>
+                  <span class="text-slate-600">Revenue: <strong class="text-emerald-700 text-sm">৳${monthTotalAmount.toLocaleString()}</strong></span>
                 </div>
-                <div class="progress-track h-2.5">
-                  <div class="bg-emerald-600 h-2.5 rounded-full transition-all" style="width: ${monthPct}%"></div>
+                <div class="progress-track h-3 bg-white">
+                  <div class="bg-gradient-to-r from-emerald-600 to-teal-500 h-3 rounded-full transition-all" style="width: ${monthPct}%"></div>
                 </div>
-                <div class="flex justify-between items-center mt-2.5 text-[11px] font-semibold text-slate-400">
+                <div class="flex justify-between items-center mt-2.5 text-xs font-bold text-slate-600">
                   <span>Remaining: ৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</span>
-                  <span class="text-emerald-600 font-extrabold">${monthPct}% Achieved</span>
+                  <span class="text-emerald-700 font-black">${monthPct}% Achieved</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Product Targets Clean Grid -->
+          <!-- Product Targets Tinted Dynamic Grid -->
           <div>
             <div class="flex items-center justify-between mb-4 mt-2">
-              <h3 class="text-sm font-extrabold text-slate-800 uppercase tracking-wider">
-                <i class="fa-solid fa-box-open text-blue-600 mr-1.5"></i> 
-                Facebook Product Incentive Targets (${u.role === 'admin' ? `Team Total • ${tInfo.agentCount} Agents` : 'Individual Goal'})
+              <h3 class="text-base font-black text-slate-800">
+                <i class="fa-solid fa-gift text-orange-500 mr-1.5"></i> 
+                Facebook Product Incentive Targets (${u.role === 'admin' ? `${adminFilterScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
               </h3>
-              <span class="text-xs font-bold text-slate-400">90% = Entry Bonus | 100% = Full Bonus</span>
+              <span class="px-3 py-1 rounded-full bg-white border text-xs font-extrabold text-slate-600 shadow-sm">90% = Entry Bonus | 100% = Full Bonus</span>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               ${Object.keys(FB_PRODUCTS).map(k => {
                 const p = FB_PRODUCTS[k];
-                const c = colorMap[p.color];
                 const achieved = pTotals[k];
                 const target = p.targetKg * tInfo.agentCount; 
                 const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
                 return `
-                  <div class="card-pro p-5">
+                  <div class="${p.style} card-dynamic p-5 rounded-3xl">
                     <div class="flex justify-between items-start mb-3">
                       <div>
-                        <h4 class="font-bold text-sm text-slate-900">${p.name}</h4>
-                        <p class="text-xs text-slate-400 font-semibold">Target: <strong class="text-slate-600">${target.toFixed(2)} kg</strong></p>
+                        <h4 class="font-black text-base text-slate-900">${p.name}</h4>
+                        <p class="text-xs text-slate-500 font-bold">Target: <strong class="text-slate-800">${target.toFixed(2)} kg</strong></p>
                       </div>
-                      <div class="w-9 h-9 rounded-xl ${c.bg} ${c.text} flex items-center justify-center text-sm">
+                      <div class="w-10 h-10 rounded-2xl ${p.badge} flex items-center justify-center shadow-sm">
                         <i class="fa-solid ${p.icon}"></i>
                       </div>
                     </div>
                     <div class="flex justify-between items-baseline mb-2">
-                      <span class="text-xl font-black text-slate-900">${achieved.toFixed(2)} <span class="text-xs font-semibold text-slate-400">kg sold</span></span>
-                      <span class="px-2 py-0.5 rounded-md ${c.bg} ${c.text} text-xs font-extrabold">${pct}%</span>
+                      <span class="text-2xl font-black text-slate-900">${achieved.toFixed(2)} <span class="text-xs font-bold text-slate-500">kg sold</span></span>
+                      <span class="px-2.5 py-0.5 rounded-lg ${p.badge} text-xs font-black">${pct}%</span>
                     </div>
-                    <div class="progress-track h-2 mb-2.5">
-                      <div class="${c.bar} h-2 rounded-full" style="width: ${pct}%"></div>
+                    <div class="progress-track h-2.5 bg-white border border-slate-200/60 mb-3">
+                      <div class="${p.bar} h-2.5 rounded-full" style="width: ${pct}%"></div>
                     </div>
-                    <p class="text-[11px] font-semibold text-slate-500"><i class="fa-solid fa-gift ${c.text} mr-1"></i> ${p.bonus}</p>
+                    <p class="text-[11px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-orange-500 mr-1"></i> ${p.bonus}</p>
                   </div>
                 `;
               }).join('')}
@@ -550,28 +616,206 @@
       `;
     }
 
+    // 2. TEAM VS TEAM COMPARISON & OVERALL RANKING (VISIBLE TO BOTH AGENTS & ADMINS)
+    function renderRankingAndComparison() {
+      const allUsers = getStored('users', []).filter(u => u.role === 'agent');
+      const allSales = getStored('sales_records', []);
+      const currentMonthStr = getTodayFormatted().substring(3);
+      const monthSales = allSales.filter(s => s.date.endsWith(currentMonthStr));
+
+      function calcTeamStats(teamName) {
+        const tAgents = allUsers.filter(a => a.team === teamName);
+        const baseTgt = tAgents.reduce((s, a) => s + Number(a.baseTarget || 0), 0);
+        const workTgt = Math.round(baseTgt * 1.05);
+        const tSales = monthSales.filter(s => s.team === teamName);
+        const leads = tSales.reduce((s, c) => s + Number(c.leads || 0), 0);
+        const orders = tSales.reduce((s, c) => s + Number(c.orders || 0), 0);
+        const revenue = tSales.reduce((s, c) => s + Number(c.amount || 0), 0);
+        const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+        const pct = workTgt > 0 ? Math.min(100, Math.round((revenue / workTgt) * 100)) : 0;
+        return { teamName, agentCount: tAgents.length, workTgt, leads, orders, revenue, conv, pct };
+      }
+
+      const nazimStats = calcTeamStats('Team Nazim');
+      const samadStats = calcTeamStats('Team Samad');
+
+      const rankedAgents = allUsers.map(ag => {
+        const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+        const leads = agSales.reduce((s, c) => s + Number(c.leads || 0), 0);
+        const orders = agSales.reduce((s, c) => s + Number(c.orders || 0), 0);
+        const revenue = agSales.reduce((s, c) => s + Number(c.amount || 0), 0);
+        const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+        const workTgt = Math.round(Number(ag.baseTarget || 1232174) * 1.05);
+        const pct = workTgt > 0 ? Math.round((revenue / workTgt) * 100) : 0;
+        return { ...ag, leads, orders, revenue, conv, workTgt, pct };
+      }).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders);
+
+      return `
+        <div class="space-y-8">
+          <!-- Team vs Team Head-to-Head Comparison -->
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>Team vs Team Live Comparison</h2>
+                <p class="text-xs font-bold text-slate-500">Team Nazim বনাম Team Samad — মাসের লাইভ পারফরম্যান্স তুলনা</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <!-- Team Nazim Card -->
+              <div class="card-dynamic p-6 border-t-4 border-t-orange-500">
+                <div class="flex justify-between items-center mb-4">
+                  <div>
+                    <span class="px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-black uppercase">Team Nazim</span>
+                    <p class="text-xs font-bold text-slate-400 mt-1">TL: Md. Nazimur Rahman • ${nazimStats.agentCount} Agents</p>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-3xl font-black text-orange-600">${nazimStats.pct}%</span>
+                    <p class="text-[10px] font-bold uppercase text-slate-400">Achieved</p>
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl mb-4 text-center">
+                  <div><span class="text-[10px] font-bold text-slate-400 block">Revenue</span><strong class="text-sm font-black text-emerald-600">৳${nazimStats.revenue.toLocaleString()}</strong></div>
+                  <div class="border-x"><span class="text-[10px] font-bold text-slate-400 block">Orders / Leads</span><strong class="text-sm font-black text-slate-800">${nazimStats.orders} / ${nazimStats.leads}</strong></div>
+                  <div><span class="text-[10px] font-bold text-slate-400 block">Conv. Ratio</span><strong class="text-sm font-black text-blue-600">${nazimStats.conv}%</strong></div>
+                </div>
+                <div class="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
+                  <span>Target (+5%): ৳${nazimStats.workTgt.toLocaleString()}</span>
+                  <span>Remaining: ৳${Math.max(0, nazimStats.workTgt - nazimStats.revenue).toLocaleString()}</span>
+                </div>
+                <div class="progress-track h-3"><div class="bg-gradient-to-r from-orange-500 to-amber-500 h-3 rounded-full" style="width:${nazimStats.pct}%"></div></div>
+              </div>
+
+              <!-- Team Samad Card -->
+              <div class="card-dynamic p-6 border-t-4 border-t-blue-600">
+                <div class="flex justify-between items-center mb-4">
+                  <div>
+                    <span class="px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-black uppercase">Team Samad</span>
+                    <p class="text-xs font-bold text-slate-400 mt-1">TL: Md Abdus Samad • ${samadStats.agentCount} Agents</p>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-3xl font-black text-blue-600">${samadStats.pct}%</span>
+                    <p class="text-[10px] font-bold uppercase text-slate-400">Achieved</p>
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl mb-4 text-center">
+                  <div><span class="text-[10px] font-bold text-slate-400 block">Revenue</span><strong class="text-sm font-black text-emerald-600">৳${samadStats.revenue.toLocaleString()}</strong></div>
+                  <div class="border-x"><span class="text-[10px] font-bold text-slate-400 block">Orders / Leads</span><strong class="text-sm font-black text-slate-800">${samadStats.orders} / ${samadStats.leads}</strong></div>
+                  <div><span class="text-[10px] font-bold text-slate-400 block">Conv. Ratio</span><strong class="text-sm font-black text-blue-600">${samadStats.conv}%</strong></div>
+                </div>
+                <div class="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
+                  <span>Target (+5%): ৳${samadStats.workTgt.toLocaleString()}</span>
+                  <span>Remaining: ৳${Math.max(0, samadStats.workTgt - samadStats.revenue).toLocaleString()}</span>
+                </div>
+                <div class="progress-track h-3"><div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-3 rounded-full" style="width:${samadStats.pct}%"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Overall Leaderboard Ranking (All 16+ Agents) -->
+          <div>
+            <div class="flex justify-between items-center mb-4">
+              <div>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (All Agents)</h2>
+                <p class="text-xs font-bold text-slate-500">সেলস অ্যামাউন্ট ও অর্ডারের ভিত্তিতে উভয় টিমের সম্মিলিত র‍্যাংকিং</p>
+              </div>
+              ${currentUser.role === 'admin' ? `<button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow">+ Add Agent Data</button>` : ''}
+            </div>
+
+            <div class="card-dynamic overflow-hidden overflow-x-auto">
+              <table class="w-full text-left text-xs whitespace-nowrap">
+                <thead class="banner-hero text-white uppercase font-extrabold">
+                  <tr>
+                    <th class="p-4">Rank</th>
+                    <th class="p-4">Agent Name</th>
+                    <th class="p-4">Team</th>
+                    <th class="p-4">Grade</th>
+                    <th class="p-4">Leads / Orders</th>
+                    <th class="p-4">Conv. Ratio</th>
+                    <th class="p-4">Working Target (+5%)</th>
+                    <th class="p-4">Achieved Revenue</th>
+                    <th class="p-4">Achievement</th>
+                    ${currentUser.role === 'admin' ? `<th class="p-4 text-right">Admin Action</th>` : ''}
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-semibold">
+                  ${rankedAgents.map((ag, idx) => {
+                    let rankBadge = `<span class="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-black">${idx + 1}</span>`;
+                    if (idx === 0) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-400 text-white flex items-center justify-center font-black shadow"><i class="fa-solid fa-trophy"></i></span>`;
+                    else if (idx === 1) rankBadge = `<span class="w-7 h-7 rounded-full bg-slate-300 text-slate-800 flex items-center justify-center font-black">2</span>`;
+                    else if (idx === 2) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-700 text-white flex items-center justify-center font-black">3</span>`;
+
+                    return `<tr class="hover:bg-slate-50/90">
+                      <td class="p-4">${rankBadge}</td>
+                      <td class="p-4 font-extrabold text-slate-900">${ag.name} <span class="text-slate-400 text-[10px]">(${ag.id})</span></td>
+                      <td class="p-4"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${ag.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${ag.team}</span></td>
+                      <td class="p-4 font-black text-slate-700">${ag.grade}</td>
+                      <td class="p-4">${ag.leads} / <strong class="text-blue-600">${ag.orders}</strong></td>
+                      <td class="p-4"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${ag.conv}%</span></td>
+                      <td class="p-4 font-bold text-slate-600">৳${ag.workTgt.toLocaleString()}</td>
+                      <td class="p-4 font-black text-emerald-600 text-sm">৳${ag.revenue.toLocaleString()}</td>
+                      <td class="p-4">
+                        <div class="flex items-center gap-2">
+                          <span class="font-black text-slate-800">${ag.pct}%</span>
+                          <div class="w-16 progress-track h-2"><div class="bg-blue-600 h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
+                        </div>
+                      </td>
+                      ${currentUser.role === 'admin' ? `
+                      <td class="p-4 text-right">
+                        <button onclick="openReportModal('${ag.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 font-extrabold rounded-lg hover:bg-blue-100">Add / Edit Data</button>
+                      </td>
+                      ` : ''}
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 3. DAILY REPORTS LOG (ADMINS CAN SEE & EDIT ALL AGENTS ACROSS BOTH TEAMS)
     function renderReports() {
       const u = currentUser;
       const allUsers = getStored('users', []);
-      const sales = getStored('sales_records', []).filter(s => u.role === 'admin' ? s.team === u.team : String(s.userId) === String(u.id));
+      const allSales = getStored('sales_records', []);
+      
+      let sales = [];
+      if (u.role === 'admin') {
+        sales = adminFilterScope === 'ALL' ? allSales : allSales.filter(s => s.team === adminFilterScope);
+      } else {
+        sales = allSales.filter(s => String(s.userId) === String(u.id));
+      }
       
       return `
         <div class="space-y-6">
-          <div class="flex justify-between items-center">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h2 class="text-xl font-extrabold text-slate-900">Daily Sales & Conversion Logs</h2>
-              <p class="text-xs font-medium text-slate-500">প্রতিদিনের লিড, অর্ডার, কনভার্সন রেশিও এবং ডেইলি টার্গেট অ্যাচিভমেন্ট</p>
+              <h2 class="text-xl font-black text-slate-900">Daily Sales & Conversion Logs</h2>
+              <p class="text-xs font-bold text-slate-500">প্রতিদিনের লিড, অর্ডার, কনভার্সন রেশিও, ডেইলি টার্গেট অ্যাচিভমেন্ট এবং এডিট/ডিলিট অপশন</p>
             </div>
-            <button onclick="openReportModal()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm">
-              <i class="fa-solid fa-plus mr-1"></i> Add New Report
-            </button>
+            <div class="flex items-center gap-2">
+              ${u.role === 'admin' ? `
+              <select onchange="setAdminScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
+                <option value="ALL" ${adminFilterScope === 'ALL' ? 'selected' : ''}>All Teams</option>
+                <option value="Team Nazim" ${adminFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
+                <option value="Team Samad" ${adminFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+              </select>
+              ` : ''}
+              <button onclick="openReportModal()" class="px-5 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
+                <i class="fa-solid fa-plus mr-1"></i> Add New Report
+              </button>
+            </div>
           </div>
-          <div class="card-pro overflow-hidden overflow-x-auto">
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
             <table class="w-full text-left text-xs whitespace-nowrap">
-              <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold">
+              <thead class="banner-hero text-white uppercase font-extrabold">
                 <tr>
                   <th class="p-4">Date</th>
                   <th class="p-4">Agent</th>
+                  <th class="p-4">Team</th>
                   <th class="p-4">Leads</th>
                   <th class="p-4">Orders</th>
                   <th class="p-4">Conv. Ratio</th>
@@ -582,36 +826,35 @@
                   <th class="p-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-100 font-medium">
-                ${sales.length === 0 ? '<tr><td colspan="10" class="p-8 text-center text-slate-400 font-semibold">এখনো কোনো রিপোর্ট সাবমিট করা হয়নি।</td></tr>' : ''}
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${sales.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">এখনো কোনো রিপোর্ট সাবমিট করা হয়নি।</td></tr>' : ''}
                 ${sales.map(s => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
-                  const agWorkTarget = Math.round((agObj.baseTarget || 1232174) * 1.05);
+                  const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
                   const agDailyTarget = Math.round(agWorkTarget / 26);
                   const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
                   const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
 
                   return `
-                  <tr class="hover:bg-slate-50/80">
+                  <tr class="hover:bg-slate-50/90">
                     <td class="p-4 font-bold text-slate-700">${cleanDisplayDate(s.date)}</td>
-                    <td class="p-4 font-bold text-slate-900">${s.userName} <span class="text-slate-400 text-[10px]">(${s.userId})</span></td>
-                    <td class="p-4 font-semibold text-slate-700">${s.leads}</td>
-                    <td class="p-4 font-extrabold text-blue-600">${s.orders}</td>
-                    <td class="p-4">
-                      <span class="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-extrabold">${convRatio}%</span>
-                    </td>
+                    <td class="p-4 font-extrabold text-slate-900">${s.userName} <span class="text-slate-400 text-[10px]">(${s.userId})</span></td>
+                    <td class="p-4"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${s.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${s.team}</span></td>
+                    <td class="p-4 font-bold text-slate-700">${s.leads}</td>
+                    <td class="p-4 font-black text-blue-600">${s.orders}</td>
+                    <td class="p-4"><span class="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-extrabold">${convRatio}%</span></td>
                     <td class="p-4 font-black text-emerald-600">৳${Number(s.amount).toLocaleString()}</td>
-                    <td class="p-4 font-semibold text-slate-500">৳${agDailyTarget.toLocaleString()}</td>
+                    <td class="p-4 font-bold text-slate-500">৳${agDailyTarget.toLocaleString()}</td>
                     <td class="p-4">
-                      <span class="px-2.5 py-1 rounded-md ${dailyAchPct >= 100 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'} font-extrabold">
+                      <span class="px-2.5 py-1 rounded-md ${dailyAchPct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">
                         ${dailyAchPct}%
                       </span>
                     </td>
-                    <td class="p-4 text-[11px] font-semibold text-slate-600">
+                    <td class="p-4 text-[11px] font-bold text-slate-600">
                       Ajwa: <strong>${s.ajwa||0}</strong> | Salt: <strong>${s.pinkSalt||0}</strong> | Garlic: <strong>${s.blackGarlic||0}</strong> | Sun.H: <strong>${s.sunHoney||0}</strong> | BS.H: <strong>${s.bsHoney||0}</strong> | Ghee: <strong>${s.gawaGhee||0}</strong>
                     </td>
                     <td class="p-4 text-right">
-                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg font-bold hover:bg-blue-50 hover:text-blue-600 transition-colors">
+                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
                         <i class="fa-solid fa-pen-to-square mr-1"></i> Edit / Delete
                       </button>
                     </td>
@@ -624,64 +867,53 @@
       `;
     }
 
-    function renderTeamStats() {
-      const users = getStored('users', []).filter(u => u.role === 'agent' && u.team === currentUser.team);
-      const sales = getStored('sales_records', []);
-      const currentMonthStr = getTodayFormatted().substring(3);
-      
+    // 4. MANAGE AGENTS / CREATE NEW ID (ADMIN ONLY)
+    function renderManageAgents() {
+      const allUsers = getStored('users', []);
       return `
         <div class="space-y-6">
           <div class="flex justify-between items-center">
             <div>
-              <h2 class="text-xl font-extrabold text-slate-900">Team Performance Leaderboard (${currentUser.team})</h2>
-              <p class="text-xs font-medium text-slate-500">এজেন্টদের মাসিক টার্গেট, কনভার্সন রেশিও এবং অ্যাচিভমেন্ট র‍্যাংকিং</p>
+              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-users-gear text-blue-600 mr-2"></i>Manage Agents & Create New ID</h2>
+              <p class="text-xs font-bold text-slate-500">এখান থেকে নতুন এজেন্ট বা অ্যাডমিন আইডি তৈরি, টার্গেট এডিট অথবা ডিলিট করতে পারবেন</p>
             </div>
-            <button onclick="openReportModal()" class="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-sm">+ Add Agent Report</button>
+            <button onclick="openUserModal()" class="px-5 py-3 tab-active text-white rounded-2xl text-xs font-extrabold shadow-lg flex items-center gap-2">
+              <i class="fa-solid fa-user-plus"></i> Create New Agent / ID
+            </button>
           </div>
-          <div class="card-pro overflow-hidden overflow-x-auto">
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
             <table class="w-full text-left text-xs whitespace-nowrap">
-              <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold">
+              <thead class="banner-hero text-white uppercase font-extrabold">
                 <tr>
-                  <th class="p-4">Agent Name</th>
+                  <th class="p-4">Emp ID</th>
+                  <th class="p-4">Name</th>
+                  <th class="p-4">Role</th>
+                  <th class="p-4">Team</th>
                   <th class="p-4">Grade</th>
+                  <th class="p-4">Password</th>
+                  <th class="p-4">Base Target</th>
                   <th class="p-4">Working Target (+5%)</th>
-                  <th class="p-4">Daily Target</th>
-                  <th class="p-4">Leads / Orders</th>
-                  <th class="p-4">Conv. Ratio</th>
-                  <th class="p-4">Achieved Revenue</th>
-                  <th class="p-4">Target Achieved</th>
-                  <th class="p-4 text-right">Action</th>
+                  <th class="p-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-100 font-medium">
-                ${users.map(ag => {
-                  const agSales = sales.filter(s => String(s.userId) === String(ag.id) && s.date.endsWith(currentMonthStr));
-                  const rev = agSales.reduce((a, c) => a + Number(c.amount || 0), 0);
-                  const leads = agSales.reduce((a, c) => a + Number(c.leads || 0), 0);
-                  const orders = agSales.reduce((a, c) => a + Number(c.orders || 0), 0);
-                  const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
-                  const workingTgt = Math.round(ag.baseTarget * 1.05);
-                  const dailyTgt = Math.round(workingTgt / 26);
-                  const pct = Math.min(100, Math.round((rev / workingTgt) * 100));
-                  return `<tr class="hover:bg-slate-50/80">
-                    <td class="p-4 font-bold text-slate-900">${ag.name} <span class="text-slate-400">(${ag.id})</span></td>
-                    <td class="p-4"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold">${ag.grade}</span></td>
-                    <td class="p-4 font-bold text-slate-700">৳${workingTgt.toLocaleString()}</td>
-                    <td class="p-4 font-semibold text-slate-500">৳${dailyTgt.toLocaleString()}</td>
-                    <td class="p-4 font-semibold">${leads} / <strong class="text-blue-600">${orders}</strong></td>
-                    <td class="p-4"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold">${conv}%</span></td>
-                    <td class="p-4 font-black text-emerald-600">৳${rev.toLocaleString()}</td>
-                    <td class="p-4">
-                      <div class="flex items-center gap-2">
-                        <span class="font-extrabold text-slate-700">${pct}%</span>
-                        <div class="w-16 progress-track h-1.5"><div class="bg-blue-600 h-1.5 rounded-full" style="width:${pct}%"></div></div>
-                      </div>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${allUsers.map(usr => `
+                  <tr class="hover:bg-slate-50">
+                    <td class="p-4 font-black text-blue-600">${usr.id}</td>
+                    <td class="p-4 font-extrabold text-slate-900">${usr.name}</td>
+                    <td class="p-4 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${usr.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'}">${usr.role}</span></td>
+                    <td class="p-4"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${usr.team}</span></td>
+                    <td class="p-4 font-black">${usr.grade || 'A'}</td>
+                    <td class="p-4 font-mono text-slate-500">${usr.pass}</td>
+                    <td class="p-4 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
+                    <td class="p-4 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
+                    <td class="p-4 text-right space-x-1">
+                      <button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>
+                      ${usr.role !== 'admin' ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
                     </td>
-                    <td class="p-4 text-right">
-                      <button onclick="openReportModal('${ag.id}')" class="px-3 py-1.5 bg-slate-100 text-slate-700 font-bold rounded-lg hover:bg-blue-50 hover:text-blue-600">Add / Edit</button>
-                    </td>
-                  </tr>`;
-                }).join('')}
+                  </tr>
+                `).join('')}
               </tbody>
             </table>
           </div>
@@ -689,68 +921,69 @@
       `;
     }
 
+    // MODAL 1: SALES REPORT SUBMIT / EDIT / DELETE (ADMIN HAS ACCESS TO ALL AGENTS OF BOTH TEAMS)
     function renderSubmitModal() {
       const u = currentUser;
-      const users = getStored('users', []).filter(usr => usr.role === 'agent' && (u.role === 'admin' ? usr.team === u.team : true));
+      const allAgents = getStored('users', []).filter(usr => usr.role === 'agent');
       
       return `
-        <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl max-h-[92vh] overflow-y-auto border border-slate-200">
+        <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto border border-slate-200">
             <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
               <div>
-                <h3 class="text-base font-extrabold text-slate-900">Daily Sales & Product Entry</h3>
-                <p class="text-xs font-medium text-slate-400">লিড ও অর্ডার বসালে অটো কনভার্সন রেশিও বের হয়ে যাবে</p>
+                <h3 class="text-base font-black text-slate-900">Daily Sales & Product Entry</h3>
+                <p class="text-xs font-bold text-slate-400">লিড ও অর্ডার বসালে অটো কনভার্সন রেশিও ও ডেইলি অ্যাচিভমেন্ট বের হবে</p>
               </div>
-              <button type="button" onclick="closeModal('submitModal')" class="w-8 h-8 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+              <button type="button" onclick="closeModal('submitModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <form onsubmit="handleSalesSubmit(event)" class="space-y-4">
               <div id="agentSelectContainer" class="${u.role === 'admin' ? '' : 'hidden'}">
-                <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Select Agent</label>
-                <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800">
-                  ${users.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id})</option>`).join('')}
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent (Both Teams Available)</label>
+                <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
+                  ${allAgents.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id} • ${usr.team})</option>`).join('')}
                 </select>
               </div>
 
               <div>
-                <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Report Date</label>
-                <input type="date" id="subDate" required onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800">
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Report Date</label>
+                <input type="date" id="subDate" required onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
               </div>
 
               <div class="grid grid-cols-3 gap-3">
                 <div>
-                  <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Total Leads</label>
+                  <label class="block text-[11px] font-extrabold text-slate-500 uppercase mb-1">Total Leads</label>
                   <input type="number" id="subLeads" required min="0" placeholder="50" oninput="updateLiveRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
                 </div>
                 <div>
-                  <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Total Orders</label>
+                  <label class="block text-[11px] font-extrabold text-slate-500 uppercase mb-1">Total Orders</label>
                   <input type="number" id="subOrders" required min="0" placeholder="15" oninput="updateLiveRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
                 </div>
                 <div>
-                  <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Amount (৳)</label>
+                  <label class="block text-[11px] font-extrabold text-slate-500 uppercase mb-1">Amount (৳)</label>
                   <input type="number" id="subAmount" required min="0" placeholder="35000" oninput="updateLiveRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
                 </div>
               </div>
 
-              <!-- Live Auto Conversion Ratio & Daily Target Achievement Preview Box -->
-              <div class="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200 text-center">
+              <!-- Live Auto Conversion Ratio & Daily Target Achievement Box -->
+              <div class="grid grid-cols-3 gap-2 p-3 bg-blue-50/70 rounded-2xl border border-blue-200 text-center">
                 <div>
-                  <span class="text-[10px] font-bold uppercase text-slate-400 block">Auto Conv. Ratio</span>
-                  <span id="liveConvRatio" class="text-sm font-black text-blue-600">0.00%</span>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-500 block">Auto Conv. Ratio</span>
+                  <span id="liveConvRatio" class="text-base font-black text-blue-600">0.00%</span>
                 </div>
-                <div class="border-x border-slate-200">
-                  <span class="text-[10px] font-bold uppercase text-slate-400 block">Daily Target (÷26)</span>
-                  <span id="liveDailyTarget" class="text-sm font-black text-slate-700">৳0</span>
+                <div class="border-x border-blue-200">
+                  <span class="text-[10px] font-extrabold uppercase text-slate-500 block">Daily Target (÷26)</span>
+                  <span id="liveDailyTarget" class="text-base font-black text-slate-800">৳0</span>
                 </div>
                 <div>
-                  <span class="text-[10px] font-bold uppercase text-slate-400 block">Daily Achieved</span>
-                  <span id="liveDailyAch" class="text-sm font-black text-emerald-600">0%</span>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-500 block">Daily Achieved</span>
+                  <span id="liveDailyAch" class="text-base font-black text-emerald-600">0%</span>
                 </div>
               </div>
 
               <div class="border-t border-slate-100 pt-3">
-                <h4 class="text-xs font-extrabold text-slate-800 uppercase mb-1"><i class="fa-solid fa-scale-balanced mr-1 text-blue-600"></i> Incentive Products Sold (KG)</h4>
-                <div class="p-2 mb-3 rounded-lg bg-blue-50/70 border border-blue-100 text-[11px] font-semibold text-blue-900">
+                <h4 class="text-xs font-black text-slate-800 uppercase mb-1"><i class="fa-solid fa-scale-balanced mr-1 text-orange-500"></i> Incentive Products Sold (KG)</h4>
+                <div class="p-2 mb-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
                   💡 গ্রামের হিসাব কেজিতে দিন: <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>400gm = 0.4</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
@@ -764,12 +997,12 @@
               </div>
 
               <div class="flex justify-between items-center pt-4 border-t border-slate-100">
-                <button type="button" id="deleteReportBtn" onclick="handleDelete()" class="hidden px-4 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl">
-                  <i class="fa-solid fa-trash-can mr-1"></i> Delete
+                <button type="button" id="deleteReportBtn" onclick="handleDelete()" class="hidden px-4 py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow">
+                  <i class="fa-solid fa-trash-can mr-1"></i> Delete Report
                 </button>
                 <div class="flex gap-2 ml-auto">
-                  <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                  <button type="submit" class="px-6 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm">
+                  <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                  <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg">
                     <i class="fa-solid fa-check mr-1"></i> Save & Sync
                   </button>
                 </div>
@@ -780,13 +1013,138 @@
       `;
     }
 
+    // MODAL 2: CREATE / EDIT AGENT ID MODAL (ADMIN ONLY)
+    function renderUserModal() {
+      return `
+        <div id="userModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <h3 class="text-base font-black text-slate-900">Create / Edit Agent ID</h3>
+              <button type="button" onclick="closeModal('userModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleSaveUser(event)" class="space-y-3.5">
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Employee ID (Login ID)</label>
+                <input type="text" id="usrId" required placeholder="e.g. 11205" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Full Name</label>
+                <input type="text" id="usrName" required placeholder="e.g. Tanvir Hasan" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Team</label>
+                  <select id="usrTeam" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="Team Nazim">Team Nazim</option>
+                    <option value="Team Samad">Team Samad</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Category Grade</label>
+                  <select id="usrGrade" onchange="autoFillGradeTarget()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="A+">Grade A+ (1,619,218)</option>
+                    <option value="A">Grade A (1,332,174)</option>
+                    <option value="A-">Grade A- (1,232,174)</option>
+                    <option value="B">Grade B (1,132,174)</option>
+                    <option value="C">Grade C (1,032,175)</option>
+                    <option value="TL">Team Leader (Admin)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Role</label>
+                  <select id="usrRole" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="agent">Sales Agent</option>
+                    <option value="admin">Admin / TL</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Password</label>
+                  <input type="text" id="usrPass" required value="123456" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Monthly Base Target (৳)</label>
+                <input type="number" id="usrTarget" required value="1232174" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                <p class="text-[10px] font-bold text-amber-600 mt-1">* এর সাথে অটোমেটিক ৫% রিটার্ন বাফার যুক্ত হয়ে Working Target সেট হবে।</p>
+              </div>
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('userModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg">Save User ID</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function autoFillGradeTarget() {
+      const g = document.getElementById('usrGrade').value;
+      const map = { 'A+': 1619218, 'A': 1332174, 'A-': 1232174, 'B': 1132174, 'C': 1032175, 'TL': 0 };
+      if (map[g] !== undefined) document.getElementById('usrTarget').value = map[g];
+    }
+
+    function openUserModal(editId) {
+      const users = getStored('users', []);
+      const existing = users.find(u => String(u.id) === String(editId));
+      if (existing) {
+        document.getElementById('usrId').value = existing.id;
+        document.getElementById('usrName').value = existing.name;
+        document.getElementById('usrTeam').value = existing.team;
+        document.getElementById('usrGrade').value = existing.grade || 'A';
+        document.getElementById('usrRole').value = existing.role || 'agent';
+        document.getElementById('usrPass').value = existing.pass || '123456';
+        document.getElementById('usrTarget').value = existing.baseTarget || 1232174;
+      } else {
+        document.getElementById('usrId').value = '';
+        document.getElementById('usrName').value = '';
+        document.getElementById('usrPass').value = '123456';
+        document.getElementById('usrTarget').value = 1232174;
+      }
+      openModal('userModal');
+    }
+
+    async function handleSaveUser(e) {
+      e.preventDefault();
+      const newUser = {
+        id: document.getElementById('usrId').value.trim(),
+        name: document.getElementById('usrName').value.trim(),
+        team: document.getElementById('usrTeam').value,
+        grade: document.getElementById('usrGrade').value,
+        role: document.getElementById('usrRole').value,
+        pass: document.getElementById('usrPass').value.trim(),
+        baseTarget: Number(document.getElementById('usrTarget').value) || 0
+      };
+
+      let users = getStored('users', []);
+      const idx = users.findIndex(u => String(u.id) === String(newUser.id));
+      if (idx !== -1) users[idx] = newUser; else users.push(newUser);
+      setStored('users', users);
+
+      await postToSheet('SAVE_USER', newUser);
+      alert(`User ID (${newUser.id}) সফলভাবে তৈরি ও ক্লাউডে সেভ হয়েছে!`);
+      closeModal('userModal');
+      renderAppLayout();
+    }
+
+    async function handleDeleteUser(delId) {
+      if (!confirm(`আপনি কি নিশ্চিতভাবে ID: ${delId} ডিলিট করতে চান?`)) return;
+      let users = getStored('users', []);
+      users = users.filter(u => String(u.id) !== String(delId));
+      setStored('users', users);
+
+      await postToSheet('DELETE_USER', { id: String(delId) });
+      renderAppLayout();
+    }
+
     function updateLiveRatio() {
       const u = currentUser;
       const allUsers = getStored('users', []);
       const agentId = u.role === 'admin' ? document.getElementById('subAgentId')?.value : u.id;
       const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
 
-      const workingTarget = Math.round((targetAgent.baseTarget || 1232174) * 1.05);
+      const workingTarget = Math.round((Number(targetAgent.baseTarget) || 1232174) * 1.05);
       const dailyTarget = Math.round(workingTarget / 26);
 
       const leads = Number(document.getElementById('subLeads')?.value) || 0;
@@ -843,7 +1201,7 @@
       e.preventDefault();
       const u = currentUser;
       const allUsers = getStored('users', []);
-      const targetAgent = u.role === 'admin' ? allUsers.find(usr => usr.id === document.getElementById('subAgentId').value) : u;
+      const targetAgent = u.role === 'admin' ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
 
       const leads = Number(document.getElementById('subLeads').value) || 0;
       const orders = Number(document.getElementById('subOrders').value) || 0;
@@ -873,7 +1231,7 @@
 
       await postToSheet('DAILY_SALES_SUBMIT', entry);
       
-      alert(`সফলভাবে সেভ ও সিঙ্ক হয়েছে!`);
+      alert(`সফলভাবে সেভ ও ক্লাউডে সিঙ্ক হয়েছে!`);
       closeModal('submitModal');
       renderAppLayout();
       setTimeout(fetchFromSheet, 1500);
