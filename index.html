@@ -61,10 +61,11 @@
       { key: '03/2027', label: 'March 2027' }
     ];
 
+    // Clean Admin Names (No "(TL)" suffix in name) & Proper Grades ("TL" for Admins, "Supervisor" for Supervisors)
     const DEFAULT_USERS = [
-      { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'SUP', baseTarget: 0 },
-      { id: '10122', name: 'Md. Nazimur Rahman (TL)', role: 'admin', team: 'Team Nazim', pass: 'admin123', grade: 'TL', baseTarget: 0 },
-      { id: '10107', name: 'Md Abdus Samad (TL)', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 0 },
+      { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
+      { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: 'admin123', grade: 'TL', baseTarget: 0 },
+      { id: '10107', name: 'Md Abdus Samad', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 0 },
       
       { id: '10191', name: 'Shagor Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A-', baseTarget: 1232174 },
       { id: '10289', name: 'Abdullah Dipu', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A+', baseTarget: 1619218 },
@@ -86,7 +87,7 @@
     ];
 
     const DEFAULT_ROSTER = [
-      { id: '10107', name: 'Md Abdus Samad (TL)', team: 'Team Samad', isTL: true, sat: '10:00 AM', sun: 'DO', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
+      { id: '10107', name: 'Md Abdus Samad', team: 'Team Samad', isTL: true, sat: '10:00 AM', sun: 'DO', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
       { id: '10098', name: 'Habibur Rahman Shuvo', team: 'Team Samad', sat: '3:00 PM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
       { id: '10136', name: 'Al-Amin Kazi', team: 'Team Samad', sat: '10:00 AM', sun: '10:00 AM', mon: '10:00 AM', tue: '10:00 AM', wed: '10:00 AM', thu: '10:00 AM', fri: 'DO' },
       { id: '11007', name: 'Zubayer Al Mahmud', team: 'Team Samad', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
@@ -96,7 +97,7 @@
       { id: '10806', name: 'Abdullah Al Soad', team: 'Team Samad', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
       { id: '10128', name: 'Al-Amin', team: 'Team Samad', sat: '7:00 AM', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
 
-      { id: '10122', name: 'Md. Nazimur Rahman (TL)', team: 'Team Nazim', isTL: true, sat: 'DO', sun: '10:00 AM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
+      { id: '10122', name: 'Md. Nazimur Rahman', team: 'Team Nazim', isTL: true, sat: 'DO', sun: '10:00 AM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
       { id: '10191', name: 'Shagor Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
       { id: '10289', name: 'Abdullah Dipu', team: 'Team Nazim', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
       { id: '11044', name: 'Hasibul Islam Eraz', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '7:00 AM', wed: '7:00 AM', thu: 'Night', fri: 'DO' },
@@ -127,38 +128,52 @@
 
     const SHIFT_OPTIONS = ["7:00 AM", "10:00 AM", "3:00 PM", "Night", "DO"];
 
-    // Ensure Default Users (including Supervisor 10001) exist in localStorage
+    // Normalize User Object so Admins always have clean name & Grade "TL", and Supervisors always have Grade "Supervisor"
+    function normalizeUserRecord(u) {
+      if (!u) return u;
+      const copy = { ...u };
+      if (copy.role === 'admin') {
+        copy.name = String(copy.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
+        copy.grade = 'TL';
+      } else if (copy.role === 'supervisor') {
+        copy.grade = 'Supervisor';
+      } else if (!copy.grade) {
+        copy.grade = 'A';
+      }
+      return copy;
+    }
+
     (function seedDefaultUsers() {
       const existing = localStorage.getItem('gb_users');
       if (!existing) {
-        localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
+        localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS.map(normalizeUserRecord)));
       } else {
         try {
           const parsed = JSON.parse(existing);
           const map = new Map();
-          DEFAULT_USERS.forEach(u => map.set(String(u.id), u));
-          parsed.forEach(u => map.set(String(u.id), u));
+          DEFAULT_USERS.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
+          parsed.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
           localStorage.setItem('gb_users', JSON.stringify(Array.from(map.values())));
         } catch (e) {
-          localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
+          localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS.map(normalizeUserRecord)));
         }
       }
     })();
 
     let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
+    if (currentUser) {
+      currentUser = normalizeUserRecord(currentUser);
+      localStorage.setItem('gb_session_user', JSON.stringify(currentUser));
+    }
+
     let activeTab = 'dashboard';
     let selectedMonthKey = localStorage.getItem('gb_selected_month') || '11/2026';
-    
-    // Separate Scopes:
-    // 1. dashboardScope: Default is Admin's own team (Team Nazim / Team Samad), or ALL for Supervisor
-    // 2. logsFilterScope: Default is ALWAYS 'ALL' for both Admins & Supervisors on Reports and Attendance tabs
     let dashboardScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
     let logsFilterScope = 'ALL';
 
     let pollInterval = null;
     let dutyTimerInterval = null;
 
-    // Role Helper Functions
     function isFullAdmin(u) { return u && u.role === 'admin'; }
     function isSupervisor(u) { return u && u.role === 'supervisor'; }
     function canViewAll(u) { return u && (u.role === 'admin' || u.role === 'supervisor'); }
@@ -214,6 +229,48 @@
       return `${h}:${m}:${s}`;
     }
 
+    // LIVE ONLINE STATUS CHECKER FOR ANY USER ID
+    function getUserOnlineStatus(userId) {
+      const uid = String(userId);
+      if (currentUser && String(currentUser.id) === uid) {
+        if (currentUser.role === 'agent') {
+          const today = getTodayFormatted();
+          const myAtt = getStored('attendance_records', []).find(a => String(a.userId) === uid && a.date === today);
+          if (myAtt && myAtt.status === 'On Break') return 'On Break';
+        }
+        return 'Online';
+      }
+
+      const now = Date.now();
+      const onlineList = getStored('online_users', []);
+      const oRec = onlineList.find(o => String(o.id) === uid);
+      // Consider online if pinged within the last 3 minutes (180,000 ms)
+      if (oRec && oRec.state !== 'Offline' && oRec.lastSeen && (now - Number(oRec.lastSeen)) < 180000) {
+        return oRec.state === 'On Break' ? 'On Break' : 'Online';
+      }
+
+      // Fallback check from today's active Attendance_Logs for agents
+      const today = getTodayFormatted();
+      const attRec = getStored('attendance_records', []).find(a => String(a.userId) === uid && a.date === today);
+      if (attRec && attRec.status !== 'Completed') {
+        if (attRec.lastTick && (now - Number(attRec.lastTick)) < 180000) {
+          return attRec.status === 'On Break' ? 'On Break' : 'Online';
+        }
+      }
+      return 'Offline';
+    }
+
+    function renderOnlineStatusBadge(userId) {
+      const st = getUserOnlineStatus(userId);
+      if (st === 'Online') {
+        return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>Online</span>`;
+      }
+      if (st === 'On Break') {
+        return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800"><i class="fa-solid fa-mug-hot text-[9px]"></i>On Break</span>`;
+      }
+      return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>Offline</span>`;
+    }
+
     function getActiveProductsForMonth(mKey) {
       const configs = getStored('monthly_configs', {});
       const mCfg = configs[mKey || selectedMonthKey] || {};
@@ -226,15 +283,17 @@
     }
 
     function getUsersForMonth(mKey) {
-      const baseUsers = getStored('users', DEFAULT_USERS);
+      const baseUsers = getStored('users', DEFAULT_USERS).map(normalizeUserRecord);
       const configs = getStored('monthly_configs', {});
       const mCfg = configs[mKey || selectedMonthKey] || {};
       const userOverrides = mCfg.users || {};
       return baseUsers.map(u => {
+        let updated = { ...u };
         if (userOverrides[u.id]) {
-          return { ...u, grade: userOverrides[u.id].grade || u.grade, baseTarget: Number(userOverrides[u.id].baseTarget ?? u.baseTarget) };
+          updated.grade = userOverrides[u.id].grade || u.grade;
+          updated.baseTarget = Number(userOverrides[u.id].baseTarget ?? u.baseTarget);
         }
-        return u;
+        return normalizeUserRecord(updated);
       });
     }
 
@@ -242,7 +301,7 @@
       const mk = mKey || selectedMonthKey;
       const savedList = getStored('roster_records', []);
       const monthRows = savedList.filter(r => r.monthKey === mk);
-      const allUsers = getStored('users', DEFAULT_USERS);
+      const allUsers = getStored('users', DEFAULT_USERS).map(normalizeUserRecord);
 
       return DEFAULT_ROSTER.map(defRow => {
         const override = monthRows.find(r => String(r.id) === String(defRow.id));
@@ -426,8 +485,15 @@
     }
 
     async function postToSheet(action, payload) {
-      const fullData = { action, timestamp: new Date().toISOString(), ...payload };
-      const params = new URLSearchParams({ action, payload: JSON.stringify(fullData), ...payload });
+      const pingInfo = currentUser ? {
+        pingUserId: String(currentUser.id),
+        pingName: currentUser.name,
+        pingRole: currentUser.role,
+        pingTeam: currentUser.team,
+        pingState: getUserOnlineStatus(currentUser.id)
+      } : {};
+      const fullData = { action, timestamp: new Date().toISOString(), ...pingInfo, ...payload };
+      const params = new URLSearchParams({ action, payload: JSON.stringify(fullData), ...pingInfo, ...payload });
 
       fetch(`${webhookUrl}?${params.toString()}`, { method: 'GET', mode: 'no-cors' }).catch(() => {});
       new Image().src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
@@ -460,6 +526,7 @@
       } catch (e) {}
     }
 
+    // Piggyback current user's online heartbeat on every cloud poll
     function fetchFromSheet() {
       const cbName = 'gb_cb_' + Date.now();
       window[cbName] = function(res) {
@@ -467,11 +534,16 @@
         if (script.parentNode) script.parentNode.removeChild(script);
         if (res && res.status === 'success') handleCloudData(res);
       };
+      let pingQuery = '';
+      if (currentUser) {
+        const st = getUserOnlineStatus(currentUser.id);
+        pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}`;
+      }
       const script = document.createElement('script');
-      script.src = `${webhookUrl}?callback=${cbName}&t=${Date.now()}`;
+      script.src = `${webhookUrl}?callback=${cbName}&t=${Date.now()}${pingQuery}`;
       script.onerror = function() {
         if (script.parentNode) script.parentNode.removeChild(script);
-        fetch(`${webhookUrl}?t=${Date.now()}`)
+        fetch(`${webhookUrl}?t=${Date.now()}${pingQuery}`)
           .then(r => r.json())
           .then(res => { if (res && res.status === 'success') handleCloudData(res); })
           .catch(() => {});
@@ -507,6 +579,13 @@
           changed = true;
         }
       }
+      if (Array.isArray(res.onlineUsers)) {
+        const localOnline = getStored('online_users', []);
+        if (JSON.stringify(res.onlineUsers) !== JSON.stringify(localOnline)) {
+          setStored('online_users', res.onlineUsers);
+          changed = true;
+        }
+      }
       if (Array.isArray(res.rosterRecords) && res.rosterRecords.length > 0) {
         const localRoster = getStored('roster_records', []);
         if (JSON.stringify(res.rosterRecords) !== JSON.stringify(localRoster)) {
@@ -524,9 +603,9 @@
       if (Array.isArray(res.customUsers) && res.customUsers.length > 0) {
         const currentUsers = getStored('users', DEFAULT_USERS);
         const mergedMap = new Map();
-        DEFAULT_USERS.forEach(u => mergedMap.set(String(u.id), u));
-        currentUsers.forEach(u => mergedMap.set(String(u.id), u));
-        res.customUsers.forEach(u => mergedMap.set(String(u.id), u));
+        DEFAULT_USERS.forEach(u => mergedMap.set(String(u.id), normalizeUserRecord(u)));
+        currentUsers.forEach(u => mergedMap.set(String(u.id), normalizeUserRecord(u)));
+        res.customUsers.forEach(u => mergedMap.set(String(u.id), normalizeUserRecord(u)));
         const mergedArr = Array.from(mergedMap.values());
         if (JSON.stringify(mergedArr) !== JSON.stringify(currentUsers)) {
           setStored('users', mergedArr);
@@ -538,12 +617,13 @@
 
     function init() {
       if (currentUser) {
+        currentUser = normalizeUserRecord(currentUser);
         if (currentUser.role === 'admin') {
           dashboardScope = currentUser.team;
         } else if (currentUser.role === 'supervisor') {
           dashboardScope = 'ALL';
         }
-        logsFilterScope = 'ALL'; // Always default to ALL Team on Daily Sales Reports & Attendance Logs
+        logsFilterScope = 'ALL';
         if (currentUser.role === 'agent') {
           ensureAgentAttendanceSession(currentUser);
           startLiveDutyClock();
@@ -561,8 +641,9 @@
       e.preventDefault();
       const id = document.getElementById('loginId').value.trim();
       const pass = document.getElementById('loginPass').value.trim();
-      const user = getStored('users', DEFAULT_USERS).find(u => String(u.id) === id && u.pass === pass);
-      if (!user) { alert('Invalid Employee ID or Password!'); return; }
+      const rawUser = getStored('users', DEFAULT_USERS).find(u => String(u.id) === id && u.pass === pass);
+      if (!rawUser) { alert('Invalid Employee ID or Password!'); return; }
+      const user = normalizeUserRecord(rawUser);
       currentUser = user;
       setStored('session_user', user);
       dashboardScope = user.role === 'admin' ? user.team : 'ALL';
@@ -575,18 +656,21 @@
     }
 
     async function handleLogout() {
-      if (currentUser && currentUser.role === 'agent') {
-        if (!confirm('Are you sure you want to End Duty & Logout for today?')) return;
-        const today = getTodayFormatted();
-        let attList = getStored('attendance_records', []);
-        let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
-        if (rec) {
-          rec.status = 'Completed';
-          rec.breakReason = '-';
-          rec.logoutTime = getNowTimeStr();
-          setStored('attendance_records', attList);
-          await postToSheet('ATTENDANCE_SYNC', rec);
+      if (currentUser) {
+        if (currentUser.role === 'agent') {
+          if (!confirm('Are you sure you want to End Duty & Logout for today?')) return;
+          const today = getTodayFormatted();
+          let attList = getStored('attendance_records', []);
+          let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+          if (rec) {
+            rec.status = 'Completed';
+            rec.breakReason = '-';
+            rec.logoutTime = getNowTimeStr();
+            setStored('attendance_records', attList);
+            await postToSheet('ATTENDANCE_SYNC', rec);
+          }
         }
+        await postToSheet('USER_LOGOUT', { userId: String(currentUser.id), userName: currentUser.name, team: currentUser.team });
       }
       if (pollInterval) clearInterval(pollInterval);
       if (dutyTimerInterval) clearInterval(dutyTimerInterval);
@@ -597,7 +681,6 @@
 
     function setTab(tab) {
       activeTab = tab;
-      // Ensure Daily Sales Reports & Attendance Logs default to ALL Team (16) when opened
       if (tab === 'reports' || tab === 'attendance') {
         logsFilterScope = 'ALL';
       }
@@ -636,8 +719,18 @@
     function renderAppLayout() {
       const u = currentUser;
       const roleBadgeText = u.role === 'admin'
-        ? `Admin (${u.team})`
+        ? `TL (${u.team})`
         : (u.role === 'supervisor' ? `Supervisor (View All)` : `${u.team} • Grade ${u.grade}`);
+
+      // Compute currently online users for top bar indicator
+      const allUsersList = getUsersForMonth(selectedMonthKey);
+      const activeOnlineUsers = allUsersList.filter(usr => {
+        const st = getUserOnlineStatus(usr.id);
+        return st === 'Online' || st === 'On Break';
+      });
+      const onlineNamesTooltip = activeOnlineUsers.length > 0
+        ? activeOnlineUsers.map(usr => `${usr.name} (${getUserOnlineStatus(usr.id)})`).join(' • ')
+        : 'No users online';
 
       const html = `
         <div class="flex-1 flex min-h-screen">
@@ -680,7 +773,7 @@
             <div class="space-y-2.5">
               <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center">
                 <p class="text-[11px] font-extrabold text-emerald-600"><i class="fa-solid fa-rotate mr-1 animate-spin"></i> Live Cloud Sync</p>
-                <p class="text-[10px] text-slate-400">Month-Wise Sheet Archive</p>
+                <p class="text-[10px] text-slate-400">${activeOnlineUsers.length} User(s) Online Now</p>
               </div>
               <button onclick="handleLogout()" class="w-full py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow transition-colors">
                 <i class="fa-solid fa-power-off mr-1"></i> ${u.role === 'agent' ? 'End Duty & Logout' : 'Logout'}
@@ -705,9 +798,15 @@
                 ${isSupervisor(u) ? `<span class="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-800 text-[10px] font-black uppercase"><i class="fa-solid fa-eye mr-1"></i>Supervisor View-Only Mode</span>` : ''}
               </div>
 
-              <div class="flex items-center gap-4 shrink-0">
+              <div class="flex items-center gap-3 shrink-0">
+                <!-- Live Online Users Counter Pill -->
+                <button onclick="canViewAll(currentUser) ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl flex items-center gap-2 transition-colors">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span>${activeOnlineUsers.length} Online</span>
+                </button>
+
                 <button onclick="fetchFromSheet()" class="px-3.5 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-xl flex items-center gap-2 hover:bg-emerald-100 transition-colors">
-                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Sync Now
+                  <i class="fa-solid fa-cloud-arrow-down text-xs"></i> Sync Now
                 </button>
                 <div class="flex items-center gap-3 pl-4 border-l border-slate-200 py-1">
                   <div class="w-10 h-10 rounded-xl tab-active text-white flex items-center justify-center font-black text-sm shadow-sm shrink-0">
@@ -1096,7 +1195,7 @@
 
     function renderDutyRosterView() {
       const u = currentUser;
-      const isEditable = isFullAdmin(u); // Only Full Admin can edit roster; Supervisor & Agent view-only
+      const isEditable = isFullAdmin(u);
       const roster = getRosterForMonth(selectedMonthKey);
       const days = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
       const dayLabels = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -1215,7 +1314,7 @@
                     ${samadRows.map(r => `
                       <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
                         <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
-                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name}</td>
+                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name} ${r.isTL ? '<span class="text-[10px] text-blue-600 font-black">(TL)</span>' : ''}</td>
                         ${days.map(d => renderShiftCell(r, d)).join('')}
                       </tr>
                     `).join('')}
@@ -1240,7 +1339,7 @@
                     ${nazimRows.map(r => `
                       <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
                         <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
-                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name}</td>
+                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name} ${r.isTL ? '<span class="text-[10px] text-orange-600 font-black">(TL)</span>' : ''}</td>
                         ${days.map(d => renderShiftCell(r, d)).join('')}
                       </tr>
                     `).join('')}
@@ -1345,7 +1444,7 @@
                   <th class="p-4">Date</th>
                   <th class="p-4">Agent Name</th>
                   <th class="p-4">Team</th>
-                  <th class="p-4">Status</th>
+                  <th class="p-4">Duty Status</th>
                   <th class="p-4">Login Time</th>
                   <th class="p-4">Logout Time</th>
                   <th class="p-4">Working Hours</th>
@@ -1499,6 +1598,7 @@
                   <tr>
                     <th class="p-3.5">Rank</th>
                     <th class="p-3.5">Agent Name</th>
+                    <th class="p-3.5">Live Status</th>
                     <th class="p-3.5">Team</th>
                     <th class="p-3.5">Grade</th>
                     <th class="p-3.5">Leads / Orders</th>
@@ -1519,6 +1619,7 @@
                     return `<tr class="hover:bg-slate-50/90">
                       <td class="p-3.5">${rankBadge}</td>
                       <td class="p-3.5 font-extrabold text-slate-900">${ag.name} <span class="text-slate-400 text-[10px]">(${ag.id})</span></td>
+                      <td class="p-3.5">${renderOnlineStatusBadge(ag.id)}</td>
                       <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${ag.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${ag.team}</span></td>
                       <td class="p-3.5 font-black text-slate-700">${ag.grade}</td>
                       <td class="p-3.5">${ag.leads} / <strong class="text-blue-600">${ag.orders}</strong></td>
@@ -1567,7 +1668,6 @@
             </div>
             <div class="flex items-center gap-2">
               ${canViewAll(u) ? `
-              <!-- Default selected is ALWAYS All Team (16) for both Admins & Supervisors -->
               <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
                 <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
                 <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
@@ -1653,7 +1753,7 @@
             <div>
               <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Monthly Setup, Grades & User IDs (${monthLabel})</h2>
               <p class="text-xs font-bold text-slate-500">
-                ${isFullAdmin(u) ? `Create Agent, Supervisor, or Admin IDs and customize monthly targets for ${monthLabel}` : `View all registered Agent, Supervisor, and Admin accounts & monthly targets for ${monthLabel}`}
+                ${isFullAdmin(u) ? `Create Agent, Supervisor, or Admin IDs, check live online status, and customize monthly targets for ${monthLabel}` : `View all registered Agent, Supervisor, and Admin accounts, live online status & monthly targets for ${monthLabel}`}
               </p>
             </div>
             ${isFullAdmin(u) ? `
@@ -1674,6 +1774,7 @@
                 <tr>
                   <th class="p-3.5">Emp ID</th>
                   <th class="p-3.5">Name</th>
+                  <th class="p-3.5">Live Status</th>
                   <th class="p-3.5">Role</th>
                   <th class="p-3.5">Team</th>
                   <th class="p-3.5">Grade (${selectedMonthKey})</th>
@@ -1688,19 +1789,22 @@
                   const roleBadge = usr.role === 'admin'
                     ? 'bg-purple-100 text-purple-800'
                     : (usr.role === 'supervisor' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700');
+                  const displayGrade = usr.role === 'admin' ? 'TL' : (usr.role === 'supervisor' ? 'Supervisor' : (usr.grade || 'A'));
+
                   return `
                   <tr class="hover:bg-slate-50">
                     <td class="p-3.5 font-black text-blue-600">${usr.id}</td>
                     <td class="p-3.5 font-extrabold text-slate-900">${usr.name}</td>
+                    <td class="p-3.5">${renderOnlineStatusBadge(usr.id)}</td>
                     <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
                     <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (usr.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${usr.team}</span></td>
-                    <td class="p-3.5 font-black">${usr.grade || 'A'}</td>
+                    <td class="p-3.5 font-black ${usr.role === 'admin' ? 'text-purple-700' : (usr.role === 'supervisor' ? 'text-indigo-700' : 'text-slate-900')}">${displayGrade}</td>
                     ${isFullAdmin(u) ? `<td class="p-3.5 font-mono text-slate-500">${usr.pass}</td>` : ''}
                     <td class="p-3.5 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
                     <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
                     ${isFullAdmin(u) ? `
                     <td class="p-3.5 text-right space-x-1">
-                      <button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>
+                      <button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit Grade / Target</button>
                       ${usr.role !== 'admin' ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
                     </td>
                     ` : ''}
@@ -2092,8 +2196,8 @@
                     <option value="A-">Grade A- (1,232,174)</option>
                     <option value="B">Grade B (1,132,174)</option>
                     <option value="C">Grade C (1,032,175)</option>
-                    <option value="SUP">Supervisor (View Only)</option>
-                    <option value="TL">Team Leader (Admin)</option>
+                    <option value="Supervisor">Supervisor</option>
+                    <option value="TL">TL (Team Leader)</option>
                   </select>
                 </div>
                 <div>
@@ -2120,7 +2224,7 @@
       const r = document.getElementById('usrRole').value;
       if (r === 'supervisor') {
         document.getElementById('usrTeam').value = 'All Teams';
-        document.getElementById('usrGrade').value = 'SUP';
+        document.getElementById('usrGrade').value = 'Supervisor';
         document.getElementById('usrTarget').value = 0;
       } else if (r === 'admin') {
         document.getElementById('usrGrade').value = 'TL';
@@ -2133,7 +2237,7 @@
 
     function autoFillGradeTarget() {
       const g = document.getElementById('usrGrade').value;
-      const map = { 'A+': 1619218, 'A': 1332174, 'A-': 1232174, 'B': 1132174, 'C': 1032175, 'SUP': 0, 'TL': 0 };
+      const map = { 'A+': 1619218, 'A': 1332174, 'A-': 1232174, 'B': 1132174, 'C': 1032175, 'Supervisor': 0, 'TL': 0 };
       if (map[g] !== undefined) document.getElementById('usrTarget').value = map[g];
     }
 
@@ -2146,7 +2250,7 @@
         document.getElementById('usrName').value = existing.name;
         document.getElementById('usrRole').value = existing.role || 'agent';
         document.getElementById('usrTeam').value = existing.team;
-        document.getElementById('usrGrade').value = existing.grade || 'A';
+        document.getElementById('usrGrade').value = existing.role === 'admin' ? 'TL' : (existing.role === 'supervisor' ? 'Supervisor' : (existing.grade || 'A'));
         document.getElementById('usrPass').value = existing.pass || '123456';
         document.getElementById('usrTarget').value = existing.baseTarget ?? 1232174;
       } else {
@@ -2164,15 +2268,19 @@
     async function handleSaveUser(e) {
       e.preventDefault();
       if (!isFullAdmin(currentUser)) return;
-      const newUser = {
+      const roleVal = document.getElementById('usrRole').value;
+      const gradeVal = roleVal === 'admin' ? 'TL' : (roleVal === 'supervisor' ? 'Supervisor' : document.getElementById('usrGrade').value);
+      const rawName = document.getElementById('usrName').value.trim();
+
+      const newUser = normalizeUserRecord({
         id: document.getElementById('usrId').value.trim(),
-        name: document.getElementById('usrName').value.trim(),
+        name: rawName,
         team: document.getElementById('usrTeam').value,
-        grade: document.getElementById('usrGrade').value,
-        role: document.getElementById('usrRole').value,
+        grade: gradeVal,
+        role: roleVal,
         pass: document.getElementById('usrPass').value.trim(),
         baseTarget: Number(document.getElementById('usrTarget').value) || 0
-      };
+      });
 
       let users = getStored('users', DEFAULT_USERS);
       const idx = users.findIndex(u => String(u.id) === String(newUser.id));
@@ -2187,7 +2295,7 @@
 
       await postToSheet('SAVE_USER', newUser);
       await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]) });
-      alert(`User ID (${newUser.id}) with role "${newUser.role.toUpperCase()}" saved and synced!`);
+      alert(`User ID (${newUser.id}) with Grade "${newUser.grade}" saved and synced!`);
       closeModal('userModal');
       renderAppLayout();
     }
