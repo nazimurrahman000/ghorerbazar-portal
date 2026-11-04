@@ -29,6 +29,7 @@
     .table-header-light { background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #334155; }
     .sprint-banner { background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%); border: 1px solid #bfdbfe; }
     .monthly-banner { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0; }
+    .incentive-banner { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; }
 
     .prod-amber { background: linear-gradient(145deg, #ffffff 0%, #fffbeb 100%); border: 1px solid #fde68a; }
     .prod-rose { background: linear-gradient(145deg, #ffffff 0%, #fff1f2 100%); border: 1px solid #fecdd3; }
@@ -83,7 +84,6 @@
       { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 }
     ];
 
-    // Exact Default Duty Roster from November 2026 Image
     const DEFAULT_ROSTER = [
       // Team Samad
       { id: '10107', name: 'Md Abdus Samad (TL)', team: 'Team Samad', isTL: true, sat: '10:00 AM', sun: 'DO', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
@@ -148,7 +148,6 @@
     function getNowTimeStr() {
       return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
-    // Sanitizes any corrupted "Sat Dec 30 1899 ... (বাংলাদেশ মানক সময়)" strings into pure English HH:MM:SS AM/PM
     function sanitizeTimeDisplay(raw) {
       if (!raw || raw === '--:--') return '--:--';
       let s = String(raw).replace(/^'/, '').trim();
@@ -191,7 +190,6 @@
       return `${h}:${m}:${s}`;
     }
 
-    // MONTH-WISE CONFIG GETTER (Preserves previous months' targets, grades & product targets)
     function getActiveProductsForMonth(mKey) {
       const configs = getStored('monthly_configs', {});
       const mCfg = configs[mKey || selectedMonthKey] || {};
@@ -239,7 +237,6 @@
       renderAppLayout();
     }
 
-    // AGENT DUTY & BREAK TRACKING ENGINE
     function ensureAgentAttendanceSession(user) {
       if (!user || user.role !== 'agent') return null;
       const today = getTodayFormatted();
@@ -601,13 +598,11 @@
 
     function renderAppLayout() {
       const u = currentUser;
-      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || { label: selectedMonthKey }).label;
-
       const html = `
         <div class="flex-1 flex min-h-screen">
-          <aside class="w-64 sidebar-light p-5 flex flex-col justify-between shrink-0 shadow-sm">
+          <aside class="w-60 sidebar-light p-4 flex flex-col justify-between shrink-0 shadow-sm">
             <div>
-              <div class="flex items-center gap-3 px-2 mb-7">
+              <div class="flex items-center gap-3 px-2 mb-6">
                 <div class="w-10 h-10 rounded-xl tab-active text-white flex items-center justify-center font-bold shadow-md">
                   <i class="fa-brands fa-facebook-f text-lg"></i>
                 </div>
@@ -618,23 +613,23 @@
               </div>
 
               <nav class="space-y-1.5">
-                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard & Targets
                 </button>
-                <button onclick="setTab('roster')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'roster' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('roster')" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'roster' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-calendar-week text-sm text-indigo-600"></i> Duty Roster
                 </button>
-                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
                 </button>
-                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Team vs Team & Ranking
                 </button>
-                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-file-invoice text-sm"></i> Daily Sales Reports
                 </button>
                 ${u.role === 'admin' ? `
-                <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-sliders text-sm text-blue-600"></i> Monthly Setup & IDs
                 </button>
                 ` : ''}
@@ -652,17 +647,18 @@
             </div>
           </aside>
 
-          <div class="flex-1 flex flex-col h-screen overflow-y-auto">
-            <header class="h-16 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+          <div class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
+            <header class="h-16 px-6 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
               <div class="flex items-center gap-3">
                 <span class="text-xs font-extrabold text-slate-400 uppercase">Ghorerbazar FB</span>
                 <span class="text-slate-300">/</span>
                 <h2 class="text-xs font-black uppercase text-blue-600">${activeTab}</h2>
                 <span class="text-slate-300">•</span>
-                <!-- Global Month Selector for Historical & Future Month-Wise Tracking -->
-                <div class="flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-xl">
+                <!-- Global Month Selector with clear label -->
+                <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
                   <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
-                  <select onchange="changeSelectedMonth(this.value)" class="bg-transparent text-xs font-extrabold text-blue-800 focus:outline-none cursor-pointer">
+                  <span class="text-[10px] font-extrabold uppercase text-slate-500">Viewing Month:</span>
+                  <select onchange="changeSelectedMonth(this.value)" class="bg-transparent text-xs font-black text-blue-800 focus:outline-none cursor-pointer">
                     ${AVAILABLE_MONTHS.map(m => `<option value="${m.key}" ${m.key === selectedMonthKey ? 'selected' : ''}>${m.label}</option>`).join('')}
                   </select>
                 </div>
@@ -683,7 +679,8 @@
                 </div>
               </div>
             </header>
-            <main class="p-6 lg:p-8 max-w-7xl w-full mx-auto">${renderTabContent()}</main>
+            <!-- Full-Width Container so there is no wasted empty space on left/right -->
+            <main class="p-5 lg:p-6 w-full flex-1">${renderTabContent()}</main>
           </div>
         </div>
         ${renderSubmitModal()}
@@ -704,7 +701,6 @@
       if (activeTab === 'agents') return renderManageAgents();
     }
 
-    // COMPACT SIDE-BY-SIDE WIDGETS (Duty Timer on Left, Incentive Tracker on Right)
     function renderCompactTopWidgets(incentiveSummary) {
       const u = currentUser;
       const today = getTodayFormatted();
@@ -717,7 +713,6 @@
       return `
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           ${u.role === 'agent' && rec ? `
-          <!-- Compact Duty & Break Card (Side 1) -->
           <div class="card-dynamic px-5 py-4 border-l-4 ${isBreak ? 'border-l-amber-500 bg-amber-50/30' : 'border-l-emerald-500'} flex items-center justify-between gap-3">
             <div class="flex items-center gap-3.5">
               <div class="w-10 h-10 rounded-xl ${isBreak ? 'bg-amber-500' : 'bg-emerald-600'} text-white flex items-center justify-center text-base shadow-sm shrink-0">
@@ -758,26 +753,24 @@
             </div>
           </div>
           ` : `
-          <!-- Admin Quick Roster & Month Status Card (Side 1) -->
           <div class="card-dynamic px-5 py-4 border-l-4 border-l-blue-600 flex items-center justify-between gap-3">
             <div class="flex items-center gap-3.5">
               <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base shadow-sm shrink-0">
                 <i class="fa-solid fa-calendar-check"></i>
               </div>
               <div>
-                <span class="text-[10px] font-black uppercase text-blue-600 block">Active Month Period</span>
+                <span class="text-[10px] font-black uppercase text-blue-600 block">Active Month Archive</span>
                 <h4 class="text-sm font-black text-slate-900">${(AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label}</h4>
-                <p class="text-[11px] font-semibold text-slate-400">All sales & targets are archived month-wise</p>
+                <p class="text-[11px] font-semibold text-slate-400">Switch month at top bar to view past reports or edit next month</p>
               </div>
             </div>
             <div class="flex items-center gap-2">
-              <button onclick="setTab('roster')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-extrabold">View Roster</button>
-              <button onclick="setTab('agents')" class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-xs font-extrabold">Edit Targets</button>
+              <button onclick="setTab('roster')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-extrabold">Duty Roster</button>
+              <button onclick="setTab('agents')" class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-xs font-extrabold">Monthly Setup</button>
             </div>
           </div>
           `}
 
-          <!-- Compact Incentive & Bonus Card (Side 2) -->
           <div class="incentive-banner px-5 py-4 rounded-2xl shadow-sm flex items-center justify-between gap-3">
             <div class="flex items-center gap-3.5 min-w-0">
               <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base shadow-sm shrink-0">
@@ -849,7 +842,6 @@
 
       return `
         <div class="space-y-5">
-          <!-- Clean & Organized Welcome Header Box (With Tidy Pill Badges instead of cluttered text) -->
           <div class="banner-hero-light p-5 rounded-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
             <div>
               <div class="flex flex-wrap items-center gap-2">
@@ -865,7 +857,6 @@
               </div>
               <h2 class="text-xl font-black text-slate-900 mt-1.5">Welcome, ${u.name}! 👋</h2>
               
-              <!-- Clean Organized Target Pills -->
               <div class="flex flex-wrap items-center gap-2 mt-2">
                 <div class="px-3 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs font-bold text-slate-600">
                   Base: <strong class="text-slate-900">৳${tInfo.baseTarget.toLocaleString()}</strong>
@@ -894,10 +885,8 @@
             </div>
           </div>
 
-          <!-- Compact Side-by-Side Duty Timer & Incentive Tracker -->
           ${renderCompactTopWidgets(incentiveSummary)}
 
-          <!-- 5 Vibrant Multi-Color KPI Cards -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div class="kpi-card-1 p-5 rounded-2xl flex flex-col justify-between">
               <div class="flex justify-between items-center">
@@ -1047,7 +1036,7 @@
                     </div>
                     <div class="flex justify-between items-baseline mb-2">
                       <span class="text-xl font-black text-slate-900">${achieved.toFixed(2)} <span class="text-xs font-bold text-slate-500">kg sold</span></span>
-                      <span class="px-2 py-0.5 rounded-md ${p.badge} text-xs font-black">${pct}%</span>
+                      <span class="px-2.5 py-0.5 rounded-md ${p.badge} text-xs font-black">${pct}%</span>
                     </div>
                     <div class="progress-track h-2 bg-white border border-slate-200/60 mb-2.5">
                       <div class="${p.bar} h-2 rounded-full" style="width: ${pct}%"></div>
@@ -1062,7 +1051,7 @@
       `;
     }
 
-    // DUTY ROSTER VIEW (Agent Read-Only, Admin Editable + Auto Summary Tables matching Image)
+    // FULL-WIDTH COMPACT DUTY ROSTER VIEW (Fits Side-by-Side Without Horizontal Scrollbar)
     function renderDutyRosterView() {
       const u = currentUser;
       const isAdmin = u.role === 'admin';
@@ -1079,7 +1068,7 @@
           morning: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
           general: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
           evening: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
-          night: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          night: { sat: 0, sun: 0, mon: 0, tue: 0, thu: 0, wed: 0, fri: 0 },
           doCount: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 }
         };
         filtered.forEach(r => {
@@ -1095,7 +1084,6 @@
         return counts;
       }
 
-      // Per-team summaries exclude the TL row (matching exact 8-agent totals in the screenshot)
       const samadSum = computeRosterSummary(samadRows, true);
       const nazimSum = computeRosterSummary(nazimRows, true);
       const combinedAll = computeRosterSummary(roster, false);
@@ -1105,11 +1093,11 @@
         const val = row[dKey] || '3:00 PM';
         const cellClass = val === 'DO' ? 'roster-do' : (val === 'Night' ? 'roster-night' : 'text-slate-700 font-semibold');
         if (!isAdmin) {
-          return `<td class="p-2.5 border border-slate-200 text-center ${cellClass}">${val}</td>`;
+          return `<td class="px-1.5 py-2 border border-slate-200 text-center text-[11px] whitespace-nowrap ${cellClass}">${val}</td>`;
         }
         return `
-          <td class="p-1.5 border border-slate-200 text-center ${cellClass}">
-            <select onchange="handleRosterShiftChange('${row.id}', '${dKey}', this.value)" class="w-full bg-transparent text-center text-xs font-bold focus:outline-none cursor-pointer">
+          <td class="p-1 border border-slate-200 text-center ${cellClass}">
+            <select onchange="handleRosterShiftChange('${row.id}', '${dKey}', this.value)" class="w-full bg-transparent text-center text-[11px] font-bold focus:outline-none cursor-pointer">
               ${SHIFT_OPTIONS.map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('')}
             </select>
           </td>
@@ -1125,27 +1113,27 @@
           { time: 'Day Off', shift: 'Day Off', key: 'doCount' }
         ];
         return `
-          <div class="card-dynamic overflow-hidden overflow-x-auto mt-4">
-            <div class="bg-slate-100 px-4 py-2.5 border-b border-slate-200 font-black text-xs text-slate-800 text-center uppercase">${title}</div>
-            <table class="w-full text-xs text-center border-collapse">
+          <div class="card-dynamic overflow-hidden mt-4">
+            <div class="bg-slate-100 px-4 py-2 border-b border-slate-200 font-black text-xs text-slate-800 text-center uppercase">${title}</div>
+            <table class="w-full text-[11px] text-center border-collapse">
               <thead class="bg-slate-50 font-extrabold text-slate-600">
                 <tr>
-                  <th class="p-2 border border-slate-200">Duty Time</th>
-                  <th class="p-2 border border-slate-200">Duty Shift</th>
-                  ${dayLabels.map(dl => `<th class="p-2 border border-slate-200">${dl}</th>`).join('')}
+                  <th class="p-1.5 border border-slate-200">Duty Time</th>
+                  <th class="p-1.5 border border-slate-200">Duty Shift</th>
+                  ${dayLabels.map(dl => `<th class="p-1.5 border border-slate-200">${dl}</th>`).join('')}
                 </tr>
               </thead>
               <tbody class="font-bold text-slate-700">
                 ${rowsSpec.map(rs => `
                   <tr>
-                    <td class="p-2 border border-slate-200">${rs.time}</td>
-                    <td class="p-2 border border-slate-200">${rs.shift}</td>
-                    ${days.map(d => `<td class="p-2 border border-slate-200">${sumObj[rs.key][d]}</td>`).join('')}
+                    <td class="p-1.5 border border-slate-200">${rs.time}</td>
+                    <td class="p-1.5 border border-slate-200">${rs.shift}</td>
+                    ${days.map(d => `<td class="p-1.5 border border-slate-200">${sumObj[rs.key][d]}</td>`).join('')}
                   </tr>
                 `).join('')}
                 <tr class="bg-slate-100 font-black text-slate-900">
-                  <td colspan="2" class="p-2 border border-slate-200">In Total (Agents)</td>
-                  ${days.map(d => `<td class="p-2 border border-slate-200">${sumObj.morning[d] + sumObj.general[d] + sumObj.evening[d] + sumObj.night[d] + sumObj.doCount[d]}</td>`).join('')}
+                  <td colspan="2" class="p-1.5 border border-slate-200">In Total (Agents)</td>
+                  ${days.map(d => `<td class="p-1.5 border border-slate-200">${sumObj.morning[d] + sumObj.general[d] + sumObj.evening[d] + sumObj.night[d] + sumObj.doCount[d]}</td>`).join('')}
                 </tr>
               </tbody>
             </table>
@@ -1156,37 +1144,37 @@
       const monthTitle = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
 
       return `
-        <div class="space-y-6">
-          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+        <div class="space-y-5">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200">
             <div>
-              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-calendar-week text-blue-600 mr-2"></i>Duty Roster (${monthTitle})</h2>
+              <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-calendar-week text-blue-600 mr-2"></i>Duty Roster (${monthTitle})</h2>
               <p class="text-xs font-bold text-slate-500">
                 ${isAdmin ? 'Admin Mode: Click any shift dropdown in the table to change schedule. Changes auto-save & update summaries!' : 'View your weekly shift schedule and Day Off (DO) assignments.'}
               </p>
             </div>
-            <span class="px-3.5 py-1.5 rounded-xl bg-orange-100 text-orange-800 text-xs font-black">
+            <span class="px-3 py-1.5 rounded-xl bg-orange-100 text-orange-800 text-xs font-black">
               DO = Day Off • Night = 11:00 PM
             </span>
           </div>
 
-          <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <!-- Team Samad Roster -->
             <div>
-              <div class="card-dynamic overflow-hidden overflow-x-auto">
-                <div class="bg-blue-600 text-white px-4 py-3 font-black text-sm text-center">Team: Facebook (Abdus Samad)</div>
-                <table class="w-full text-xs border-collapse whitespace-nowrap">
+              <div class="card-dynamic overflow-hidden">
+                <div class="bg-blue-600 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Team: Facebook (Abdus Samad)</div>
+                <table class="w-full text-[11px] border-collapse">
                   <thead class="bg-slate-50 font-extrabold text-slate-600">
                     <tr>
-                      <th class="p-2.5 border border-slate-200">Emp. ID</th>
-                      <th class="p-2.5 border border-slate-200 text-left">Name</th>
-                      ${dayLabels.map(dl => `<th class="p-2.5 border border-slate-200">${dl}</th>`).join('')}
+                      <th class="px-1.5 py-2 border border-slate-200">ID</th>
+                      <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
+                      ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
                     </tr>
                   </thead>
                   <tbody>
                     ${samadRows.map(r => `
                       <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
-                        <td class="p-2.5 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
-                        <td class="p-2.5 border border-slate-200 font-bold text-slate-900">${r.name}</td>
+                        <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
+                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name}</td>
                         ${days.map(d => renderShiftCell(r, d)).join('')}
                       </tr>
                     `).join('')}
@@ -1198,21 +1186,21 @@
 
             <!-- Team Nazim Roster -->
             <div>
-              <div class="card-dynamic overflow-hidden overflow-x-auto">
-                <div class="bg-orange-500 text-white px-4 py-3 font-black text-sm text-center">Team: Facebook (Nazim)</div>
-                <table class="w-full text-xs border-collapse whitespace-nowrap">
+              <div class="card-dynamic overflow-hidden">
+                <div class="bg-orange-500 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Team: Facebook (Nazim)</div>
+                <table class="w-full text-[11px] border-collapse">
                   <thead class="bg-slate-50 font-extrabold text-slate-600">
                     <tr>
-                      <th class="p-2.5 border border-slate-200">Emp. ID</th>
-                      <th class="p-2.5 border border-slate-200 text-left">Name</th>
-                      ${dayLabels.map(dl => `<th class="p-2.5 border border-slate-200">${dl}</th>`).join('')}
+                      <th class="px-1.5 py-2 border border-slate-200">ID</th>
+                      <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
+                      ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
                     </tr>
                   </thead>
                   <tbody>
                     ${nazimRows.map(r => `
                       <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
-                        <td class="p-2.5 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
-                        <td class="p-2.5 border border-slate-200 font-bold text-slate-900">${r.name}</td>
+                        <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
+                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name}</td>
                         ${days.map(d => renderShiftCell(r, d)).join('')}
                       </tr>
                     `).join('')}
@@ -1224,33 +1212,33 @@
           </div>
 
           <!-- Combined Facebook Team Roster Summary -->
-          <div class="card-dynamic overflow-hidden overflow-x-auto max-w-4xl mx-auto">
-            <div class="bg-slate-900 text-white px-4 py-3 font-black text-sm text-center uppercase tracking-wider">Facebook Team Roster Summary (Combined)</div>
+          <div class="card-dynamic overflow-hidden max-w-4xl mx-auto">
+            <div class="bg-slate-900 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Facebook Team Roster Summary (Combined)</div>
             <table class="w-full text-xs text-center border-collapse">
               <thead class="bg-slate-100 font-extrabold text-slate-700">
                 <tr>
-                  <th class="p-2.5 border border-slate-200">Duty Time</th>
-                  <th class="p-2.5 border border-slate-200">Duty Shift</th>
-                  ${dayLabels.map(dl => `<th class="p-2.5 border border-slate-200">${dl}</th>`).join('')}
+                  <th class="p-2 border border-slate-200">Duty Time</th>
+                  <th class="p-2 border border-slate-200">Duty Shift</th>
+                  ${dayLabels.map(dl => `<th class="p-2 border border-slate-200">${dl}</th>`).join('')}
                 </tr>
               </thead>
               <tbody class="font-bold text-slate-700">
-                <tr class="bg-orange-50/40"><td class="p-2.5 border border-slate-200">7:00 AM</td><td class="p-2.5 border border-slate-200">Morning</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.morning[d]}</td>`).join('')}</tr>
-                <tr class="bg-orange-50/40"><td class="p-2.5 border border-slate-200">10:00 AM</td><td class="p-2.5 border border-slate-200">General Time</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.general[d]}</td>`).join('')}</tr>
-                <tr class="bg-orange-50/40"><td class="p-2.5 border border-slate-200">3:00 PM</td><td class="p-2.5 border border-slate-200">Evening</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.evening[d]}</td>`).join('')}</tr>
-                <tr><td class="p-2.5 border border-slate-200">11:00 PM</td><td class="p-2.5 border border-slate-200">Night</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.night[d]}</td>`).join('')}</tr>
-                <tr><td class="p-2.5 border border-slate-200">Day Off</td><td class="p-2.5 border border-slate-200">Day Off</td>${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.doCount[d]}</td>`).join('')}</tr>
+                <tr class="bg-orange-50/40"><td class="p-2 border border-slate-200">7:00 AM</td><td class="p-2 border border-slate-200">Morning</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.morning[d]}</td>`).join('')}</tr>
+                <tr class="bg-orange-50/40"><td class="p-2 border border-slate-200">10:00 AM</td><td class="p-2 border border-slate-200">General Time</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.general[d]}</td>`).join('')}</tr>
+                <tr class="bg-orange-50/40"><td class="p-2 border border-slate-200">3:00 PM</td><td class="p-2 border border-slate-200">Evening</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.evening[d]}</td>`).join('')}</tr>
+                <tr><td class="p-2 border border-slate-200">11:00 PM</td><td class="p-2 border border-slate-200">Night</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.night[d]}</td>`).join('')}</tr>
+                <tr><td class="p-2 border border-slate-200">Day Off</td><td class="p-2 border border-slate-200">Day Off</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.doCount[d]}</td>`).join('')}</tr>
                 <tr class="bg-slate-100 font-black text-slate-900">
-                  <td colspan="2" class="p-2.5 border border-slate-200">In Total (Agents)</td>
-                  ${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.morning[d] + combinedNoTL.general[d] + combinedNoTL.evening[d] + combinedNoTL.night[d] + combinedNoTL.doCount[d]}</td>`).join('')}
+                  <td colspan="2" class="p-2 border border-slate-200">In Total (Agents)</td>
+                  ${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.morning[d] + combinedNoTL.general[d] + combinedNoTL.evening[d] + combinedNoTL.night[d] + combinedNoTL.doCount[d]}</td>`).join('')}
                 </tr>
                 <tr class="bg-emerald-50 font-black text-emerald-800">
-                  <td colspan="2" class="p-2.5 border border-slate-200">In Total (Daily Active Agents)</td>
-                  ${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedNoTL.morning[d] + combinedNoTL.general[d] + combinedNoTL.evening[d] + combinedNoTL.night[d]}</td>`).join('')}
+                  <td colspan="2" class="p-2 border border-slate-200">In Total (Daily Active Agents)</td>
+                  ${days.map(d => `<td class="p-2 border border-slate-200">${combinedNoTL.morning[d] + combinedNoTL.general[d] + combinedNoTL.evening[d] + combinedNoTL.night[d]}</td>`).join('')}
                 </tr>
                 <tr class="bg-blue-50 font-black text-blue-800">
-                  <td colspan="2" class="p-2.5 border border-slate-200">In Total Active (Including TL)</td>
-                  ${days.map(d => `<td class="p-2.5 border border-slate-200">${combinedAll.morning[d] + combinedAll.general[d] + combinedAll.evening[d] + combinedAll.night[d]}</td>`).join('')}
+                  <td colspan="2" class="p-2 border border-slate-200">In Total Active (Including TL)</td>
+                  ${days.map(d => `<td class="p-2 border border-slate-200">${combinedAll.morning[d] + combinedAll.general[d] + combinedAll.evening[d] + combinedAll.night[d]}</td>`).join('')}
                 </tr>
               </tbody>
             </table>
@@ -1607,7 +1595,6 @@
       `;
     }
 
-    // ADMIN MONTHLY SETUP, TARGETS, PRODUCT INCENTIVE CONFIG & AGENT IDs
     function renderManageAgents() {
       const allUsers = getUsersForMonth(selectedMonthKey);
       const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
@@ -1668,7 +1655,6 @@
       `;
     }
 
-    // PRODUCT INCENTIVE MONTHLY CONFIG MODAL
     function renderProductConfigModal() {
       const activeProds = getActiveProductsForMonth(selectedMonthKey);
       return `
@@ -2108,7 +2094,6 @@
       if (idx !== -1) users[idx] = newUser; else users.push(newUser);
       setStored('users', users);
 
-      // Also archive Grade & BaseTarget for the selected month in monthly_configs
       let configs = getStored('monthly_configs', {});
       if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
       if (!configs[selectedMonthKey].users) configs[selectedMonthKey].users = {};
@@ -2202,7 +2187,6 @@
       const amount = Number(document.getElementById('subAmount').value) || 0;
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
 
-      // Automatically switch view to the submitted report's month if needed
       const submittedMonthKey = dateStr.substring(3);
       if (submittedMonthKey && submittedMonthKey.length === 7) {
         selectedMonthKey = submittedMonthKey;
