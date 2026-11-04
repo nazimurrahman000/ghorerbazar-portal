@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,10 +7,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&display=swap');
-    body { font-family: 'Plus Jakarta Sans', 'Hind Siliguri', sans-serif; background-color: #f1f5f9; color: #0f172a; }
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; color: #0f172a; }
     
-    /* Clean Light Executive Sidebar */
     .sidebar-light { background: #ffffff; border-right: 1px solid #e2e8f0; color: #1e293b; }
     .card-dynamic { background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05); transition: all 0.25s ease; }
     .card-dynamic:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -5px rgba(15, 23, 42, 0.08); }
@@ -21,14 +20,12 @@
       box-shadow: 0 8px 20px -4px rgba(24, 119, 242, 0.4); 
     }
     
-    /* Original Multi-Color Vibrant Executive KPI Cards */
     .kpi-card-1 { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.35); }
     .kpi-card-2 { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(5, 150, 105, 0.35); }
     .kpi-card-3 { background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(124, 58, 237, 0.35); }
     .kpi-card-4 { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.35); }
     .kpi-card-5 { background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); color: #ffffff; box-shadow: 0 10px 20px -5px rgba(234, 88, 12, 0.35); }
 
-    /* Clean White/Light Executive Banner Hero */
     .banner-hero-light { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; color: #0f172a; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.03); }
     .table-header-light { background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #334155; }
     .sprint-banner { background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%); border: 1px solid #bfdbfe; }
@@ -86,21 +83,33 @@
       gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56, style: 'prod-emerald', badge: 'bg-emerald-600 text-white', bar: 'bg-emerald-600', icon: 'fa-cheese', bonus90: 1200, bonus100: 2000 }
     };
 
+    const BREAK_REASONS = [
+      "Prayer Break",
+      "Lunch / Meal Break",
+      "Tea / Coffee Break",
+      "Washroom Break",
+      "Official / Team Meeting",
+      "Personal / Emergency Break"
+    ];
+
     if (!localStorage.getItem('gb_users')) {
       localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS));
     }
 
     let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
     let activeTab = 'dashboard';
-    // Default admin filter scope is ALWAYS the admin's own team (Team Nazim for Nazim, Team Samad for Samad)
     let adminFilterScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
     let pollInterval = null;
+    let dutyTimerInterval = null;
 
     function getStored(key, def) { const r = localStorage.getItem('gb_' + key); return r ? JSON.parse(r) : def; }
     function setStored(key, val) { localStorage.setItem('gb_' + key, JSON.stringify(val)); }
 
     function getTodayFormatted() {
       const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+    function getNowTimeStr() {
+      return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
     function dateToInputVal(dateStr) {
       if (!dateStr) return new Date().toISOString().split('T')[0];
@@ -122,6 +131,129 @@
         if (mIdx >= 0 && mIdx < 12) return `${p[0]} ${months[mIdx]} ${p[2]}`;
       }
       return s;
+    }
+    function formatHMS(sec) {
+      sec = Math.max(0, Math.floor(Number(sec) || 0));
+      const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+      const s = String(sec % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    // AGENT DUTY & BREAK TRACKING ENGINE
+    function ensureAgentAttendanceSession(user) {
+      if (!user || user.role !== 'agent') return null;
+      const today = getTodayFormatted();
+      let attList = getStored('attendance_records', []);
+      let rec = attList.find(a => String(a.userId) === String(user.id) && a.date === today);
+
+      if (!rec) {
+        rec = {
+          date: today,
+          userId: String(user.id),
+          userName: user.name,
+          team: user.team,
+          loginTime: getNowTimeStr(),
+          logoutTime: '--:--',
+          status: 'Working',
+          breakReason: '-',
+          breakLogs: '-',
+          activeSeconds: 0,
+          breakSeconds: 0,
+          lastTick: Date.now()
+        };
+        attList.unshift(rec);
+        setStored('attendance_records', attList);
+        postToSheet('ATTENDANCE_SYNC', rec);
+      } else if (rec.status === 'Completed') {
+        // Re-logged in on the same day -> resume working
+        rec.status = 'Working';
+        rec.logoutTime = '--:--';
+        rec.lastTick = Date.now();
+        setStored('attendance_records', attList);
+        postToSheet('ATTENDANCE_SYNC', rec);
+      } else {
+        rec.lastTick = Date.now();
+        setStored('attendance_records', attList);
+      }
+      return rec;
+    }
+
+    function startLiveDutyClock() {
+      if (dutyTimerInterval) clearInterval(dutyTimerInterval);
+      dutyTimerInterval = setInterval(() => {
+        if (!currentUser || currentUser.role !== 'agent') return;
+        const today = getTodayFormatted();
+        let attList = getStored('attendance_records', []);
+        let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+        if (!rec || rec.status === 'Completed') return;
+
+        const now = Date.now();
+        const elapsed = Math.max(1, Math.round((now - (rec.lastTick || now)) / 1000));
+        rec.lastTick = now;
+
+        if (rec.status === 'On Break') {
+          rec.breakSeconds = (Number(rec.breakSeconds) || 0) + elapsed;
+        } else if (rec.status === 'Working') {
+          rec.activeSeconds = (Number(rec.activeSeconds) || 0) + elapsed;
+        }
+        setStored('attendance_records', attList);
+
+        const wClock = document.getElementById('live-work-timer');
+        const bClock = document.getElementById('live-break-timer');
+        if (wClock) wClock.textContent = formatHMS(rec.activeSeconds);
+        if (bClock) bClock.textContent = formatHMS(rec.breakSeconds);
+
+        // Auto sync attendance to Google Sheet every 25 seconds
+        if ((rec.activeSeconds + rec.breakSeconds) % 25 === 0) {
+          postToSheet('ATTENDANCE_SYNC', rec);
+        }
+      }, 1000);
+    }
+
+    function openBreakModal() {
+      openModal('breakModal');
+    }
+
+    async function handleStartBreak(e) {
+      e.preventDefault();
+      if (!currentUser) return;
+      const reason = document.getElementById('breakReasonSelect').value;
+      const note = document.getElementById('breakCustomNote').value.trim();
+      const fullReason = note ? `${reason} (${note})` : reason;
+
+      const today = getTodayFormatted();
+      let attList = getStored('attendance_records', []);
+      let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+      if (!rec) rec = ensureAgentAttendanceSession(currentUser);
+
+      rec.status = 'On Break';
+      rec.breakReason = fullReason;
+      rec.lastTick = Date.now();
+      const logEntry = `${fullReason} at ${getNowTimeStr()}`;
+      rec.breakLogs = (!rec.breakLogs || rec.breakLogs === '-') ? logEntry : `${rec.breakLogs} | ${logEntry}`;
+
+      setStored('attendance_records', attList);
+      await postToSheet('ATTENDANCE_SYNC', rec);
+      closeModal('breakModal');
+      renderAppLayout();
+    }
+
+    async function handleResumeWork() {
+      if (!currentUser) return;
+      const today = getTodayFormatted();
+      let attList = getStored('attendance_records', []);
+      let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+      if (!rec) return;
+
+      rec.status = 'Working';
+      rec.breakReason = '-';
+      rec.lastTick = Date.now();
+      rec.breakLogs = `${rec.breakLogs} (Resumed ${getNowTimeStr()})`;
+
+      setStored('attendance_records', attList);
+      await postToSheet('ATTENDANCE_SYNC', rec);
+      renderAppLayout();
     }
 
     function getTargetData(user, scopeOverride) {
@@ -238,6 +370,24 @@
           changed = true;
         }
       }
+      if (Array.isArray(res.attendanceRecords)) {
+        const localAtt = getStored('attendance_records', []);
+        const today = getTodayFormatted();
+        // Preserve active running seconds for the logged-in agent so cloud poll doesn't jump backwards
+        const mergedAtt = res.attendanceRecords.map(cloudRec => {
+          if (currentUser && currentUser.role === 'agent' && String(cloudRec.userId) === String(currentUser.id) && cloudRec.date === today) {
+            const myLocal = localAtt.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+            if (myLocal && myLocal.status !== 'Completed' && (myLocal.activeSeconds > cloudRec.activeSeconds || myLocal.breakSeconds > cloudRec.breakSeconds)) {
+              return myLocal;
+            }
+          }
+          return cloudRec;
+        });
+        if (JSON.stringify(mergedAtt) !== JSON.stringify(localAtt)) {
+          setStored('attendance_records', mergedAtt);
+          changed = true;
+        }
+      }
       if (Array.isArray(res.customUsers) && res.customUsers.length > 0) {
         const currentUsers = getStored('users', DEFAULT_USERS);
         const mergedMap = new Map();
@@ -258,6 +408,10 @@
         if (currentUser.role === 'admin' && (!adminFilterScope || adminFilterScope === 'ALL')) {
           adminFilterScope = currentUser.team;
         }
+        if (currentUser.role === 'agent') {
+          ensureAgentAttendanceSession(currentUser);
+          startLiveDutyClock();
+        }
         renderAppLayout();
         fetchFromSheet();
         if (pollInterval) clearInterval(pollInterval);
@@ -272,16 +426,33 @@
       const id = document.getElementById('loginId').value.trim();
       const pass = document.getElementById('loginPass').value.trim();
       const user = getStored('users', DEFAULT_USERS).find(u => String(u.id) === id && u.pass === pass);
-      if (!user) { alert('ভুল Employee ID অথবা Password!'); return; }
+      if (!user) { alert('Invalid Employee ID or Password!'); return; }
       currentUser = user;
       setStored('session_user', user);
-      // Set default view to Admin's own team!
       adminFilterScope = user.role === 'admin' ? user.team : 'ALL';
+      if (user.role === 'agent') {
+        ensureAgentAttendanceSession(user);
+        startLiveDutyClock();
+      }
       init();
     }
 
-    function handleLogout() {
-      clearInterval(pollInterval);
+    async function handleLogout() {
+      if (currentUser && currentUser.role === 'agent') {
+        if (!confirm('Are you sure you want to End Duty & Logout for today?')) return;
+        const today = getTodayFormatted();
+        let attList = getStored('attendance_records', []);
+        let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+        if (rec) {
+          rec.status = 'Completed';
+          rec.breakReason = '-';
+          rec.logoutTime = getNowTimeStr();
+          setStored('attendance_records', attList);
+          await postToSheet('ATTENDANCE_SYNC', rec);
+        }
+      }
+      if (pollInterval) clearInterval(pollInterval);
+      if (dutyTimerInterval) clearInterval(dutyTimerInterval);
       currentUser = null;
       localStorage.removeItem('gb_session_user');
       document.getElementById('app').innerHTML = renderLogin();
@@ -310,7 +481,7 @@
                 <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Password</label>
                 <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
               </div>
-              <button type="submit" class="w-full py-3.5 tab-active text-white font-extrabold rounded-xl shadow-lg transition-all">Sign In to Workspace</button>
+              <button type="submit" class="w-full py-3.5 tab-active text-white font-extrabold rounded-xl shadow-lg transition-all">Sign In & Start Duty</button>
             </form>
           </div>
         </div>
@@ -337,6 +508,9 @@
                 <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard & Targets
                 </button>
+                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
+                </button>
                 <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Team vs Team & Ranking
                 </button>
@@ -345,7 +519,7 @@
                 </button>
                 ${u.role === 'admin' ? `
                 <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <i class="fa-solid fa-user-plus text-sm text-emerald-600"></i> Manage Agents (Create ID)
+                  <i class="fa-solid fa-user-plus text-sm text-blue-600"></i> Manage Agents (Create ID)
                 </button>
                 ` : ''}
               </nav>
@@ -357,7 +531,7 @@
                 <p class="text-[10px] text-slate-400 mt-0.5">Central Google Sheet Active</p>
               </div>
               <button onclick="handleLogout()" class="w-full py-3 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow transition-colors">
-                <i class="fa-solid fa-power-off mr-1"></i> Logout
+                <i class="fa-solid fa-power-off mr-1"></i> ${u.role === 'agent' ? 'End Duty & Logout' : 'Logout'}
               </button>
             </div>
           </aside>
@@ -388,6 +562,8 @@
           </div>
         </div>
         ${renderSubmitModal()}
+        ${renderBreakModal()}
+        ${renderEditAttendanceModal()}
         ${renderUserModal()}
       `;
       document.getElementById('app').innerHTML = html;
@@ -395,9 +571,63 @@
 
     function renderTabContent() {
       if (activeTab === 'dashboard') return renderDashboard();
+      if (activeTab === 'attendance') return renderAttendanceView();
       if (activeTab === 'ranking') return renderRankingAndComparison();
       if (activeTab === 'reports') return renderReports();
       if (activeTab === 'agents') return renderManageAgents();
+    }
+
+    // AGENT LIVE DUTY & BREAK BAR COMPONENT
+    function renderAgentLiveDutyWidget() {
+      const u = currentUser;
+      if (!u || u.role !== 'agent') return '';
+      const today = getTodayFormatted();
+      const attList = getStored('attendance_records', []);
+      const rec = attList.find(a => String(a.userId) === String(u.id) && a.date === today) || ensureAgentAttendanceSession(u);
+      const isBreak = rec.status === 'On Break';
+
+      return `
+        <div class="card-dynamic p-5 border-l-4 ${isBreak ? 'border-l-amber-500 bg-amber-50/40' : 'border-l-emerald-500'} flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl ${isBreak ? 'bg-amber-500' : 'bg-emerald-600'} text-white flex items-center justify-center text-xl shadow-md shrink-0">
+              <i class="fa-solid ${isBreak ? 'fa-mug-hot' : 'fa-user-clock'}"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${isBreak ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+                  ${isBreak ? `On Break (${rec.breakReason})` : 'Duty Active • Working'}
+                </span>
+                <span class="text-xs font-bold text-slate-400">Login: ${rec.loginTime}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-6 mt-1.5">
+                <div>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400 block">Working Hours</span>
+                  <span id="live-work-timer" class="text-2xl font-black font-mono text-emerald-600">${formatHMS(rec.activeSeconds)}</span>
+                </div>
+                <div class="pl-6 border-l border-slate-200">
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400 block">Break Time</span>
+                  <span id="live-break-timer" class="text-2xl font-black font-mono text-amber-600">${formatHMS(rec.breakSeconds)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            ${isBreak ? `
+              <button onclick="handleResumeWork()" class="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-extrabold shadow-lg flex items-center gap-2 animate-bounce">
+                <i class="fa-solid fa-play"></i> Back to Work (Resume Duty)
+              </button>
+            ` : `
+              <button onclick="openBreakModal()" class="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-extrabold shadow-md flex items-center gap-2">
+                <i class="fa-solid fa-mug-saucer"></i> Take a Break
+              </button>
+            `}
+            <button onclick="handleLogout()" class="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl text-xs font-extrabold flex items-center gap-1.5">
+              <i class="fa-solid fa-power-off"></i> End Duty & Logout
+            </button>
+          </div>
+        </div>
+      `;
     }
 
     function renderDashboard() {
@@ -479,6 +709,9 @@
             </div>
           </div>
 
+          <!-- Agent Live Duty & Break Control Bar -->
+          ${renderAgentLiveDutyWidget()}
+
           <div class="incentive-banner p-5 rounded-3xl shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div class="flex items-center gap-3.5">
               <div class="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-xl shadow-md shrink-0">
@@ -491,12 +724,12 @@
                   ${incentiveSummary.earnedRewards.length > 0 ? `+ ${incentiveSummary.earnedRewards.length} Product Rewards` : ''}
                 </h3>
                 <p class="text-[11px] font-bold text-slate-600 mt-0.5">
-                  ${incentiveSummary.earnedRewards.length > 0 ? `Unlocked: ${incentiveSummary.earnedRewards.join(', ')}` : 'প্রোডাক্ট টার্গেটের ৯০% বা ১০০% স্পর্শ করলেই এখানে বোনাস যোগ হবে!'}
+                  ${incentiveSummary.earnedRewards.length > 0 ? `Unlocked: ${incentiveSummary.earnedRewards.join(', ')}` : 'Reach 90% or 100% of any product target to unlock cash bonuses and rewards automatically!'}
                 </p>
               </div>
             </div>
             <span class="px-3.5 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-black shadow">
-              🔥 Incentive Unlocked
+              🔥 Incentive Tracker
             </span>
           </div>
 
@@ -651,11 +884,100 @@
                     <div class="progress-track h-2.5 bg-white border border-slate-200/60 mb-3">
                       <div class="${p.bar} h-2.5 rounded-full" style="width: ${pct}%"></div>
                     </div>
-                    <p class="text-[11px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `${p.bonus90}৳` : ''} ${p.bonus100 ? `${p.bonus100}৳` : ''} ${p.item100 || ''}</strong></p>
+                    <p class="text-[11px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `90%: ৳${p.bonus90} | ` : ''}${p.bonus100 ? `100%: ৳${p.bonus100}` : ''}${p.item100 ? `100%: ${p.item100}` : ''}</strong></p>
                   </div>
                 `;
               }).join('')}
             </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ATTENDANCE & DUTY LOGS VIEW
+    function renderAttendanceView() {
+      const u = currentUser;
+      const allAtt = getStored('attendance_records', []);
+      let records = [];
+      if (u.role === 'admin') {
+        records = adminFilterScope === 'ALL' ? allAtt : allAtt.filter(a => a.team === adminFilterScope);
+      } else {
+        records = allAtt.filter(a => String(a.userId) === String(u.id));
+      }
+
+      return `
+        <div class="space-y-6">
+          ${renderAgentLiveDutyWidget()}
+
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h2 class="text-xl font-black text-slate-900"><i class="fa-regular fa-clock text-emerald-600 mr-2"></i>Daily Attendance, Working Hours & Break Logs</h2>
+              <p class="text-xs font-bold text-slate-500">Live duty tracking from login to logout with break reasons and total duration</p>
+            </div>
+            <div class="flex items-center gap-2">
+              ${u.role === 'admin' ? `
+              <select onchange="setAdminScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
+                <option value="Team Nazim" ${adminFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
+                <option value="Team Samad" ${adminFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+                <option value="ALL" ${adminFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+              </select>
+              <button onclick="openEditAttendanceModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
+                <i class="fa-solid fa-plus mr-1"></i> Add / Edit Attendance
+              </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-4">Date</th>
+                  <th class="p-4">Agent Name</th>
+                  <th class="p-4">Team</th>
+                  <th class="p-4">Status</th>
+                  <th class="p-4">Login Time</th>
+                  <th class="p-4">Logout Time</th>
+                  <th class="p-4">Working Hours</th>
+                  <th class="p-4">Break Time</th>
+                  <th class="p-4">Current Break Reason</th>
+                  <th class="p-4">Break History</th>
+                  ${u.role === 'admin' ? `<th class="p-4 text-right">Admin Actions</th>` : ''}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${records.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No attendance records logged yet.</td></tr>' : ''}
+                ${records.map(r => {
+                  let statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800"><span class="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block mr-1 animate-ping"></span>Working</span>`;
+                  if (r.status === 'On Break') {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800"><i class="fa-solid fa-mug-hot mr-1"></i>On Break</span>`;
+                  } else if (r.status === 'Completed') {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-200 text-slate-700"><i class="fa-solid fa-check-double mr-1"></i>Completed</span>`;
+                  }
+
+                  return `
+                    <tr class="hover:bg-slate-50/90">
+                      <td class="p-4 font-bold text-slate-700">${cleanDisplayDate(r.date)}</td>
+                      <td class="p-4 font-extrabold text-slate-900">${r.userName} <span class="text-slate-400 text-[10px]">(${r.userId})</span></td>
+                      <td class="p-4"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${r.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${r.team}</span></td>
+                      <td class="p-4">${statusBadge}</td>
+                      <td class="p-4 font-bold text-slate-700">${r.loginTime || '--:--'}</td>
+                      <td class="p-4 font-bold text-slate-700">${r.logoutTime || '--:--'}</td>
+                      <td class="p-4 font-mono font-black text-emerald-600 text-sm">${formatHMS(r.activeSeconds)}</td>
+                      <td class="p-4 font-mono font-black text-amber-600 text-sm">${formatHMS(r.breakSeconds)}</td>
+                      <td class="p-4 font-bold text-amber-700">${r.breakReason || '-'}</td>
+                      <td class="p-4 text-[11px] text-slate-500 max-w-xs truncate" title="${r.breakLogs || '-'}">${r.breakLogs || '-'}</td>
+                      ${u.role === 'admin' ? `
+                      <td class="p-4 text-right space-x-1">
+                        <button onclick="openEditAttendanceModal('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>
+                        <button onclick="handleDeleteAttendance('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>
+                      </td>
+                      ` : ''}
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
           </div>
         </div>
       `;
@@ -700,7 +1022,7 @@
             <div class="flex items-center justify-between mb-4">
               <div>
                 <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>Team vs Team Live Comparison</h2>
-                <p class="text-xs font-bold text-slate-500">Team Nazim বনাম Team Samad — মাসের লাইভ পারফরম্যান্স তুলনা</p>
+                <p class="text-xs font-bold text-slate-500">Team Nazim vs Team Samad — Real-time monthly performance comparison</p>
               </div>
             </div>
 
@@ -757,7 +1079,7 @@
             <div class="flex justify-between items-center mb-4">
               <div>
                 <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (All Agents)</h2>
-                <p class="text-xs font-bold text-slate-500">সেলস অ্যামাউন্ট ও অর্ডারের ভিত্তিতে উভয় টিমের সম্মিলিত র‍্যাংকিং</p>
+                <p class="text-xs font-bold text-slate-500">Combined leaderboard across both teams sorted by sales revenue and order volume</p>
               </div>
               ${currentUser.role === 'admin' ? `<button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow">+ Add Agent Data</button>` : ''}
             </div>
@@ -832,7 +1154,7 @@
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h2 class="text-xl font-black text-slate-900">Daily Sales & Conversion Logs</h2>
-              <p class="text-xs font-bold text-slate-500">প্রতিদিনের লিড, অর্ডার, কনভার্সন রেশিও, ডেইলি টার্গেট অ্যাচিভমেন্ট এবং এডিট/ডিলিট অপশন</p>
+              <p class="text-xs font-bold text-slate-500">Track daily leads, orders, conversion ratios, daily target achievements, and edit/delete records</p>
             </div>
             <div class="flex items-center gap-2">
               ${u.role === 'admin' ? `
@@ -866,7 +1188,7 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
-                ${sales.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">এখনো কোনো রিপোর্ট সাবমিট করা হয়নি।</td></tr>' : ''}
+                ${sales.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted yet.</td></tr>' : ''}
                 ${sales.map(s => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
                   const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
@@ -913,7 +1235,7 @@
           <div class="flex justify-between items-center">
             <div>
               <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-users-gear text-blue-600 mr-2"></i>Manage Agents & Create New ID</h2>
-              <p class="text-xs font-bold text-slate-500">এখান থেকে নতুন এজেন্ট বা অ্যাডমিন আইডি তৈরি, টার্গেট এডিট অথবা ডিলিট করতে পারবেন</p>
+              <p class="text-xs font-bold text-slate-500">Create new agent or admin accounts, update monthly targets, or remove existing users</p>
             </div>
             <button onclick="openUserModal()" class="px-5 py-3 tab-active text-white rounded-2xl text-xs font-extrabold shadow-lg flex items-center gap-2">
               <i class="fa-solid fa-user-plus"></i> Create New Agent / ID
@@ -959,6 +1281,180 @@
       `;
     }
 
+    // BREAK REASON SELECTION MODAL
+    function renderBreakModal() {
+      return `
+        <div id="breakModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center"><i class="fa-solid fa-mug-hot"></i></div>
+                <div>
+                  <h3 class="text-base font-black text-slate-900">Take a Break</h3>
+                  <p class="text-xs font-bold text-slate-400">Select your break reason to pause working hours</p>
+                </div>
+              </div>
+              <button type="button" onclick="closeModal('breakModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleStartBreak(event)" class="space-y-4">
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1.5">Select Break Reason</label>
+                <select id="breakReasonSelect" required class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
+                  ${BREAK_REASONS.map(r => `<option value="${r}">${r}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1.5">Short Note (Optional)</label>
+                <input type="text" id="breakCustomNote" placeholder="e.g. Back in 15 mins" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+              </div>
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('breakModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white bg-amber-500 hover:bg-amber-600 rounded-xl shadow-lg">
+                  <i class="fa-solid fa-pause mr-1"></i> Start Break Now
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    // ADMIN EDIT / ADD ATTENDANCE MODAL
+    function renderEditAttendanceModal() {
+      const allAgents = getStored('users', []).filter(u => u.role === 'agent');
+      return `
+        <div id="editAttModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <h3 class="text-base font-black text-slate-900">Admin: Add / Edit Attendance Record</h3>
+              <button type="button" onclick="closeModal('editAttModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleAdminSaveAttendance(event)" class="space-y-3.5">
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent</label>
+                <select id="attAgentId" onchange="onAttModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs font-extrabold">
+                  ${allAgents.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${a.team})</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Date</label>
+                <input type="date" id="attDate" required onchange="onAttModalChange()" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-xs font-extrabold">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Login Time</label>
+                  <input type="text" id="attLogin" placeholder="09:00:00 AM" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Logout Time</label>
+                  <input type="text" id="attLogout" placeholder="06:00:00 PM" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Working Minutes</label>
+                  <input type="number" id="attWorkMins" min="0" placeholder="480" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Break Minutes</label>
+                  <input type="number" id="attBreakMins" min="0" placeholder="45" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Duty Status</label>
+                  <select id="attStatus" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="Working">Working</option>
+                    <option value="On Break">On Break</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Break Reason</label>
+                  <input type="text" id="attReason" placeholder="-" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+              </div>
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('editAttModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save Attendance</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function openEditAttendanceModal(agentId, dateStr) {
+      document.getElementById('attDate').value = dateToInputVal(dateStr || getTodayFormatted());
+      if (agentId) document.getElementById('attAgentId').value = agentId;
+      onAttModalChange();
+      openModal('editAttModal');
+    }
+
+    function onAttModalChange() {
+      const agId = document.getElementById('attAgentId').value;
+      const dateStr = inputValToDateStr(document.getElementById('attDate').value);
+      const attList = getStored('attendance_records', []);
+      const ex = attList.find(a => String(a.userId) === String(agId) && a.date === dateStr);
+      if (ex) {
+        document.getElementById('attLogin').value = ex.loginTime || '09:00:00 AM';
+        document.getElementById('attLogout').value = ex.logoutTime || '--:--';
+        document.getElementById('attWorkMins').value = Math.round((Number(ex.activeSeconds) || 0) / 60);
+        document.getElementById('attBreakMins').value = Math.round((Number(ex.breakSeconds) || 0) / 60);
+        document.getElementById('attStatus').value = ex.status || 'Working';
+        document.getElementById('attReason').value = ex.breakReason || '-';
+      } else {
+        document.getElementById('attLogin').value = getNowTimeStr();
+        document.getElementById('attLogout').value = '--:--';
+        document.getElementById('attWorkMins').value = 0;
+        document.getElementById('attBreakMins').value = 0;
+        document.getElementById('attStatus').value = 'Working';
+        document.getElementById('attReason').value = '-';
+      }
+    }
+
+    async function handleAdminSaveAttendance(e) {
+      e.preventDefault();
+      const allUsers = getStored('users', DEFAULT_USERS);
+      const agId = document.getElementById('attAgentId').value;
+      const ag = allUsers.find(u => String(u.id) === String(agId));
+      const dateStr = inputValToDateStr(document.getElementById('attDate').value);
+
+      let attList = getStored('attendance_records', []);
+      const idx = attList.findIndex(a => String(a.userId) === String(agId) && a.date === dateStr);
+
+      const rec = {
+        date: dateStr,
+        userId: String(ag.id),
+        userName: ag.name,
+        team: ag.team,
+        loginTime: document.getElementById('attLogin').value.trim() || '--:--',
+        logoutTime: document.getElementById('attLogout').value.trim() || '--:--',
+        status: document.getElementById('attStatus').value,
+        breakReason: document.getElementById('attReason').value.trim() || '-',
+        breakLogs: idx !== -1 ? attList[idx].breakLogs : 'Edited by Admin',
+        activeSeconds: (Number(document.getElementById('attWorkMins').value) || 0) * 60,
+        breakSeconds: (Number(document.getElementById('attBreakMins').value) || 0) * 60,
+        lastTick: Date.now()
+      };
+
+      if (idx !== -1) attList[idx] = rec; else attList.unshift(rec);
+      setStored('attendance_records', attList);
+      await postToSheet('ATTENDANCE_SYNC', rec);
+      alert('Attendance record updated and synced!');
+      closeModal('editAttModal');
+      renderAppLayout();
+    }
+
+    async function handleDeleteAttendance(userId, dateStr) {
+      if (!confirm(`Are you sure you want to delete the attendance record for ${dateStr}?`)) return;
+      let attList = getStored('attendance_records', []);
+      attList = attList.filter(a => !(String(a.userId) === String(userId) && a.date === dateStr));
+      setStored('attendance_records', attList);
+      await postToSheet('DELETE_ATTENDANCE', { userId: String(userId), date: dateStr });
+      renderAppLayout();
+    }
+
     function renderSubmitModal() {
       const u = currentUser;
       const allAgents = getStored('users', []).filter(usr => usr.role === 'agent');
@@ -969,7 +1465,7 @@
             <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
               <div>
                 <h3 class="text-base font-black text-slate-900">Daily Sales & Product Entry</h3>
-                <p class="text-xs font-bold text-slate-400">লিড ও অর্ডার বসালে অটো কনভার্সন রেশিও ও ডেইলি অ্যাচিভমেন্ট বের হবে</p>
+                <p class="text-xs font-bold text-slate-400">Conversion ratio & daily target achievement calculate automatically</p>
               </div>
               <button type="button" onclick="closeModal('submitModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -1020,15 +1516,15 @@
               <div class="border-t border-slate-100 pt-3">
                 <h4 class="text-xs font-black text-slate-800 uppercase mb-1"><i class="fa-solid fa-scale-balanced mr-1 text-orange-500"></i> Incentive Products Sold (KG)</h4>
                 <div class="p-2 mb-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
-                  💡 গ্রামের হিসাব কেজিতে দিন: <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>400gm = 0.4</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
+                  💡 Enter gram weights in decimals: <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>400gm = 0.4</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Ajwa Dates (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" placeholder="0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Pink Salt (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" placeholder="0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Black Garlic (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" placeholder="0.25 বা 0.5" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Sundarban Honey (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" placeholder="0.25, 0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Black Seed Honey (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" placeholder="0.25, 0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Gawa Ghee (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" placeholder="0.2, 0.4, 0.5 বা 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Ajwa Dates (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Pink Salt (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Black Garlic (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" placeholder="e.g. 0.25 or 0.5" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Sundarban Honey (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Black Seed Honey (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Gawa Ghee (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" placeholder="e.g. 0.2, 0.4, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
                 </div>
               </div>
 
@@ -1102,7 +1598,7 @@
               <div>
                 <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Monthly Base Target (৳)</label>
                 <input type="number" id="usrTarget" required value="1232174" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
-                <p class="text-[10px] font-bold text-amber-600 mt-1">* এর সাথে অটোমেটিক ৫% রিটার্ন বাফার যুক্ত হয়ে Working Target সেট হবে।</p>
+                <p class="text-[10px] font-bold text-amber-600 mt-1">* An additional 5% return buffer will be added automatically to set the Working Target.</p>
               </div>
               <div class="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onclick="closeModal('userModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
@@ -1158,13 +1654,13 @@
       setStored('users', users);
 
       await postToSheet('SAVE_USER', newUser);
-      alert(`User ID (${newUser.id}) সফলভাবে তৈরি ও ক্লাউডে সেভ হয়েছে!`);
+      alert(`User ID (${newUser.id}) has been saved and synced to the cloud!`);
       closeModal('userModal');
       renderAppLayout();
     }
 
     async function handleDeleteUser(delId) {
-      if (!confirm(`আপনি কি নিশ্চিতভাবে ID: ${delId} ডিলিট করতে চান?`)) return;
+      if (!confirm(`Are you sure you want to delete User ID: ${delId}?`)) return;
       let users = getStored('users', DEFAULT_USERS);
       users = users.filter(u => String(u.id) !== String(delId));
       setStored('users', users);
@@ -1266,7 +1762,7 @@
 
       await postToSheet('DAILY_SALES_SUBMIT', entry);
       
-      alert(`সফলভাবে সেভ ও ক্লাউডে সিঙ্ক হয়েছে!`);
+      alert(`Report saved and synced to the cloud successfully!`);
       closeModal('submitModal');
       renderAppLayout();
       setTimeout(fetchFromSheet, 1500);
@@ -1277,7 +1773,7 @@
       const agentId = u.role === 'admin' ? document.getElementById('subAgentId').value : u.id;
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
 
-      if (!confirm(`আপনি কি নিশ্চিতভাবে ${dateStr} তারিখের এই রিপোর্টটি ডিলিট করতে চান?`)) return;
+      if (!confirm(`Are you sure you want to delete the report for ${dateStr}?`)) return;
       
       let sales = getStored('sales_records', []);
       sales = sales.filter(s => !(String(s.userId) === String(agentId) && s.date === dateStr));
@@ -1285,7 +1781,7 @@
 
       await postToSheet('DELETE_SALES_RECORD', { userId: String(agentId), date: dateStr });
       
-      alert('রিপোর্ট সফলভাবে ডিলিট হয়েছে!');
+      alert('Report deleted successfully!');
       closeModal('submitModal');
       renderAppLayout();
       setTimeout(fetchFromSheet, 1500);
