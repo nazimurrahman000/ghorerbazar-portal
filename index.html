@@ -127,7 +127,6 @@
 
     const SHIFT_OPTIONS = ["7:00 AM", "10:00 AM", "3:00 PM", "Night", "DO"];
 
-    // Strictly enforce Admin grade = "TL", Supervisor grade = "Supervisor", and strip "(TL)" from Admin names
     function normalizeUserRecord(u) {
       if (!u) return u;
       const copy = { ...u };
@@ -161,6 +160,10 @@
       }
     })();
 
+    function getTodayFormatted() {
+      const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+
     let currentUser = JSON.parse(localStorage.getItem('gb_session_user')) || null;
     if (currentUser) {
       currentUser = normalizeUserRecord(currentUser);
@@ -170,39 +173,47 @@
     let activeTab = 'dashboard';
     let selectedMonthKey = localStorage.getItem('gb_selected_month') || '11/2026';
     let dashboardScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
+    
+    // Daily Sales Reports & Attendance Filters
     let logsFilterScope = 'ALL';
+    let reportsDateFilter = getTodayFormatted(); // Default to current date (Today), or 'ALL' for full month
+
+    // Monthly Performance Tab Filters
+    let monthlyPerfTeamScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
+    let monthlyPerfAgentId = 'ALL';
 
     let pollInterval = null;
     let dutyTimerInterval = null;
     let pendingConfirmCallback = null;
 
-    // Permission & Role Helpers
-    function isSuperAdmin(u) { return u && String(u.id) === '10122'; } // Nazim has full super-admin control
+    // MODAL GUARD: Prevents background cloud polling from re-rendering the page while ANY popup modal is open
+    function isAnyModalOpen() {
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'confirmWarningModal'];
+      return modalIds.some(id => {
+        const el = document.getElementById(id);
+        return el && !el.classList.contains('hidden');
+      });
+    }
+
+    function isSuperAdmin(u) { return u && String(u.id) === '10122'; }
     function isFullAdmin(u) { return u && u.role === 'admin'; }
     function isSupervisor(u) { return u && u.role === 'supervisor'; }
     function canViewAll(u) { return u && (u.role === 'admin' || u.role === 'supervisor'); }
 
-    // Determines if current user can delete a target user ID
     function canDeleteTargetUser(actor, targetUser) {
       if (!actor || !targetUser || !isFullAdmin(actor)) return false;
-      // Nobody can delete their own currently logged-in ID or Nazim's primary Super Admin ID (10122)
       if (String(targetUser.id) === String(actor.id) || String(targetUser.id) === '10122') return false;
-      // Nazim (10122) can delete any other user (including Supervisor & Samad)
       if (isSuperAdmin(actor)) return true;
-      // Samad (or other Co-Admins) can ONLY delete 'agent' role accounts, NOT 'supervisor' or 'admin'
       return targetUser.role === 'agent';
     }
 
-    // Determines if current user can edit a target user ID
     function canEditTargetUser(actor, targetUser) {
       if (!actor || !targetUser || !isFullAdmin(actor)) return false;
       if (isSuperAdmin(actor)) return true;
-      // Samad can edit his own account or any agent account, but cannot edit Nazim or Supervisors
       if (String(targetUser.id) === String(actor.id)) return true;
       return targetUser.role === 'agent';
     }
 
-    // Custom Two-Step Warning Confirmation Modal Trigger
     function openConfirmWarningModal(title, message, badgeText, onConfirmAction) {
       pendingConfirmCallback = onConfirmAction;
       document.getElementById('warnModalTitle').textContent = title || 'Confirm Permanent Deletion';
@@ -223,9 +234,6 @@
     function getStored(key, def) { const r = localStorage.getItem('gb_' + key); return r ? JSON.parse(r) : def; }
     function setStored(key, val) { localStorage.setItem('gb_' + key, JSON.stringify(val)); }
 
-    function getTodayFormatted() {
-      const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-    }
     function getNowTimeStr() {
       return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
@@ -243,7 +251,7 @@
       return s;
     }
     function dateToInputVal(dateStr) {
-      if (!dateStr) return new Date().toISOString().split('T')[0];
+      if (!dateStr || dateStr === 'ALL') return new Date().toISOString().split('T')[0];
       const p = dateStr.split('/'); if (p.length === 3) return `${p[2]}-${p[1]}-${p[0]}`;
       return new Date().toISOString().split('T')[0];
     }
@@ -650,7 +658,10 @@
           changed = true;
         }
       }
-      if (changed && currentUser) renderAppLayout();
+      // CRITICAL FIX: Never re-render layout if user currently has any popup modal open!
+      if (changed && currentUser && !isAnyModalOpen()) {
+        renderAppLayout();
+      }
     }
 
     function init() {
@@ -658,10 +669,15 @@
         currentUser = normalizeUserRecord(currentUser);
         if (currentUser.role === 'admin') {
           dashboardScope = currentUser.team;
+          monthlyPerfTeamScope = currentUser.team;
         } else if (currentUser.role === 'supervisor') {
           dashboardScope = 'ALL';
+          monthlyPerfTeamScope = 'ALL';
         }
         logsFilterScope = 'ALL';
+        reportsDateFilter = getTodayFormatted();
+        monthlyPerfAgentId = 'ALL';
+
         if (currentUser.role === 'agent') {
           ensureAgentAttendanceSession(currentUser);
           startLiveDutyClock();
@@ -685,7 +701,11 @@
       currentUser = user;
       setStored('session_user', user);
       dashboardScope = user.role === 'admin' ? user.team : 'ALL';
+      monthlyPerfTeamScope = user.role === 'admin' ? user.team : 'ALL';
+      monthlyPerfAgentId = 'ALL';
       logsFilterScope = 'ALL';
+      reportsDateFilter = getTodayFormatted();
+
       if (user.role === 'agent') {
         ensureAgentAttendanceSession(user);
         startLiveDutyClock();
@@ -719,13 +739,45 @@
 
     function setTab(tab) {
       activeTab = tab;
-      if (tab === 'reports' || tab === 'attendance') {
+      if (tab === 'reports') {
         logsFilterScope = 'ALL';
+        if (!reportsDateFilter) reportsDateFilter = getTodayFormatted();
+      } else if (tab === 'attendance') {
+        logsFilterScope = 'ALL';
+      } else if (tab === 'monthly_perf') {
+        // Default to Admin's own team when entering Monthly Performance tab
+        if (currentUser && currentUser.role === 'admin') {
+          monthlyPerfTeamScope = currentUser.team;
+        } else {
+          monthlyPerfTeamScope = 'ALL';
+        }
+        monthlyPerfAgentId = 'ALL';
       }
       renderAppLayout();
     }
+
     function setDashboardScope(scope) { dashboardScope = scope; renderAppLayout(); }
     function setLogsScope(scope) { logsFilterScope = scope; renderAppLayout(); }
+    function setReportsDateFilter(dateStr) {
+      reportsDateFilter = dateStr;
+      if (dateStr && dateStr !== 'ALL' && dateStr.length === 10) {
+        const mKey = dateStr.substring(3);
+        if (mKey && mKey.length === 7) {
+          selectedMonthKey = mKey;
+          localStorage.setItem('gb_selected_month', selectedMonthKey);
+        }
+      }
+      renderAppLayout();
+    }
+    function setMonthlyPerfTeam(teamScope) {
+      monthlyPerfTeamScope = teamScope;
+      monthlyPerfAgentId = 'ALL';
+      renderAppLayout();
+    }
+    function setMonthlyPerfAgent(agId) {
+      monthlyPerfAgentId = agId;
+      renderAppLayout();
+    }
 
     function renderLogin() {
       return `
@@ -787,17 +839,20 @@
                 <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard & Targets
                 </button>
+                <button onclick="setTab('monthly_perf')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'monthly_perf' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-chart-column text-sm text-purple-600"></i> Monthly Performance
+                </button>
+                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-file-invoice text-sm text-blue-600"></i> Daily Sales Reports
+                </button>
+                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Team vs Team & Ranking
+                </button>
                 <button onclick="setTab('roster')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'roster' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-calendar-week text-sm text-indigo-600"></i> Duty Roster
                 </button>
                 <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
-                </button>
-                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Team vs Team & Ranking
-                </button>
-                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <i class="fa-solid fa-file-invoice text-sm"></i> Daily Sales Reports
                 </button>
                 ${canViewAll(u) ? `
                 <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
@@ -823,7 +878,7 @@
               <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
                 <span class="text-slate-300">/</span>
-                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab}</h2>
+                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab.replace('_', ' ')}</h2>
                 <span class="text-slate-300">•</span>
                 <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
                   <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
@@ -871,6 +926,7 @@
 
     function renderTabContent() {
       if (activeTab === 'dashboard') return renderDashboard();
+      if (activeTab === 'monthly_perf') return renderMonthlyPerformanceView();
       if (activeTab === 'roster') return renderDutyRosterView();
       if (activeTab === 'attendance') return renderAttendanceView();
       if (activeTab === 'ranking') return renderRankingAndComparison();
@@ -878,11 +934,10 @@
       if (activeTab === 'agents') return renderManageAgents();
     }
 
-    // CUSTOM 2-STEP WARNING CONFIRMATION MODAL (Prevents 1-Click Accidental Deletes)
     function renderConfirmWarningModal() {
       return `
         <div id="confirmWarningModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-red-200 animate-fadeIn">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-red-200">
             <div class="flex items-center gap-3.5 mb-4">
               <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-xl shrink-0 shadow-sm">
                 <i class="fa-solid fa-triangle-exclamation"></i>
@@ -972,8 +1027,8 @@
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
+              <button onclick="setTab('monthly_perf')" class="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-extrabold">Monthly Summary</button>
               <button onclick="setTab('roster')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-extrabold">Duty Roster</button>
-              <button onclick="setTab('agents')" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-xs font-extrabold">Monthly Setup</button>
             </div>
           </div>
           `}
@@ -1256,6 +1311,229 @@
               }).join('')}
             </div>
           </div>
+        </div>
+      `;
+    }
+
+    // NEW TAB: MONTHLY PERFORMANCE REPORT (Admin Default Own Team, Filter by Team or Agent, With Grand Total Sum)
+    function renderMonthlyPerformanceView() {
+      const u = currentUser;
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      const monthSales = getStored('sales_records', []).filter(s => s.date.endsWith(selectedMonthKey));
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      // Filter agents by Team & Agent Dropdowns
+      let teamFilteredAgents = allAgents;
+      if (canViewAll(u)) {
+        if (monthlyPerfTeamScope !== 'ALL') {
+          teamFilteredAgents = allAgents.filter(a => a.team === monthlyPerfTeamScope);
+        }
+      } else {
+        teamFilteredAgents = allAgents.filter(a => String(a.id) === String(u.id));
+      }
+
+      let displayedAgents = teamFilteredAgents;
+      if (canViewAll(u) && monthlyPerfAgentId !== 'ALL') {
+        displayedAgents = teamFilteredAgents.filter(a => String(a.id) === String(monthlyPerfAgentId));
+      }
+
+      // Compute Agent-wise Monthly Summary
+      let totBase = 0, totWork = 0, totLeads = 0, totOrders = 0, totRev = 0;
+      let totAjwa = 0, totSalt = 0, totGarlic = 0, totSunH = 0, totBsH = 0, totGhee = 0;
+
+      const agentRows = displayedAgents.map(ag => {
+        const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+        const baseTgt = Number(ag.baseTarget) || 1232174;
+        const workTgt = Math.round(baseTgt * 1.05);
+        const leads = agSales.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
+        const orders = agSales.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
+        const rev = agSales.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+        const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+        const rem = Math.max(0, workTgt - rev);
+        const achPct = workTgt > 0 ? Math.round((rev / workTgt) * 100) : 0;
+
+        const ajwa = agSales.reduce((acc, c) => acc + (Number(c.ajwa) || 0), 0);
+        const pinkSalt = agSales.reduce((acc, c) => acc + (Number(c.pinkSalt) || 0), 0);
+        const blackGarlic = agSales.reduce((acc, c) => acc + (Number(c.blackGarlic) || 0), 0);
+        const sunHoney = agSales.reduce((acc, c) => acc + (Number(c.sunHoney) || 0), 0);
+        const bsHoney = agSales.reduce((acc, c) => acc + (Number(c.bsHoney) || 0), 0);
+        const gawaGhee = agSales.reduce((acc, c) => acc + (Number(c.gawaGhee) || 0), 0);
+
+        totBase += baseTgt;
+        totWork += workTgt;
+        totLeads += leads;
+        totOrders += orders;
+        totRev += rev;
+        totAjwa += ajwa;
+        totSalt += pinkSalt;
+        totGarlic += blackGarlic;
+        totSunH += sunHoney;
+        totBsH += bsHoney;
+        totGhee += gawaGhee;
+
+        return {
+          ...ag, baseTgt, workTgt, leads, orders, rev, conv, rem, achPct,
+          ajwa, pinkSalt, blackGarlic, sunHoney, bsHoney, gawaGhee, daysCount: agSales.length, dailyLogs: agSales
+        };
+      });
+
+      const totConv = totLeads > 0 ? ((totOrders / totLeads) * 100).toFixed(2) : '0.00';
+      const totRem = Math.max(0, totWork - totRev);
+      const totAchPct = totWork > 0 ? Math.round((totRev / totWork) * 100) : 0;
+
+      // Single Agent Date-by-Date Breakdown if 1 specific agent is selected (or if an Agent is logged in)
+      const singleAgentObj = displayedAgents.length === 1 ? agentRows[0] : null;
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-xl font-black text-slate-900">
+                <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>Monthly Performance Report (${monthLabel})
+              </h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">
+                ${canViewAll(u) ? `Defaulting to your team (${monthlyPerfTeamScope}). Filter by Team or select a specific Agent to inspect full monthly totals.` : `Your complete monthly performance summary and daily breakdown for ${monthLabel}.`}
+              </p>
+            </div>
+
+            ${canViewAll(u) ? `
+            <div class="flex flex-wrap items-center gap-3">
+              <!-- Team Filter Dropdown / Buttons -->
+              <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
+                <select onchange="setMonthlyPerfTeam(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                  <option value="Team Nazim" ${monthlyPerfTeamScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim (8 Agents)</option>
+                  <option value="Team Samad" ${monthlyPerfTeamScope === 'Team Samad' ? 'selected' : ''}>Team Samad (8 Agents)</option>
+                  <option value="ALL" ${monthlyPerfTeamScope === 'ALL' ? 'selected' : ''}>Overall All Teams (16 Agents)</option>
+                </select>
+              </div>
+
+              <!-- Agent Name Filter Dropdown -->
+              <div class="flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-xl">
+                <i class="fa-solid fa-user-check text-purple-600 text-xs"></i>
+                <span class="text-[10px] font-extrabold uppercase text-purple-700">Agent:</span>
+                <select onchange="setMonthlyPerfAgent(this.value)" class="bg-transparent text-xs font-extrabold text-purple-900 focus:outline-none cursor-pointer">
+                  <option value="ALL" ${monthlyPerfAgentId === 'ALL' ? 'selected' : ''}>All Agents (${teamFilteredAgents.length})</option>
+                  ${teamFilteredAgents.map(ag => `<option value="${ag.id}" ${String(monthlyPerfAgentId) === String(ag.id) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            ` : ''}
+          </div>
+
+          <!-- Monthly Agent-Wise Performance Table with Grand Total Sum Footer -->
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Agent Name</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5">Grade</th>
+                  <th class="p-3.5">Base Target</th>
+                  <th class="p-3.5">Working Target (+5%)</th>
+                  <th class="p-3.5 text-center">Leads</th>
+                  <th class="p-3.5 text-center">Orders</th>
+                  <th class="p-3.5 text-center">Conv. Ratio</th>
+                  <th class="p-3.5">Achieved Revenue</th>
+                  <th class="p-3.5">Remaining</th>
+                  <th class="p-3.5">Achieved %</th>
+                  <th class="p-3.5">Products Sold (KG)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${agentRows.map(r => `
+                  <tr class="hover:bg-slate-50/90 cursor-pointer" onclick="canViewAll(currentUser) ? setMonthlyPerfAgent('${r.id}') : null" title="Click to view this agent's date-by-date monthly breakdown">
+                    <td class="p-3.5 font-extrabold text-slate-900">${r.name} <span class="text-slate-400 text-[10px]">(${r.id})</span></td>
+                    <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${r.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${r.team}</span></td>
+                    <td class="p-3.5 font-black text-slate-700">${r.grade}</td>
+                    <td class="p-3.5 font-bold text-slate-500">৳${r.baseTgt.toLocaleString()}</td>
+                    <td class="p-3.5 font-extrabold text-indigo-700">৳${r.workTgt.toLocaleString()}</td>
+                    <td class="p-3.5 text-center font-bold text-slate-700">${r.leads.toLocaleString()}</td>
+                    <td class="p-3.5 text-center font-black text-blue-600">${r.orders.toLocaleString()}</td>
+                    <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${r.conv}%</span></td>
+                    <td class="p-3.5 font-black text-emerald-600 text-sm">৳${r.rev.toLocaleString()}</td>
+                    <td class="p-3.5 font-bold text-slate-500">৳${r.rem.toLocaleString()}</td>
+                    <td class="p-3.5">
+                      <span class="px-2.5 py-1 rounded-md ${r.achPct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${r.achPct}%</span>
+                    </td>
+                    <td class="p-3.5 text-[11px] font-bold text-slate-600">
+                      Ajwa: <strong>${r.ajwa.toFixed(2)}</strong> | Salt: <strong>${r.pinkSalt.toFixed(2)}</strong> | Garlic: <strong>${r.blackGarlic.toFixed(2)}</strong> | Sun.H: <strong>${r.sunHoney.toFixed(2)}</strong> | BS.H: <strong>${r.bsHoney.toFixed(2)}</strong> | Ghee: <strong>${r.gawaGhee.toFixed(2)}</strong>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <!-- GRAND TOTAL SUM FOOTER ROW -->
+              <tfoot class="bg-slate-900 text-white font-black text-xs">
+                <tr>
+                  <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${agentRows.length} ${agentRows.length === 1 ? 'Agent' : 'Agents'})
+                  </td>
+                  <td class="p-4">৳${totBase.toLocaleString()}</td>
+                  <td class="p-4 text-indigo-300">৳${totWork.toLocaleString()}</td>
+                  <td class="p-4 text-center">${totLeads.toLocaleString()}</td>
+                  <td class="p-4 text-center text-blue-300">${totOrders.toLocaleString()}</td>
+                  <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${totConv}%</span></td>
+                  <td class="p-4 text-emerald-400 text-sm">৳${totRev.toLocaleString()}</td>
+                  <td class="p-4 text-slate-300">৳${totRem.toLocaleString()}</td>
+                  <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${totAchPct}%</span></td>
+                  <td class="p-4 text-[11px] text-amber-200">
+                    Ajwa: ${totAjwa.toFixed(2)} | Salt: ${totSalt.toFixed(2)} | Garlic: ${totGarlic.toFixed(2)} | Sun.H: ${totSunH.toFixed(2)} | BS.H: ${totBsH.toFixed(2)} | Ghee: ${totGhee.toFixed(2)} kg
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          ${singleAgentObj ? `
+          <!-- Specific Agent's Date-by-Date Monthly Breakdown Table -->
+          <div class="space-y-3 mt-6">
+            <div class="flex items-center justify-between">
+              <h3 class="text-base font-black text-slate-900">
+                <i class="fa-solid fa-calendar-day text-blue-600 mr-1.5"></i> 
+                ${singleAgentObj.name}'s Daily Sales Breakdown (${monthLabel})
+              </h3>
+              ${canViewAll(u) ? `<button onclick="setMonthlyPerfAgent('ALL')" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-extrabold"><i class="fa-solid fa-arrow-left mr-1"></i>Back to All Team Members</button>` : ''}
+            </div>
+            <div class="card-dynamic overflow-hidden overflow-x-auto">
+              <table class="w-full text-left text-xs whitespace-nowrap">
+                <thead class="table-header-light uppercase font-extrabold">
+                  <tr>
+                    <th class="p-3.5">Date</th>
+                    <th class="p-3.5">Leads</th>
+                    <th class="p-3.5">Orders</th>
+                    <th class="p-3.5">Conv. Ratio</th>
+                    <th class="p-3.5">Sales Amount</th>
+                    <th class="p-3.5">Daily Target (÷26)</th>
+                    <th class="p-3.5">Daily Achieved</th>
+                    <th class="p-3.5">Products Sold (KG)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-semibold">
+                  ${singleAgentObj.dailyLogs.length === 0 ? `<tr><td colspan="8" class="p-6 text-center text-slate-400 font-bold">No daily entries submitted by ${singleAgentObj.name} in ${monthLabel}.</td></tr>` : ''}
+                  ${singleAgentObj.dailyLogs.map(dl => {
+                    const dTarget = Math.round(singleAgentObj.workTgt / 26);
+                    const dConv = Number(dl.leads) > 0 ? ((Number(dl.orders) / Number(dl.leads)) * 100).toFixed(2) : '0.00';
+                    const dAch = dTarget > 0 ? Math.round((Number(dl.amount) / dTarget) * 100) : 0;
+                    return `
+                      <tr class="hover:bg-slate-50">
+                        <td class="p-3.5 font-bold text-slate-800">${cleanDisplayDate(dl.date)}</td>
+                        <td class="p-3.5">${dl.leads}</td>
+                        <td class="p-3.5 font-black text-blue-600">${dl.orders}</td>
+                        <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${dConv}%</span></td>
+                        <td class="p-3.5 font-black text-emerald-600">৳${Number(dl.amount).toLocaleString()}</td>
+                        <td class="p-3.5 text-slate-500">৳${dTarget.toLocaleString()}</td>
+                        <td class="p-3.5"><span class="px-2 py-0.5 rounded ${dAch >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${dAch}%</span></td>
+                        <td class="p-3.5 text-[11px] font-bold text-slate-600">
+                          Ajwa: ${dl.ajwa||0} | Salt: ${dl.pinkSalt||0} | Garlic: ${dl.blackGarlic||0} | Sun.H: ${dl.sunHoney||0} | BS.H: ${dl.bsHoney||0} | Ghee: ${dl.gawaGhee||0}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          ` : ''}
         </div>
       `;
     }
@@ -1714,26 +1992,90 @@
       `;
     }
 
+    // DAILY SALES REPORTS TAB (Defaults to Current Date + Selective Date Picker + All Month Toggle + Total Sum Row)
     function renderReports() {
       const u = currentUser;
       const allUsers = getUsersForMonth(selectedMonthKey);
-      const allSales = getStored('sales_records', []).filter(s => s.date.endsWith(selectedMonthKey));
+      const rawSales = getStored('sales_records', []);
       
+      // Filter by Date (Current Date by default, or Full Month if 'ALL' is toggled)
+      let dateFilteredSales = [];
+      if (reportsDateFilter === 'ALL') {
+        dateFilteredSales = rawSales.filter(s => s.date.endsWith(selectedMonthKey));
+      } else {
+        dateFilteredSales = rawSales.filter(s => s.date === reportsDateFilter);
+      }
+
+      // Filter by Team / User Role
       let sales = [];
       if (canViewAll(u)) {
-        sales = logsFilterScope === 'ALL' ? allSales : allSales.filter(s => s.team === logsFilterScope);
+        sales = logsFilterScope === 'ALL' ? dateFilteredSales : dateFilteredSales.filter(s => s.team === logsFilterScope);
       } else {
-        sales = allSales.filter(s => String(s.userId) === String(u.id));
+        sales = dateFilteredSales.filter(s => String(s.userId) === String(u.id));
       }
-      
+
+      // Deduplicate in case identical date+userId rows exist in local array
+      const uniqueMap = new Map();
+      sales.forEach(s => {
+        const key = `${s.userId}_${s.date}`;
+        if (!uniqueMap.has(key)) uniqueMap.set(key, s);
+      });
+      sales = Array.from(uniqueMap.values());
+
+      // Calculate Totals for Footer Sum
+      let sumLeads = 0, sumOrders = 0, sumAmount = 0, sumDailyTgt = 0;
+      let sumAjwa = 0, sumSalt = 0, sumGarlic = 0, sumSunH = 0, sumBsH = 0, sumGhee = 0;
+
+      sales.forEach(s => {
+        const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
+        const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
+        const agDailyTarget = Math.round(agWorkTarget / 26);
+
+        sumLeads += Number(s.leads) || 0;
+        sumOrders += Number(s.orders) || 0;
+        sumAmount += Number(s.amount) || 0;
+        sumDailyTgt += agDailyTarget;
+        sumAjwa += Number(s.ajwa) || 0;
+        sumSalt += Number(s.pinkSalt) || 0;
+        sumGarlic += Number(s.blackGarlic) || 0;
+        sumSunH += Number(s.sunHoney) || 0;
+        sumBsH += Number(s.bsHoney) || 0;
+        sumGhee += Number(s.gawaGhee) || 0;
+      });
+
+      const sumConv = sumLeads > 0 ? ((sumOrders / sumLeads) * 100).toFixed(2) : '0.00';
+      const sumAchPct = sumDailyTgt > 0 ? Math.round((sumAmount / sumDailyTgt) * 100) : 0;
+      const isShowingToday = reportsDateFilter === getTodayFormatted();
+
       return `
         <div class="space-y-6">
-          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
-              <h2 class="text-xl font-black text-slate-900">Daily Sales & Conversion Logs (${selectedMonthKey})</h2>
-              <p class="text-xs font-bold text-slate-500">Historical & current month logs — switch month from the top bar to view previous months</p>
+              <h2 class="text-xl font-black text-slate-900">
+                <i class="fa-solid fa-file-invoice text-blue-600 mr-2"></i>
+                Daily Sales & Conversion Logs (${reportsDateFilter === 'ALL' ? `Full Month • ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)})
+              </h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">
+                Showing entries for <strong>${reportsDateFilter === 'ALL' ? `All Dates in ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)}</strong> — use the date picker to inspect any specific date
+              </p>
             </div>
-            <div class="flex items-center gap-2">
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              <!-- Selective Date Picker -->
+              <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <i class="fa-solid fa-calendar-day text-blue-600 text-xs"></i>
+                <span class="text-[10px] font-extrabold uppercase text-slate-500">Select Date:</span>
+                <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-800 focus:outline-none cursor-pointer">
+              </div>
+
+              <!-- Quick Today & All Month Toggle Buttons -->
+              <button onclick="setReportsDateFilter('${getTodayFormatted()}')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${isShowingToday ? 'bg-blue-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+                Today (${cleanDisplayDate(getTodayFormatted())})
+              </button>
+              <button onclick="setReportsDateFilter('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${reportsDateFilter === 'ALL' ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+                All Dates (${selectedMonthKey})
+              </button>
+
               ${canViewAll(u) ? `
               <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
                 <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
@@ -1741,8 +2083,9 @@
                 <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
               </select>
               ` : ''}
+
               ${isFullAdmin(u) || u.role === 'agent' ? `
-              <button onclick="openReportModal()" class="px-5 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
+              <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
                 <i class="fa-solid fa-plus mr-1"></i> Add New Report
               </button>
               ` : ''}
@@ -1767,7 +2110,7 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
-                ${sales.length === 0 ? '<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports found for this month.</td></tr>' : ''}
+                ${sales.length === 0 ? `<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted for ${reportsDateFilter === 'ALL' ? selectedMonthKey : cleanDisplayDate(reportsDateFilter)} yet.</td></tr>` : ''}
                 ${sales.map(s => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
                   const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
@@ -1806,6 +2149,24 @@
                   </tr>
                 `}).join('')}
               </tbody>
+              ${sales.length > 0 ? `
+              <tfoot class="bg-slate-900 text-white font-black text-xs">
+                <tr>
+                  <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${sales.length} ${sales.length === 1 ? 'Entry' : 'Entries'})
+                  </td>
+                  <td class="p-4">${sumLeads.toLocaleString()}</td>
+                  <td class="p-4 text-blue-300">${sumOrders.toLocaleString()}</td>
+                  <td class="p-4"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${sumConv}%</span></td>
+                  <td class="p-4 text-emerald-400 text-sm">৳${sumAmount.toLocaleString()}</td>
+                  <td class="p-4 text-slate-300">৳${sumDailyTgt.toLocaleString()}</td>
+                  <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${sumAchPct}%</span></td>
+                  <td colspan="${isFullAdmin(u) || u.role === 'agent' ? '2' : '1'}" class="p-4 text-[11px] text-amber-200">
+                    Ajwa: ${sumAjwa.toFixed(2)} | Salt: ${sumSalt.toFixed(2)} | Garlic: ${sumGarlic.toFixed(2)} | Sun.H: ${sumSunH.toFixed(2)} | BS.H: ${sumBsH.toFixed(2)} | Ghee: ${sumGhee.toFixed(2)} kg
+                  </td>
+                </tr>
+              </tfoot>
+              ` : ''}
             </table>
           </div>
         </div>
@@ -2445,7 +2806,8 @@
 
     function openReportModal(agentId, dateStr) {
       if (isSupervisor(currentUser)) return;
-      document.getElementById('subDate').value = dateToInputVal(dateStr || getTodayFormatted());
+      const targetDate = (dateStr && dateStr !== 'ALL') ? dateStr : getTodayFormatted();
+      document.getElementById('subDate').value = dateToInputVal(targetDate);
       if (isFullAdmin(currentUser) && agentId) {
         document.getElementById('subAgentId').value = agentId;
       }
@@ -2496,6 +2858,8 @@
         selectedMonthKey = submittedMonthKey;
         localStorage.setItem('gb_selected_month', selectedMonthKey);
       }
+      // Update Daily Sales Report date filter to match the newly submitted date so user sees it immediately
+      reportsDateFilter = dateStr;
 
       const entry = {
         userId: String(targetAgent.id),
