@@ -6,6 +6,7 @@
   <title>Ghorerbazar Facebook - Dynamic Sales & Incentive Portal</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; color: #0f172a; }
@@ -191,7 +192,7 @@
     let pendingConfirmCallback = null;
 
     function isAnyModalOpen() {
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'confirmWarningModal'];
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'confirmWarningModal', 'aiImportModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -979,6 +980,7 @@
         ${isFullAdmin(u) ? renderEditAttendanceModal() : ''}
         ${isFullAdmin(u) ? renderUserModal() : ''}
         ${isFullAdmin(u) ? renderProductConfigModal() : ''}
+        ${isFullAdmin(u) ? renderAiImportModal() : ''}
         ${renderConfirmWarningModal()}
       `;
       document.getElementById('app').innerHTML = html;
@@ -1200,6 +1202,11 @@
                 <button onclick="setDashboardScope('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
                 <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (16)</button>
               </div>
+              ` : ''}
+              ${isFullAdmin(u) ? `
+              <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2 transition-all">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Import
+              </button>
               ` : ''}
               ${isFullAdmin(u) || u.role === 'agent' ? `
               <button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2">
@@ -1463,6 +1470,11 @@
 
             ${canViewAll(u) ? `
             <div class="flex flex-wrap items-center gap-3">
+              ${isFullAdmin(u) ? `
+              <button onclick="openAiImportModal()" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-all">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
+              </button>
+              ` : ''}
               <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
                 <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
                 <select onchange="setMonthlyPerfTeam(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
@@ -2245,6 +2257,11 @@
               </select>
               ` : ''}
 
+              ${isFullAdmin(u) ? `
+              <button onclick="openAiImportModal()" class="px-3.5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-all">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Import
+              </button>
+              ` : ''}
               ${isFullAdmin(u) || u.role === 'agent' ? `
               <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
                 <i class="fa-solid fa-plus mr-1"></i> Add New Report
@@ -3107,6 +3124,604 @@
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
 
       handleDirectDeleteReport(agentId, targetAg.name, dateStr);
+    }
+
+    
+    // =========================================================================
+    // AI-BASED ERP REPORT IMPORT ENGINE (Sales Report & Product Report)
+    // =========================================================================
+    let aiExtractedRows = [];
+
+    function renderAiImportModal() {
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
+      return `
+        <div id="aiImportModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-6xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-200 shrink-0">
+              <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-lg shadow-md">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-base font-black text-slate-900">AI-Based ERP Report Importer</h3>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-purple-100 text-purple-800">Smart OCR + Duplicate Guard</span>
+                  </div>
+                  <p class="text-xs font-bold text-slate-500 mt-0.5">Upload ERP screenshot(s) — AI extracts Agent Name, Report Date, Category (Sales / Product) & Data for your review before saving</p>
+                </div>
+              </div>
+              <button type="button" onclick="closeModal('aiImportModal')" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="overflow-y-auto flex-1 py-4 space-y-4 pr-1">
+              <!-- Default Controls for Upload -->
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Default Agent (If not in image)</label>
+                  <select id="aiDefaultAgentId" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-800">
+                    ${allAgents.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${a.team})</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Default Report Category</label>
+                  <select id="aiDefaultCategory" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-purple-800">
+                    <option value="AUTO">Auto-Detect from Image (Sales / Product)</option>
+                    <option value="Sales Report">Sales Report (Leads, Orders, Amount)</option>
+                    <option value="Product Report">Product Report (Ajwa, Salt, Garlic, Honey, Ghee)</option>
+                    <option value="Both">Both (Sales + Product Report)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1">Upload ERP Screenshot / Image</label>
+                  <input type="file" id="aiErpImageInput" accept="image/*" multiple onchange="processAiErpImageUpload(event)" class="hidden">
+                  <div class="flex items-center gap-2">
+                    <label for="aiErpImageInput" class="flex-1 cursor-pointer py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs rounded-xl text-center shadow flex items-center justify-center gap-2 transition-all">
+                      <i class="fa-solid fa-cloud-arrow-up"></i> Select ERP Image(s)
+                    </label>
+                    <button type="button" onclick="addBlankAiPreviewRow()" class="py-2 px-3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold text-xs rounded-xl" title="Add Manual Row to Preview">
+                      <i class="fa-solid fa-plus"></i> Row
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- OCR Scanning Progress -->
+              <div id="aiScanningStatusBox" class="hidden p-4 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <i class="fa-solid fa-spinner animate-spin text-purple-600 text-lg"></i>
+                  <div>
+                    <h4 id="aiScanningTitle" class="text-xs font-black text-purple-900">AI is scanning ERP image...</h4>
+                    <p id="aiScanningSub" class="text-[11px] font-bold text-purple-600">Extracting agent names, dates, sales amounts & product weights</p>
+                  </div>
+                </div>
+                <span id="aiScanningPct" class="px-2.5 py-1 rounded-lg bg-purple-600 text-white text-xs font-black">0%</span>
+              </div>
+
+              <!-- Duplicate Warning Banner -->
+              <div id="aiDuplicateWarningBanner" class="hidden p-3.5 rounded-2xl bg-amber-50 border-2 border-amber-300 flex items-start gap-3">
+                <div class="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div class="flex-1 text-xs">
+                  <h4 class="font-black text-amber-950 uppercase">Duplicate Report Warning Detected!</h4>
+                  <p class="font-bold text-amber-800 mt-0.5">
+                    One or more extracted rows already have existing data for the <strong>same Agent, same Date, and same Report Category</strong>. 
+                    By default, duplicate rows are <strong>UNCHECKED (Protected)</strong> so existing data is NEVER overwritten without your explicit confirmation.
+                  </p>
+                </div>
+              </div>
+
+              <!-- Extracted Data Preview Table -->
+              <div id="aiPreviewSection" class="hidden space-y-2">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-black uppercase text-slate-800">
+                    <i class="fa-solid fa-table-list text-purple-600 mr-1.5"></i> 
+                    Preview Extracted Data (Edit/Correct any field before approving)
+                  </h4>
+                  <span id="aiPreviewCountBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-slate-100 text-slate-700">0 rows</span>
+                </div>
+
+                <div class="card-dynamic overflow-x-auto border border-slate-200">
+                  <table class="w-full text-left text-[11px] whitespace-nowrap">
+                    <thead class="bg-slate-900 text-white uppercase font-extrabold">
+                      <tr>
+                        <th class="p-2.5 text-center">Approve</th>
+                        <th class="p-2.5">Status / Duplicate Check</th>
+                        <th class="p-2.5">Agent Name</th>
+                        <th class="p-2.5">Report Date</th>
+                        <th class="p-2.5">Report Category</th>
+                        <th class="p-2.5 text-center">Leads</th>
+                        <th class="p-2.5 text-center">Orders</th>
+                        <th class="p-2.5">Amount (৳)</th>
+                        <th class="p-2.5 text-center">Ajwa(kg)</th>
+                        <th class="p-2.5 text-center">Salt(kg)</th>
+                        <th class="p-2.5 text-center">Garlic(kg)</th>
+                        <th class="p-2.5 text-center">Sun.H(kg)</th>
+                        <th class="p-2.5 text-center">BS.H(kg)</th>
+                        <th class="p-2.5 text-center">Ghee(kg)</th>
+                        <th class="p-2.5 text-center">Remove</th>
+                      </tr>
+                    </thead>
+                    <tbody id="aiPreviewTableBody" class="divide-y divide-slate-200 font-bold"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-200 flex items-center justify-between shrink-0">
+              <p class="text-[11px] font-bold text-slate-500">
+                <i class="fa-solid fa-shield-halved text-emerald-600 mr-1"></i>
+                Safe Mode: Only checked rows will be saved to Google Sheet & Portal.
+              </p>
+              <div class="flex items-center gap-2.5">
+                <button type="button" onclick="closeModal('aiImportModal')" class="px-4 py-2.5 text-xs font-extrabold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">
+                  Cancel
+                </button>
+                <button type="button" onclick="handleApproveAiImport()" class="px-6 py-2.5 text-xs font-extrabold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-lg flex items-center gap-2 transition-all">
+                  <i class="fa-solid fa-check-double"></i> Add Data / Approve Selected
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openAiImportModal() {
+      if (!isFullAdmin(currentUser)) return;
+      aiExtractedRows = [];
+      const prevSec = document.getElementById('aiPreviewSection');
+      const dupBan = document.getElementById('aiDuplicateWarningBanner');
+      const fileInp = document.getElementById('aiErpImageInput');
+      if (prevSec) prevSec.classList.add('hidden');
+      if (dupBan) dupBan.classList.add('hidden');
+      if (fileInp) fileInp.value = '';
+      openModal('aiImportModal');
+    }
+
+    function checkExistingSalesOrProductStatus(userId, dateStr, category) {
+      const allSales = getStored('sales_records', []);
+      const ex = allSales.find(s => String(s.userId) === String(userId) && s.date === dateStr);
+      if (!ex) return { exists: false, hasSales: false, hasProducts: false, record: null };
+
+      const hasSales = (Number(ex.leads) > 0 || Number(ex.orders) > 0 || Number(ex.amount) > 0);
+      const hasProducts = (
+        Number(ex.ajwa) > 0 || Number(ex.pinkSalt) > 0 || Number(ex.blackGarlic) > 0 ||
+        Number(ex.sunHoney) > 0 || Number(ex.bsHoney) > 0 || Number(ex.gawaGhee) > 0
+      );
+
+      let isDuplicateCategory = false;
+      if (category === 'Sales Report' && hasSales) isDuplicateCategory = true;
+      else if (category === 'Product Report' && hasProducts) isDuplicateCategory = true;
+      else if (category === 'Both' && (hasSales || hasProducts)) isDuplicateCategory = true;
+
+      return { exists: true, hasSales, hasProducts, isDuplicateCategory, record: ex };
+    }
+
+    async function processAiErpImageUpload(e) {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+
+      const statusBox = document.getElementById('aiScanningStatusBox');
+      const pctBadge = document.getElementById('aiScanningPct');
+      const titleEl = document.getElementById('aiScanningTitle');
+      if (statusBox) statusBox.classList.remove('hidden');
+
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (titleEl) titleEl.textContent = `Scanning image ${i + 1} of ${files.length}: ${file.name}...`;
+          if (pctBadge) pctBadge.textContent = '15%';
+
+          const worker = await Tesseract.createWorker({
+            logger: m => {
+              if (m.status === 'recognizing text' && pctBadge) {
+                pctBadge.textContent = `${Math.round((m.progress || 0) * 100)}%`;
+              }
+            }
+          });
+          await worker.loadLanguage('eng');
+          await worker.initialize('eng');
+          const { data: { text } } = await worker.recognize(file);
+          await worker.terminate();
+
+          parseErpTextIntoPreviewRows(text);
+        }
+      } catch (err) {
+        alert('OCR Image Scan Error: ' + (err.message || err));
+      } finally {
+        if (statusBox) statusBox.classList.add('hidden');
+        renderAiPreviewTable();
+      }
+    }
+
+    function normalizeExtractedDate(rawDateStr) {
+      const m1 = rawDateStr.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+      if (m1) {
+        let d = m1[1].padStart(2, '0');
+        let m = m1[2].padStart(2, '0');
+        let y = m1[3].length === 2 ? '20' + m1[3] : m1[3];
+        if (Number(d) > 1900) {
+          y = m1[1]; m = m1[2].padStart(2, '0'); d = m1[3].padStart(2, '0');
+        }
+        return `${d}/${m}/${y}`;
+      }
+      const m2 = rawDateStr.match(/(\d{1,2})\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s,\-]*(\d{2,4})?/i);
+      if (m2) {
+        const months = { jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06', jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12' };
+        const d = String(m2[1]).padStart(2, '0');
+        const mon = months[m2[2].toLowerCase().substring(0, 3)] || selectedMonthKey.split('/')[0];
+        const yr = m2[3] ? (m2[3].length === 2 ? '20' + m2[3] : m2[3]) : selectedMonthKey.split('/')[1];
+        return `${d}/${mon}/${yr}`;
+      }
+      return null;
+    }
+
+    function parseErpTextIntoPreviewRows(rawText) {
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
+      const defAgentId = document.getElementById('aiDefaultAgentId')?.value || (allAgents[0] ? allAgents[0].id : '10191');
+      const defCatPref = document.getElementById('aiDefaultCategory')?.value || 'AUTO';
+
+      let currentAgent = allAgents.find(a => String(a.id) === String(defAgentId)) || allAgents[0];
+
+      // First check if any agent name or ID is mentioned in the header/top of the image
+      allAgents.forEach(ag => {
+        const lowerText = rawText.toLowerCase();
+        const nameParts = ag.name.toLowerCase().split(/\s+/).filter(p => p.length >= 4 && p !== 'mohammad' && p !== 'hossain' && p !== 'ahmed' && p !== 'rahman' && p !== 'islam' && p !== 'mahmud');
+        if (lowerText.includes(String(ag.id)) || nameParts.some(np => lowerText.includes(np))) {
+          currentAgent = ag;
+        }
+      });
+
+      const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      let addedCountFromThisImage = 0;
+
+      lines.forEach(line => {
+        const lower = line.toLowerCase();
+        // Check if this specific line mentions an agent
+        allAgents.forEach(ag => {
+          const nameParts = ag.name.toLowerCase().split(/\s+/).filter(p => p.length >= 4 && p !== 'mohammad' && p !== 'hossain');
+          if (lower.includes(String(ag.id)) || nameParts.some(np => lower.includes(np))) {
+            currentAgent = ag;
+          }
+        });
+
+        const detectedDate = normalizeExtractedDate(line);
+        // Clean out the date portion before extracting numeric columns
+        const lineWithoutDate = line
+          .replace(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}/g, ' ')
+          .replace(/\d{1,2}\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\s,\-]*\d{0,4}/gi, ' ')
+          .replace(new RegExp('\\b' + currentAgent.id + '\\b', 'g'), ' ');
+
+        const numMatches = lineWithoutDate.match(/\d+(?:,\d{3})*(?:\.\d+)?/g);
+        if (!numMatches || numMatches.length === 0) return;
+
+        const nums = numMatches.map(n => Number(n.replace(/,/g, ''))).filter(n => !isNaN(n));
+        if (nums.length === 0) return;
+
+        // Determine if line is valid data row (either has a date or has multiple numbers/keywords)
+        const hasProductKeyword = /(ajwa|salt|garlic|honey|sundarban|black\s*seed|ghee|kg|gm)/i.test(line);
+        if (!detectedDate && nums.length < 2 && !hasProductKeyword) return;
+
+        const rowDate = detectedDate || (reportsDateFilter !== 'ALL' ? reportsDateFilter : getTodayFormatted());
+
+        // Determine Category
+        let category = 'Sales Report';
+        if (defCatPref !== 'AUTO') {
+          category = defCatPref;
+        } else {
+          const hasLargeAmount = nums.some(n => n >= 1500);
+          const hasDecimals = nums.some(n => n > 0 && n < 50 && !Number.isInteger(n));
+          if (hasProductKeyword && !hasLargeAmount) {
+            category = 'Product Report';
+          } else if (hasDecimals && !hasLargeAmount) {
+            category = 'Product Report';
+          } else if (hasLargeAmount && nums.length >= 6) {
+            category = 'Both';
+          } else {
+            category = 'Sales Report';
+          }
+        }
+
+        let leads = 0, orders = 0, amount = 0;
+        let ajwa = 0, pinkSalt = 0, blackGarlic = 0, sunHoney = 0, bsHoney = 0, gawaGhee = 0;
+
+        if (category === 'Sales Report' || category === 'Both') {
+          // Find amount (largest number >= 500)
+          const bigNums = nums.filter(n => n >= 500);
+          amount = bigNums.length > 0 ? Math.max(...bigNums) : (nums[nums.length - 1] || 0);
+          const smallInts = nums.filter(n => n !== amount && n >= 0 && n < 2000 && Number.isInteger(n));
+          if (smallInts.length >= 2) {
+            leads = Math.max(smallInts[0], smallInts[1]);
+            orders = Math.min(smallInts[0], smallInts[1]);
+          } else if (smallInts.length === 1) {
+            orders = smallInts[0];
+            leads = Math.round(orders * 4);
+          }
+          if (category === 'Both') {
+            const remNums = nums.filter(n => n !== amount && n !== leads && n !== orders);
+            ajwa = remNums[0] || 0;
+            pinkSalt = remNums[1] || 0;
+            blackGarlic = remNums[2] || 0;
+            sunHoney = remNums[3] || 0;
+            bsHoney = remNums[4] || 0;
+            gawaGhee = remNums[5] || 0;
+          }
+        } else if (category === 'Product Report') {
+          if (/ajwa/i.test(line)) ajwa = nums[0] || 0;
+          else if (/salt/i.test(line)) pinkSalt = nums[0] || 0;
+          else if (/garlic/i.test(line)) blackGarlic = nums[0] || 0;
+          else if (/sundarban/i.test(line)) sunHoney = nums[0] || 0;
+          else if (/black\s*seed/i.test(line)) bsHoney = nums[0] || 0;
+          else if (/ghee/i.test(line)) gawaGhee = nums[0] || 0;
+          else {
+            ajwa = nums[0] || 0;
+            pinkSalt = nums[1] || 0;
+            blackGarlic = nums[2] || 0;
+            sunHoney = nums[3] || 0;
+            bsHoney = nums[4] || 0;
+            gawaGhee = nums[5] || 0;
+          }
+        }
+
+        const dupInfo = checkExistingSalesOrProductStatus(currentAgent.id, rowDate, category);
+        aiExtractedRows.push({
+          rowId: 'ai_row_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+          approved: !dupInfo.isDuplicateCategory, // Unchecked by default if duplicate!
+          userId: String(currentAgent.id),
+          date: rowDate,
+          category: category,
+          leads: leads,
+          orders: orders,
+          amount: amount,
+          ajwa: ajwa,
+          pinkSalt: pinkSalt,
+          blackGarlic: blackGarlic,
+          sunHoney: sunHoney,
+          bsHoney: bsHoney,
+          gawaGhee: gawaGhee
+        });
+        addedCountFromThisImage++;
+      });
+
+      // If OCR text was too blurry to match a structured row, provide 1 editable row with the selected defaults so Admin can still input/verify
+      if (addedCountFromThisImage === 0) {
+        addBlankAiPreviewRow();
+      }
+    }
+
+    function addBlankAiPreviewRow() {
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
+      const defAgentId = document.getElementById('aiDefaultAgentId')?.value || (allAgents[0] ? allAgents[0].id : '10191');
+      const defCatPref = document.getElementById('aiDefaultCategory')?.value;
+      const category = (defCatPref && defCatPref !== 'AUTO') ? defCatPref : 'Sales Report';
+      const rowDate = reportsDateFilter !== 'ALL' ? reportsDateFilter : getTodayFormatted();
+      const dupInfo = checkExistingSalesOrProductStatus(defAgentId, rowDate, category);
+
+      aiExtractedRows.push({
+        rowId: 'ai_row_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+        approved: !dupInfo.isDuplicateCategory,
+        userId: String(defAgentId),
+        date: rowDate,
+        category: category,
+        leads: 0, orders: 0, amount: 0,
+        ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0
+      });
+      renderAiPreviewTable();
+    }
+
+    function updateAiPreviewRowField(idx, field, val) {
+      if (!aiExtractedRows[idx]) return;
+      if (field === 'date') {
+        aiExtractedRows[idx].date = inputValToDateStr(val);
+      } else if (field === 'userId' || field === 'category') {
+        aiExtractedRows[idx][field] = val;
+      } else if (field === 'approved') {
+        const row = aiExtractedRows[idx];
+        const dupInfo = checkExistingSalesOrProductStatus(row.userId, row.date, row.category);
+        if (val && dupInfo.isDuplicateCategory) {
+          const allAgents = getUsersForMonth(selectedMonthKey);
+          const ag = allAgents.find(a => String(a.id) === String(row.userId));
+          const agName = ag ? ag.name : row.userId;
+          const ok = confirm(`⚠️ DUPLICATE OVERWRITE WARNING!\n\n${agName} already has ${row.category} data on ${row.date}.\nAre you sure you want to approve overwriting this existing ${row.category}?`);
+          if (!ok) {
+            renderAiPreviewTable();
+            return;
+          }
+        }
+        aiExtractedRows[idx].approved = Boolean(val);
+      } else {
+        aiExtractedRows[idx][field] = Number(val) || 0;
+      }
+
+      // If agent, date, or category changed, re-evaluate duplicate status
+      if (field === 'userId' || field === 'date' || field === 'category') {
+        const row = aiExtractedRows[idx];
+        const dupInfo = checkExistingSalesOrProductStatus(row.userId, row.date, row.category);
+        if (dupInfo.isDuplicateCategory) {
+          row.approved = false; // Auto-uncheck on duplicate to protect existing data
+        }
+        renderAiPreviewTable();
+      }
+    }
+
+    function removeAiPreviewRow(idx) {
+      aiExtractedRows.splice(idx, 1);
+      renderAiPreviewTable();
+    }
+
+    function renderAiPreviewTable() {
+      const prevSec = document.getElementById('aiPreviewSection');
+      const tbody = document.getElementById('aiPreviewTableBody');
+      const countBadge = document.getElementById('aiPreviewCountBadge');
+      const dupBanner = document.getElementById('aiDuplicateWarningBanner');
+      if (!tbody || !prevSec) return;
+
+      if (aiExtractedRows.length === 0) {
+        prevSec.classList.add('hidden');
+        if (dupBanner) dupBanner.classList.add('hidden');
+        return;
+      }
+
+      prevSec.classList.remove('hidden');
+      if (countBadge) countBadge.textContent = `${aiExtractedRows.length} row(s) detected`;
+
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
+      let anyDuplicateFound = false;
+
+      tbody.innerHTML = aiExtractedRows.map((r, idx) => {
+        const dupInfo = checkExistingSalesOrProductStatus(r.userId, r.date, r.category);
+        if (dupInfo.isDuplicateCategory) anyDuplicateFound = true;
+
+        let statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800"><i class="fa-solid fa-circle-check mr-1"></i>New Entry</span>`;
+        if (dupInfo.isDuplicateCategory) {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300" title="Existing data found for same Agent, Date & Category"><i class="fa-solid fa-triangle-exclamation mr-1 text-amber-600"></i>Duplicate ${r.category}</span>`;
+        } else if (dupInfo.exists) {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800" title="Will safely merge without overwriting other category"><i class="fa-solid fa-code-merge mr-1"></i>Safe Merge (${dupInfo.hasSales ? 'Has Sales' : 'Has Products'})</span>`;
+        }
+
+        const isSalesDisabled = r.category === 'Product Report';
+        const isProdDisabled = r.category === 'Sales Report';
+
+        return `
+          <tr class="${dupInfo.isDuplicateCategory ? 'bg-amber-50/70' : 'hover:bg-slate-50'}">
+            <td class="p-2 text-center">
+              <input type="checkbox" ${r.approved ? 'checked' : ''} onchange="updateAiPreviewRowField(${idx}, 'approved', this.checked)" class="w-4 h-4 accent-purple-600 rounded cursor-pointer">
+            </td>
+            <td class="p-2">${statusBadge}</td>
+            <td class="p-2">
+              <select onchange="updateAiPreviewRowField(${idx}, 'userId', this.value)" class="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-extrabold text-slate-800">
+                ${allAgents.map(a => `<option value="${a.id}" ${String(a.id) === String(r.userId) ? 'selected' : ''}>${a.name} (${a.id})</option>`).join('')}
+              </select>
+            </td>
+            <td class="p-2">
+              <input type="date" value="${dateToInputVal(r.date)}" onchange="updateAiPreviewRowField(${idx}, 'date', this.value)" class="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold">
+            </td>
+            <td class="p-2">
+              <select onchange="updateAiPreviewRowField(${idx}, 'category', this.value)" class="px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-extrabold ${r.category === 'Sales Report' ? 'text-blue-700' : (r.category === 'Product Report' ? 'text-emerald-700' : 'text-purple-700')}">
+                <option value="Sales Report" ${r.category === 'Sales Report' ? 'selected' : ''}>Sales Report</option>
+                <option value="Product Report" ${r.category === 'Product Report' ? 'selected' : ''}>Product Report</option>
+                <option value="Both" ${r.category === 'Both' ? 'selected' : ''}>Both (Sales + Product)</option>
+              </select>
+            </td>
+            <td class="p-2 text-center">
+              <input type="number" min="0" value="${r.leads}" ${isSalesDisabled ? 'disabled' : ''} oninput="updateAiPreviewRowField(${idx}, 'leads', this.value)" class="w-16 px-2 py-1 border rounded-lg text-center ${isSalesDisabled ? 'bg-slate-100 text-slate-400' : 'bg-white text-slate-900'}">
+            </td>
+            <td class="p-2 text-center">
+              <input type="number" min="0" value="${r.orders}" ${isSalesDisabled ? 'disabled' : ''} oninput="updateAiPreviewRowField(${idx}, 'orders', this.value)" class="w-14 px-2 py-1 border rounded-lg text-center ${isSalesDisabled ? 'bg-slate-100 text-slate-400' : 'bg-white text-blue-700 font-black'}">
+            </td>
+            <td class="p-2">
+              <input type="number" min="0" value="${r.amount}" ${isSalesDisabled ? 'disabled' : ''} oninput="updateAiPreviewRowField(${idx}, 'amount', this.value)" class="w-24 px-2 py-1 border rounded-lg ${isSalesDisabled ? 'bg-slate-100 text-slate-400' : 'bg-white text-emerald-700 font-black'}">
+            </td>
+            <td class="p-2 text-center">
+              <input type="number" step="0.01" min="0" value="${r.ajwa}" ${isProdDisabled ? 'disabled' : ''} oninput="updateAiPreviewRowField(${idx}, 'ajwa', this.value)" class="w-14 px-1.5 py-1 border rounded-lg text-center ${isProdDisabled ? 'bg-slate-100 text-slate-400' : 'bg-white'}">
+            </td>
+            <td class="p-2 text-center">
+              <input type="number" step="0.01" min="0" value="${r.pinkSalt}" ${isProdDisabled ? 'disabled' : ''} oninput="updateAiPreviewRowField(${idx}, 'pinkSalt', this.value)" class="w-14 px-1.5 py-1 border rounded-lg text-center ${isProdDisabled ? 'bg-slate-100 text-slate-400' : 'bg-white'}">
+            </td>
+            <td class="p-2 text-center">
+              <input type="number" step="0.01" min="0" value="${r.blackGarlic}" ${isProdDisabled ? 'disabled' : ''} oninput="updateAiPreviewRowField(${idx}, 'blackGarlic', this.value)" class="w-14 px-1.5 py-1 border rounded-lg text-center ${isProdDisabled ? 'bg-slate-100 text-slate-400' : 'bg-white'}">
+            </td>
+            <td class="p-2 text-center">
+              <input type="number" step="0.01" min="0" value="${r.sunHoney}" ${isProdDisabled ? 'disabled' : ''} oninput="updateAiPreviewRowField(${idx}, 'sunHoney', this.value)" class="w-14 px-1.5 py-1 border rounded-lg text-center ${isProdDisabled ? 'bg-slate-100 text-slate-400' : 'bg-white'}">
+            </td>
+            <td class="p-2 text-center">
+              <input type="number" step="0.01" min="0" value="${r.bsHoney}" ${isProdDisabled ? 'disabled' : ''} oninput="updateAiPreviewRowField(${idx}, 'bsHoney', this.value)" class="w-14 px-1.5 py-1 border rounded-lg text-center ${isProdDisabled ? 'bg-slate-100 text-slate-400' : 'bg-white'}">
+            </td>
+            <td class="p-2 text-center">
+              <input type="number" step="0.01" min="0" value="${r.gawaGhee}" ${isProdDisabled ? 'disabled' : ''} oninput="updateAiPreviewRowField(${idx}, 'gawaGhee', this.value)" class="w-14 px-1.5 py-1 border rounded-lg text-center ${isProdDisabled ? 'bg-slate-100 text-slate-400' : 'bg-white'}">
+            </td>
+            <td class="p-2 text-center">
+              <button type="button" onclick="removeAiPreviewRow(${idx})" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center mx-auto">
+                <i class="fa-solid fa-trash-can text-[10px]"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      if (dupBanner) {
+        if (anyDuplicateFound) dupBanner.classList.remove('hidden');
+        else dupBanner.classList.add('hidden');
+      }
+    }
+
+    async function handleApproveAiImport() {
+      if (!isFullAdmin(currentUser)) return;
+      const approvedRows = aiExtractedRows.filter(r => r.approved);
+      if (approvedRows.length === 0) {
+        alert('Please select/approve at least one row to import!');
+        return;
+      }
+
+      // Check if any approved row is overwriting existing data for the same category
+      const duplicatesBeingOverwritten = approvedRows.filter(r => checkExistingSalesOrProductStatus(r.userId, r.date, r.category).isDuplicateCategory);
+      if (duplicatesBeingOverwritten.length > 0) {
+        const confirmOverwrite = confirm(`⚠️ FINAL CONFIRMATION REQUIRED:\n\n${duplicatesBeingOverwritten.length} approved row(s) already have existing data for the same Agent, Date, and Report Category.\n\nDo you confirm updating/overwriting those specific category fields?`);
+        if (!confirmOverwrite) return;
+      }
+
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      let sales = getStored('sales_records', []);
+
+      for (const row of approvedRows) {
+        const ag = allUsers.find(u => String(u.id) === String(row.userId));
+        if (!ag) continue;
+
+        const existingIdx = sales.findIndex(s => String(s.userId) === String(ag.id) && s.date === row.date);
+        const ex = existingIdx !== -1 ? sales[existingIdx] : null;
+
+        // Smart non-destructive merge:
+        // If importing "Product Report" only, preserve existing Leads, Orders, Amount!
+        // If importing "Sales Report" only, preserve existing Product KGs!
+        const finalLeads = (row.category === 'Sales Report' || row.category === 'Both') ? (Number(row.leads) || 0) : (ex ? Number(ex.leads) || 0 : 0);
+        const finalOrders = (row.category === 'Sales Report' || row.category === 'Both') ? (Number(row.orders) || 0) : (ex ? Number(ex.orders) || 0 : 0);
+        const finalAmount = (row.category === 'Sales Report' || row.category === 'Both') ? (Number(row.amount) || 0) : (ex ? Number(ex.amount) || 0 : 0);
+        const finalRatio = finalLeads > 0 ? Number(((finalOrders / finalLeads) * 100).toFixed(2)) : 0;
+
+        const finalAjwa = (row.category === 'Product Report' || row.category === 'Both') ? (Number(row.ajwa) || 0) : (ex ? Number(ex.ajwa) || 0 : 0);
+        const finalSalt = (row.category === 'Product Report' || row.category === 'Both') ? (Number(row.pinkSalt) || 0) : (ex ? Number(ex.pinkSalt) || 0 : 0);
+        const finalGarlic = (row.category === 'Product Report' || row.category === 'Both') ? (Number(row.blackGarlic) || 0) : (ex ? Number(ex.blackGarlic) || 0 : 0);
+        const finalSunH = (row.category === 'Product Report' || row.category === 'Both') ? (Number(row.sunHoney) || 0) : (ex ? Number(ex.sunHoney) || 0 : 0);
+        const finalBsH = (row.category === 'Product Report' || row.category === 'Both') ? (Number(row.bsHoney) || 0) : (ex ? Number(ex.bsHoney) || 0 : 0);
+        const finalGhee = (row.category === 'Product Report' || row.category === 'Both') ? (Number(row.gawaGhee) || 0) : (ex ? Number(ex.gawaGhee) || 0 : 0);
+
+        const mergedEntry = {
+          userId: String(ag.id),
+          userName: ag.name,
+          team: ag.team,
+          date: row.date,
+          leads: finalLeads,
+          orders: finalOrders,
+          amount: finalAmount,
+          ratio: finalRatio,
+          ajwa: finalAjwa,
+          pinkSalt: finalSalt,
+          blackGarlic: finalGarlic,
+          sunHoney: finalSunH,
+          bsHoney: finalBsH,
+          gawaGhee: finalGhee
+        };
+
+        if (existingIdx !== -1) {
+          sales[existingIdx] = mergedEntry;
+        } else {
+          sales.unshift(mergedEntry);
+        }
+
+        const logMeta = recordActivityLog(
+          `AI ERP Import (${row.category})`,
+          `Imported ${row.category} for ${ag.name} (${row.date}) — Amount: ৳${finalAmount.toLocaleString()}, Orders: ${finalOrders}`
+        );
+
+        await postToSheet('DAILY_SALES_SUBMIT', { ...mergedEntry, ...logMeta });
+      }
+
+      setStored('sales_records', sales);
+      alert(`Successfully imported & synced ${approvedRows.length} ERP report row(s) to Google Sheet & Portal!`);
+      closeModal('aiImportModal');
+      renderAppLayout();
+      setTimeout(fetchFromSheet, 1500);
     }
 
     window.addEventListener('load', init);
