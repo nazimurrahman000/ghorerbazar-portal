@@ -646,6 +646,27 @@
       document.body.appendChild(script);
     }
 
+    function isUserInteractingWithControl() {
+      const active = document.activeElement;
+      if (!active) return false;
+      const tag = (active.tagName || '').toUpperCase();
+      return tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA';
+    }
+
+    function hasOnlineStateChanged(cloudList, localList) {
+      if (!Array.isArray(cloudList) || !Array.isArray(localList)) return true;
+      if (cloudList.length !== localList.length) return true;
+      const norm = arr => arr.map(u => `${u.id}_${u.state}_${getUserOnlineStatus(u.id)}`).sort().join('|');
+      return norm(cloudList) !== norm(localList);
+    }
+
+    function hasAttendanceChanged(cloudAtt, localAtt) {
+      if (!Array.isArray(cloudAtt) || !Array.isArray(localAtt)) return true;
+      if (cloudAtt.length !== localAtt.length) return true;
+      const stripTick = arr => arr.map(({ lastTick, ...rest }) => rest);
+      return JSON.stringify(stripTick(cloudAtt)) !== JSON.stringify(stripTick(localAtt));
+    }
+
     function handleCloudData(res) {
       let changed = false;
       if (Array.isArray(res.salesRecords)) {
@@ -669,17 +690,15 @@
           }
           return cloudRec;
         });
-        if (JSON.stringify(mergedAtt) !== JSON.stringify(localAtt)) {
-          setStored('attendance_records', mergedAtt);
-          changed = true;
-        }
+        const stateChanged = hasAttendanceChanged(mergedAtt, localAtt);
+        setStored('attendance_records', mergedAtt);
+        if (stateChanged) changed = true;
       }
       if (Array.isArray(res.onlineUsers)) {
         const localOnline = getStored('online_users', []);
-        if (JSON.stringify(res.onlineUsers) !== JSON.stringify(localOnline)) {
-          setStored('online_users', res.onlineUsers);
-          changed = true;
-        }
+        const onlineStateDiff = hasOnlineStateChanged(res.onlineUsers, localOnline);
+        setStored('online_users', res.onlineUsers);
+        if (onlineStateDiff) changed = true;
       }
       if (Array.isArray(res.activityLogs) && res.activityLogs.length > 0) {
         const localLogs = getStored('activity_logs', []);
@@ -714,7 +733,7 @@
           changed = true;
         }
       }
-      if (changed && currentUser && !isAnyModalOpen()) {
+      if (changed && currentUser && !isAnyModalOpen() && !isUserInteractingWithControl()) {
         renderAppLayout();
       }
     }
@@ -865,6 +884,14 @@
     }
 
     function renderAppLayout() {
+      const prevMainEl = document.getElementById('mainScrollContainer');
+      const savedScrollTop = prevMainEl ? prevMainEl.scrollTop : 0;
+      const savedScrollLeft = prevMainEl ? prevMainEl.scrollLeft : 0;
+      const tableScrollPositions = Array.from(document.querySelectorAll('.overflow-x-auto')).map(el => ({
+        top: el.scrollTop,
+        left: el.scrollLeft
+      }));
+
       const u = currentUser;
       const roleBadgeText = u.role === 'admin'
         ? `TL (${u.team})`
@@ -934,7 +961,7 @@
             </div>
           </aside>
 
-          <div class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
+          <div id="mainScrollContainer" class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
             <header class="min-h-[72px] py-3 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm shrink-0">
               <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
@@ -984,6 +1011,19 @@
         ${renderConfirmWarningModal()}
       `;
       document.getElementById('app').innerHTML = html;
+
+      const newMainEl = document.getElementById('mainScrollContainer');
+      if (newMainEl) {
+        newMainEl.scrollTop = savedScrollTop;
+        newMainEl.scrollLeft = savedScrollLeft;
+      }
+      const newTables = document.querySelectorAll('.overflow-x-auto');
+      tableScrollPositions.forEach((pos, idx) => {
+        if (newTables[idx]) {
+          newTables[idx].scrollTop = pos.top;
+          newTables[idx].scrollLeft = pos.left;
+        }
+      });
     }
 
     function renderTabContent() {
@@ -1385,6 +1425,7 @@
 
     function renderMonthlyPerformanceView() {
       const u = currentUser;
+      const isAdmin = isFullAdmin(u);
       const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
       const monthSales = getStored('sales_records', []).filter(s => s.date.endsWith(selectedMonthKey));
       const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
@@ -1448,7 +1489,7 @@
           ...ag, baseTgt, workTgt, leads, orders, rev, conv, rem, achPct,
           ajwa, pinkSalt, blackGarlic, sunHoney, bsHoney, gawaGhee, daysCount: uniqueDailyLogs.length, dailyLogs: uniqueDailyLogs
         };
-      });
+      }).sort((a, b) => b.rev - a.rev || b.orders - a.orders);
 
       const totConv = totLeads > 0 ? ((totOrders / totLeads) * 100).toFixed(2) : '0.00';
       const totRem = Math.max(0, totWork - totRev);
@@ -1464,15 +1505,18 @@
                 <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>Monthly Performance Report (${monthLabel})
               </h2>
               <p class="text-xs font-bold text-slate-500 mt-0.5">
-                ${canViewAll(u) ? `Defaulting to your team (${monthlyPerfTeamScope}). Filter by Team or select a specific Agent to inspect date-wise monthly performance.` : `View your complete monthly summary and date-wise performance table with total sum for ${monthLabel}.`}
+                ${canViewAll(u) ? `Sorted by Sales Amount. Click any agent or use Admin Actions to edit/delete date-wise records with full cross-panel sync.` : `View your complete monthly summary and date-wise performance table with total sum for ${monthLabel}.`}
               </p>
             </div>
 
             ${canViewAll(u) ? `
             <div class="flex flex-wrap items-center gap-3">
-              ${isFullAdmin(u) ? `
+              ${isAdmin ? `
               <button onclick="openAiImportModal()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2 transition-all">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
+              </button>
+              <button onclick="openReportModal(monthlyPerfAgentId !== 'ALL' ? monthlyPerfAgentId : '')" class="px-4 py-2 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
+                <i class="fa-solid fa-plus-circle"></i> Add / Edit Daily Data
               </button>
               ` : ''}
               <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
@@ -1512,11 +1556,12 @@
                   <th class="p-3.5">Remaining</th>
                   <th class="p-3.5">Achieved %</th>
                   <th class="p-3.5">Products Sold (KG)</th>
+                  ${isAdmin ? `<th class="p-3.5 text-right">Admin Actions</th>` : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
                 ${agentRows.map(r => `
-                  <tr class="hover:bg-slate-50/90 ${canViewAll(u) ? 'cursor-pointer' : ''}" onclick="${canViewAll(u) ? `setMonthlyPerfAgent('${r.id}')` : ''}" title="${canViewAll(u) ? 'Click to view date-by-date monthly table for this agent' : ''}">
+                  <tr class="hover:bg-slate-50/90 ${canViewAll(u) ? 'cursor-pointer' : ''}" onclick="${canViewAll(u) ? `setMonthlyPerfAgent('${r.id}')` : ''}" title="${canViewAll(u) ? 'Click to view & edit date-by-date monthly records for this agent' : ''}">
                     <td class="p-3.5 font-extrabold text-slate-900">${r.name} <span class="text-slate-400 text-[10px]">(${r.id})</span></td>
                     <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${r.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${r.team}</span></td>
                     <td class="p-3.5 font-black text-slate-700">${r.grade}</td>
@@ -1533,6 +1578,19 @@
                     <td class="p-3.5 text-[11px] font-bold text-slate-600">
                       Ajwa: <strong>${r.ajwa.toFixed(2)}</strong> | Salt: <strong>${r.pinkSalt.toFixed(2)}</strong> | Garlic: <strong>${r.blackGarlic.toFixed(2)}</strong> | Sun.H: <strong>${r.sunHoney.toFixed(2)}</strong> | BS.H: <strong>${r.bsHoney.toFixed(2)}</strong> | Ghee: <strong>${r.gawaGhee.toFixed(2)}</strong>
                     </td>
+                    ${isAdmin ? `
+                    <td class="p-3.5 text-right space-x-1" onclick="event.stopPropagation()">
+                      <button onclick="setMonthlyPerfAgent('${r.id}')" class="px-2.5 py-1 bg-purple-50 text-purple-700 rounded-lg font-extrabold hover:bg-purple-100" title="View & Edit Date-Wise Logs">
+                        <i class="fa-solid fa-calendar-days mr-1"></i> Dates (${r.daysCount})
+                      </button>
+                      <button onclick="openReportModal('${r.id}')" class="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100" title="Add/Edit Sales Entry">
+                        <i class="fa-solid fa-pen-to-square"></i> Edit
+                      </button>
+                      <button onclick="openUserModal('${r.id}')" class="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg font-extrabold hover:bg-amber-100" title="Edit Target/Grade">
+                        <i class="fa-solid fa-bullseye"></i>
+                      </button>
+                    </td>
+                    ` : ''}
                   </tr>
                 `).join('')}
               </tbody>
@@ -1549,7 +1607,7 @@
                   <td class="p-4 text-emerald-400 text-sm">৳${totRev.toLocaleString()}</td>
                   <td class="p-4 text-slate-300">৳${totRem.toLocaleString()}</td>
                   <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${totAchPct}%</span></td>
-                  <td class="p-4 text-[11px] text-amber-200">
+                  <td colspan="${isAdmin ? 2 : 1}" class="p-4 text-[11px] text-amber-200">
                     Ajwa: ${totAjwa.toFixed(2)} | Salt: ${totSalt.toFixed(2)} | Garlic: ${totGarlic.toFixed(2)} | Sun.H: ${totSunH.toFixed(2)} | BS.H: ${totBsH.toFixed(2)} | Ghee: ${totGhee.toFixed(2)} kg
                   </td>
                 </tr>
@@ -1562,15 +1620,24 @@
             const sumDailyTgtSingle = dTargetSingle * singleAgentObj.dailyLogs.length;
             return `
             <div class="space-y-3 mt-6">
-              <div class="flex items-center justify-between bg-white px-5 py-3.5 rounded-2xl border border-slate-200">
+              <div class="flex flex-wrap items-center justify-between gap-3 bg-white px-5 py-3.5 rounded-2xl border border-slate-200">
                 <div>
                   <h3 class="text-base font-black text-slate-900">
                     <i class="fa-solid fa-calendar-day text-blue-600 mr-1.5"></i> 
                     ${singleAgentObj.name}'s Date-Wise Monthly Performance (${monthLabel})
                   </h3>
-                  <p class="text-xs font-bold text-slate-400">Day-by-day sales, conversion ratio, product weights & grand total sum</p>
+                  <p class="text-xs font-bold text-slate-400">
+                    ${isAdmin ? 'Admin Editable Mode: Any Edit or Delete here will show a confirmation warning and automatically update Agent Panel, Central Dashboard & Google Sheet.' : 'Day-by-day sales, conversion ratio, product weights & grand total sum'}
+                  </p>
                 </div>
-                ${canViewAll(u) ? `<button onclick="setMonthlyPerfAgent('ALL')" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-extrabold"><i class="fa-solid fa-arrow-left mr-1"></i>Back to All Team Members</button>` : ''}
+                <div class="flex items-center gap-2">
+                  ${isAdmin ? `
+                  <button onclick="openReportModal('${singleAgentObj.id}')" class="px-3.5 py-2 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
+                    <i class="fa-solid fa-plus mr-1"></i> Add New Date Entry for ${singleAgentObj.name}
+                  </button>
+                  ` : ''}
+                  ${canViewAll(u) ? `<button onclick="setMonthlyPerfAgent('ALL')" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-extrabold"><i class="fa-solid fa-arrow-left mr-1"></i>Back to All Team Members</button>` : ''}
+                </div>
               </div>
               <div class="card-dynamic overflow-hidden overflow-x-auto">
                 <table class="w-full text-left text-xs whitespace-nowrap">
@@ -1584,10 +1651,11 @@
                       <th class="p-3.5">Daily Target (÷26)</th>
                       <th class="p-3.5">Daily Achieved %</th>
                       <th class="p-3.5">Products Sold (KG)</th>
+                      ${isAdmin ? `<th class="p-3.5 text-right">Admin Actions</th>` : ''}
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100 font-semibold">
-                    ${singleAgentObj.dailyLogs.length === 0 ? `<tr><td colspan="8" class="p-8 text-center text-slate-400 font-bold">No daily entries submitted by ${singleAgentObj.name} in ${monthLabel} yet.</td></tr>` : ''}
+                    ${singleAgentObj.dailyLogs.length === 0 ? `<tr><td colspan="${isAdmin ? 9 : 8}" class="p-8 text-center text-slate-400 font-bold">No daily entries submitted by ${singleAgentObj.name} in ${monthLabel} yet.</td></tr>` : ''}
                     ${singleAgentObj.dailyLogs.map(dl => {
                       const dConv = Number(dl.leads) > 0 ? ((Number(dl.orders) / Number(dl.leads)) * 100).toFixed(2) : '0.00';
                       const dAch = dTargetSingle > 0 ? Math.round((Number(dl.amount) / dTargetSingle) * 100) : 0;
@@ -1603,6 +1671,16 @@
                           <td class="p-3.5 text-[11px] font-bold text-slate-600">
                             Ajwa: <strong>${dl.ajwa||0}</strong> | Salt: <strong>${dl.pinkSalt||0}</strong> | Garlic: <strong>${dl.blackGarlic||0}</strong> | Sun.H: <strong>${dl.sunHoney||0}</strong> | BS.H: <strong>${dl.bsHoney||0}</strong> | Ghee: <strong>${dl.gawaGhee||0}</strong>
                           </td>
+                          ${isAdmin ? `
+                          <td class="p-3.5 text-right space-x-1">
+                            <button onclick="openReportModal('${dl.userId}', '${dl.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
+                              <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
+                            </button>
+                            <button onclick="handleDirectDeleteReport('${dl.userId}', '${singleAgentObj.name}', '${dl.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100 transition-colors">
+                              <i class="fa-solid fa-trash-can mr-1"></i> Delete
+                            </button>
+                          </td>
+                          ` : ''}
                         </tr>
                       `;
                     }).join('')}
@@ -1618,7 +1696,7 @@
                       <td class="p-4 text-emerald-400 text-sm">৳${singleAgentObj.rev.toLocaleString()}</td>
                       <td class="p-4 text-slate-300">৳${sumDailyTgtSingle.toLocaleString()} <span class="text-[10px] text-slate-400">(Month: ৳${singleAgentObj.workTgt.toLocaleString()})</span></td>
                       <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${singleAgentObj.achPct}% of Month</span></td>
-                      <td class="p-4 text-[11px] text-amber-200">
+                      <td colspan="${isAdmin ? 2 : 1}" class="p-4 text-[11px] text-amber-200">
                         Ajwa: ${singleAgentObj.ajwa.toFixed(2)} | Salt: ${singleAgentObj.pinkSalt.toFixed(2)} | Garlic: ${singleAgentObj.blackGarlic.toFixed(2)} | Sun.H: ${singleAgentObj.sunHoney.toFixed(2)} | BS.H: ${singleAgentObj.bsHoney.toFixed(2)} | Ghee: ${singleAgentObj.gawaGhee.toFixed(2)} kg
                       </td>
                     </tr>
@@ -2196,7 +2274,7 @@
         const key = `${s.userId}_${s.date}`;
         if (!uniqueMap.has(key)) uniqueMap.set(key, s);
       });
-      sales = Array.from(uniqueMap.values());
+      sales = Array.from(uniqueMap.values()).sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0) || (Number(b.orders) || 0) - (Number(a.orders) || 0));
 
       let sumLeads = 0, sumOrders = 0, sumAmount = 0, sumDailyTgt = 0;
       let sumAjwa = 0, sumSalt = 0, sumGarlic = 0, sumSunH = 0, sumBsH = 0, sumGhee = 0;
@@ -3003,12 +3081,20 @@
     function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
     function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
 
+    let lastSelectedAgentId = null;
+
     function openReportModal(agentId, dateStr) {
       if (isSupervisor(currentUser)) return;
       const targetDate = (dateStr && dateStr !== 'ALL') ? dateStr : getTodayFormatted();
       document.getElementById('subDate').value = dateToInputVal(targetDate);
-      if (isFullAdmin(currentUser) && agentId) {
-        document.getElementById('subAgentId').value = agentId;
+      if (isFullAdmin(currentUser)) {
+        const selEl = document.getElementById('subAgentId');
+        const allAg = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+        const preferredId = agentId || lastSelectedAgentId || (allAg[0] && allAg[0].id);
+        if (selEl && preferredId) {
+          selEl.value = preferredId;
+          lastSelectedAgentId = preferredId;
+        }
       }
       onModalChange();
       openModal('submitModal');
@@ -3017,6 +3103,9 @@
     function onModalChange() {
       const u = currentUser;
       const agentId = isFullAdmin(u) ? document.getElementById('subAgentId').value : u.id;
+      if (isFullAdmin(u) && agentId) {
+        lastSelectedAgentId = agentId;
+      }
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
       
       const sales = getStored('sales_records', []);
@@ -3052,6 +3141,23 @@
       const amount = Number(document.getElementById('subAmount').value) || 0;
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
 
+      let sales = getStored('sales_records', []);
+      const idx = sales.findIndex(s => String(s.userId) === String(targetAgent.id) && s.date === dateStr);
+      const isUpdate = idx !== -1;
+
+      if (isUpdate) {
+        const oldRec = sales[idx];
+        const confirmModify = confirm(
+          `⚠️ Warning — Existing Record Edit / Overwrite:\n\n` +
+          `Agent: ${targetAgent.name} (${targetAgent.id})\n` +
+          `Date: ${dateStr}\n` +
+          `Previous Data: Leads ${oldRec.leads}, Orders ${oldRec.orders}, Amount ৳${Number(oldRec.amount).toLocaleString()}\n` +
+          `New Data: Leads ${leads}, Orders ${orders}, Amount ৳${amount.toLocaleString()}\n\n` +
+          `Are you sure you want to update this record across Agent Panel, Central Dashboard, Monthly Performance & Google Sheet?`
+        );
+        if (!confirmModify) return;
+      }
+
       const submittedMonthKey = dateStr.substring(3);
       if (submittedMonthKey && submittedMonthKey.length === 7) {
         selectedMonthKey = submittedMonthKey;
@@ -3076,10 +3182,8 @@
         gawaGhee: Number(document.getElementById('subGawaGhee').value) || 0
       };
 
-      let sales = getStored('sales_records', []);
-      const idx = sales.findIndex(s => String(s.userId) === String(entry.userId) && s.date === entry.date);
-      const isUpdate = idx !== -1;
-      if (idx !== -1) sales[idx] = entry; else sales.unshift(entry);
+      sales = sales.filter(s => !(String(s.userId) === String(entry.userId) && s.date === entry.date));
+      sales.unshift(entry);
       setStored('sales_records', sales);
 
       const logMeta = recordActivityLog(
@@ -3089,7 +3193,7 @@
 
       await postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta });
       
-      alert(`Report saved and synced to the cloud successfully!`);
+      alert(`Report ${isUpdate ? 'updated' : 'saved'} and synced across Agent Panel, Central Dashboard & Google Sheet!`);
       closeModal('submitModal');
       renderAppLayout();
       setTimeout(fetchFromSheet, 1500);
