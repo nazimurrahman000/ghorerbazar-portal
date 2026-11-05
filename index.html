@@ -6,8 +6,6 @@
   <title>Ghorerbazar Facebook - Dynamic Sales & Incentive Portal</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Tesseract.js for Client-Side OCR Image Recognition -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; color: #0f172a; }
@@ -43,18 +41,10 @@
     .progress-track { background-color: rgba(15, 23, 42, 0.08); border-radius: 9999px; overflow: hidden; }
     .roster-do { background-color: #fed7aa; color: #9a3412; font-weight: 800; }
     .roster-night { background-color: #e0e7ff; color: #1e40af; font-weight: 800; }
-    
-    @keyframes bellShake {
-      0%, 100% { transform: rotate(0); }
-      20%, 60% { transform: rotate(14deg); }
-      40%, 80% { transform: rotate(-14deg); }
-    }
-    .bell-ring { animation: bellShake 1.2s infinite ease-in-out; }
   </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col">
   <div id="app" class="flex-1 flex flex-col"></div>
-  <div id="toastNotificationContainer" class="fixed top-20 right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
   <script>
     const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
@@ -144,6 +134,7 @@
         copy.role = 'admin';
         copy.name = String(copy.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
         copy.grade = 'TL';
+        // Ensure Nazim's password upgrades from old default 'admin123' to '123nazim'
         if (String(copy.id) === '10122' && (!copy.pass || copy.pass === 'admin123')) {
           copy.pass = '123nazim';
         }
@@ -194,24 +185,20 @@
     let monthlyPerfAgentId = 'ALL';
 
     let activityTeamFilter = 'ALL';
-    let lastSelectedAgentId = null;
 
     let pollInterval = null;
     let dutyTimerInterval = null;
     let pendingConfirmCallback = null;
-    let notificationCheckInterval = null;
-
-    let userNotifications = JSON.parse(localStorage.getItem('gb_notifications') || '[]');
-    let notificationDropdownOpen = false;
 
     function isAnyModalOpen() {
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'confirmWarningModal', 'aiImportModal'];
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'confirmWarningModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
       });
     }
 
+    // STRICT ROLE & PRIVACY HELPERS
     function isSuperAdmin(u) { return u && String(u.id) === '10122'; }
     function isFullAdmin(u) { return u && u.role === 'admin'; }
     function isSupervisor(u) { return u && u.role === 'supervisor'; }
@@ -241,8 +228,8 @@
 
     function openConfirmWarningModal(title, message, badgeText, onConfirmAction) {
       pendingConfirmCallback = onConfirmAction;
-      document.getElementById('warnModalTitle').textContent = title || 'Confirm Permanent Action';
-      document.getElementById('warnModalMessage').textContent = message || 'Are you sure you want to proceed? This will immediately sync and update across the central database.';
+      document.getElementById('warnModalTitle').textContent = title || 'Confirm Permanent Deletion';
+      document.getElementById('warnModalMessage').textContent = message || 'Are you sure you want to permanently delete this record? This action cannot be undone.';
       document.getElementById('warnModalBadge').textContent = badgeText || 'Security Warning';
       openModal('confirmWarningModal');
     }
@@ -423,131 +410,6 @@
       selectedMonthKey = newMonthKey;
       localStorage.setItem('gb_selected_month', newMonthKey);
       renderAppLayout();
-    }
-
-    function checkAgentDutyReminders() {
-      if (!currentUser || currentUser.role !== 'agent') return;
-      const roster = getRosterForMonth(selectedMonthKey);
-      const myRow = roster.find(r => String(r.id) === String(currentUser.id));
-      if (!myRow) return;
-
-      const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-      const todayDayKey = days[new Date().getDay()];
-      const shiftStr = String(myRow[todayDayKey] || '3:00 PM').trim();
-
-      if (shiftStr === 'DO') return;
-
-      let endHour = 23, endMinute = 0;
-      if (shiftStr.includes('7:00')) { endHour = 15; endMinute = 0; }
-      else if (shiftStr.includes('10:00')) { endHour = 18; endMinute = 0; }
-      else if (shiftStr.includes('3:00')) { endHour = 23; endMinute = 0; }
-      else if (shiftStr.toUpperCase().includes('NIGHT')) { endHour = 7; endMinute = 0; }
-
-      const now = new Date();
-      const currentH = now.getHours();
-      const currentM = now.getMinutes();
-
-      let minutesUntilEnd = (endHour * 60 + endMinute) - (currentH * 60 + currentM);
-      if (minutesUntilEnd < 0 && shiftStr.toUpperCase().includes('NIGHT')) {
-        minutesUntilEnd += 1440;
-      }
-
-      if (minutesUntilEnd > 0 && minutesUntilEnd <= 5) {
-        const notifKey = `remind_submit_${getTodayFormatted()}_${currentUser.id}`;
-        if (!localStorage.getItem(notifKey)) {
-          localStorage.setItem(notifKey, 'sent');
-          triggerNotification(
-            "Submit Your Daily Sales Report",
-            "Your shift ends in 5 minutes! Please submit your daily leads, orders & product sales report before logging out.",
-            "report_reminder"
-          );
-        }
-      }
-    }
-
-    function triggerNotification(title, message, type) {
-      const notifObj = {
-        id: 'notif_' + Date.now(),
-        date: getTodayFormatted(),
-        time: getNowTimeStr(),
-        title: title,
-        message: message,
-        read: false,
-        type: type || 'info'
-      };
-      userNotifications.unshift(notifObj);
-      if (userNotifications.length > 50) userNotifications = userNotifications.slice(0, 50);
-      localStorage.setItem('gb_notifications', JSON.stringify(userNotifications));
-
-      showTopRightToast(title, message);
-      updateNotificationBellUI();
-    }
-
-    function showTopRightToast(title, message) {
-      const container = document.getElementById('toastNotificationContainer');
-      if (!container) return;
-      const toast = document.createElement('div');
-      toast.className = 'bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-blue-500/50 flex items-start gap-3 w-80 pointer-events-auto animate-bounce';
-      toast.innerHTML = `
-        <div class="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-bell"></i></div>
-        <div class="flex-1">
-          <h4 class="text-xs font-black text-white">${title}</h4>
-          <p class="text-[11px] font-bold text-slate-300 mt-0.5 leading-snug">${message}</p>
-        </div>
-        <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xs"></i></button>
-      `;
-      container.appendChild(toast);
-      setTimeout(() => {
-        if (toast.parentNode) toast.parentNode.removeChild(toast);
-      }, 7000);
-    }
-
-    function updateNotificationBellUI() {
-      const badge = document.getElementById('notifBadgeDot');
-      const unreadCount = userNotifications.filter(n => !n.read).length;
-      if (badge) {
-        if (unreadCount > 0) {
-          badge.textContent = unreadCount;
-          badge.classList.remove('hidden');
-        } else {
-          badge.classList.add('hidden');
-        }
-      }
-    }
-
-    function toggleNotificationDropdown() {
-      notificationDropdownOpen = !notificationDropdownOpen;
-      const el = document.getElementById('notificationDropdownMenu');
-      if (el) {
-        if (notificationDropdownOpen) {
-          userNotifications.forEach(n => n.read = true);
-          localStorage.setItem('gb_notifications', JSON.stringify(userNotifications));
-          updateNotificationBellUI();
-          renderNotificationList();
-          el.classList.remove('hidden');
-        } else {
-          el.classList.add('hidden');
-        }
-      }
-    }
-
-    function renderNotificationList() {
-      const listEl = document.getElementById('notificationItemsContainer');
-      if (!listEl) return;
-      if (userNotifications.length === 0) {
-        listEl.innerHTML = `<p class="p-6 text-center text-xs text-slate-400 font-bold">No notifications yet.</p>`;
-        return;
-      }
-      listEl.innerHTML = userNotifications.map(n => `
-        <div class="p-3 border-b border-slate-100 hover:bg-slate-50 flex items-start gap-3">
-          <div class="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-bell"></i></div>
-          <div class="flex-1">
-            <h5 class="text-xs font-extrabold text-slate-900">${n.title}</h5>
-            <p class="text-[11px] font-semibold text-slate-600 mt-0.5">${n.message}</p>
-            <span class="text-[9px] font-bold text-slate-400 mt-1 block">${n.date} at ${n.time}</span>
-          </div>
-        </div>
-      `).join('');
     }
 
     function ensureAgentAttendanceSession(user) {
@@ -759,40 +621,6 @@
       } catch (e) {}
     }
 
-    function handleManualSyncClick() {
-      const btn = document.getElementById('manualSyncBtn');
-      if (btn) {
-        const icon = btn.querySelector('.fa-cloud-arrow-down');
-        if (icon) icon.classList.add('fa-spin');
-      }
-      fetchFromSheet();
-      setTimeout(() => {
-        if (btn) {
-          const icon = btn.querySelector('.fa-cloud-arrow-down');
-          if (icon) icon.classList.remove('fa-spin');
-        }
-        showToastNotification("Data successfully synced with Google Cloud Sheet!");
-      }, 1200);
-    }
-
-    function showToastNotification(msg) {
-      let toast = document.getElementById('toastNotification');
-      if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'toastNotification';
-        toast.className = 'fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-700 transition-all duration-300 translate-y-20 opacity-0';
-        toast.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i><span id="toastMsg" class="text-xs font-bold"></span>`;
-        document.body.appendChild(toast);
-      }
-      document.getElementById('toastMsg').textContent = msg;
-      setTimeout(() => {
-        toast.classList.remove('translate-y-20', 'opacity-0');
-      }, 50);
-      setTimeout(() => {
-        toast.classList.add('translate-y-20', 'opacity-0');
-      }, 3500);
-    }
-
     function fetchFromSheet() {
       const cbName = 'gb_cb_' + Date.now();
       window[cbName] = function(res) {
@@ -886,13 +714,7 @@
         }
       }
       if (changed && currentUser && !isAnyModalOpen()) {
-        const container = document.getElementById('mainScrollContainer');
-        const prevScroll = container ? container.scrollTop : 0;
         renderAppLayout();
-        const newContainer = document.getElementById('mainScrollContainer');
-        if (newContainer && prevScroll > 0) {
-          newContainer.scrollTop = prevScroll;
-        }
       }
     }
 
@@ -918,9 +740,6 @@
         fetchFromSheet();
         if (pollInterval) clearInterval(pollInterval);
         pollInterval = setInterval(fetchFromSheet, 4000);
-
-        if (notificationCheckInterval) clearInterval(notificationCheckInterval);
-        notificationCheckInterval = setInterval(checkAgentDutyReminders, 30000);
       } else {
         document.getElementById('app').innerHTML = renderLogin();
       }
@@ -970,7 +789,6 @@
       }
       if (pollInterval) clearInterval(pollInterval);
       if (dutyTimerInterval) clearInterval(dutyTimerInterval);
-      if (notificationCheckInterval) clearInterval(notificationCheckInterval);
       currentUser = null;
       localStorage.removeItem('gb_session_user');
       document.getElementById('app').innerHTML = renderLogin();
@@ -1021,7 +839,7 @@
     function renderLogin() {
       return `
         <div class="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-          <div class="v-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-slate-800 border border-slate-200">
+          <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-slate-800 border border-slate-200">
             <div class="text-center mb-8">
               <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl tab-active text-white shadow-lg mb-4">
                 <i class="fa-brands fa-facebook-f text-3xl"></i>
@@ -1045,11 +863,7 @@
       `;
     }
 
-    // SCROLL RETENTION & JUMP FIX APPLIED SAFELY HERE
     function renderAppLayout() {
-      const container = document.getElementById('mainScrollContainer');
-      const prevScroll = container ? container.scrollTop : 0;
-
       const u = currentUser;
       const roleBadgeText = u.role === 'admin'
         ? `TL (${u.team})`
@@ -1063,8 +877,6 @@
       const onlineNamesTooltip = activeOnlineUsers.length > 0
         ? activeOnlineUsers.map(usr => `${usr.name} (${getUserOnlineStatus(usr.id)})`).join(' • ')
         : 'No users online';
-
-      const unreadNotifCount = userNotifications.filter(n => !n.read).length;
 
       const html = `
         <div class="flex-1 flex min-h-screen">
@@ -1121,14 +933,14 @@
             </div>
           </aside>
 
-          <div id="mainScrollContainer" class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
+          <div class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
             <header class="min-h-[72px] py-3 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm shrink-0">
               <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
                 <span class="text-slate-300">/</span>
                 <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab.replace('_', ' ')}</h2>
                 <span class="text-slate-300">•</span>
-                <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl">
+                <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
                   <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
                   <span class="text-[11px] font-extrabold uppercase text-slate-500">Month:</span>
                   <select onchange="changeSelectedMonth(this.value)" class="bg-transparent text-xs font-black text-blue-800 focus:outline-none cursor-pointer">
@@ -1139,22 +951,6 @@
               </div>
 
               <div class="flex items-center gap-3 shrink-0">
-                <div class="relative">
-                  <button onclick="toggleNotificationDropdown()" class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center relative transition-colors">
-                    <i class="fa-solid fa-bell ${unreadNotifCount > 0 ? 'bell-ring text-blue-600' : ''}"></i>
-                    <span id="notifBadgeDot" class="${unreadNotifCount > 0 ? '' : 'hidden'} absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow">
-                      ${unreadNotifCount}
-                    </span>
-                  </button>
-                  <div id="notificationDropdownMenu" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
-                    <div class="p-3 bg-slate-900 text-white flex justify-between items-center">
-                      <span class="text-xs font-black"><i class="fa-solid fa-bell mr-1.5 text-blue-400"></i> Notifications</span>
-                      <button onclick="toggleNotificationDropdown()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
-                    </div>
-                    <div id="notificationItemsContainer" class="max-h-72 overflow-y-auto"></div>
-                  </div>
-                </div>
-
                 <button onclick="canViewAll(currentUser) ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl flex items-center gap-2 transition-colors">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
                   <span>${activeOnlineUsers.length} Online</span>
@@ -1186,12 +982,6 @@
         ${renderConfirmWarningModal()}
       `;
       document.getElementById('app').innerHTML = html;
-      updateNotificationBellUI();
-
-      const newContainer = document.getElementById('mainScrollContainer');
-      if (newContainer && prevScroll > 0) {
-        newContainer.scrollTop = prevScroll;
-      }
     }
 
     function renderTabContent() {
@@ -2368,6 +2158,955 @@
           </div>
         </div>
       `;
+    }
+
+    function renderReports() {
+      const u = currentUser;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const rawSales = getStored('sales_records', []);
+      
+      let dateFilteredSales = [];
+      if (reportsDateFilter === 'ALL') {
+        dateFilteredSales = rawSales.filter(s => s.date.endsWith(selectedMonthKey));
+      } else {
+        dateFilteredSales = rawSales.filter(s => s.date === reportsDateFilter);
+      }
+
+      let sales = [];
+      if (canViewAll(u)) {
+        sales = logsFilterScope === 'ALL' ? dateFilteredSales : dateFilteredSales.filter(s => s.team === logsFilterScope);
+      } else {
+        sales = dateFilteredSales.filter(s => String(s.userId) === String(u.id));
+      }
+
+      const uniqueMap = new Map();
+      sales.forEach(s => {
+        const key = `${s.userId}_${s.date}`;
+        if (!uniqueMap.has(key)) uniqueMap.set(key, s);
+      });
+      sales = Array.from(uniqueMap.values());
+
+      let sumLeads = 0, sumOrders = 0, sumAmount = 0, sumDailyTgt = 0;
+      let sumAjwa = 0, sumSalt = 0, sumGarlic = 0, sumSunH = 0, sumBsH = 0, sumGhee = 0;
+
+      sales.forEach(s => {
+        const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
+        const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
+        const agDailyTarget = Math.round(agWorkTarget / 26);
+
+        sumLeads += Number(s.leads) || 0;
+        sumOrders += Number(s.orders) || 0;
+        sumAmount += Number(s.amount) || 0;
+        sumDailyTgt += agDailyTarget;
+        sumAjwa += Number(s.ajwa) || 0;
+        sumSalt += Number(s.pinkSalt) || 0;
+        sumGarlic += Number(s.blackGarlic) || 0;
+        sumSunH += Number(s.sunHoney) || 0;
+        sumBsH += Number(s.bsHoney) || 0;
+        sumGhee += Number(s.gawaGhee) || 0;
+      });
+
+      const sumConv = sumLeads > 0 ? ((sumOrders / sumLeads) * 100).toFixed(2) : '0.00';
+      const sumAchPct = sumDailyTgt > 0 ? Math.round((sumAmount / sumDailyTgt) * 100) : 0;
+      const isShowingToday = reportsDateFilter === getTodayFormatted();
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-xl font-black text-slate-900">
+                <i class="fa-solid fa-file-invoice text-blue-600 mr-2"></i>
+                Daily Sales & Conversion Logs (${reportsDateFilter === 'ALL' ? `Full Month • ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)})
+              </h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">
+                Showing entries for <strong>${reportsDateFilter === 'ALL' ? `All Dates in ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)}</strong> — use the date picker to inspect any specific date
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <i class="fa-solid fa-calendar-day text-blue-600 text-xs"></i>
+                <span class="text-[10px] font-extrabold uppercase text-slate-500">Select Date:</span>
+                <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-800 focus:outline-none cursor-pointer">
+              </div>
+
+              <button onclick="setReportsDateFilter('${getTodayFormatted()}')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${isShowingToday ? 'bg-blue-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+                Today (${cleanDisplayDate(getTodayFormatted())})
+              </button>
+              <button onclick="setReportsDateFilter('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${reportsDateFilter === 'ALL' ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+                All Dates (${selectedMonthKey})
+              </button>
+
+              ${canViewAll(u) ? `
+              <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+                <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
+                <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+              </select>
+              ` : ''}
+
+              ${isFullAdmin(u) || u.role === 'agent' ? `
+              <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
+                <i class="fa-solid fa-plus mr-1"></i> Add New Report
+              </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Date</th>
+                  <th class="p-3.5">Agent</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5">Leads</th>
+                  <th class="p-3.5">Orders</th>
+                  <th class="p-3.5">Conv. Ratio</th>
+                  <th class="p-3.5">Sales Amount</th>
+                  <th class="p-3.5">Daily Target (÷26)</th>
+                  <th class="p-3.5">Daily Achieved</th>
+                  <th class="p-3.5">Products Sold (kg)</th>
+                  ${isFullAdmin(u) || u.role === 'agent' ? `<th class="p-3.5 text-right">Actions</th>` : ''}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${sales.length === 0 ? `<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted for ${reportsDateFilter === 'ALL' ? selectedMonthKey : cleanDisplayDate(reportsDateFilter)} yet.</td></tr>` : ''}
+                ${sales.map(s => {
+                  const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
+                  const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
+                  const agDailyTarget = Math.round(agWorkTarget / 26);
+                  const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
+                  const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
+
+                  return `
+                  <tr class="hover:bg-slate-50/90">
+                    <td class="p-3.5 font-bold text-slate-700">${cleanDisplayDate(s.date)}</td>
+                    <td class="p-3.5 font-extrabold text-slate-900">${s.userName} <span class="text-slate-400 text-[10px]">(${s.userId})</span></td>
+                    <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${s.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${s.team}</span></td>
+                    <td class="p-3.5 font-bold text-slate-700">${s.leads}</td>
+                    <td class="p-3.5 font-black text-blue-600">${s.orders}</td>
+                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-extrabold">${convRatio}%</span></td>
+                    <td class="p-3.5 font-black text-emerald-600">৳${Number(s.amount).toLocaleString()}</td>
+                    <td class="p-3.5 font-bold text-slate-500">৳${agDailyTarget.toLocaleString()}</td>
+                    <td class="p-3.5">
+                      <span class="px-2.5 py-1 rounded-md ${dailyAchPct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">
+                        ${dailyAchPct}%
+                      </span>
+                    </td>
+                    <td class="p-3.5 text-[11px] font-bold text-slate-600">
+                      Ajwa: <strong>${s.ajwa||0}</strong> | Salt: <strong>${s.pinkSalt||0}</strong> | Garlic: <strong>${s.blackGarlic||0}</strong> | Sun.H: <strong>${s.sunHoney||0}</strong> | BS.H: <strong>${s.bsHoney||0}</strong> | Ghee: <strong>${s.gawaGhee||0}</strong>
+                    </td>
+                    ${isFullAdmin(u) || u.role === 'agent' ? `
+                    <td class="p-3.5 text-right space-x-1">
+                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
+                        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
+                      </button>
+                      <button onclick="handleDirectDeleteReport('${s.userId}', '${s.userName}', '${s.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100 transition-colors">
+                        <i class="fa-solid fa-trash-can mr-1"></i> Delete
+                      </button>
+                    </td>
+                    ` : ''}
+                  </tr>
+                `}).join('')}
+              </tbody>
+              ${sales.length > 0 ? `
+              <tfoot class="bg-slate-900 text-white font-black text-xs">
+                <tr>
+                  <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${sales.length} ${sales.length === 1 ? 'Entry' : 'Entries'})
+                  </td>
+                  <td class="p-4">${sumLeads.toLocaleString()}</td>
+                  <td class="p-4 text-blue-300">${sumOrders.toLocaleString()}</td>
+                  <td class="p-4"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${sumConv}%</span></td>
+                  <td class="p-4 text-emerald-400 text-sm">৳${sumAmount.toLocaleString()}</td>
+                  <td class="p-4 text-slate-300">৳${sumDailyTgt.toLocaleString()}</td>
+                  <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${sumAchPct}%</span></td>
+                  <td colspan="${isFullAdmin(u) || u.role === 'agent' ? '2' : '1'}" class="p-4 text-[11px] text-amber-200">
+                    Ajwa: ${sumAjwa.toFixed(2)} | Salt: ${sumSalt.toFixed(2)} | Garlic: ${sumGarlic.toFixed(2)} | Sun.H: ${sumSunH.toFixed(2)} | BS.H: ${sumBsH.toFixed(2)} | Ghee: ${sumGhee.toFixed(2)} kg
+                  </td>
+                </tr>
+              </tfoot>
+              ` : ''}
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderManageAgents() {
+      const u = currentUser;
+      let allUsers = getUsersForMonth(selectedMonthKey);
+      if (isSupervisor(u)) {
+        allUsers = allUsers.filter(usr => usr.role !== 'admin');
+      }
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Monthly Setup, Grades & User IDs (${monthLabel})</h2>
+              <p class="text-xs font-bold text-slate-500">
+                ${isFullAdmin(u) ? `Create Agent or Supervisor IDs, check live online status, and customize monthly targets for ${monthLabel}` : `View registered Agent & Supervisor accounts, live online status & monthly targets for ${monthLabel}`}
+              </p>
+            </div>
+            ${isFullAdmin(u) ? `
+            <div class="flex items-center gap-2.5">
+              <button onclick="openProductConfigModal()" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
+                <i class="fa-solid fa-gift"></i> Edit Product Incentives (${selectedMonthKey})
+              </button>
+              <button onclick="openUserModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
+                <i class="fa-solid fa-user-plus"></i> Create New ID (${isSuperAdmin(u) ? 'Agent / Supervisor / Admin' : 'Agent / Supervisor'})
+              </button>
+            </div>
+            ` : ''}
+          </div>
+
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Emp ID</th>
+                  <th class="p-3.5">Name</th>
+                  <th class="p-3.5">Live Status</th>
+                  <th class="p-3.5">Role</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5">Grade (${selectedMonthKey})</th>
+                  ${isFullAdmin(u) ? `<th class="p-3.5">Password</th>` : ''}
+                  <th class="p-3.5">Base Target (${selectedMonthKey})</th>
+                  <th class="p-3.5">Working Target (+5%)</th>
+                  ${isFullAdmin(u) ? `<th class="p-3.5 text-right">Actions</th>` : ''}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${allUsers.map(usr => {
+                  const roleBadge = usr.role === 'admin'
+                    ? 'bg-purple-100 text-purple-800'
+                    : (usr.role === 'supervisor' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700');
+                  const displayGrade = usr.role === 'admin' ? 'TL' : (usr.role === 'supervisor' ? 'Supervisor' : (usr.grade || 'A'));
+                  const canEdit = canEditTargetUser(u, usr);
+                  const canDel = canDeleteTargetUser(u, usr);
+                  const canSeePass = canViewTargetPassword(u, usr);
+
+                  return `
+                  <tr class="hover:bg-slate-50">
+                    <td class="p-3.5 font-black text-blue-600">${usr.id}</td>
+                    <td class="p-3.5 font-extrabold text-slate-900">${usr.name}</td>
+                    <td class="p-3.5">${renderOnlineStatusBadge(usr.id)}</td>
+                    <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
+                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (usr.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${usr.team}</span></td>
+                    <td class="p-3.5 font-black ${usr.role === 'admin' ? 'text-purple-700' : (usr.role === 'supervisor' ? 'text-indigo-700' : 'text-slate-900')}">${displayGrade}</td>
+                    ${isFullAdmin(u) ? `<td class="p-3.5 font-mono text-slate-500">${canSeePass ? usr.pass : '<span class="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-sans font-bold"><i class="fa-solid fa-eye-slash mr-1"></i>Protected</span>'}</td>` : ''}
+                    <td class="p-3.5 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
+                    <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
+                    ${isFullAdmin(u) ? `
+                    <td class="p-3.5 text-right space-x-1">
+                      ${canEdit ? `<button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>` : `<span class="px-2.5 py-1 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-lg"><i class="fa-solid fa-lock mr-1"></i>Protected</span>`}
+                      ${canDel ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
+                    </td>
+                    ` : ''}
+                  </tr>
+                `}).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderProductConfigModal() {
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      return `
+        <div id="productConfigModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <div>
+                <h3 class="text-base font-black text-slate-900">Edit Product Targets & Bonuses (${selectedMonthKey})</h3>
+                <p class="text-xs font-bold text-slate-400">Customize per-agent KG targets and cash bonuses for this month</p>
+              </div>
+              <button type="button" onclick="closeModal('productConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleSaveProductConfig(event)" class="space-y-3">
+              ${Object.keys(activeProds).map(k => {
+                const p = activeProds[k];
+                return `
+                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-3 items-center">
+                    <div>
+                      <span class="text-xs font-black text-slate-800 block">${p.name}</span>
+                      <span class="text-[10px] font-bold text-slate-400">Per Agent Target</span>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Target (KG)</label>
+                      <input type="number" step="0.01" id="cfg_kg_${k}" value="${p.targetKg}" required class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">100% Bonus (৳)</label>
+                      <input type="number" id="cfg_b100_${k}" value="${p.bonus100 || 0}" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('productConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save Monthly Product Config</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function openProductConfigModal() { openModal('productConfigModal'); }
+
+    async function handleSaveProductConfig(e) {
+      e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
+      let configs = getStored('monthly_configs', {});
+      if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
+      if (!configs[selectedMonthKey].products) configs[selectedMonthKey].products = {};
+
+      Object.keys(DEFAULT_PRODUCTS).forEach(k => {
+        const kgVal = Number(document.getElementById(`cfg_kg_${k}`).value) || DEFAULT_PRODUCTS[k].targetKg;
+        const b100Val = Number(document.getElementById(`cfg_b100_${k}`).value) || 0;
+        configs[selectedMonthKey].products[k] = {
+          targetKg: kgVal,
+          bonus100: b100Val
+        };
+      });
+
+      setStored('monthly_configs', configs);
+      const logMeta = recordActivityLog('Updated Product Incentives', `Modified monthly product KG targets & bonuses for ${selectedMonthKey}`);
+      await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]), ...logMeta });
+      alert(`Product targets for ${selectedMonthKey} saved and synced!`);
+      closeModal('productConfigModal');
+      renderAppLayout();
+    }
+
+    function renderBreakModal() {
+      return `
+        <div id="breakModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center"><i class="fa-solid fa-mug-hot"></i></div>
+                <div>
+                  <h3 class="text-base font-black text-slate-900">Take a Break</h3>
+                  <p class="text-xs font-bold text-slate-400">Select your break reason to pause working hours</p>
+                </div>
+              </div>
+              <button type="button" onclick="closeModal('breakModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleStartBreak(event)" class="space-y-4">
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1.5">Select Break Reason</label>
+                <select id="breakReasonSelect" required class="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
+                  ${BREAK_REASONS.map(r => `<option value="${r}">${r}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1.5">Short Note (Optional)</label>
+                <input type="text" id="breakCustomNote" placeholder="e.g. Back in 15 mins" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+              </div>
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('breakModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white bg-amber-500 hover:bg-amber-600 rounded-xl shadow-lg">
+                  <i class="fa-solid fa-pause mr-1"></i> Start Break Now
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderEditAttendanceModal() {
+      const allAgents = getStored('users', []).filter(u => u.role === 'agent');
+      return `
+        <div id="editAttModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <h3 class="text-base font-black text-slate-900">Admin: Add / Edit Attendance Record</h3>
+              <button type="button" onclick="closeModal('editAttModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleAdminSaveAttendance(event)" class="space-y-3.5">
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent</label>
+                <select id="attAgentId" onchange="onAttModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs font-extrabold">
+                  ${allAgents.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${a.team})</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Date</label>
+                <input type="date" id="attDate" required onchange="onAttModalChange()" class="w-full px-3.5 py-2 bg-slate-50 border rounded-xl text-xs font-extrabold">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Login Time</label>
+                  <input type="text" id="attLogin" placeholder="09:00:00 AM" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Logout Time</label>
+                  <input type="text" id="attLogout" placeholder="06:00:00 PM" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Working Minutes</label>
+                  <input type="number" id="attWorkMins" min="0" placeholder="480" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Break Minutes</label>
+                  <input type="number" id="attBreakMins" min="0" placeholder="45" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Duty Status</label>
+                  <select id="attStatus" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="Working">Working</option>
+                    <option value="On Break">On Break</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Break Reason</label>
+                  <input type="text" id="attReason" placeholder="-" class="w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-bold">
+                </div>
+              </div>
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('editAttModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save Attendance</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function openEditAttendanceModal(agentId, dateStr) {
+      if (!isFullAdmin(currentUser)) return;
+      document.getElementById('attDate').value = dateToInputVal(dateStr || getTodayFormatted());
+      if (agentId) document.getElementById('attAgentId').value = agentId;
+      onAttModalChange();
+      openModal('editAttModal');
+    }
+
+    function onAttModalChange() {
+      const agId = document.getElementById('attAgentId').value;
+      const dateStr = inputValToDateStr(document.getElementById('attDate').value);
+      const attList = getStored('attendance_records', []);
+      const ex = attList.find(a => String(a.userId) === String(agId) && a.date === dateStr);
+      if (ex) {
+        document.getElementById('attLogin').value = sanitizeTimeDisplay(ex.loginTime);
+        document.getElementById('attLogout').value = sanitizeTimeDisplay(ex.logoutTime);
+        document.getElementById('attWorkMins').value = Math.round((Number(ex.activeSeconds) || 0) / 60);
+        document.getElementById('attBreakMins').value = Math.round((Number(ex.breakSeconds) || 0) / 60);
+        document.getElementById('attStatus').value = ex.status || 'Working';
+        document.getElementById('attReason').value = ex.breakReason || '-';
+      } else {
+        document.getElementById('attLogin').value = getNowTimeStr();
+        document.getElementById('attLogout').value = '--:--';
+        document.getElementById('attWorkMins').value = 0;
+        document.getElementById('attBreakMins').value = 0;
+        document.getElementById('attStatus').value = 'Working';
+        document.getElementById('attReason').value = '-';
+      }
+    }
+
+    async function handleAdminSaveAttendance(e) {
+      e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
+      const allUsers = getStored('users', DEFAULT_USERS);
+      const agId = document.getElementById('attAgentId').value;
+      const ag = allUsers.find(u => String(u.id) === String(agId));
+      const dateStr = inputValToDateStr(document.getElementById('attDate').value);
+
+      let attList = getStored('attendance_records', []);
+      const idx = attList.findIndex(a => String(a.userId) === String(agId) && a.date === dateStr);
+
+      const rec = {
+        date: dateStr,
+        userId: String(ag.id),
+        userName: ag.name,
+        team: ag.team,
+        loginTime: document.getElementById('attLogin').value.trim() || '--:--',
+        logoutTime: document.getElementById('attLogout').value.trim() || '--:--',
+        status: document.getElementById('attStatus').value,
+        breakReason: document.getElementById('attReason').value.trim() || '-',
+        breakLogs: idx !== -1 ? attList[idx].breakLogs : 'Edited by Admin',
+        activeSeconds: (Number(document.getElementById('attWorkMins').value) || 0) * 60,
+        breakSeconds: (Number(document.getElementById('attBreakMins').value) || 0) * 60,
+        lastTick: Date.now()
+      };
+
+      if (idx !== -1) attList[idx] = rec; else attList.unshift(rec);
+      setStored('attendance_records', attList);
+      const logMeta = recordActivityLog('Edited Attendance', `Updated attendance record for ${ag.name} (${ag.id}) on ${dateStr}`);
+      await postToSheet('ATTENDANCE_SYNC', { ...rec, ...logMeta });
+      alert('Attendance record updated and synced!');
+      closeModal('editAttModal');
+      renderAppLayout();
+    }
+
+    function handleDeleteAttendance(userId, dateStr) {
+      if (!isFullAdmin(currentUser)) return;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetAg = allUsers.find(u => String(u.id) === String(userId));
+      const agName = targetAg ? targetAg.name : `ID ${userId}`;
+
+      openConfirmWarningModal(
+        'Delete Attendance Log?',
+        `Warning: You are about to permanently delete the attendance & duty log for ${agName} (${userId}) on ${dateStr}. Please confirm to proceed.`,
+        'Attendance Deletion Warning',
+        async () => {
+          let attList = getStored('attendance_records', []);
+          attList = attList.filter(a => !(String(a.userId) === String(userId) && a.date === dateStr));
+          setStored('attendance_records', attList);
+          const logMeta = recordActivityLog('Deleted Attendance', `Deleted attendance record for ${agName} (${userId}) on ${dateStr}`);
+          await postToSheet('DELETE_ATTENDANCE', { userId: String(userId), date: dateStr, ...logMeta });
+          renderAppLayout();
+        }
+      );
+    }
+
+    function renderSubmitModal() {
+      const u = currentUser;
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      
+      return `
+        <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto border border-slate-200">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div>
+                <h3 class="text-base font-black text-slate-900">Daily Sales & Product Entry</h3>
+                <p class="text-xs font-bold text-slate-400">Conversion ratio & daily target achievement calculate automatically</p>
+              </div>
+              <button type="button" onclick="closeModal('submitModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form onsubmit="handleSalesSubmit(event)" class="space-y-4">
+              <div id="agentSelectContainer" class="${isFullAdmin(u) ? '' : 'hidden'}">
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent (Both Teams Available)</label>
+                <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
+                  ${allAgents.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id} • ${usr.team})</option>`).join('')}
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Report Date</label>
+                <input type="date" id="subDate" required onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
+              </div>
+
+              <div class="grid grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-[11px] font-extrabold text-slate-500 uppercase mb-1">Total Leads</label>
+                  <input type="number" id="subLeads" required min="0" placeholder="50" oninput="updateLiveRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold text-slate-500 uppercase mb-1">Total Orders</label>
+                  <input type="number" id="subOrders" required min="0" placeholder="15" oninput="updateLiveRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold text-slate-500 uppercase mb-1">Amount (৳)</label>
+                  <input type="number" id="subAmount" required min="0" placeholder="35000" oninput="updateLiveRatio()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2 p-3 bg-blue-50/70 rounded-2xl border border-blue-200 text-center">
+                <div>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-500 block">Auto Conv. Ratio</span>
+                  <span id="liveConvRatio" class="text-base font-black text-blue-600">0.00%</span>
+                </div>
+                <div class="border-x border-blue-200">
+                  <span class="text-[10px] font-extrabold uppercase text-slate-500 block">Daily Target (÷26)</span>
+                  <span id="liveDailyTarget" class="text-base font-black text-slate-800">৳0</span>
+                </div>
+                <div>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-500 block">Daily Achieved</span>
+                  <span id="liveDailyAch" class="text-base font-black text-emerald-600">0%</span>
+                </div>
+              </div>
+
+              <div class="border-t border-slate-100 pt-3">
+                <h4 class="text-xs font-black text-slate-800 uppercase mb-1"><i class="fa-solid fa-scale-balanced mr-1 text-orange-500"></i> Incentive Products Sold (KG)</h4>
+                <div class="p-2 mb-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
+                  💡 Enter gram weights in decimals: <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>400gm = 0.4</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Ajwa Dates (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Pink Salt (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Black Garlic (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" placeholder="e.g. 0.25 or 0.5" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Sundarban Honey (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Black Seed Honey (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Gawa Ghee (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" placeholder="e.g. 0.2, 0.4, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                </div>
+              </div>
+
+              <div class="flex justify-between items-center pt-4 border-t border-slate-100">
+                <button type="button" id="deleteReportBtn" onclick="handleDelete()" class="hidden px-4 py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow">
+                  <i class="fa-solid fa-trash-can mr-1"></i> Delete Report
+                </button>
+                <div class="flex gap-2 ml-auto">
+                  <button type="button" onclick="closeModal('submitModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                  <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg">
+                    <i class="fa-solid fa-check mr-1"></i> Save & Sync
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderUserModal() {
+      const isNazim = isSuperAdmin(currentUser);
+      return `
+        <div id="userModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <div>
+                <h3 class="text-base font-black text-slate-900">Create / Edit User ID (${selectedMonthKey})</h3>
+                <p class="text-[11px] font-bold text-slate-400">
+                  ${isNazim ? 'Create Agent, Supervisor (View-Only), or Admin IDs' : 'Create Sales Agent or Supervisor (View-Only) IDs'}
+                </p>
+              </div>
+              <button type="button" onclick="closeModal('userModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleSaveUser(event)" class="space-y-3.5">
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Employee ID (Login ID)</label>
+                <input type="text" id="usrId" required placeholder="e.g. 10002 or 11205" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Full Name</label>
+                <input type="text" id="usrName" required placeholder="e.g. Tanvir Hasan" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Role</label>
+                  <select id="usrRole" onchange="onUserRoleSelectChange()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="agent">Sales Agent</option>
+                    <option value="supervisor">Supervisor (View All Only)</option>
+                    ${isNazim ? `<option value="admin">Admin / TL (Full Access)</option>` : ''}
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Team</label>
+                  <select id="usrTeam" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="Team Nazim">Team Nazim</option>
+                    <option value="Team Samad">Team Samad</option>
+                    <option value="All Teams">All Teams (Supervisor)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Grade (${selectedMonthKey})</label>
+                  <select id="usrGrade" onchange="autoFillGradeTarget()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
+                    <option value="A+">Grade A+ (1,619,218)</option>
+                    <option value="A">Grade A (1,332,174)</option>
+                    <option value="A-">Grade A- (1,232,174)</option>
+                    <option value="B">Grade B (1,132,174)</option>
+                    <option value="C">Grade C (1,032,175)</option>
+                    <option value="Supervisor">Supervisor</option>
+                    ${isNazim ? `<option value="TL">TL (Team Leader)</option>` : ''}
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Password</label>
+                  <input type="text" id="usrPass" required value="123456" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Monthly Base Target (৳) for ${selectedMonthKey}</label>
+                <input type="number" id="usrTarget" required value="1232174" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
+                <p class="text-[10px] font-bold text-amber-600 mt-1">* For Supervisors/Admins, Base Target is 0. For Agents, +5% buffer is added automatically.</p>
+              </div>
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('userModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg">Save User ID</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function onUserRoleSelectChange() {
+      const r = document.getElementById('usrRole').value;
+      if (r === 'supervisor') {
+        document.getElementById('usrTeam').value = 'All Teams';
+        document.getElementById('usrGrade').value = 'Supervisor';
+        document.getElementById('usrTarget').value = 0;
+      } else if (r === 'admin') {
+        document.getElementById('usrGrade').value = 'TL';
+        document.getElementById('usrTarget').value = 0;
+      } else {
+        document.getElementById('usrGrade').value = 'A-';
+        document.getElementById('usrTarget').value = 1232174;
+      }
+    }
+
+    function autoFillGradeTarget() {
+      const g = document.getElementById('usrGrade').value;
+      const map = { 'A+': 1619218, 'A': 1332174, 'A-': 1232174, 'B': 1132174, 'C': 1032175, 'Supervisor': 0, 'TL': 0 };
+      if (map[g] !== undefined) document.getElementById('usrTarget').value = map[g];
+    }
+
+    function openUserModal(editId) {
+      if (!isFullAdmin(currentUser)) return;
+      const users = getUsersForMonth(selectedMonthKey);
+      const existing = users.find(u => String(u.id) === String(editId));
+      if (existing) {
+        if (!canEditTargetUser(currentUser, existing)) {
+          alert('Permission Denied: Only Nazim (Super Admin) can edit this account.');
+          return;
+        }
+        document.getElementById('usrId').value = existing.id;
+        document.getElementById('usrName').value = existing.name;
+        document.getElementById('usrRole').value = existing.role || 'agent';
+        document.getElementById('usrTeam').value = existing.team;
+        document.getElementById('usrGrade').value = existing.role === 'admin' ? 'TL' : (existing.role === 'supervisor' ? 'Supervisor' : (existing.grade || 'A'));
+        document.getElementById('usrPass').value = existing.pass || '123456';
+        document.getElementById('usrTarget').value = existing.baseTarget ?? 1232174;
+      } else {
+        document.getElementById('usrId').value = '';
+        document.getElementById('usrName').value = '';
+        document.getElementById('usrRole').value = 'agent';
+        document.getElementById('usrTeam').value = 'Team Nazim';
+        document.getElementById('usrGrade').value = 'A-';
+        document.getElementById('usrPass').value = '123456';
+        document.getElementById('usrTarget').value = 1232174;
+      }
+      openModal('userModal');
+    }
+
+    async function handleSaveUser(e) {
+      e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
+      const targetId = document.getElementById('usrId').value.trim();
+      const existingUser = getStored('users', DEFAULT_USERS).find(u => String(u.id) === String(targetId));
+      if (existingUser && !canEditTargetUser(currentUser, existingUser)) {
+        alert('Permission Denied: You cannot overwrite a protected Admin ID.');
+        return;
+      }
+
+      let roleVal = document.getElementById('usrRole').value;
+      if (roleVal === 'admin' && !isSuperAdmin(currentUser) && String(targetId) !== String(currentUser.id)) {
+        alert('Permission Denied: Only Nazim (Super Admin) can create Admin accounts. You can create Agent or Supervisor IDs.');
+        return;
+      }
+
+      const gradeVal = roleVal === 'admin' ? 'TL' : (roleVal === 'supervisor' ? 'Supervisor' : document.getElementById('usrGrade').value);
+      const rawName = document.getElementById('usrName').value.trim();
+
+      const newUser = normalizeUserRecord({
+        id: targetId,
+        name: rawName,
+        team: document.getElementById('usrTeam').value,
+        grade: gradeVal,
+        role: roleVal,
+        pass: document.getElementById('usrPass').value.trim(),
+        baseTarget: Number(document.getElementById('usrTarget').value) || 0
+      });
+
+      let users = getStored('users', DEFAULT_USERS);
+      const idx = users.findIndex(u => String(u.id) === String(newUser.id));
+      const isNewAccount = idx === -1;
+      if (idx !== -1) users[idx] = newUser; else users.push(newUser);
+      setStored('users', users);
+
+      let configs = getStored('monthly_configs', {});
+      if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
+      if (!configs[selectedMonthKey].users) configs[selectedMonthKey].users = {};
+      configs[selectedMonthKey].users[newUser.id] = { grade: newUser.grade, baseTarget: newUser.baseTarget };
+      setStored('monthly_configs', configs);
+
+      const logMeta = recordActivityLog(
+        isNewAccount ? 'Created User ID' : 'Updated User ID',
+        `${isNewAccount ? 'Created' : 'Updated'} ${newUser.role.toUpperCase()} ID: ${newUser.name} (${newUser.id}), Grade: ${newUser.grade}, Target: ৳${newUser.baseTarget.toLocaleString()}`
+      );
+
+      await postToSheet('SAVE_USER', { ...newUser, ...logMeta });
+      await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]) });
+      alert(`User ID (${newUser.id}) with Grade "${newUser.grade}" saved and synced!`);
+      closeModal('userModal');
+      renderAppLayout();
+    }
+
+    function handleDeleteUser(delId) {
+      if (!isFullAdmin(currentUser)) return;
+      const users = getUsersForMonth(selectedMonthKey);
+      const targetUser = users.find(u => String(u.id) === String(delId));
+      if (!targetUser) return;
+
+      if (!canDeleteTargetUser(currentUser, targetUser)) {
+        alert('Permission Denied: Only Nazim (Super Admin) is authorized to delete Supervisor or Admin accounts!');
+        return;
+      }
+
+      openConfirmWarningModal(
+        `Delete User ID (${targetUser.id})?`,
+        `Warning: You are about to permanently delete ${targetUser.name} (ID: ${targetUser.id}, Role: ${targetUser.role.toUpperCase()}). They will immediately lose login access. Please confirm to proceed.`,
+        'User Account Deletion',
+        async () => {
+          let storedUsers = getStored('users', DEFAULT_USERS);
+          storedUsers = storedUsers.filter(u => String(u.id) !== String(delId));
+          setStored('users', storedUsers);
+          const logMeta = recordActivityLog('Deleted User ID', `Deleted ${targetUser.role.toUpperCase()} account: ${targetUser.name} (${targetUser.id})`);
+          await postToSheet('DELETE_USER', { id: String(delId), ...logMeta });
+          renderAppLayout();
+        }
+      );
+    }
+
+    function updateLiveRatio() {
+      const u = currentUser;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const agentId = isFullAdmin(u) ? document.getElementById('subAgentId')?.value : u.id;
+      const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
+
+      const workingTarget = Math.round((Number(targetAgent.baseTarget) || 1232174) * 1.05);
+      const dailyTarget = Math.round(workingTarget / 26);
+
+      const leads = Number(document.getElementById('subLeads')?.value) || 0;
+      const orders = Number(document.getElementById('subOrders')?.value) || 0;
+      const amount = Number(document.getElementById('subAmount')?.value) || 0;
+
+      const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+      const ach = dailyTarget > 0 ? Math.round((amount / dailyTarget) * 100) : 0;
+
+      document.getElementById('liveConvRatio').textContent = conv + '%';
+      document.getElementById('liveDailyTarget').textContent = '৳' + dailyTarget.toLocaleString();
+      document.getElementById('liveDailyAch').textContent = ach + '%';
+    }
+
+    function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
+
+    function openReportModal(agentId, dateStr) {
+      if (isSupervisor(currentUser)) return;
+      const targetDate = (dateStr && dateStr !== 'ALL') ? dateStr : getTodayFormatted();
+      document.getElementById('subDate').value = dateToInputVal(targetDate);
+      if (isFullAdmin(currentUser) && agentId) {
+        document.getElementById('subAgentId').value = agentId;
+      }
+      onModalChange();
+      openModal('submitModal');
+    }
+
+    function onModalChange() {
+      const u = currentUser;
+      const agentId = isFullAdmin(u) ? document.getElementById('subAgentId').value : u.id;
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+      
+      const sales = getStored('sales_records', []);
+      const existing = sales.find(s => String(s.userId) === String(agentId) && s.date === dateStr);
+      
+      if (existing) {
+        document.getElementById('subLeads').value = existing.leads || 0;
+        document.getElementById('subOrders').value = existing.orders || 0;
+        document.getElementById('subAmount').value = existing.amount || 0;
+        document.getElementById('subAjwa').value = existing.ajwa || '';
+        document.getElementById('subPinkSalt').value = existing.pinkSalt || '';
+        document.getElementById('subBlackGarlic').value = existing.blackGarlic || '';
+        document.getElementById('subSunHoney').value = existing.sunHoney || '';
+        document.getElementById('subBSHoney').value = existing.bsHoney || '';
+        document.getElementById('subGawaGhee').value = existing.gawaGhee || '';
+        document.getElementById('deleteReportBtn').classList.remove('hidden');
+      } else {
+        ['subLeads','subOrders','subAmount','subAjwa','subPinkSalt','subBlackGarlic','subSunHoney','subBSHoney','subGawaGhee'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('deleteReportBtn').classList.add('hidden');
+      }
+      updateLiveRatio();
+    }
+
+    async function handleSalesSubmit(e) {
+      e.preventDefault();
+      const u = currentUser;
+      if (isSupervisor(u)) return;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetAgent = isFullAdmin(u) ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
+
+      const leads = Number(document.getElementById('subLeads').value) || 0;
+      const orders = Number(document.getElementById('subOrders').value) || 0;
+      const amount = Number(document.getElementById('subAmount').value) || 0;
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+
+      const submittedMonthKey = dateStr.substring(3);
+      if (submittedMonthKey && submittedMonthKey.length === 7) {
+        selectedMonthKey = submittedMonthKey;
+        localStorage.setItem('gb_selected_month', selectedMonthKey);
+      }
+      reportsDateFilter = dateStr;
+
+      const entry = {
+        userId: String(targetAgent.id),
+        userName: targetAgent.name,
+        team: targetAgent.team,
+        date: dateStr,
+        leads: leads,
+        orders: orders,
+        amount: amount,
+        ratio: leads > 0 ? Number(((orders / leads) * 100).toFixed(2)) : 0,
+        ajwa: Number(document.getElementById('subAjwa').value) || 0,
+        pinkSalt: Number(document.getElementById('subPinkSalt').value) || 0,
+        blackGarlic: Number(document.getElementById('subBlackGarlic').value) || 0,
+        sunHoney: Number(document.getElementById('subSunHoney').value) || 0,
+        bsHoney: Number(document.getElementById('subBSHoney').value) || 0,
+        gawaGhee: Number(document.getElementById('subGawaGhee').value) || 0
+      };
+
+      let sales = getStored('sales_records', []);
+      const idx = sales.findIndex(s => String(s.userId) === String(entry.userId) && s.date === entry.date);
+      const isUpdate = idx !== -1;
+      if (idx !== -1) sales[idx] = entry; else sales.unshift(entry);
+      setStored('sales_records', sales);
+
+      const logMeta = recordActivityLog(
+        isUpdate ? 'Updated Sales Report' : 'Submitted Sales Report',
+        `${isUpdate ? 'Updated' : 'Submitted'} sales report for ${targetAgent.name} (${dateStr}) — Leads: ${leads}, Orders: ${orders}, Amount: ৳${amount.toLocaleString()}`
+      );
+
+      await postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta });
+      
+      alert(`Report saved and synced to the cloud successfully!`);
+      closeModal('submitModal');
+      renderAppLayout();
+      setTimeout(fetchFromSheet, 1500);
+    }
+
+    function handleDirectDeleteReport(agentId, agentName, dateStr) {
+      if (isSupervisor(currentUser)) return;
+      openConfirmWarningModal(
+        `Delete Sales Report (${dateStr})?`,
+        `Warning: You are about to permanently delete the sales & product report for ${agentName} (${agentId}) dated ${dateStr}. This will deduct the amount from monthly & sprint achievements.`,
+        'Sales Data Deletion Warning',
+        async () => {
+          let sales = getStored('sales_records', []);
+          sales = sales.filter(s => !(String(s.userId) === String(agentId) && s.date === dateStr));
+          setStored('sales_records', sales);
+
+          const logMeta = recordActivityLog('Deleted Sales Report', `Deleted sales report of ${agentName} (${agentId}) dated ${dateStr}`);
+          await postToSheet('DELETE_SALES_RECORD', { userId: String(agentId), date: dateStr, ...logMeta });
+          closeModal('submitModal');
+          renderAppLayout();
+          setTimeout(fetchFromSheet, 1500);
+        }
+      );
+    }
+
+    function handleDelete() {
+      const u = currentUser;
+      if (isSupervisor(u)) return;
+      const agentId = isFullAdmin(u) ? document.getElementById('subAgentId').value : u.id;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetAg = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
+      const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+
+      handleDirectDeleteReport(agentId, targetAg.name, dateStr);
     }
 
     window.addEventListener('load', init);
