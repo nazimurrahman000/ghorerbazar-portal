@@ -289,28 +289,129 @@
       });
     }
 
-    // STRICT ROLE & PRIVACY HELPERS
+    // =========================================================================
+    // NAZIM-EXCLUSIVE ROLE & FEATURE PERMISSION ENGINE (PER-ID ACCESS CONTROL)
+    // =========================================================================
+    const PORTAL_FEATURES_CATALOG = [
+      // Section 1: Sidebar Navigation Tabs
+      { key: 'tab_dashboard', category: 'Sidebar Tabs', label: 'Dashboard & Targets Tab', desc: 'View main KPI cards, sprint progress & product targets', icon: 'fa-gauge-high', color: 'text-blue-600' },
+      { key: 'tab_monthly_perf', category: 'Sidebar Tabs', label: 'Monthly Performance Tab', desc: 'View monthly performance summary & date-wise breakdown', icon: 'fa-chart-column', color: 'text-purple-600' },
+      { key: 'tab_reports', category: 'Sidebar Tabs', label: 'Daily Sales Reports Tab', desc: 'Access daily sales & conversion logs table', icon: 'fa-file-invoice', color: 'text-blue-600' },
+      { key: 'tab_ranking', category: 'Sidebar Tabs', label: 'Team vs Team & Ranking Tab', desc: 'View floor leaderboard & team head-to-head comparison', icon: 'fa-trophy', color: 'text-amber-500' },
+      { key: 'tab_roster', category: 'Sidebar Tabs', label: 'Duty Roster Tab', desc: 'View weekly shift schedule and Day Off (DO) table', icon: 'fa-calendar-week', color: 'text-indigo-600' },
+      { key: 'tab_attendance', category: 'Sidebar Tabs', label: 'Attendance & Duty Logs Tab', desc: 'View login/logout times, working hours & break history', icon: 'fa-clock', color: 'text-emerald-600' },
+      { key: 'tab_chat', category: 'Sidebar Tabs', label: 'Team & Personal Chat Tab', desc: 'Access group channels & 1-on-1 personal inbox', icon: 'fa-comments', color: 'text-blue-600' },
+      { key: 'tab_activity_logs', category: 'Sidebar Tabs', label: 'Activity Logs Tab', desc: 'View system activity timeline & audit logs', icon: 'fa-list-check', color: 'text-rose-500' },
+      { key: 'tab_agents', category: 'Sidebar Tabs', label: 'Target Setup & IDs Tab', desc: 'View registered user accounts, grades & target setup page', icon: 'fa-sliders', color: 'text-blue-600' },
+
+      // Section 2: Data Scope & Floor Visibility
+      { key: 'feat_view_all_teams', category: 'Floor Visibility', label: 'View All Teams & All Agents Data', desc: 'See all 17 agents & switch between Team Nazim / Team Samad / All', icon: 'fa-eye', color: 'text-indigo-600' },
+      { key: 'feat_bell_floor_alerts', category: 'Floor Visibility', label: 'Live Floor Alerts in Bell Icon', desc: 'Receive live login, logout, break & data edit alerts in Bell Icon', icon: 'fa-bell', color: 'text-amber-500' },
+
+      // Section 3: Action & Management Capabilities (Can be granted to ANY ID!)
+      { key: 'feat_submit_own_sales', category: 'Action Capabilities', label: 'Submit / Edit Own Daily Sales', desc: 'Allow user to submit or edit their own daily sales report', icon: 'fa-plus-circle', color: 'text-emerald-600' },
+      { key: 'feat_manage_all_sales', category: 'Action Capabilities', label: 'Add / Edit / Delete Any Agent Sales', desc: 'Allow user to add, edit or delete sales reports for ANY agent', icon: 'fa-pen-to-square', color: 'text-blue-600' },
+      { key: 'feat_ai_erp_import', category: 'Action Capabilities', label: 'AI Smart ERP Picture Importer', desc: 'Upload or Ctrl+V paste ERP report screenshots for AI auto-import', icon: 'fa-wand-magic-sparkles', color: 'text-purple-600' },
+      { key: 'feat_post_notice', category: 'Action Capabilities', label: 'Broadcast Official Floor Notice', desc: 'Show "Post Notice" button to send announcements to everyone's Bell Icon', icon: 'fa-bullhorn', color: 'text-orange-600' },
+      { key: 'feat_edit_roster', category: 'Action Capabilities', label: 'Edit Weekly Duty Roster Shifts', desc: 'Change shift dropdowns (7 AM, 10 AM, 3 PM, Night, DO) in Duty Roster', icon: 'fa-calendar-check', color: 'text-indigo-600' },
+      { key: 'feat_manage_attendance', category: 'Action Capabilities', label: 'Add / Edit / Delete Attendance Logs', desc: 'Manually edit or delete login/logout/working hours in Attendance tab', icon: 'fa-user-clock', color: 'text-teal-600' },
+      { key: 'feat_edit_grades_targets', category: 'Action Capabilities', label: 'Edit Monthly Grade & TL Targets', desc: 'Customize monthly base targets for Grade A+, A, A-, B, C & TL', icon: 'fa-layer-group', color: 'text-indigo-600' },
+      { key: 'feat_edit_products', category: 'Action Capabilities', label: 'Edit Monthly Product Incentives', desc: 'Add/remove monthly products, KG targets & 90%/100% cash bonuses', icon: 'fa-gift', color: 'text-amber-600' },
+      { key: 'feat_manage_users', category: 'Action Capabilities', label: 'Create / Edit / Delete User IDs', desc: 'Create new Agent/Supervisor IDs or edit existing user accounts', icon: 'fa-user-Gear', color: 'text-rose-600' }
+    ];
+
     function isSuperAdmin(u) { return u && String(u.id) === '10122'; }
     function isFullAdmin(u) { return u && u.role === 'admin'; }
     function isSupervisor(u) { return u && u.role === 'supervisor'; }
-    function canViewAll(u) { return u && (u.role === 'admin' || u.role === 'supervisor'); }
+
+    function getDefaultFeaturePermissionsForRole(role) {
+      const r = String(role || 'agent').toLowerCase();
+      const isAdm = r === 'admin';
+      const isSup = r === 'supervisor';
+      return {
+        tab_dashboard: true,
+        tab_monthly_perf: true,
+        tab_reports: true,
+        tab_ranking: true,
+        tab_roster: true,
+        tab_attendance: true,
+        tab_chat: true,
+        tab_activity_logs: true,
+        tab_agents: isAdm || isSup,
+
+        feat_view_all_teams: isAdm || isSup,
+        feat_bell_floor_alerts: isAdm || isSup,
+
+        feat_submit_own_sales: isAdm || r === 'agent',
+        feat_manage_all_sales: isAdm,
+        feat_ai_erp_import: isAdm,
+        feat_post_notice: isAdm,
+        feat_edit_roster: isAdm,
+        feat_manage_attendance: isAdm,
+        feat_edit_grades_targets: isAdm,
+        feat_edit_products: isAdm,
+        feat_manage_users: isAdm
+      };
+    }
+
+    function getRolePermissionsStore() {
+      const configs = getStored('monthly_configs', {});
+      return (configs['ROLE_PERMISSIONS'] && typeof configs['ROLE_PERMISSIONS'] === 'object')
+        ? configs['ROLE_PERMISSIONS']
+        : {};
+    }
+
+    function saveRolePermissionsStore(permStore) {
+      const configs = getStored('monthly_configs', {});
+      configs['ROLE_PERMISSIONS'] = permStore || {};
+      setStored('monthly_configs', configs);
+      postToSheet('SAVE_MONTHLY_CONFIG', {
+        monthKey: 'ROLE_PERMISSIONS',
+        configJson: JSON.stringify(configs['ROLE_PERMISSIONS'])
+      }).catch(() => {});
+    }
+
+    function getEffectivePermissionsForUser(u) {
+      if (!u) return {};
+      // Nazim (10122) always has 100% Super Admin master access to everything
+      if (isSuperAdmin(u)) {
+        const allTrue = {};
+        PORTAL_FEATURES_CATALOG.forEach(f => { allTrue[f.key] = true; });
+        return allTrue;
+      }
+      const defaults = getDefaultFeaturePermissionsForRole(u.role);
+      const store = getRolePermissionsStore();
+      const userCustom = store[String(u.id)] || {};
+      return { ...defaults, ...userCustom };
+    }
+
+    function hasFeatureAccess(u, featureKey) {
+      if (!u) return false;
+      if (isSuperAdmin(u)) return true;
+      const perms = getEffectivePermissionsForUser(u);
+      return Boolean(perms[featureKey]);
+    }
+
+    function canViewAll(u) {
+      return hasFeatureAccess(u, 'feat_view_all_teams');
+    }
 
     function canViewTargetPassword(actor, targetUser) {
-      if (!actor || !targetUser || !isFullAdmin(actor)) return false;
+      if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
       if (isSuperAdmin(actor)) return true;
       if (String(targetUser.id) === '10122') return false;
       return true;
     }
 
     function canDeleteTargetUser(actor, targetUser) {
-      if (!actor || !targetUser || !isFullAdmin(actor)) return false;
+      if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
       if (String(targetUser.id) === String(actor.id) || String(targetUser.id) === '10122') return false;
       if (isSuperAdmin(actor)) return true;
       return targetUser.role === 'agent';
     }
 
     function canEditTargetUser(actor, targetUser) {
-      if (!actor || !targetUser || !isFullAdmin(actor)) return false;
+      if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
       if (isSuperAdmin(actor)) return true;
       if (String(targetUser.id) === '10122') return false;
       if (String(targetUser.id) === String(actor.id)) return true;
@@ -463,7 +564,7 @@
         logAction: logEntry.action,
         logDetails: logEntry.details
       };
-      if (currentUser && canViewAll(currentUser)) {
+      if (currentUser && hasFeatureAccess(currentUser, 'feat_bell_floor_alerts')) {
         syncAdminBellNotificationsFromActivityLogs(logs, false);
       }
       if (sendStandaloneSync) {
@@ -965,7 +1066,7 @@
         if (JSON.stringify(cleanCloudLogs) !== JSON.stringify(localLogs)) {
           const hadPreviousSync = localLogs.length > 0;
           setStored('activity_logs', cleanCloudLogs);
-          if (currentUser && canViewAll(currentUser)) {
+          if (currentUser && hasFeatureAccess(currentUser, 'feat_bell_floor_alerts')) {
             syncAdminBellNotificationsFromActivityLogs(cleanCloudLogs, hadPreviousSync);
           }
           changed = true;
@@ -1261,24 +1362,37 @@
               </div>
 
               <nav class="space-y-1">
+                ${hasFeatureAccess(u, 'tab_dashboard') ? `
                 <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard & Targets
                 </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_monthly_perf') ? `
                 <button onclick="setTab('monthly_perf')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'monthly_perf' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-chart-column text-sm text-purple-600"></i> Monthly Performance
                 </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_reports') ? `
                 <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-file-invoice text-sm text-blue-600"></i> Daily Sales Reports
                 </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_ranking') ? `
                 <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Team vs Team & Ranking
                 </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_roster') ? `
                 <button onclick="setTab('roster')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'roster' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-calendar-week text-sm text-indigo-600"></i> Duty Roster
                 </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_attendance') ? `
                 <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
                 </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_chat') ? `
                 <button onclick="setTab('chat')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'chat' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <span class="flex items-center gap-3">
                     <i class="fa-solid fa-comments text-sm ${activeTab === 'chat' ? 'text-white' : 'text-blue-600'}"></i> Team & Personal Chat
@@ -1288,13 +1402,27 @@
                     return unreadChat > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shadow">${unreadChat}</span>` : '';
                   })()}
                 </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_activity_logs') ? `
                 <button onclick="setTab('activity_logs')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'activity_logs' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-list-check text-sm text-rose-500"></i> Activity Logs
                 </button>
-                ${canViewAll(u) ? `
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_agents') ? `
                 <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-sliders text-sm text-blue-600"></i> Target Setup & IDs
                 </button>
+                ` : ''}
+                ${isSuperAdmin(u) ? `
+                <div class="pt-2 mt-2 border-t border-slate-200/80">
+                  <span class="px-2.5 text-[9px] font-black uppercase tracking-widest text-purple-600 block mb-1">Nazim Master Control</span>
+                  <button onclick="setTab('role_management')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'role_management' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg' : 'bg-purple-50 text-purple-900 hover:bg-purple-100 border border-purple-200'}">
+                    <span class="flex items-center gap-2.5">
+                      <i class="fa-solid fa-user-shield text-sm ${activeTab === 'role_management' ? 'text-amber-300' : 'text-purple-600'}"></i> Role & Feature Access
+                    </span>
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${activeTab === 'role_management' ? 'bg-white/20 text-white' : 'bg-purple-600 text-white'}">ONLY YOU</span>
+                  </button>
+                </div>
                 ` : ''}
               </nav>
             </div>
@@ -1315,7 +1443,7 @@
               <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
                 <span class="text-slate-300">/</span>
-                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab === 'agents' ? 'Target Setup & IDs' : (activeTab === 'chat' ? 'Team & Personal Chat' : activeTab.replace('_', ' '))}</h2>
+                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab === 'agents' ? 'Target Setup & IDs' : (activeTab === 'chat' ? 'Team & Personal Chat' : (activeTab === 'role_management' ? 'Role & Feature Access Control (Nazim Exclusive)' : activeTab.replace('_', ' ')))}</h2>
                 <span class="text-slate-300">•</span>
                 <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
                   <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
@@ -1324,17 +1452,17 @@
                     ${AVAILABLE_MONTHS.map(m => `<option value="${m.key}" ${m.key === selectedMonthKey ? 'selected' : ''}>${m.label}</option>`).join('')}
                   </select>
                 </div>
-                ${isSupervisor(u) ? `<span class="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-800 text-[10px] font-black uppercase"><i class="fa-solid fa-eye mr-1"></i>Supervisor View-Only Mode</span>` : ''}
+                ${isSupervisor(u) ? `<span class="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-800 text-[10px] font-black uppercase"><i class="fa-solid fa-eye mr-1"></i>Supervisor Mode</span>` : ''}
               </div>
 
               <div class="flex items-center gap-3 shrink-0">
-                ${isFullAdmin(u) ? `
+                ${hasFeatureAccess(u, 'feat_post_notice') ? `
                 <button onclick="openAnnouncementModal()" title="Broadcast Official Notice / Announcement to All Agents' Bell Icons" class="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-extrabold rounded-xl shadow-md flex items-center gap-2 transition-all">
                   <i class="fa-solid fa-bullhorn text-xs"></i> Post Notice
                 </button>
                 ` : ''}
                 ${renderHeaderBellNotificationWidget()}
-                <button onclick="canViewAll(currentUser) ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl flex items-center gap-2 transition-colors">
+                <button onclick="hasFeatureAccess(currentUser, 'tab_agents') ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl flex items-center gap-2 transition-colors">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
                   <span>${activeOnlineUsers.length} Online</span>
                 </button>
@@ -1357,15 +1485,15 @@
             <main class="p-5 lg:px-7 lg:py-6 max-w-[1540px] w-full mx-auto flex-1">${renderTabContent()}</main>
           </div>
         </div>
-        ${isFullAdmin(u) || u.role === 'agent' ? renderSubmitModal() : ''}
+        ${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? renderSubmitModal() : ''}
         ${u.role === 'agent' ? renderBreakModal() : ''}
-        ${isFullAdmin(u) ? renderEditAttendanceModal() : ''}
-        ${isFullAdmin(u) ? renderUserModal() : ''}
-        ${isFullAdmin(u) ? renderProductConfigModal() : ''}
-        ${isFullAdmin(u) ? renderGradeConfigModal() : ''}
-        ${isFullAdmin(u) ? renderAiImportModal() : ''}
+        ${hasFeatureAccess(u, 'feat_manage_attendance') ? renderEditAttendanceModal() : ''}
+        ${hasFeatureAccess(u, 'feat_manage_users') ? renderUserModal() : ''}
+        ${hasFeatureAccess(u, 'feat_edit_products') ? renderProductConfigModal() : ''}
+        ${hasFeatureAccess(u, 'feat_edit_grades_targets') ? renderGradeConfigModal() : ''}
+        ${hasFeatureAccess(u, 'feat_ai_erp_import') ? renderAiImportModal() : ''}
         ${renderConfirmWarningModal()}
-        ${isFullAdmin(u) ? renderAnnouncementModal() : ''}
+        ${hasFeatureAccess(u, 'feat_post_notice') ? renderAnnouncementModal() : ''}
         ${renderLogoutConfirmModal()}
       `;
       document.getElementById('app').innerHTML = html;
@@ -1393,15 +1521,19 @@
     }
 
     function renderTabContent() {
+      if (activeTab === 'role_management') {
+        return isSuperAdmin(currentUser) ? renderNazimRoleManagementView() : renderDashboard();
+      }
       if (activeTab === 'dashboard') return renderDashboard();
-      if (activeTab === 'monthly_perf') return renderMonthlyPerformanceView();
-      if (activeTab === 'roster') return renderDutyRosterView();
-      if (activeTab === 'attendance') return renderAttendanceView();
-      if (activeTab === 'activity_logs') return renderActivityLogsView();
-      if (activeTab === 'ranking') return renderRankingAndComparison();
-      if (activeTab === 'chat') return renderChatHubView();
-      if (activeTab === 'reports') return renderReports();
-      if (activeTab === 'agents') return renderManageAgents();
+      if (activeTab === 'monthly_perf' && hasFeatureAccess(currentUser, 'tab_monthly_perf')) return renderMonthlyPerformanceView();
+      if (activeTab === 'roster' && hasFeatureAccess(currentUser, 'tab_roster')) return renderDutyRosterView();
+      if (activeTab === 'attendance' && hasFeatureAccess(currentUser, 'tab_attendance')) return renderAttendanceView();
+      if (activeTab === 'activity_logs' && hasFeatureAccess(currentUser, 'tab_activity_logs')) return renderActivityLogsView();
+      if (activeTab === 'ranking' && hasFeatureAccess(currentUser, 'tab_ranking')) return renderRankingAndComparison();
+      if (activeTab === 'chat' && hasFeatureAccess(currentUser, 'tab_chat')) return renderChatHubView();
+      if (activeTab === 'reports' && hasFeatureAccess(currentUser, 'tab_reports')) return renderReports();
+      if (activeTab === 'agents' && hasFeatureAccess(currentUser, 'tab_agents')) return renderManageAgents();
+      return renderDashboard();
     }
 
     function renderConfirmWarningModal() {
@@ -1604,15 +1736,15 @@
                 <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (17)</button>
               </div>
               ` : ''}
-              ${isFullAdmin(u) ? `
+              ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
               <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2 transition-all">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
               </button>
               ` : ''}
-              ${isFullAdmin(u) || u.role === 'agent' ? `
+              ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
               <button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2">
                 <i class="fa-solid fa-plus-circle"></i>
-                ${isFullAdmin(u) ? 'Add / Edit Agent Data' : 'Submit Daily Report'}
+                ${hasFeatureAccess(u, 'feat_manage_all_sales') ? 'Add / Edit Agent Data' : 'Submit Daily Report'}
               </button>
               ` : ''}
             </div>
@@ -1742,7 +1874,7 @@
                 Facebook Product Incentive Targets (${canViewAll(u) ? `${dashboardScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
               </h3>
               <div class="flex items-center gap-2">
-                ${isFullAdmin(u) ? `<button onclick="openProductConfigModal()" class="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[11px] font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
+                ${hasFeatureAccess(u, 'feat_edit_products') ? `<button onclick="openProductConfigModal()" class="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[11px] font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
                 <span class="px-2.5 py-0.5 rounded-full bg-white border text-[10px] font-extrabold text-slate-600">90% = Entry Bonus | 100% = Full Bonus</span>
               </div>
             </div>
@@ -1784,7 +1916,7 @@
 
     function renderMonthlyPerformanceView() {
       const u = currentUser;
-      const isAdmin = isFullAdmin(u);
+      const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
       const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
       const monthSales = getStored('sales_records', []).filter(s => s.date.endsWith(selectedMonthKey));
       const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
@@ -1869,10 +2001,12 @@
 
             ${canViewAll(u) ? `
             <div class="flex flex-wrap items-center gap-3">
-              ${isAdmin ? `
+              ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
               <button onclick="openAiImportModal()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2 transition-all">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
               </button>
+              ` : ''}
+              ${isAdmin ? `
               <button onclick="openReportModal(monthlyPerfAgentId !== 'ALL' ? monthlyPerfAgentId : '')" class="px-4 py-2 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
                 <i class="fa-solid fa-plus-circle"></i> Add / Edit Daily Data
               </button>
@@ -2181,7 +2315,7 @@
 
     function renderDutyRosterView() {
       const u = currentUser;
-      const isEditable = isFullAdmin(u);
+      const isEditable = hasFeatureAccess(u, 'feat_edit_roster');
       const roster = getRosterForMonth(selectedMonthKey);
       const days = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
       const dayLabels = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -2372,7 +2506,7 @@
     }
 
     async function handleRosterShiftChange(empId, dayKey, newShift) {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_edit_roster')) return;
       const roster = getRosterForMonth(selectedMonthKey);
       const targetRow = roster.find(r => String(r.id) === String(empId));
       if (!targetRow) return;
@@ -2416,7 +2550,7 @@
                 <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
               </select>
               ` : ''}
-              ${isFullAdmin(u) ? `
+              ${hasFeatureAccess(u, 'feat_manage_attendance') ? `
               <button onclick="openEditAttendanceModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
                 <i class="fa-solid fa-plus mr-1"></i> Add / Edit Attendance
               </button>
@@ -2438,7 +2572,7 @@
                   <th class="p-4">Break Time</th>
                   <th class="p-4">Current Break Reason</th>
                   <th class="p-4">Break History</th>
-                  ${isFullAdmin(u) ? `<th class="p-4 text-right">Admin Actions</th>` : ''}
+                  ${hasFeatureAccess(u, 'feat_manage_attendance') ? `<th class="p-4 text-right">Admin Actions</th>` : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
@@ -2463,7 +2597,7 @@
                       <td class="p-4 font-mono font-black text-amber-600 text-sm">${formatHMS(r.breakSeconds)}</td>
                       <td class="p-4 font-bold text-amber-700">${r.breakReason || '-'}</td>
                       <td class="p-4 text-[11px] text-slate-500 max-w-xs truncate" title="${r.breakLogs || '-'}">${r.breakLogs || '-'}</td>
-                      ${isFullAdmin(u) ? `
+                      ${hasFeatureAccess(u, 'feat_manage_attendance') ? `
                       <td class="p-4 text-right space-x-1">
                         <button onclick="openEditAttendanceModal('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>
                         <button onclick="handleDeleteAttendance('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>
@@ -2741,12 +2875,12 @@
               </select>
               ` : ''}
 
-              ${isFullAdmin(u) ? `
+              ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
               <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-all">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
               </button>
               ` : ''}
-              ${isFullAdmin(u) || u.role === 'agent' ? `
+              ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
               <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
                 <i class="fa-solid fa-plus mr-1"></i> Add New Report
               </button>
@@ -2768,7 +2902,7 @@
                   <th class="p-3.5">Daily Target (÷26)</th>
                   <th class="p-3.5">Daily Achieved</th>
                   <th class="p-3.5">Products Sold (kg)</th>
-                  ${isFullAdmin(u) || u.role === 'agent' ? `<th class="p-3.5 text-right">Actions</th>` : ''}
+                  ${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? `<th class="p-3.5 text-right">Actions</th>` : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
@@ -2798,7 +2932,7 @@
                     <td class="p-3.5 text-[11px] font-bold text-slate-600">
                       ${formatDynamicProductsInline(s, selectedMonthKey, false)}
                     </td>
-                    ${isFullAdmin(u) || u.role === 'agent' ? `
+                    ${(hasFeatureAccess(u, 'feat_manage_all_sales') || (hasFeatureAccess(u, 'feat_submit_own_sales') && String(s.userId) === String(u.id))) ? `
                     <td class="p-3.5 text-right space-x-1">
                       <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
                         <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
@@ -2823,7 +2957,7 @@
                   <td class="p-4 text-emerald-400 text-sm">৳${sumAmount.toLocaleString()}</td>
                   <td class="p-4 text-slate-300">৳${sumDailyTgt.toLocaleString()}</td>
                   <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${sumAchPct}%</span></td>
-                  <td colspan="${isFullAdmin(u) || u.role === 'agent' ? '2' : '1'}" class="p-4 text-[11px] text-amber-200">
+                  <td colspan="${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? '2' : '1'}" class="p-4 text-[11px] text-amber-200">
                     ${formatDynamicProductsFooter(repProdSums, selectedMonthKey)}
                   </td>
                 </tr>
@@ -2880,19 +3014,28 @@
                 ${isFullAdmin(u) ? `Create Agent or Supervisor IDs, check live online status (Online agents shown first), and customize monthly targets for ${monthLabel}` : `View registered Agent & Supervisor accounts, live online status & monthly targets for ${monthLabel}`}
               </p>
             </div>
-            ${isFullAdmin(u) ? `
             <div class="flex flex-wrap items-center gap-2.5">
+              ${isSuperAdmin(u) ? `
+              <button onclick="setTab('role_management')" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
+                <i class="fa-solid fa-user-shield"></i> Role & Feature Access Control
+              </button>
+              ` : ''}
+              ${hasFeatureAccess(u, 'feat_edit_grades_targets') ? `
               <button onclick="openGradeConfigModal()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
                 <i class="fa-solid fa-layer-group"></i> Edit Grade & TL Targets (${selectedMonthKey})
               </button>
+              ` : ''}
+              ${hasFeatureAccess(u, 'feat_edit_products') ? `
               <button onclick="openProductConfigModal()" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
                 <i class="fa-solid fa-gift"></i> Edit Product Incentives (${selectedMonthKey})
               </button>
+              ` : ''}
+              ${hasFeatureAccess(u, 'feat_manage_users') ? `
               <button onclick="openUserModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
                 <i class="fa-solid fa-user-plus"></i> Create New ID (${isSuperAdmin(u) ? 'Agent / Supervisor / Admin' : 'Agent / Supervisor'})
               </button>
+              ` : ''}
             </div>
-            ` : ''}
           </div>
 
           <div class="card-dynamic overflow-hidden overflow-x-auto">
@@ -2905,10 +3048,10 @@
                   <th class="p-3.5">Role</th>
                   <th class="p-3.5">Team</th>
                   <th class="p-3.5">Grade (${selectedMonthKey})</th>
-                  ${isFullAdmin(u) ? `<th class="p-3.5">Password</th>` : ''}
+                  ${hasFeatureAccess(u, 'feat_manage_users') ? `<th class="p-3.5">Password</th>` : ''}
                   <th class="p-3.5">Base Target (${selectedMonthKey})</th>
                   <th class="p-3.5">Working Target (+5%)</th>
-                  ${isFullAdmin(u) ? `<th class="p-3.5 text-right">Actions</th>` : ''}
+                  ${hasFeatureAccess(u, 'feat_manage_users') ? `<th class="p-3.5 text-right">Actions</th>` : ''}
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
@@ -2929,11 +3072,12 @@
                     <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
                     <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (usr.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${usr.team}</span></td>
                     <td class="p-3.5 font-black ${usr.role === 'admin' ? 'text-purple-700' : (usr.role === 'supervisor' ? 'text-indigo-700' : 'text-slate-900')}">${displayGrade}</td>
-                    ${isFullAdmin(u) ? `<td class="p-3.5 font-mono text-slate-500">${canSeePass ? usr.pass : '<span class="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-sans font-bold"><i class="fa-solid fa-eye-slash mr-1"></i>Protected</span>'}</td>` : ''}
+                    ${hasFeatureAccess(u, 'feat_manage_users') ? `<td class="p-3.5 font-mono text-slate-500">${canSeePass ? usr.pass : '<span class="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-sans font-bold"><i class="fa-solid fa-eye-slash mr-1"></i>Protected</span>'}</td>` : ''}
                     <td class="p-3.5 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
                     <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
-                    ${isFullAdmin(u) ? `
+                    ${hasFeatureAccess(u, 'feat_manage_users') ? `
                     <td class="p-3.5 text-right space-x-1">
+                      ${isSuperAdmin(u) ? `<button onclick="openUserRoleControlForId('${usr.id}')" class="px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg font-extrabold hover:bg-purple-100" title="Manage Features & Permissions for ${usr.name}"><i class="fa-solid fa-user-shield mr-1"></i>Roles</button>` : ''}
                       ${canEdit ? `<button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>` : `<span class="px-2.5 py-1 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-lg"><i class="fa-solid fa-lock mr-1"></i>Protected</span>`}
                       ${canDel ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
                     </td>
@@ -3023,7 +3167,7 @@
     function openProductConfigModal() { openModal('productConfigModal'); }
 
     function handleAddCustomProductSlot() {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
       // Save any current edits in the modal before adding a new slot
       syncProductModalInputsToStorage();
       let configs = getStored('monthly_configs', {});
@@ -3051,7 +3195,7 @@
     }
 
     function handleRemoveCustomProduct(prodKey) {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
       syncProductModalInputsToStorage();
       let configs = getStored('monthly_configs', {});
       if (configs[selectedMonthKey] && configs[selectedMonthKey].products) {
@@ -3092,7 +3236,7 @@
 
     async function handleSaveProductConfig(e) {
       e.preventDefault();
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
       const configs = syncProductModalInputsToStorage();
 
       const activeCount = Object.values(getActiveProductsForMonth(selectedMonthKey)).length;
@@ -3158,7 +3302,7 @@
 
     async function handleSaveGradeConfig(e) {
       e.preventDefault();
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return;
       let configs = getStored('monthly_configs', {});
       if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {}, gradeTargets: {} };
       if (!configs[selectedMonthKey].gradeTargets) configs[selectedMonthKey].gradeTargets = {};
@@ -3292,7 +3436,7 @@
     }
 
     function openEditAttendanceModal(agentId, dateStr) {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_manage_attendance')) return;
       document.getElementById('attDate').value = dateToInputVal(dateStr || getTodayFormatted());
       if (agentId) document.getElementById('attAgentId').value = agentId;
       onAttModalChange();
@@ -3323,7 +3467,7 @@
 
     async function handleAdminSaveAttendance(e) {
       e.preventDefault();
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_manage_attendance')) return;
       const allUsers = getStored('users', DEFAULT_USERS);
       const agId = document.getElementById('attAgentId').value;
       const ag = allUsers.find(u => String(u.id) === String(agId));
@@ -3357,7 +3501,7 @@
     }
 
     function handleDeleteAttendance(userId, dateStr) {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_manage_attendance')) return;
       const allUsers = getUsersForMonth(selectedMonthKey);
       const targetAg = allUsers.find(u => String(u.id) === String(userId));
       const agName = targetAg ? targetAg.name : `ID ${userId}`;
@@ -3394,7 +3538,7 @@
             </div>
 
             <form onsubmit="handleSalesSubmit(event)" class="space-y-4">
-              <div id="agentSelectContainer" class="${isFullAdmin(u) ? '' : 'hidden'}">
+              <div id="agentSelectContainer" class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'}">
                 <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent (Both Teams Available)</label>
                 <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
                   ${allAgents.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id} • ${usr.team})</option>`).join('')}
@@ -3576,7 +3720,7 @@
     }
 
     function openUserModal(editId) {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
       const users = getUsersForMonth(selectedMonthKey);
       const existing = users.find(u => String(u.id) === String(editId));
       if (existing) {
@@ -3605,7 +3749,7 @@
 
     async function handleSaveUser(e) {
       e.preventDefault();
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
       const targetId = document.getElementById('usrId').value.trim();
       const existingUser = getStored('users', DEFAULT_USERS).find(u => String(u.id) === String(targetId));
       if (existingUser && !canEditTargetUser(currentUser, existingUser)) {
@@ -3657,7 +3801,7 @@
     }
 
     function handleDeleteUser(delId) {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
       const users = getUsersForMonth(selectedMonthKey);
       const targetUser = users.find(u => String(u.id) === String(delId));
       if (!targetUser) return;
@@ -3686,7 +3830,7 @@
     function updateLiveRatio() {
       const u = currentUser;
       const allUsers = getUsersForMonth(selectedMonthKey);
-      const agentId = isFullAdmin(u) ? document.getElementById('subAgentId')?.value : u.id;
+      const agentId = hasFeatureAccess(u, 'feat_manage_all_sales') ? document.getElementById('subAgentId')?.value : u.id;
       const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
 
       const workingTarget = Math.round(((targetAgent.baseTarget !== undefined && targetAgent.baseTarget !== null) ? Number(targetAgent.baseTarget) : 1232174) * 1.05);
@@ -3732,9 +3876,9 @@
     }
 
     function openReportModal(agentId, dateStr) {
-      if (isSupervisor(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales') && !hasFeatureAccess(currentUser, 'feat_submit_own_sales')) return;
       let resolvedAgentId = currentUser ? currentUser.id : null;
-      if (isFullAdmin(currentUser)) {
+      if (hasFeatureAccess(currentUser, 'feat_manage_all_sales')) {
         const selEl = document.getElementById('subAgentId');
         const allAg = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
         const preferredId = agentId || lastSelectedAgentId || (allAg[0] && allAg[0].id);
@@ -3752,8 +3896,8 @@
 
     function onModalChange() {
       const u = currentUser;
-      const agentId = isFullAdmin(u) ? document.getElementById('subAgentId').value : u.id;
-      if (isFullAdmin(u) && agentId) {
+      const agentId = hasFeatureAccess(u, 'feat_manage_all_sales') ? document.getElementById('subAgentId').value : u.id;
+      if (hasFeatureAccess(u, 'feat_manage_all_sales') && agentId) {
         lastSelectedAgentId = agentId;
       }
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
@@ -3820,9 +3964,9 @@
     async function handleSalesSubmit(e) {
       e.preventDefault();
       const u = currentUser;
-      if (isSupervisor(u)) return;
+      if (!hasFeatureAccess(u, 'feat_manage_all_sales') && !hasFeatureAccess(u, 'feat_submit_own_sales')) return;
       const allUsers = getUsersForMonth(selectedMonthKey);
-      const targetAgent = isFullAdmin(u) ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
+      const targetAgent = hasFeatureAccess(u, 'feat_manage_all_sales') ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
 
       const leads = Number(document.getElementById('subLeads').value) || 0;
       const orders = Number(document.getElementById('subOrders').value) || 0;
@@ -3877,7 +4021,7 @@
     }
 
     function handleDirectDeleteReport(agentId, agentName, dateStr) {
-      if (isSupervisor(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales') && !(hasFeatureAccess(currentUser, 'feat_submit_own_sales') && String(agentId) === String(currentUser?.id))) return;
       openConfirmWarningModal(
         `Delete Sales Report (${dateStr})?`,
         `Warning: You are about to permanently delete the sales & product report for <strong>${agentName} (${agentId})</strong> dated <strong>${dateStr}</strong>. This will immediately deduct the amount from monthly & sprint achievements.`,
@@ -3900,8 +4044,8 @@
 
     function handleDelete() {
       const u = currentUser;
-      if (isSupervisor(u)) return;
-      const agentId = isFullAdmin(u) ? document.getElementById('subAgentId').value : u.id;
+      if (!hasFeatureAccess(u, 'feat_manage_all_sales') && !hasFeatureAccess(u, 'feat_submit_own_sales')) return;
+      const agentId = hasFeatureAccess(u, 'feat_manage_all_sales') ? document.getElementById('subAgentId').value : u.id;
       const allUsers = getUsersForMonth(selectedMonthKey);
       const targetAg = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
@@ -4071,7 +4215,7 @@
     }
 
     function openAiImportModal() {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_ai_erp_import')) return;
       openModal('aiImportModal');
     }
 
@@ -4179,7 +4323,7 @@
 
     // Listen for Ctrl+V (Clipboard Paste) to directly upload copied screenshots into AI ERP Importer!
     window.addEventListener('paste', async (e) => {
-      if (!currentUser || !isFullAdmin(currentUser)) return;
+      if (!currentUser || !hasFeatureAccess(currentUser, 'feat_ai_erp_import')) return;
       const aiModalEl = document.getElementById('aiImportModal');
       const isAiModalVisible = aiModalEl && !aiModalEl.classList.contains('hidden');
       if (!isAiModalVisible) return;
@@ -4852,7 +4996,7 @@
     }
 
     async function approveAndSaveAiRecords() {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_ai_erp_import')) return;
       const approvedRows = aiDetectedRecords.filter(r => r.selected);
       if (approvedRows.length === 0) {
         showPortalToast('No Rows Selected', 'Please check at least 1 detected row to approve and save!', 'error');
@@ -5018,7 +5162,7 @@
     }
 
     function syncAdminBellNotificationsFromActivityLogs(logsList, triggerLivePopup = false) {
-      if (!currentUser || !canViewAll(currentUser) || !Array.isArray(logsList)) return;
+      if (!currentUser || !hasFeatureAccess(currentUser, 'feat_bell_floor_alerts') || !Array.isArray(logsList)) return;
 
       const seenStorageKey = `gb_admin_seen_act_${currentUser.id}`;
       const clearedStorageKey = `gb_admin_cleared_act_${currentUser.id}`;
@@ -5092,7 +5236,7 @@
     }
 
     function renderHeaderBellNotificationWidget() {
-      if (currentUser && canViewAll(currentUser)) {
+      if (currentUser && hasFeatureAccess(currentUser, 'feat_bell_floor_alerts')) {
         const storedLogs = getStored('activity_logs', []);
         if (storedLogs.length > 0 && getNotificationsForCurrentUser().length === 0) {
           syncAdminBellNotificationsFromActivityLogs(storedLogs, false);
@@ -5102,7 +5246,7 @@
       const myNotifs = getNotificationsForCurrentUser();
       const unreadCount = myNotifs.filter(n => !n.read).length;
       const shiftInfo = getAgentTodayRosterShiftInfo(currentUser);
-      const isAdminOrSup = currentUser && canViewAll(currentUser);
+      const isAdminOrSup = currentUser && hasFeatureAccess(currentUser, 'feat_bell_floor_alerts');
 
       return `
         <div class="relative" id="bellNotificationWrapper">
@@ -5752,13 +5896,13 @@
     }
 
     function openAnnouncementModal() {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_post_notice')) return;
       openModal('announceModal');
     }
 
     function handleSendOfficialAnnouncement(e) {
       e.preventDefault();
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_post_notice')) return;
 
       const titleVal = (document.getElementById('annTitleInput')?.value || '').trim() || 'Official Notice';
       const targetVal = document.getElementById('annTargetSelect')?.value || 'ALL';
@@ -5808,7 +5952,7 @@
     }
 
     function handleDeleteOfficialNotice(noticeId) {
-      if (!isFullAdmin(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_post_notice')) return;
       const hub = getChatAndNoticeHubStore();
       hub.notices = hub.notices.filter(n => n.id !== noticeId);
       saveChatAndNoticeHubStore(hub);
@@ -6003,7 +6147,7 @@
                 <p class="text-xs font-extrabold text-slate-900 truncate mt-0.5">${latestNotice.title}: <span class="font-bold text-slate-700">${latestNotice.message}</span></p>
               </div>
             </div>
-            ${isFullAdmin(u) ? `
+            ${hasFeatureAccess(u, 'feat_post_notice') ? `
             <button onclick="openAnnouncementModal()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-extrabold shrink-0">
               + New Notice
             </button>
@@ -6022,7 +6166,7 @@
                     </h3>
                     <p class="text-[10px] font-bold text-slate-400">Find any Agent, Admin or Group in one place</p>
                   </div>
-                  ${isFullAdmin(u) ? `
+                  ${hasFeatureAccess(u, 'feat_post_notice') ? `
                   <button onclick="openAnnouncementModal()" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[10px] font-black">
                     <i class="fa-solid fa-bullhorn mr-1"></i>Post Notice
                   </button>
@@ -6241,6 +6385,378 @@
                   <i class="fa-solid fa-paper-plane"></i> Send
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+
+    
+    // =========================================================================
+    // NAZIM-EXCLUSIVE ROLE & FEATURE ACCESS CONTROL CENTER (ONLY ID 10122)
+    // =========================================================================
+    let selectedRoleMgmtUserId = '10107';
+    let roleMgmtTeamFilter = 'ALL';
+    let roleMgmtSearchQuery = '';
+
+    function openUserRoleControlForId(targetId) {
+      if (!isSuperAdmin(currentUser)) return;
+      if (String(targetId) === '10122') {
+        showPortalToast('Super Admin Protected', 'Nazim (10122) permanently holds 100% Master Access to all features.', 'warning');
+        return;
+      }
+      selectedRoleMgmtUserId = String(targetId);
+      activeTab = 'role_management';
+      renderAppLayout();
+    }
+
+    function selectRoleMgmtUser(uid) {
+      if (!isSuperAdmin(currentUser)) return;
+      selectedRoleMgmtUserId = String(uid);
+      renderAppLayout();
+    }
+
+    function setRoleMgmtTeamFilter(teamVal) {
+      roleMgmtTeamFilter = teamVal;
+      renderAppLayout();
+    }
+
+    function onRoleMgmtSearchInput(val) {
+      roleMgmtSearchQuery = String(val || '');
+      renderAppLayout();
+      const el = document.getElementById('roleMgmtUserSearchInput');
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    }
+
+    function handleToggleSingleUserFeature(targetUserId, featureKey, isChecked) {
+      if (!isSuperAdmin(currentUser)) return;
+      const uid = String(targetUserId);
+      if (uid === '10122') return;
+
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetUser = allUsers.find(u => String(u.id) === uid);
+      if (!targetUser) return;
+
+      const permStore = getRolePermissionsStore();
+      if (!permStore[uid]) {
+        permStore[uid] = { ...getDefaultFeaturePermissionsForRole(targetUser.role) };
+      }
+      permStore[uid][featureKey] = Boolean(isChecked);
+      saveRolePermissionsStore(permStore);
+
+      const featObj = PORTAL_FEATURES_CATALOG.find(f => f.key === featureKey);
+      const featName = featObj ? featObj.label : featureKey;
+
+      recordActivityLog(
+        'Updated Feature Access',
+        `Nazim ${isChecked ? 'ENABLED' : 'DISABLED'} "${featName}" for ${targetUser.name} (${uid})`,
+        true
+      );
+      renderAppLayout();
+      showPortalToast(
+        isChecked ? 'Feature Enabled Instantly' : 'Feature Revoked Instantly',
+        `"${featName}" is now ${isChecked ? 'ACTIVE' : 'OFF'} for ${targetUser.name} (${uid}).`,
+        isChecked ? 'success' : 'warning'
+      );
+    }
+
+    function handleApplyRolePresetToUser(targetUserId, presetType) {
+      if (!isSuperAdmin(currentUser)) return;
+      const uid = String(targetUserId);
+      if (uid === '10122') return;
+
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetUser = allUsers.find(u => String(u.id) === uid);
+      if (!targetUser) return;
+
+      const permStore = getRolePermissionsStore();
+
+      if (presetType === 'RESET_DEFAULT') {
+        delete permStore[uid];
+      } else if (presetType === 'FULL_ADMIN') {
+        permStore[uid] = { ...getDefaultFeaturePermissionsForRole('admin') };
+      } else if (presetType === 'SUPERVISOR_VIEW') {
+        permStore[uid] = { ...getDefaultFeaturePermissionsForRole('supervisor') };
+      } else if (presetType === 'STANDARD_AGENT') {
+        permStore[uid] = { ...getDefaultFeaturePermissionsForRole('agent') };
+      } else if (presetType === 'ENABLE_ALL') {
+        const allOn = {};
+        PORTAL_FEATURES_CATALOG.forEach(f => { allOn[f.key] = true; });
+        permStore[uid] = allOn;
+      }
+
+      saveRolePermissionsStore(permStore);
+      recordActivityLog(
+        'Applied Role Preset',
+        `Nazim applied "${presetType}" permission preset to ${targetUser.name} (${uid})`,
+        true
+      );
+      renderAppLayout();
+      showPortalToast('Permission Preset Applied!', `Updated all feature switches for ${targetUser.name} (${uid}).`, 'success');
+    }
+
+    function handleChangeBaseRoleFromAccessPanel(targetUserId, newRoleVal) {
+      if (!isSuperAdmin(currentUser)) return;
+      const uid = String(targetUserId);
+      if (uid === '10122') return;
+
+      let users = getStored('users', DEFAULT_USERS);
+      const idx = users.findIndex(u => String(u.id) === uid);
+      if (idx === -1) return;
+
+      users[idx].role = newRoleVal;
+      if (newRoleVal === 'admin') users[idx].grade = 'TL';
+      else if (newRoleVal === 'supervisor') {
+        users[idx].grade = 'Supervisor';
+        users[idx].team = 'All Teams';
+      }
+      users[idx] = normalizeUserRecord(users[idx]);
+      setStored('users', users);
+
+      // Also update default permission set for the new role
+      const permStore = getRolePermissionsStore();
+      permStore[uid] = { ...getDefaultFeaturePermissionsForRole(newRoleVal) };
+      saveRolePermissionsStore(permStore);
+
+      const logMeta = recordActivityLog(
+        'Changed User Base Role',
+        `Nazim changed ${users[idx].name} (${uid}) primary role to ${newRoleVal.toUpperCase()}`,
+        false
+      );
+      postToSheet('SAVE_USER', { ...users[idx], ...logMeta }).catch(() => {});
+
+      renderAppLayout();
+      showPortalToast('Primary Role Updated!', `${users[idx].name} (${uid}) is now set as ${newRoleVal.toUpperCase()}.`, 'success');
+    }
+
+    function renderNazimRoleManagementView() {
+      if (!isSuperAdmin(currentUser)) return renderDashboard();
+
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const controllableUsers = allUsers.filter(u => String(u.id) !== '10122');
+
+      // Ensure selected user exists
+      if (!controllableUsers.some(u => String(u.id) === String(selectedRoleMgmtUserId)) && controllableUsers.length > 0) {
+        selectedRoleMgmtUserId = String(controllableUsers[0].id);
+      }
+
+      const filteredUsers = controllableUsers.filter(u => {
+        if (roleMgmtTeamFilter === 'ADMIN_SUP' && u.role === 'agent') return false;
+        if (roleMgmtTeamFilter === 'Team Nazim' && u.team !== 'Team Nazim') return false;
+        if (roleMgmtTeamFilter === 'Team Samad' && u.team !== 'Team Samad') return false;
+        if (roleMgmtSearchQuery.trim()) {
+          const q = roleMgmtSearchQuery.toLowerCase();
+          return u.name.toLowerCase().includes(q) || String(u.id).includes(q) || (u.team || '').toLowerCase().includes(q);
+        }
+        return true;
+      });
+
+      const targetUser = controllableUsers.find(u => String(u.id) === String(selectedRoleMgmtUserId)) || controllableUsers[0];
+      const targetPerms = targetUser ? getEffectivePermissionsForUser(targetUser) : {};
+      const permStore = getRolePermissionsStore();
+      const hasCustomOverride = targetUser && Boolean(permStore[String(targetUser.id)]);
+
+      const categories = ['Sidebar Tabs', 'Floor Visibility', 'Action Capabilities'];
+      const totalEnabledForTarget = PORTAL_FEATURES_CATALOG.filter(f => targetPerms[f.key]).length;
+
+      return `
+        <div class="space-y-5">
+          <!-- Top Hero Banner -->
+          <div class="p-5 rounded-3xl bg-gradient-to-r from-slate-900 via-purple-950 to-indigo-950 text-white shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border border-purple-500/30">
+            <div class="flex items-center gap-4">
+              <div class="w-13 h-13 p-3.5 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center text-2xl shadow-lg shrink-0">
+                <i class="fa-solid fa-user-shield"></i>
+              </div>
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-400 text-slate-950 shadow">
+                    <i class="fa-solid fa-crown mr-1"></i>Nazim Exclusive Master Panel (ID: 10122)
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-white/10 text-purple-200 border border-white/15">
+                    Invisible to Other Admins, Supervisors & Agents
+                  </span>
+                </div>
+                <h2 class="text-xl font-black text-white mt-1.5">Granular ID-by-ID Role & Feature Access Control</h2>
+                <p class="text-xs font-bold text-slate-300 mt-0.5">
+                  Select any Employee ID on the left and toggle ON/OFF exactly which tabs, buttons, and admin features that specific ID can use!
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2.5 shrink-0">
+              <div class="px-4 py-2.5 rounded-2xl bg-white/10 border border-white/15 text-right">
+                <span class="text-[10px] font-extrabold uppercase text-purple-300 block">Controllable IDs</span>
+                <strong class="text-lg font-black text-white">${controllableUsers.length} Accounts</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            <!-- Left Column: Select Any Employee ID -->
+            <div class="lg:col-span-4 card-dynamic overflow-hidden flex flex-col max-h-[760px]">
+              <div class="p-4 bg-white border-b border-slate-200 space-y-3">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-xs font-black uppercase tracking-wider text-slate-900">
+                    <i class="fa-solid fa-id-badge text-purple-600 mr-1.5"></i>1. Select Employee ID
+                  </h3>
+                  <span class="text-[10px] font-extrabold text-slate-400">${filteredUsers.length} shown</span>
+                </div>
+
+                <!-- Filter Pills -->
+                <div class="flex flex-wrap gap-1">
+                  ${[
+                    { key: 'ALL', label: 'All IDs' },
+                    { key: 'ADMIN_SUP', label: 'TL / Sup' },
+                    { key: 'Team Nazim', label: 'Team Nazim' },
+                    { key: 'Team Samad', label: 'Team Samad' }
+                  ].map(f => `
+                    <button type="button" onclick="setRoleMgmtTeamFilter('${f.key}')" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all ${roleMgmtTeamFilter === f.key ? 'bg-purple-600 text-white shadow' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                      ${f.label}
+                    </button>
+                  `).join('')}
+                </div>
+
+                <!-- Search Input -->
+                <div class="relative">
+                  <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3 top-2.5"></i>
+                  <input type="text" id="roleMgmtUserSearchInput" value="${roleMgmtSearchQuery}" oninput="onRoleMgmtSearchInput(this.value)" placeholder="Search by name or ID (e.g. 10191)..." class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white">
+                </div>
+              </div>
+
+              <div class="flex-1 overflow-y-auto p-2.5 space-y-1.5 bg-slate-50/50">
+                ${filteredUsers.map(usr => {
+                  const isSel = targetUser && String(usr.id) === String(targetUser.id);
+                  const uPerms = getEffectivePermissionsForUser(usr);
+                  const activeFeatCount = PORTAL_FEATURES_CATALOG.filter(f => uPerms[f.key]).length;
+                  const isCustom = Boolean(permStore[String(usr.id)]);
+                  const roleBadge = usr.role === 'admin'
+                    ? 'bg-purple-100 text-purple-800'
+                    : (usr.role === 'supervisor' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-700');
+
+                  return `
+                    <button type="button" onclick="selectRoleMgmtUser('${usr.id}')" class="w-full p-3 rounded-2xl text-left flex items-center justify-between gap-2.5 transition-all ${isSel ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md' : 'bg-white hover:bg-purple-50/60 text-slate-800 border border-slate-200/80'}">
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-9 h-9 rounded-xl ${isSel ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'} flex items-center justify-center font-black text-xs shrink-0">
+                          ${usr.name.charAt(0)}
+                        </div>
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-1.5">
+                            <span class="text-xs font-extrabold truncate">${usr.name}</span>
+                            <span class="text-[10px] font-mono font-black ${isSel ? 'text-purple-200' : 'text-blue-600'}">(${usr.id})</span>
+                          </div>
+                          <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${isSel ? 'bg-white/20 text-white' : roleBadge}">${usr.role}</span>
+                            <span class="text-[10px] font-bold ${isSel ? 'text-purple-100' : 'text-slate-400'}">${usr.team}</span>
+                            ${isCustom ? `<span class="px-1.5 py-0.2 rounded text-[8px] font-black uppercase ${isSel ? 'bg-amber-400 text-slate-950' : 'bg-amber-100 text-amber-800'}">Customized</span>` : ''}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <span class="px-2 py-1 rounded-lg text-[10px] font-black ${isSel ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'}">
+                          ${activeFeatCount}/${PORTAL_FEATURES_CATALOG.length}
+                        </span>
+                      </div>
+                    </button>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <!-- Right Column: Feature-by-Feature Switches for Selected ID -->
+            <div class="lg:col-span-8 space-y-4">
+              ${targetUser ? `
+              <!-- Selected User Control Header -->
+              <div class="card-dynamic p-5 bg-white border-t-4 border-t-purple-600">
+                <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pb-4 border-b border-slate-100">
+                  <div class="flex items-center gap-3.5">
+                    <div class="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-black text-lg shadow">
+                      ${targetUser.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="text-lg font-black text-slate-900">${targetUser.name}</h3>
+                        <span class="px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-mono text-xs font-black">ID: ${targetUser.id}</span>
+                        ${renderOnlineStatusBadge(targetUser.id)}
+                        ${hasCustomOverride ? `<span class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black uppercase"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Custom Feature Set Active</span>` : `<span class="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold uppercase">Default Role Permissions</span>`}
+                      </div>
+                      <p class="text-xs font-bold text-slate-500 mt-1">
+                        Team: <strong class="text-slate-800">${targetUser.team}</strong> • Grade: <strong class="text-slate-800">${targetUser.grade}</strong> • Active Features: <strong class="text-purple-600">${totalEnabledForTarget} of ${PORTAL_FEATURES_CATALOG.length} Enabled</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Primary Role Switcher -->
+                  <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-2xl border border-slate-200">
+                    <span class="text-[10px] font-black uppercase text-slate-500 pl-1">Base Role:</span>
+                    <select onchange="handleChangeBaseRoleFromAccessPanel('${targetUser.id}', this.value)" class="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      <option value="agent" ${targetUser.role === 'agent' ? 'selected' : ''}>Sales Agent</option>
+                      <option value="supervisor" ${targetUser.role === 'supervisor' ? 'selected' : ''}>Supervisor (View All)</option>
+                      <option value="admin" ${targetUser.role === 'admin' ? 'selected' : ''}>Admin / TL</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- 1-Click Preset Templates -->
+                <div class="pt-3.5 flex flex-wrap items-center justify-between gap-2">
+                  <span class="text-[11px] font-extrabold text-slate-500"><i class="fa-solid fa-bolt text-amber-500 mr-1"></i>Quick Role Templates for ${targetUser.name.split(' ')[0]}:</span>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <button type="button" onclick="handleApplyRolePresetToUser('${targetUser.id}', 'STANDARD_AGENT')" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-extrabold">
+                      Agent Default
+                    </button>
+                    <button type="button" onclick="handleApplyRolePresetToUser('${targetUser.id}', 'SUPERVISOR_VIEW')" class="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-extrabold">
+                      Supervisor (View All)
+                    </button>
+                    <button type="button" onclick="handleApplyRolePresetToUser('${targetUser.id}', 'FULL_ADMIN')" class="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-extrabold">
+                      Full Admin Access
+                    </button>
+                    <button type="button" onclick="handleApplyRolePresetToUser('${targetUser.id}', 'RESET_DEFAULT')" class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-extrabold">
+                      <i class="fa-solid fa-rotate-left mr-1"></i>Reset to Role Default
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Feature Categories & Toggle Cards -->
+              ${categories.map(catName => {
+                const catFeatures = PORTAL_FEATURES_CATALOG.filter(f => f.category === catName);
+                return `
+                  <div class="card-dynamic p-5 bg-white">
+                    <div class="flex items-center justify-between mb-3.5 pb-2 border-b border-slate-100">
+                      <h4 class="text-xs font-black uppercase tracking-wider text-slate-800">
+                        <i class="fa-solid fa-sliders text-purple-600 mr-1.5"></i>${catName} (${catFeatures.filter(f => targetPerms[f.key]).length}/${catFeatures.length} Active)
+                      </h4>
+                      <span class="text-[10px] font-bold text-slate-400">Click any switch to add/remove feature for ID ${targetUser.id}</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      ${catFeatures.map(feat => {
+                        const isOn = Boolean(targetPerms[feat.key]);
+                        return `
+                          <label class="p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start justify-between gap-3 ${isOn ? 'bg-purple-50/40 border-purple-300 shadow-xs' : 'bg-slate-50/70 border-slate-200 opacity-75 hover:opacity-100'}">
+                            <div class="flex items-start gap-3 min-w-0">
+                              <div class="w-9 h-9 rounded-xl ${isOn ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-500'} flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-xs transition-colors">
+                                <i class="fa-solid ${feat.icon}"></i>
+                              </div>
+                              <div class="min-w-0">
+                                <div class="flex items-center gap-1.5">
+                                  <span class="text-xs font-black text-slate-900">${feat.label}</span>
+                                </div>
+                                <p class="text-[11px] font-semibold text-slate-500 mt-0.5 leading-snug">${feat.desc}</p>
+                              </div>
+                            </div>
+                            <div class="shrink-0 pt-1">
+                              <input type="checkbox" ${isOn ? 'checked' : ''} onchange="handleToggleSingleUserFeature('${targetUser.id}', '${feat.key}', this.checked)" class="w-5 h-5 accent-purple-600 rounded cursor-pointer">
+                            </div>
+                          </label>
+                        `;
+                      }).join('')}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+              ` : ''}
             </div>
           </div>
         </div>
