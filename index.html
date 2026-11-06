@@ -124,7 +124,8 @@
       'B': 1132174,
       'C': 1032175,
       'TL': 522328,
-      'Supervisor': 0
+      'Supervisor': 0,
+      'Pending': 0
     };
 
     function getGradeTargetsForMonth(mKey) {
@@ -146,6 +147,7 @@
       { id: '11042', name: 'Md. Ashiqur Rahman', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'B', baseTarget: 1132174 },
       { id: '10328', name: 'Sheikh MD Rayhan', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
       { id: '10135', name: 'Ranju Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
+      { id: '10357', name: 'Md. Faruque Hossain', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'Pending', baseTarget: 0 },
 
       { id: '10098', name: 'Habibur Rahman Shuvo', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A-', baseTarget: 1232174 },
       { id: '10136', name: 'Al-Amin Kazi', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A+', baseTarget: 1619218 },
@@ -176,7 +178,8 @@
       { id: '10803', name: 'Md. Abdullah Mahmud', team: 'Team Nazim', sat: '3:00 PM', sun: '7:00 AM', mon: 'Night', tue: 'DO', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
       { id: '11042', name: 'Md. Ashiqur Rahman', team: 'Team Nazim', sat: 'DO', sun: '3:00 PM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
       { id: '10328', name: 'Sheikh MD Rayhan', team: 'Team Nazim', sat: '7:00 AM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
-      { id: '10135', name: 'Ranju Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '10:00 AM', tue: '7:00 AM', wed: '3:00 PM', thu: 'Night', fri: 'DO' }
+      { id: '10135', name: 'Ranju Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '10:00 AM', tue: '7:00 AM', wed: '3:00 PM', thu: 'Night', fri: 'DO' },
+      { id: '10357', name: 'Md. Faruque Hossain', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' }
     ];
 
     const DEFAULT_PRODUCTS = {
@@ -279,7 +282,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen) return true;
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal'];
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -764,7 +767,7 @@
         agentCount = agents.length || 1;
       } else {
         const freshUser = allUsers.find(u => String(u.id) === String(user.id)) || user;
-        baseTarget = Number(freshUser.baseTarget) || 1232174;
+        baseTarget = (freshUser.baseTarget !== undefined && freshUser.baseTarget !== null) ? Number(freshUser.baseTarget) : 1232174;
       }
 
       const workingTarget = Math.round(baseTarget * 1.05);
@@ -978,7 +981,11 @@
       if (res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
         const localCfg = getStored('monthly_configs', {});
         if (JSON.stringify(res.monthlyConfigs) !== JSON.stringify(localCfg)) {
+          const hadPrevCfg = Object.keys(localCfg).length > 0;
           setStored('monthly_configs', res.monthlyConfigs);
+          if (currentUser) {
+            syncIncomingChatAndNoticesFromConfigs(res.monthlyConfigs, hadPrevCfg);
+          }
           changed = true;
         }
       }
@@ -1143,6 +1150,9 @@
 
     function setTab(tab) {
       activeTab = tab;
+      if (tab === 'chat') {
+        markChatChannelRead(activeChatChannelId);
+      }
       if (tab === 'reports') {
         logsFilterScope = 'ALL';
         if (!reportsDateFilter) reportsDateFilter = getTodayFormatted();
@@ -1213,6 +1223,9 @@
     function renderAppLayout() {
       const prevMainEl = document.getElementById('mainScrollContainer');
       const savedScrollTop = prevMainEl ? prevMainEl.scrollTop : 0;
+      const prevChatBox = document.getElementById('chatMessagesViewport');
+      const savedChatScrollTop = prevChatBox ? prevChatBox.scrollTop : null;
+      const wasChatAtBottom = prevChatBox ? (prevChatBox.scrollHeight - prevChatBox.scrollTop - prevChatBox.clientHeight < 60) : true;
       const savedScrollLeft = prevMainEl ? prevMainEl.scrollLeft : 0;
       const tableScrollPositions = Array.from(document.querySelectorAll('.overflow-x-auto')).map(el => ({
         top: el.scrollTop,
@@ -1266,6 +1279,15 @@
                 <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
                 </button>
+                <button onclick="setTab('chat')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'chat' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <span class="flex items-center gap-3">
+                    <i class="fa-solid fa-comments text-sm ${activeTab === 'chat' ? 'text-white' : 'text-blue-600'}"></i> Team & Personal Chat
+                  </span>
+                  ${(() => {
+                    const unreadChat = getUnreadChatCountForUser();
+                    return unreadChat > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shadow">${unreadChat}</span>` : '';
+                  })()}
+                </button>
                 <button onclick="setTab('activity_logs')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'activity_logs' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-list-check text-sm text-rose-500"></i> Activity Logs
                 </button>
@@ -1293,7 +1315,7 @@
               <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
                 <span class="text-slate-300">/</span>
-                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab === 'agents' ? 'Target Setup & IDs' : activeTab.replace('_', ' ')}</h2>
+                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab === 'agents' ? 'Target Setup & IDs' : (activeTab === 'chat' ? 'Team & Personal Chat' : activeTab.replace('_', ' '))}</h2>
                 <span class="text-slate-300">•</span>
                 <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
                   <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
@@ -1306,6 +1328,11 @@
               </div>
 
               <div class="flex items-center gap-3 shrink-0">
+                ${isFullAdmin(u) ? `
+                <button onclick="openAnnouncementModal()" title="Broadcast Official Notice / Announcement to All Agents' Bell Icons" class="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-extrabold rounded-xl shadow-md flex items-center gap-2 transition-all">
+                  <i class="fa-solid fa-bullhorn text-xs"></i> Post Notice
+                </button>
+                ` : ''}
                 ${renderHeaderBellNotificationWidget()}
                 <button onclick="canViewAll(currentUser) ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl flex items-center gap-2 transition-colors">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
@@ -1338,6 +1365,7 @@
         ${isFullAdmin(u) ? renderGradeConfigModal() : ''}
         ${isFullAdmin(u) ? renderAiImportModal() : ''}
         ${renderConfirmWarningModal()}
+        ${isFullAdmin(u) ? renderAnnouncementModal() : ''}
         ${renderLogoutConfirmModal()}
       `;
       document.getElementById('app').innerHTML = html;
@@ -1346,6 +1374,14 @@
       if (newMainEl) {
         newMainEl.scrollTop = savedScrollTop;
         newMainEl.scrollLeft = savedScrollLeft;
+      }
+      const newChatBox = document.getElementById('chatMessagesViewport');
+      if (newChatBox) {
+        if (wasChatAtBottom || savedChatScrollTop === null) {
+          newChatBox.scrollTop = newChatBox.scrollHeight;
+        } else {
+          newChatBox.scrollTop = savedChatScrollTop;
+        }
       }
       const newTables = document.querySelectorAll('.overflow-x-auto');
       tableScrollPositions.forEach((pos, idx) => {
@@ -1363,6 +1399,7 @@
       if (activeTab === 'attendance') return renderAttendanceView();
       if (activeTab === 'activity_logs') return renderActivityLogsView();
       if (activeTab === 'ranking') return renderRankingAndComparison();
+      if (activeTab === 'chat') return renderChatHubView();
       if (activeTab === 'reports') return renderReports();
       if (activeTab === 'agents') return renderManageAgents();
     }
@@ -1535,7 +1572,7 @@
             <div>
               <div class="flex flex-wrap items-center gap-2">
                 <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${dashboardScope === 'Team Nazim' ? 'bg-orange-500' : (dashboardScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800')} text-white">
-                  ${canViewAll(u) ? `${dashboardScope === 'ALL' ? 'Full Facebook Team (16)' : dashboardScope}` : u.team}
+                  ${canViewAll(u) ? `${dashboardScope === 'ALL' ? 'Full Facebook Team (17)' : dashboardScope}` : u.team}
                 </span>
                 <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
                   ${canViewAll(u) ? `${tInfo.agentCount} Agents` : `Grade: ${myMonthUser.grade}`}
@@ -1564,7 +1601,7 @@
               <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
                 <button onclick="setDashboardScope('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
                 <button onclick="setDashboardScope('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
-                <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (16)</button>
+                <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (17)</button>
               </div>
               ` : ''}
               ${isFullAdmin(u) ? `
@@ -1785,7 +1822,7 @@
             return da - db;
           });
 
-        const baseTgt = Number(ag.baseTarget) || 1232174;
+        const baseTgt = (ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174;
         const workTgt = Math.round(baseTgt * 1.05);
         const leads = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
         const orders = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
@@ -1843,9 +1880,9 @@
               <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
                 <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
                 <select onchange="setMonthlyPerfTeam(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
-                  <option value="Team Nazim" ${monthlyPerfTeamScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim (8 Agents)</option>
+                  <option value="Team Nazim" ${monthlyPerfTeamScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim (9 Agents)</option>
                   <option value="Team Samad" ${monthlyPerfTeamScope === 'Team Samad' ? 'selected' : ''}>Team Samad (8 Agents)</option>
-                  <option value="ALL" ${monthlyPerfTeamScope === 'ALL' ? 'selected' : ''}>Overall All Teams (16 Agents)</option>
+                  <option value="ALL" ${monthlyPerfTeamScope === 'ALL' ? 'selected' : ''}>Overall All Teams (17 Agents)</option>
                 </select>
               </div>
 
@@ -2374,7 +2411,7 @@
             <div class="flex items-center gap-2">
               ${canViewAll(u) ? `
               <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
-                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (17)</option>
                 <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
                 <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
               </select>
@@ -2473,7 +2510,7 @@
         const orders = agSales.reduce((s, c) => s + Number(c.orders || 0), 0);
         const revenue = agSales.reduce((s, c) => s + Number(c.amount || 0), 0);
         const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
-        const workTgt = Math.round(Number(ag.baseTarget || 1232174) * 1.05);
+        const workTgt = Math.round(((ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174) * 1.05);
         const pct = workTgt > 0 ? Math.round((revenue / workTgt) * 100) : 0;
         return { ...ag, leads, orders, revenue, conv, workTgt, pct };
       }).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders);
@@ -2591,7 +2628,10 @@
                         <div class="inline-flex items-center gap-2 ${isMe ? 'my-rank-name-pill px-3 py-1.5 rounded-xl' : ''}">
                           <span>${ag.name}</span>
                           <span class="${isMe ? 'text-blue-100' : 'text-slate-400'} text-[10px]">(${ag.id})</span>
-                          ${isMe ? `<span class="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black uppercase shadow-sm"><i class="fa-solid fa-location-dot mr-1"></i>YOU • ${getOrdinal(posNum)}</span>` : ''}
+                          ${isMe
+                            ? `<span class="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black uppercase shadow-sm"><i class="fa-solid fa-location-dot mr-1"></i>YOU • ${getOrdinal(posNum)}</span>`
+                            : `<button type="button" onclick="openDirectChatWithUser('${ag.id}')" title="Send Personal Message to ${ag.name}" class="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-[10px] font-extrabold transition-colors"><i class="fa-regular fa-comment-dots mr-1"></i>Message</button>`
+                          }
                         </div>
                       </td>
                       <td class="p-3.5">${renderOnlineStatusBadge(ag.id)}</td>
@@ -2650,7 +2690,7 @@
 
       sales.forEach(s => {
         const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
-        const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
+        const agWorkTarget = Math.round(((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174) * 1.05);
         const agDailyTarget = Math.round(agWorkTarget / 26);
 
         sumLeads += Number(s.leads) || 0;
@@ -2695,7 +2735,7 @@
 
               ${canViewAll(u) ? `
               <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
-                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (16)</option>
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (17)</option>
                 <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
                 <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
               </select>
@@ -2735,7 +2775,7 @@
                 ${sales.length === 0 ? `<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted for ${reportsDateFilter === 'ALL' ? selectedMonthKey : cleanDisplayDate(reportsDateFilter)} yet.</td></tr>` : ''}
                 ${sales.map(s => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
-                  const agWorkTarget = Math.round((Number(agObj.baseTarget) || 1232174) * 1.05);
+                  const agWorkTarget = Math.round(((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174) * 1.05);
                   const agDailyTarget = Math.round(agWorkTarget / 26);
                   const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
                   const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
@@ -3486,6 +3526,7 @@
                       <option value="A-">Grade A- (৳${Number(gMap['A-']).toLocaleString()})</option>
                       <option value="B">Grade B (৳${Number(gMap['B']).toLocaleString()})</option>
                       <option value="C">Grade C (৳${Number(gMap['C']).toLocaleString()})</option>
+                      <option value="Pending">Pending / Not Assigned (৳0)</option>
                       <option value="Supervisor">Supervisor (0)</option>
                       <option value="TL">Grade TL (৳${Number(gMap['TL']).toLocaleString()})</option>
                     </select>
@@ -3648,7 +3689,7 @@
       const agentId = isFullAdmin(u) ? document.getElementById('subAgentId')?.value : u.id;
       const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
 
-      const workingTarget = Math.round((Number(targetAgent.baseTarget) || 1232174) * 1.05);
+      const workingTarget = Math.round(((targetAgent.baseTarget !== undefined && targetAgent.baseTarget !== null) ? Number(targetAgent.baseTarget) : 1232174) * 1.05);
       const dailyTarget = Math.round(workingTarget / 26);
 
       const leads = Number(document.getElementById('subLeads')?.value) || 0;
@@ -4191,6 +4232,7 @@
         '11042': ['ashiqur', 'ashik', 'ashiq'],
         '10328': ['rayhan', 'raihan', 'sheikh'],
         '10135': ['ranju', 'ronju'],
+        '10357': ['faruque', 'faruk', 'faruq', 'md. faruque', 'faruque hossain'],
         '10098': ['shuvo', 'habibur'],
         '10136': ['al-amin kazi', 'alamin kazi', 'kazi'],
         '11007': ['zubayer', 'jubayer', 'zubaer'],
@@ -4942,6 +4984,12 @@
 
     function getBellNotifVisualMeta(n) {
       const act = String(n.actionType || n.title || '').toUpperCase();
+      if (n.type === 'admin_notice') {
+        return { bg: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white', icon: 'fa-bullhorn', badgeBg: 'bg-orange-100 text-orange-800 border border-orange-200', badgeText: '📢 Official Notice' };
+      }
+      if (n.type === 'chat_dm') {
+        return { bg: 'bg-blue-600 text-white', icon: 'fa-comment-dots', badgeBg: 'bg-blue-100 text-blue-800', badgeText: 'New Message' };
+      }
       if (n.type === 'duty_reminder') {
         return { bg: 'bg-amber-500 text-white', icon: 'fa-file-pen', badgeBg: 'bg-amber-100 text-amber-800', badgeText: 'Duty Alert' };
       }
@@ -5187,6 +5235,15 @@
       saveNotificationsForCurrentUser(updatedNotifs);
       notificationDropdownOpen = false;
 
+      if (clickedNotif && clickedNotif.type === 'admin_notice') {
+        renderAppLayout();
+        return;
+      }
+      if (clickedNotif && clickedNotif.type === 'chat_dm' && clickedNotif.roomId) {
+        activeChatChannelId = clickedNotif.roomId;
+        setTab('chat');
+        return;
+      }
       if (clickedNotif && clickedNotif.type === 'admin_activity' && canViewAll(currentUser)) {
         const actUpper = String(clickedNotif.actionType || '').toUpperCase();
         if (actUpper.includes('SALES') || actUpper.includes('REPORT') || actUpper.includes('IMPORT')) {
@@ -5339,6 +5396,856 @@
         renderAppLayout();
       }
     });
+
+
+    
+    // =========================================================================
+    // GROUP & 1-ON-1 PERSONAL CHAT HUB + INBOX + READ RECEIPTS (SEEN TRACKING)
+    // =========================================================================
+    let activeChatChannelId = 'GLOBAL_GROUP';
+    let activeChatLeftFilter = 'ALL'; // 'ALL' | 'INBOX' | 'GROUPS' | 'ADMINS' | 'AGENTS'
+    let chatSearchQuery = '';
+
+    function getDmRoomId(uidA, uidB) {
+      const a = String(uidA).trim();
+      const b = String(uidB).trim();
+      return a < b ? `DM_${a}_${b}` : `DM_${b}_${a}`;
+    }
+
+    function openDirectChatWithUser(targetUserId) {
+      if (!currentUser || !targetUserId) return;
+      if (String(targetUserId) === String(currentUser.id)) return;
+      const dmRoom = getDmRoomId(currentUser.id, targetUserId);
+      activeChatChannelId = dmRoom;
+      activeTab = 'chat';
+      markChatChannelRead(dmRoom, true);
+      renderAppLayout();
+      const inputEl = document.getElementById('chatComposerInput');
+      if (inputEl) inputEl.focus();
+    }
+
+    function getChatAndNoticeHubStore() {
+      const configs = getStored('monthly_configs', {});
+      const hub = configs['CHAT_AND_NOTICES'] || {};
+      return {
+        messages: Array.isArray(hub.messages) ? hub.messages : [],
+        notices: Array.isArray(hub.notices) ? hub.notices : [],
+        readReceipts: (hub.readReceipts && typeof hub.readReceipts === 'object') ? hub.readReceipts : {}
+      };
+    }
+
+    function saveChatAndNoticeHubStore(hubData) {
+      const configs = getStored('monthly_configs', {});
+      const trimmedHub = {
+        messages: (hubData.messages || []).slice(-220),
+        notices: (hubData.notices || []).slice(-40),
+        readReceipts: hubData.readReceipts || {}
+      };
+      configs['CHAT_AND_NOTICES'] = trimmedHub;
+      setStored('monthly_configs', configs);
+      postToSheet('SAVE_MONTHLY_CONFIG', {
+        monthKey: 'CHAT_AND_NOTICES',
+        configJson: JSON.stringify(trimmedHub)
+      }).catch(() => {});
+    }
+
+    function isChatMessageVisibleToUser(msg, user) {
+      if (!msg || !user) return false;
+      if (msg.roomId === 'GLOBAL_GROUP') return true;
+      if (msg.roomId === 'TEAM_NAZIM') return canViewAll(user) || user.team === 'Team Nazim';
+      if (msg.roomId === 'TEAM_SAMAD') return canViewAll(user) || user.team === 'Team Samad';
+      if (String(msg.roomId || '').startsWith('DM_')) {
+        const parts = String(msg.roomId).split('_');
+        return parts.includes(String(user.id));
+      }
+      return false;
+    }
+
+    function getLastReadMapForUser() {
+      if (!currentUser) return {};
+      const localMap = (() => {
+        try { return JSON.parse(localStorage.getItem(`gb_chat_read_${currentUser.id}`) || '{}'); }
+        catch (e) { return {}; }
+      })();
+      const { readReceipts } = getChatAndNoticeHubStore();
+      const cloudMap = readReceipts[String(currentUser.id)] || {};
+      const merged = { ...cloudMap };
+      Object.keys(localMap).forEach(rId => {
+        merged[rId] = Math.max(Number(merged[rId] || 0), Number(localMap[rId] || 0));
+      });
+      return merged;
+    }
+
+    // Marks channel as read locally AND syncs read receipt to cloud if there were unread messages from others
+    function markChatChannelRead(channelId, syncToCloudIfNeeded = true) {
+      if (!currentUser || !channelId) return;
+      const uid = String(currentUser.id);
+      const nowTs = Date.now();
+
+      const hub = getChatAndNoticeHubStore();
+      if (!hub.readReceipts) hub.readReceipts = {};
+      if (!hub.readReceipts[uid]) hub.readReceipts[uid] = {};
+
+      const prevReadTs = Math.max(
+        Number(hub.readReceipts[uid][channelId] || 0),
+        Number(getLastReadMapForUser()[channelId] || 0)
+      );
+
+      // Check if there are any messages in this channel sent by someone else after prevReadTs
+      const hasNewFromOthers = hub.messages.some(m =>
+        m.roomId === channelId &&
+        String(m.senderId) !== uid &&
+        Number(m.ts || 0) > prevReadTs
+      );
+
+      const localMap = getLastReadMapForUser();
+      localMap[channelId] = nowTs;
+      localStorage.setItem(`gb_chat_read_${uid}`, JSON.stringify(localMap));
+
+      if (hasNewFromOthers || !hub.readReceipts[uid][channelId]) {
+        hub.readReceipts[uid][channelId] = nowTs;
+        if (syncToCloudIfNeeded) {
+          saveChatAndNoticeHubStore(hub);
+        } else {
+          const configs = getStored('monthly_configs', {});
+          configs['CHAT_AND_NOTICES'] = hub;
+          setStored('monthly_configs', configs);
+        }
+      }
+    }
+
+    // Returns list of users who have SEEN a specific message!
+    function getSeenByUsersForMessage(msg, allUsers) {
+      if (!msg) return [];
+      const { readReceipts } = getChatAndNoticeHubStore();
+      const msgTs = Number(msg.ts || 0);
+      const senderId = String(msg.senderId);
+      const roomId = String(msg.roomId || '');
+
+      if (roomId.startsWith('DM_')) {
+        const parts = roomId.split('_');
+        const partnerId = parts[1] === senderId ? parts[2] : parts[1];
+        const partnerReadTs = Number((readReceipts[partnerId] && readReceipts[partnerId][roomId]) || 0);
+        if (partnerReadTs >= msgTs) {
+          const pObj = allUsers.find(u => String(u.id) === String(partnerId));
+          return [pObj ? pObj.name : `ID ${partnerId}`];
+        }
+        return [];
+      }
+
+      // Group message: check all users who have read this group channel at or after msgTs
+      const seenNames = [];
+      allUsers.forEach(usr => {
+        const uid = String(usr.id);
+        if (uid === senderId) return;
+        const uReadTs = Number((readReceipts[uid] && readReceipts[uid][roomId]) || 0);
+        if (uReadTs >= msgTs) {
+          seenNames.push(usr.name);
+        }
+      });
+      return seenNames;
+    }
+
+    function getUnreadCountForChannel(channelId) {
+      if (!currentUser) return 0;
+      const map = getLastReadMapForUser();
+      const lastReadTs = Number(map[channelId] || 0);
+      const { messages } = getChatAndNoticeHubStore();
+      return messages.filter(m =>
+        m.roomId === channelId &&
+        String(m.senderId) !== String(currentUser.id) &&
+        Number(m.ts || 0) > lastReadTs
+      ).length;
+    }
+
+    function getUnreadChatCountForUser() {
+      if (!currentUser) return 0;
+      const map = getLastReadMapForUser();
+      const { messages } = getChatAndNoticeHubStore();
+      return messages.filter(m => {
+        if (!isChatMessageVisibleToUser(m, currentUser)) return false;
+        if (String(m.senderId) === String(currentUser.id)) return false;
+        const lastReadTs = Number(map[m.roomId] || 0);
+        return Number(m.ts || 0) > lastReadTs;
+      }).length;
+    }
+
+    function getUnreadDmCountForUser() {
+      if (!currentUser) return 0;
+      const map = getLastReadMapForUser();
+      const { messages } = getChatAndNoticeHubStore();
+      return messages.filter(m => {
+        if (!String(m.roomId || '').startsWith('DM_')) return false;
+        if (!isChatMessageVisibleToUser(m, currentUser)) return false;
+        if (String(m.senderId) === String(currentUser.id)) return false;
+        const lastReadTs = Number(map[m.roomId] || 0);
+        return Number(m.ts || 0) > lastReadTs;
+      }).length;
+    }
+
+    function syncIncomingChatAndNoticesFromConfigs(allConfigs, triggerPopup = false) {
+      if (!currentUser || !allConfigs || typeof allConfigs !== 'object') return;
+      const hub = allConfigs['CHAT_AND_NOTICES'];
+      if (!hub) return;
+
+      const notices = Array.isArray(hub.notices) ? hub.notices : [];
+      const messages = Array.isArray(hub.messages) ? hub.messages : [];
+
+      // 1. Process Official Admin Notices into every user's Bell Notification Center!
+      const seenNoticeKey = `gb_seen_notices_${currentUser.id}`;
+      let seenNotices = [];
+      try { seenNotices = JSON.parse(localStorage.getItem(seenNoticeKey) || '[]'); } catch (e) {}
+      const seenNoticeSet = new Set(seenNotices);
+
+      const myNotifs = getNotificationsForCurrentUser();
+      const existingIds = new Set(myNotifs.map(n => n.id));
+      let addedNewNotice = false;
+
+      notices.forEach(nt => {
+        if (!nt || !nt.id) return;
+        if (nt.targetTeam && nt.targetTeam !== 'ALL' && !canViewAll(currentUser) && currentUser.team !== nt.targetTeam) {
+          return;
+        }
+        const notifId = `notice_${nt.id}`;
+        if (!existingIds.has(notifId)) {
+          const isSender = String(nt.senderId) === String(currentUser.id);
+          const notifObj = {
+            id: notifId,
+            userId: String(currentUser.id),
+            date: nt.date || getTodayFormatted(),
+            time: nt.time || getNowTimeStr(),
+            title: `📢 ${nt.title || 'Official Notice'} (${nt.senderName})`,
+            message: nt.message || '',
+            type: 'admin_notice',
+            read: isSender
+          };
+          myNotifs.unshift(notifObj);
+          existingIds.add(notifId);
+          addedNewNotice = true;
+
+          if (!seenNoticeSet.has(nt.id)) {
+            seenNoticeSet.add(nt.id);
+            if (!isSender) {
+              showPortalToast(notifObj.title, notifObj.message, 'warning');
+            }
+          }
+        }
+      });
+
+      if (addedNewNotice) {
+        localStorage.setItem(seenNoticeKey, JSON.stringify(Array.from(seenNoticeSet).slice(-100)));
+        saveNotificationsForCurrentUser(myNotifs.slice(0, 80));
+      }
+
+      // 2. Process incoming Direct Messages (DMs) & Group messages
+      const seenMsgKey = `gb_seen_chat_toasts_${currentUser.id}`;
+      let seenMsgs = [];
+      try { seenMsgs = JSON.parse(localStorage.getItem(seenMsgKey) || '[]'); } catch (e) {}
+      const seenMsgSet = new Set(seenMsgs);
+      const isInitialChatSeed = seenMsgSet.size === 0;
+
+      messages.slice(-30).forEach(m => {
+        if (!m || !m.id) return;
+        if (!seenMsgSet.has(m.id)) {
+          seenMsgSet.add(m.id);
+          if (triggerPopup && !isInitialChatSeed && String(m.senderId) !== String(currentUser.id)) {
+            if (isChatMessageVisibleToUser(m, currentUser)) {
+              const isDm = String(m.roomId || '').startsWith('DM_');
+              if (activeTab === 'chat' && activeChatChannelId === m.roomId) {
+                markChatChannelRead(m.roomId, true);
+              } else {
+                showPortalToast(
+                  isDm ? `💬 Personal Message from ${m.senderName}` : `👥 Group Message (${m.senderName})`,
+                  m.text,
+                  'success'
+                );
+              }
+            }
+          }
+        }
+      });
+
+      localStorage.setItem(seenMsgKey, JSON.stringify(Array.from(seenMsgSet).slice(-220)));
+    }
+
+    // =========================================================================
+    // ADMIN OFFICIAL NOTICE / ANNOUNCEMENT BROADCAST MODAL
+    // =========================================================================
+    function renderAnnouncementModal() {
+      const { notices } = getChatAndNoticeHubStore();
+      return `
+        <div id="announceModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-base shadow-md">
+                  <i class="fa-solid fa-bullhorn"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-black text-slate-900">Broadcast Official Notice / Announcement</h3>
+                  <p class="text-xs font-bold text-slate-400">Instantly sends to everyone's Bell Icon with unread red badge & popup alert!</p>
+                </div>
+              </div>
+              <button type="button" onclick="closeModal('announceModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form onsubmit="handleSendOfficialAnnouncement(event)" class="space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Notice Title</label>
+                  <input type="text" id="annTitleInput" required placeholder="e.g. Important Floor Notice" value="Important Floor Notice" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Target Audience</label>
+                  <select id="annTargetSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-800">
+                    <option value="ALL">All Floor Members (Both Teams)</option>
+                    <option value="Team Nazim">Team Nazim Only</option>
+                    <option value="Team Samad">Team Samad Only</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Announcement Message</label>
+                <textarea id="annMessageInput" rows="4" required placeholder="Write your official announcement or instruction for the team..." class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"></textarea>
+              </div>
+
+              <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+                <label class="flex items-center gap-2 text-xs font-extrabold text-slate-600 cursor-pointer">
+                  <input type="checkbox" id="annAlsoPostInGroupChat" checked class="w-4 h-4 accent-amber-600 rounded">
+                  <span>Also pin in Global Group Chat</span>
+                </label>
+                <div class="flex gap-2">
+                  <button type="button" onclick="closeModal('announceModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                  <button type="submit" class="px-5 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 rounded-xl shadow-lg flex items-center gap-1.5">
+                    <i class="fa-solid fa-paper-plane"></i> Broadcast Notice Now
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            ${notices.length > 0 ? `
+            <div class="mt-5 pt-4 border-t border-slate-200">
+              <h4 class="text-[11px] font-black uppercase text-slate-500 mb-2.5">Recent Broadcasted Notices (${notices.length})</h4>
+              <div class="space-y-2 max-h-44 overflow-y-auto pr-1">
+                ${notices.slice().reverse().slice(0, 8).map(nt => `
+                  <div class="p-3 rounded-xl bg-amber-50/70 border border-amber-200 flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[9px] font-black uppercase">${nt.targetTeam || 'ALL'}</span>
+                        <strong class="text-xs font-black text-slate-900 truncate">${nt.title}</strong>
+                        <span class="text-[10px] font-bold text-slate-400">• ${nt.date} ${nt.time}</span>
+                      </div>
+                      <p class="text-[11px] font-semibold text-slate-700 mt-1 whitespace-normal">${nt.message}</p>
+                    </div>
+                    <button type="button" onclick="handleDeleteOfficialNotice('${nt.id}')" title="Delete Notice" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                      <i class="fa-solid fa-trash-can text-[11px]"></i>
+                    </button>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function openAnnouncementModal() {
+      if (!isFullAdmin(currentUser)) return;
+      openModal('announceModal');
+    }
+
+    function handleSendOfficialAnnouncement(e) {
+      e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
+
+      const titleVal = (document.getElementById('annTitleInput')?.value || '').trim() || 'Official Notice';
+      const targetVal = document.getElementById('annTargetSelect')?.value || 'ALL';
+      const msgVal = (document.getElementById('annMessageInput')?.value || '').trim();
+      const postInChat = document.getElementById('annAlsoPostInGroupChat')?.checked;
+      if (!msgVal) return;
+
+      const hub = getChatAndNoticeHubStore();
+      const newNotice = {
+        id: 'nt_' + Date.now(),
+        senderId: String(currentUser.id),
+        senderName: currentUser.name,
+        targetTeam: targetVal,
+        title: titleVal,
+        message: msgVal,
+        date: getTodayFormatted(),
+        time: getNowTimeStr(),
+        ts: Date.now()
+      };
+      hub.notices.push(newNotice);
+
+      if (postInChat) {
+        const roomTarget = targetVal === 'Team Nazim' ? 'TEAM_NAZIM' : (targetVal === 'Team Samad' ? 'TEAM_SAMAD' : 'GLOBAL_GROUP');
+        hub.messages.push({
+          id: 'msg_' + Date.now() + '_ann',
+          roomId: roomTarget,
+          senderId: String(currentUser.id),
+          senderName: currentUser.name,
+          senderRole: currentUser.role,
+          senderTeam: currentUser.team,
+          text: `📢 [OFFICIAL NOTICE: ${titleVal}] — ${msgVal}`,
+          isNotice: true,
+          date: newNotice.date,
+          time: newNotice.time,
+          ts: Date.now()
+        });
+      }
+
+      saveChatAndNoticeHubStore(hub);
+      syncIncomingChatAndNoticesFromConfigs(getStored('monthly_configs', {}), false);
+
+      recordActivityLog('Broadcasted Official Notice', `Sent Notice "${titleVal}" (${targetVal}): ${msgVal}`, true);
+      document.getElementById('annMessageInput').value = '';
+      closeModal('announceModal');
+      renderAppLayout();
+      showPortalToast('Official Notice Broadcasted!', `Sent "${titleVal}" to ${targetVal} Bell Notifications.`, 'success');
+    }
+
+    function handleDeleteOfficialNotice(noticeId) {
+      if (!isFullAdmin(currentUser)) return;
+      const hub = getChatAndNoticeHubStore();
+      hub.notices = hub.notices.filter(n => n.id !== noticeId);
+      saveChatAndNoticeHubStore(hub);
+      renderAppLayout();
+      openModal('announceModal');
+      showPortalToast('Notice Removed', 'Deleted the announcement from the broadcast list.', 'warning');
+    }
+
+    // =========================================================================
+    // UNIFIED INBOX, GROUP CHANNELS & 1-ON-1 PERSONAL CHAT VIEW WITH SEEN STATUS
+    // =========================================================================
+    function setChatLeftFilter(filterKey) {
+      activeChatLeftFilter = filterKey;
+      renderAppLayout();
+    }
+
+    function selectChatChannel(channelId) {
+      activeChatChannelId = channelId;
+      markChatChannelRead(channelId, true);
+      renderAppLayout();
+      const inputEl = document.getElementById('chatComposerInput');
+      if (inputEl) inputEl.focus();
+    }
+
+    function onChatSearchInput(val) {
+      chatSearchQuery = String(val || '');
+      renderAppLayout();
+      const sInput = document.getElementById('chatMemberSearchInput');
+      if (sInput) {
+        sInput.focus();
+        sInput.setSelectionRange(sInput.value.length, sInput.value.length);
+      }
+    }
+
+    function handleSendChatMessage(e) {
+      e.preventDefault();
+      if (!currentUser) return;
+      const inputEl = document.getElementById('chatComposerInput');
+      const textVal = (inputEl?.value || '').trim();
+      if (!textVal) return;
+
+      const hub = getChatAndNoticeHubStore();
+      const nowTs = Date.now();
+      const newMsg = {
+        id: 'msg_' + nowTs + '_' + Math.random().toString(36).substring(2, 6),
+        roomId: activeChatChannelId,
+        senderId: String(currentUser.id),
+        senderName: currentUser.name,
+        senderRole: currentUser.role,
+        senderTeam: currentUser.team,
+        text: textVal,
+        date: getTodayFormatted(),
+        time: getNowTimeStr(),
+        ts: nowTs
+      };
+
+      hub.messages.push(newMsg);
+      if (!hub.readReceipts) hub.readReceipts = {};
+      if (!hub.readReceipts[String(currentUser.id)]) hub.readReceipts[String(currentUser.id)] = {};
+      hub.readReceipts[String(currentUser.id)][activeChatChannelId] = nowTs;
+
+      saveChatAndNoticeHubStore(hub);
+      markChatChannelRead(activeChatChannelId, false);
+
+      inputEl.value = '';
+      renderAppLayout();
+      const refreshedInput = document.getElementById('chatComposerInput');
+      if (refreshedInput) refreshedInput.focus();
+    }
+
+    function handleDeleteChatMessage(msgId) {
+      if (!currentUser) return;
+      const hub = getChatAndNoticeHubStore();
+      const targetMsg = hub.messages.find(m => m.id === msgId);
+      if (!targetMsg) return;
+      if (!isFullAdmin(currentUser) && String(targetMsg.senderId) !== String(currentUser.id)) return;
+
+      hub.messages = hub.messages.filter(m => m.id !== msgId);
+      saveChatAndNoticeHubStore(hub);
+      renderAppLayout();
+      showPortalToast('Message Deleted', 'Removed message from chat history.', 'warning');
+    }
+
+    function renderChatHubView() {
+      const u = currentUser;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const { messages, notices } = getChatAndNoticeHubStore();
+
+      markChatChannelRead(activeChatChannelId, true);
+
+      // Build available Group Channels
+      const groupChannels = [
+        { id: 'GLOBAL_GROUP', name: '🌐 Full Floor Group (All)', subtitle: 'Everyone — Admins, Supervisor & All Agents', badgeColor: 'bg-blue-600' }
+      ];
+      if (canViewAll(u) || u.team === 'Team Nazim') {
+        groupChannels.push({ id: 'TEAM_NAZIM', name: '🟠 Team Nazim Group', subtitle: 'TL Nazim & Team Nazim Agents', badgeColor: 'bg-orange-500' });
+      }
+      if (canViewAll(u) || u.team === 'Team Samad') {
+        groupChannels.push({ id: 'TEAM_SAMAD', name: '🔵 Team Samad Group', subtitle: 'TL Samad & Team Samad Agents', badgeColor: 'bg-indigo-600' });
+      }
+
+      const groupUnreadTotal = groupChannels.reduce((acc, gc) => acc + getUnreadCountForChannel(gc.id), 0);
+      const dmUnreadTotal = getUnreadDmCountForUser();
+
+      // Build Direct Message (1-on-1) contacts list
+      // Priority sorting:
+      // 1) Users with UNREAD messages waiting for you at the very top!
+      // 2) Users with recent conversation history
+      // 3) Online / On Break status
+      const otherUsers = allUsers
+        .filter(usr => String(usr.id) !== String(u.id))
+        .filter(usr => {
+          if (activeChatLeftFilter === 'ADMINS') return usr.role === 'admin' || usr.role === 'supervisor';
+          if (activeChatLeftFilter === 'AGENTS') return usr.role === 'agent';
+          return true;
+        })
+        .filter(usr => {
+          if (!chatSearchQuery.trim()) return true;
+          const q = chatSearchQuery.toLowerCase();
+          return usr.name.toLowerCase().includes(q) || String(usr.id).includes(q) || (usr.team || '').toLowerCase().includes(q);
+        })
+        .map(usr => {
+          const dmId = getDmRoomId(u.id, usr.id);
+          const unreadCnt = getUnreadCountForChannel(dmId);
+          const dmMsgs = messages.filter(m => m.roomId === dmId);
+          const lastMsg = dmMsgs.length > 0 ? dmMsgs[dmMsgs.length - 1] : null;
+          const lastTs = lastMsg ? Number(lastMsg.ts || 0) : 0;
+          return { usr, dmId, unreadCnt, lastMsg, lastTs, totalDmMsgs: dmMsgs.length };
+        })
+        .filter(item => {
+          if (activeChatLeftFilter === 'INBOX') {
+            return item.totalDmMsgs > 0 || item.unreadCnt > 0;
+          }
+          return true;
+        })
+        .sort((a, b) => {
+          if (b.unreadCnt !== a.unreadCnt) return b.unreadCnt - a.unreadCnt;
+          if (b.lastTs !== a.lastTs) return b.lastTs - a.lastTs;
+          const stRank = (usr) => {
+            const st = getUserOnlineStatus(usr.id);
+            return st === 'Online' ? 1 : (st === 'On Break' ? 2 : 3);
+          };
+          return stRank(a.usr) - stRank(b.usr);
+        });
+
+      // Determine active channel header details
+      let activeHeaderTitle = '🌐 Full Floor Group (All)';
+      let activeHeaderSub = 'Group Chat • All Admins, Supervisor & Agents can communicate here';
+      let activeHeaderBadge = renderOnlineStatusBadge(u.id);
+      let isDmChannel = false;
+
+      const matchedGroup = groupChannels.find(g => g.id === activeChatChannelId);
+      if (matchedGroup) {
+        activeHeaderTitle = matchedGroup.name;
+        activeHeaderSub = matchedGroup.subtitle;
+      } else if (String(activeChatChannelId).startsWith('DM_')) {
+        isDmChannel = true;
+        const parts = String(activeChatChannelId).split('_');
+        const partnerId = parts[1] === String(u.id) ? parts[2] : parts[1];
+        const partnerObj = allUsers.find(usr => String(usr.id) === String(partnerId));
+        if (partnerObj) {
+          activeHeaderTitle = `${partnerObj.name} (${partnerObj.id})`;
+          activeHeaderSub = `Personal 1-on-1 Inbox • ${partnerObj.role === 'admin' ? 'Team Leader (Admin)' : (partnerObj.role === 'supervisor' ? 'Supervisor' : `${partnerObj.team} • Grade ${partnerObj.grade}`)}`;
+          activeHeaderBadge = renderOnlineStatusBadge(partnerObj.id);
+        }
+      }
+
+      const channelMessages = messages.filter(m => m.roomId === activeChatChannelId);
+      const latestNotice = notices.length > 0 ? notices[notices.length - 1] : null;
+
+      const filterPills = [
+        { key: 'ALL', label: 'All Chats', count: groupUnreadTotal + dmUnreadTotal },
+        { key: 'INBOX', label: 'My Inbox', count: dmUnreadTotal },
+        { key: 'GROUPS', label: 'Groups', count: groupUnreadTotal },
+        { key: 'ADMINS', label: 'Admins / TL', count: 0 },
+        { key: 'AGENTS', label: 'Agents', count: 0 }
+      ];
+
+      return `
+        <div class="space-y-4">
+          ${latestNotice ? `
+          <div class="px-4 py-3 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200 flex items-center justify-between gap-3 shadow-sm">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm shrink-0 shadow">
+                <i class="fa-solid fa-bullhorn"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[9px] font-black uppercase">Latest Official Notice (${latestNotice.targetTeam || 'ALL'})</span>
+                  <span class="text-[10px] font-bold text-slate-400">By ${latestNotice.senderName} • ${latestNotice.date} ${latestNotice.time}</span>
+                </div>
+                <p class="text-xs font-extrabold text-slate-900 truncate mt-0.5">${latestNotice.title}: <span class="font-bold text-slate-700">${latestNotice.message}</span></p>
+              </div>
+            </div>
+            ${isFullAdmin(u) ? `
+            <button onclick="openAnnouncementModal()" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-extrabold shrink-0">
+              + New Notice
+            </button>
+            ` : ''}
+          </div>
+          ` : ''}
+
+          <div class="card-dynamic overflow-hidden grid grid-cols-1 lg:grid-cols-12 h-[calc(100vh-190px)] min-h-[560px]">
+            <!-- Left Sidebar: Unified Personal Inbox, Group Channels & Member Directory -->
+            <div class="lg:col-span-4 border-r border-slate-200 flex flex-col bg-slate-50/60 h-full overflow-hidden">
+              <div class="p-3.5 bg-white border-b border-slate-200 space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-xs font-black uppercase tracking-wider text-slate-900">
+                      <i class="fa-solid fa-inbox text-blue-600 mr-1.5"></i>Personal Inbox & Groups
+                    </h3>
+                    <p class="text-[10px] font-bold text-slate-400">Find any Agent, Admin or Group in one place</p>
+                  </div>
+                  ${isFullAdmin(u) ? `
+                  <button onclick="openAnnouncementModal()" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[10px] font-black">
+                    <i class="fa-solid fa-bullhorn mr-1"></i>Post Notice
+                  </button>
+                  ` : ''}
+                </div>
+
+                <!-- Category Filter Pills (All / My Inbox / Groups / Admins / Agents) -->
+                <div class="flex flex-wrap items-center gap-1 pt-0.5">
+                  ${filterPills.map(fp => `
+                    <button type="button" onclick="setChatLeftFilter('${fp.key}')" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all ${activeChatLeftFilter === fp.key ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                      <span>${fp.label}</span>
+                      ${fp.count > 0 ? `<span class="px-1.5 py-0.2 rounded-full text-[9px] font-black ${activeChatLeftFilter === fp.key ? 'bg-white text-blue-700' : 'bg-red-600 text-white'}">${fp.count}</span>` : ''}
+                    </button>
+                  `).join('')}
+                </div>
+
+                <!-- Search Bar -->
+                <div class="relative">
+                  <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3 top-2.5"></i>
+                  <input type="text" id="chatMemberSearchInput" value="${chatSearchQuery}" oninput="onChatSearchInput(this.value)" placeholder="Search Agent or Admin name / ID..." class="w-full pl-8 pr-3 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white">
+                </div>
+              </div>
+
+              <div class="flex-1 overflow-y-auto p-2.5 space-y-4">
+                ${activeChatLeftFilter === 'ALL' || activeChatLeftFilter === 'GROUPS' ? `
+                <!-- Group Channels -->
+                <div>
+                  <div class="flex items-center justify-between px-2 mb-1.5">
+                    <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">Group Channels (${groupChannels.length})</span>
+                    ${groupUnreadTotal > 0 ? `<span class="text-[10px] font-black text-red-600">${groupUnreadTotal} Unseen</span>` : ''}
+                  </div>
+                  <div class="space-y-1">
+                    ${groupChannels.map(gc => {
+                      const isSel = activeChatChannelId === gc.id;
+                      const unreadCnt = getUnreadCountForChannel(gc.id);
+                      const lastMsg = [...messages].reverse().find(m => m.roomId === gc.id);
+                      return `
+                        <button type="button" onclick="selectChatChannel('${gc.id}')" class="w-full p-2.5 rounded-xl text-left flex items-center justify-between gap-2 transition-all ${isSel ? 'tab-active shadow-md' : (unreadCnt > 0 ? 'bg-blue-50/90 border border-blue-200 text-slate-900' : 'hover:bg-white text-slate-800')}">
+                          <div class="min-w-0 flex-1">
+                            <div class="flex items-center justify-between gap-1">
+                              <span class="text-xs font-black truncate">${gc.name}</span>
+                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shadow animate-pulse">${unreadCnt}</span>` : ''}
+                            </div>
+                            <p class="text-[10px] font-bold ${isSel ? 'text-blue-100' : (unreadCnt > 0 ? 'text-blue-800 font-extrabold' : 'text-slate-400')} truncate mt-0.5">
+                              ${lastMsg ? `${lastMsg.senderName.split(' ')[0]}: ${lastMsg.text}` : gc.subtitle}
+                            </p>
+                          </div>
+                        </button>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+                ` : ''}
+
+                ${activeChatLeftFilter !== 'GROUPS' ? `
+                <!-- 1-on-1 Personal Inbox & Directory -->
+                <div>
+                  <div class="flex items-center justify-between px-2 mb-1.5">
+                    <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      ${activeChatLeftFilter === 'INBOX' ? 'Active Personal Inbox' : (activeChatLeftFilter === 'ADMINS' ? 'Admins & Supervisor' : 'Personal Direct Messages')} (${otherUsers.length})
+                    </span>
+                    ${dmUnreadTotal > 0 ? `<span class="text-[10px] font-black text-red-600">${dmUnreadTotal} Unseen</span>` : ''}
+                  </div>
+                  <div class="space-y-1">
+                    ${otherUsers.length === 0 ? `
+                      <div class="p-6 text-center text-xs font-bold text-slate-400">
+                        ${activeChatLeftFilter === 'INBOX' ? 'No personal messages yet. Click "All Chats" or "Agents" above to message anyone!' : 'No matching members found.'}
+                      </div>
+                    ` : otherUsers.map(({ usr, dmId, unreadCnt, lastMsg }) => {
+                      const isSel = activeChatChannelId === dmId;
+                      const st = getUserOnlineStatus(usr.id);
+                      const dotCol = st === 'Online' ? 'bg-emerald-500' : (st === 'On Break' ? 'bg-amber-500' : 'bg-slate-300');
+                      const roleTag = usr.role === 'admin' ? 'TL / Admin' : (usr.role === 'supervisor' ? 'Supervisor' : usr.team.replace('Team ', ''));
+
+                      // Check if the last message in this DM was sent by currentUser and whether partner has seen it!
+                      let lastMsgSub = `ID: ${usr.id} • Click to message`;
+                      if (lastMsg) {
+                        const isSentByMe = String(lastMsg.senderId) === String(u.id);
+                        if (isSentByMe) {
+                          const seenUsers = getSeenByUsersForMessage(lastMsg, allUsers);
+                          const isSeen = seenUsers.length > 0;
+                          lastMsgSub = `${isSeen ? '✓✓ Seen' : '✓ Sent'}: ${lastMsg.text}`;
+                        } else {
+                          lastMsgSub = lastMsg.text;
+                        }
+                      }
+
+                      return `
+                        <button type="button" onclick="selectChatChannel('${dmId}')" class="w-full p-2.5 rounded-xl text-left flex items-center gap-2.5 transition-all ${isSel ? 'tab-active shadow-md' : (unreadCnt > 0 ? 'bg-blue-50/90 border border-blue-200 text-slate-900' : 'hover:bg-white text-slate-800')}">
+                          <div class="relative shrink-0">
+                            <div class="w-9 h-9 rounded-xl ${isSel ? 'bg-white/20 text-white' : (usr.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700')} flex items-center justify-center font-black text-xs">
+                              ${usr.name.charAt(0)}
+                            </div>
+                            <span class="w-2.5 h-2.5 rounded-full ${dotCol} ring-2 ring-white absolute -bottom-0.5 -right-0.5" title="${st}"></span>
+                          </div>
+                          <div class="min-w-0 flex-1">
+                            <div class="flex items-center justify-between gap-1">
+                              <span class="text-xs font-extrabold truncate">${usr.name}</span>
+                              <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${isSel ? 'bg-white/20 text-white' : (usr.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-200 text-slate-700')} shrink-0">${roleTag}</span>
+                            </div>
+                            <div class="flex items-center justify-between mt-0.5 gap-1">
+                              <p class="text-[10px] font-semibold ${isSel ? 'text-blue-100' : (unreadCnt > 0 ? 'text-blue-900 font-black' : 'text-slate-400')} truncate">
+                                ${lastMsgSub}
+                              </p>
+                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shrink-0 shadow animate-bounce">${unreadCnt}</span>` : ''}
+                            </div>
+                          </div>
+                        </button>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- Right Panel: Active Conversation Area with Seen / Read Receipts -->
+            <div class="lg:col-span-8 flex flex-col h-full bg-white overflow-hidden">
+              <!-- Conversation Header -->
+              <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-10 h-10 rounded-xl tab-active text-white flex items-center justify-center font-black text-sm shadow-sm shrink-0">
+                    <i class="fa-solid ${isDmChannel ? 'fa-user-check' : 'fa-users'}"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <h4 class="text-sm font-black text-slate-900 truncate">${activeHeaderTitle}</h4>
+                    <p class="text-[11px] font-bold text-slate-400 truncate">${activeHeaderSub}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span class="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-extrabold">
+                    <i class="fa-solid fa-check-double text-emerald-600"></i> Live Seen Tracking Active
+                  </span>
+                  ${activeHeaderBadge}
+                </div>
+              </div>
+
+              <!-- Messages Feed -->
+              <div id="chatMessagesViewport" class="flex-1 overflow-y-auto p-5 space-y-3.5 bg-slate-50/50">
+                ${channelMessages.length === 0 ? `
+                  <div class="h-full flex flex-col items-center justify-center text-center p-6">
+                    <div class="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl mb-3 shadow-sm">
+                      <i class="fa-regular fa-comments"></i>
+                    </div>
+                    <h5 class="text-sm font-black text-slate-800">Start Your Conversation with ${activeHeaderTitle}!</h5>
+                    <p class="text-xs font-bold text-slate-400 max-w-sm mt-1">
+                      ${isDmChannel
+                        ? 'This is your private 1-on-1 personal inbox. You will see a "Seen ✓✓" indicator as soon as they read your message.'
+                        : 'Messages sent in this group channel are visible to all group members and show who has seen each message.'}
+                    </p>
+                  </div>
+                ` : channelMessages.map(m => {
+                  const isMine = String(m.senderId) === String(u.id);
+                  const canDelMsg = isMine || isFullAdmin(u);
+                  const seenNames = getSeenByUsersForMessage(m, allUsers);
+                  const isSeen = seenNames.length > 0;
+                  const seenTooltip = isSeen ? `Seen by: ${seenNames.join(', ')}` : 'Sent (Not seen yet)';
+
+                  let seenStatusHtml = '';
+                  if (isDmChannel) {
+                    if (isMine) {
+                      seenStatusHtml = isSeen
+                        ? `<span class="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600" title="${seenTooltip}"><i class="fa-solid fa-check-double"></i> Seen</span>`
+                        : `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400" title="${seenTooltip}"><i class="fa-solid fa-check"></i> Sent</span>`;
+                    }
+                  } else {
+                    // Group Message Seen Indicator (Visible on all group messages so everyone knows who saw it!)
+                    if (isSeen) {
+                      const shortSeenList = seenNames.length <= 3
+                        ? seenNames.map(n => n.split(' ')[0]).join(', ')
+                        : `${seenNames.slice(0, 2).map(n => n.split(' ')[0]).join(', ')} +${seenNames.length - 2} more`;
+                      seenStatusHtml = `<span class="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-600 cursor-help" title="${seenTooltip}"><i class="fa-solid fa-check-double"></i> Seen by ${seenNames.length} (${shortSeenList})</span>`;
+                    } else if (isMine) {
+                      seenStatusHtml = `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400"><i class="fa-solid fa-check"></i> Sent to Group</span>`;
+                    }
+                  }
+
+                  if (m.isNotice) {
+                    return `
+                      <div class="p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 text-center max-w-2xl mx-auto shadow-sm">
+                        <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-[9px] font-black uppercase">Official Broadcast • ${m.senderName}</span>
+                        <p class="text-xs font-extrabold text-slate-900 mt-1.5 whitespace-pre-wrap">${m.text}</p>
+                        <div class="flex items-center justify-center gap-3 mt-1.5">
+                          <span class="text-[10px] font-bold text-slate-400">${m.date} • ${m.time}</span>
+                          ${seenStatusHtml}
+                        </div>
+                      </div>
+                    `;
+                  }
+
+                  return `
+                    <div class="flex flex-col ${isMine ? 'items-end' : 'items-start'}">
+                      <div class="flex items-center gap-1.5 mb-1 px-1">
+                        <span class="text-[10px] font-black ${isMine ? 'text-blue-600' : 'text-slate-700'}">${isMine ? 'You' : m.senderName}</span>
+                        <span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-600">${m.senderRole === 'admin' ? 'TL' : (m.senderRole === 'supervisor' ? 'SUP' : (m.senderTeam || 'Agent'))}</span>
+                        <span class="text-[9px] font-bold text-slate-400">${m.time}</span>
+                        ${canDelMsg ? `
+                          <button type="button" onclick="handleDeleteChatMessage('${m.id}')" title="Delete Message" class="text-[10px] text-slate-300 hover:text-red-500 ml-1">
+                            <i class="fa-solid fa-trash-can"></i>
+                          </button>
+                        ` : ''}
+                      </div>
+                      <div class="max-w-[78%] px-4 py-2.5 rounded-2xl text-xs font-bold leading-relaxed shadow-sm whitespace-pre-wrap ${isMine ? 'tab-active text-white rounded-br-xs' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-xs'}">
+                        ${m.text}
+                      </div>
+                      ${seenStatusHtml ? `<div class="mt-1 px-1">${seenStatusHtml}</div>` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+
+              <!-- Message Composer -->
+              <form onsubmit="handleSendChatMessage(event)" class="p-3.5 bg-white border-t border-slate-200 flex items-center gap-2.5 shrink-0">
+                <input type="text" id="chatComposerInput" autocomplete="off" placeholder="Write a message to ${activeHeaderTitle}..." class="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white">
+                <button type="submit" class="px-5 py-3 tab-active text-white rounded-2xl text-xs font-extrabold shadow-md flex items-center gap-2 shrink-0">
+                  <i class="fa-solid fa-paper-plane"></i> Send
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      `;
+    }
 
 
     window.addEventListener('load', init);
