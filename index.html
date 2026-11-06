@@ -12,7 +12,7 @@
     body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; color: #0f172a; }
     
     .sidebar-light { background: #ffffff; border-right: 1px solid #e2e8f0; color: #1e293b; }
-    .card-dynamic { background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px -3px rgba(15, 23, 42, 0.04); transition: all 0.2s ease; }
+    .card-dynamic { background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px -3px rgba(15, 23, 42, 0.04); }
     
     .tab-active { 
       background: linear-gradient(135deg, #1877f2 0%, #0c63d4 100%); 
@@ -74,15 +74,14 @@
     .modal-card-anim {
       animation: modalPopSmooth 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
+    .card-dynamic {
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
     .card-dynamic:hover {
-      transform: translateY(-1.5px);
-      box-shadow: 0 10px 24px -6px rgba(15, 23, 42, 0.08);
+      box-shadow: 0 8px 20px -6px rgba(15, 23, 42, 0.07);
     }
     button, select, input {
-      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    button:active {
-      transform: scale(0.97);
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     }
   </style>
 </head>
@@ -427,10 +426,10 @@
       const iconBox = document.getElementById('warnModalIconBox');
       if (btnEl) {
         if (isWarningEdit) {
-          btnEl.className = 'px-5 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl shadow-lg flex items-center gap-1.5 transition-all';
+          btnEl.className = 'px-5 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl shadow-lg flex items-center gap-1.5 transition-colors';
           btnEl.innerHTML = `<i class="fa-solid fa-check-double"></i> ${confirmBtnLabel || 'Yes, Update & Sync'}`;
         } else {
-          btnEl.className = 'px-5 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 rounded-xl shadow-lg flex items-center gap-1.5 transition-all';
+          btnEl.className = 'px-5 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 rounded-xl shadow-lg flex items-center gap-1.5 transition-colors';
           btnEl.innerHTML = `<i class="fa-solid fa-trash-can"></i> ${confirmBtnLabel || 'Yes, Permanently Delete'}`;
         }
       }
@@ -1178,10 +1177,10 @@
                 : 'You can sign back in anytime using your Employee ID and password.'}
             </p>
             <div class="grid grid-cols-2 gap-3 mt-6 pt-4 border-t border-slate-100">
-              <button type="button" onclick="closeModal('logoutConfirmModal')" class="w-full py-3 text-xs font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all">
+              <button type="button" onclick="closeModal('logoutConfirmModal')" class="w-full py-3 text-xs font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
                 No, Stay Logged In
               </button>
-              <button type="button" onclick="executeInstantLogout()" class="w-full py-3 text-xs font-extrabold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 rounded-xl shadow-lg shadow-red-600/25 flex items-center justify-center gap-2 transition-all">
+              <button type="button" onclick="executeInstantLogout()" class="w-full py-3 text-xs font-extrabold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 rounded-xl shadow-lg shadow-red-600/25 flex items-center justify-center gap-2 transition-colors">
                 <i class="fa-solid fa-right-from-bracket"></i> Yes, Log Out Now
               </button>
             </div>
@@ -1313,7 +1312,7 @@
                 <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Password</label>
                 <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
               </div>
-              <button type="submit" class="w-full py-3.5 tab-active text-white font-extrabold rounded-xl shadow-lg transition-all">Sign In to Portal</button>
+              <button type="submit" class="w-full py-3.5 tab-active text-white font-extrabold rounded-xl shadow-lg transition-colors">Sign In to Portal</button>
             </form>
           </div>
         </div>
@@ -1326,6 +1325,10 @@
       const prevChatBox = document.getElementById('chatMessagesViewport');
       const savedChatScrollTop = prevChatBox ? prevChatBox.scrollTop : null;
       const wasChatAtBottom = prevChatBox ? (prevChatBox.scrollHeight - prevChatBox.scrollTop - prevChatBox.clientHeight < 60) : true;
+      const prevChatLeft = document.getElementById('chatLeftSidebarViewport');
+      const savedChatLeftTop = prevChatLeft ? prevChatLeft.scrollTop : 0;
+      const prevRoleLeft = document.getElementById('roleLeftSidebarViewport');
+      const savedRoleLeftTop = prevRoleLeft ? prevRoleLeft.scrollTop : 0;
       const savedScrollLeft = prevMainEl ? prevMainEl.scrollLeft : 0;
       const tableScrollPositions = Array.from(document.querySelectorAll('.overflow-x-auto')).map(el => ({
         top: el.scrollTop,
@@ -1362,37 +1365,37 @@
 
               <nav class="space-y-1">
                 ${hasFeatureAccess(u, 'tab_dashboard') ? `
-                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard & Targets
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_monthly_perf') ? `
-                <button onclick="setTab('monthly_perf')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'monthly_perf' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('monthly_perf')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'monthly_perf' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-chart-column text-sm text-purple-600"></i> Monthly Performance
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_reports') ? `
-                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-file-invoice text-sm text-blue-600"></i> Daily Sales Reports
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_ranking') ? `
-                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Team vs Team & Ranking
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_roster') ? `
-                <button onclick="setTab('roster')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'roster' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('roster')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'roster' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-calendar-week text-sm text-indigo-600"></i> Duty Roster
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_attendance') ? `
-                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_chat') ? `
-                <button onclick="setTab('chat')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'chat' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('chat')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'chat' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <span class="flex items-center gap-3">
                     <i class="fa-solid fa-comments text-sm ${activeTab === 'chat' ? 'text-white' : 'text-blue-600'}"></i> Team & Personal Chat
                   </span>
@@ -1403,19 +1406,19 @@
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_activity_logs') ? `
-                <button onclick="setTab('activity_logs')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'activity_logs' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('activity_logs')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'activity_logs' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-list-check text-sm text-rose-500"></i> Activity Logs
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_agents') ? `
-                <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                <button onclick="setTab('agents')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'agents' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-sliders text-sm text-blue-600"></i> Target Setup & IDs
                 </button>
                 ` : ''}
                 ${isSuperAdmin(u) ? `
                 <div class="pt-2 mt-2 border-t border-slate-200/80">
                   <span class="px-2.5 text-[9px] font-black uppercase tracking-widest text-purple-600 block mb-1">Nazim Master Control</span>
-                  <button onclick="setTab('role_management')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all ${activeTab === 'role_management' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg' : 'bg-purple-50 text-purple-900 hover:bg-purple-100 border border-purple-200'}">
+                  <button onclick="setTab('role_management')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'role_management' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg' : 'bg-purple-50 text-purple-900 hover:bg-purple-100 border border-purple-200'}">
                     <span class="flex items-center gap-2.5">
                       <i class="fa-solid fa-user-shield text-sm ${activeTab === 'role_management' ? 'text-amber-300' : 'text-purple-600'}"></i> Role & Feature Access
                     </span>
@@ -1456,7 +1459,7 @@
 
               <div class="flex items-center gap-3 shrink-0">
                 ${hasFeatureAccess(u, 'feat_post_notice') ? `
-                <button onclick="openAnnouncementModal()" title="Broadcast Official Notice / Announcement to All Agents' Bell Icons" class="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-extrabold rounded-xl shadow-md flex items-center gap-2 transition-all">
+                <button onclick="openAnnouncementModal()" title="Broadcast Official Notice / Announcement to All Agents' Bell Icons" class="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-extrabold rounded-xl shadow-md flex items-center gap-2 transition-colors">
                   <i class="fa-solid fa-bullhorn text-xs"></i> Post Notice
                 </button>
                 ` : ''}
@@ -1509,6 +1512,14 @@
         } else {
           newChatBox.scrollTop = savedChatScrollTop;
         }
+      }
+      const newChatLeft = document.getElementById('chatLeftSidebarViewport');
+      if (newChatLeft) {
+        newChatLeft.scrollTop = savedChatLeftTop;
+      }
+      const newRoleLeft = document.getElementById('roleLeftSidebarViewport');
+      if (newRoleLeft) {
+        newRoleLeft.scrollTop = savedRoleLeftTop;
       }
       const newTables = document.querySelectorAll('.overflow-x-auto');
       tableScrollPositions.forEach((pos, idx) => {
@@ -1730,13 +1741,13 @@
             <div class="flex flex-wrap items-center gap-2.5">
               ${canViewAll(u) ? `
               <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-                <button onclick="setDashboardScope('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
-                <button onclick="setDashboardScope('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
-                <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (17)</button>
+                <button onclick="setDashboardScope('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
+                <button onclick="setDashboardScope('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
+                <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (17)</button>
               </div>
               ` : ''}
               ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
-              <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2 transition-all">
+              <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2 transition-colors">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
               </button>
               ` : ''}
@@ -1831,7 +1842,7 @@
                   <span class="text-slate-600">Achieved: <strong class="text-blue-700">৳${sprintSalesAmount.toLocaleString()}</strong></span>
                 </div>
                 <div class="progress-track h-2 bg-white">
-                  <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full transition-all" style="width: ${sprintPct}%"></div>
+                  <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full transition-colors" style="width: ${sprintPct}%"></div>
                 </div>
                 <div class="flex justify-between items-center mt-1.5 text-[11px] font-bold text-slate-600">
                   <span>Remaining: ৳${Math.max(0, tInfo.sprintGoal - sprintSalesAmount).toLocaleString()}</span>
@@ -1856,7 +1867,7 @@
                   <span class="text-slate-600">Revenue: <strong class="text-emerald-700">৳${monthTotalAmount.toLocaleString()}</strong></span>
                 </div>
                 <div class="progress-track h-2 bg-white">
-                  <div class="bg-gradient-to-r from-emerald-600 to-teal-500 h-2 rounded-full transition-all" style="width: ${monthPct}%"></div>
+                  <div class="bg-gradient-to-r from-emerald-600 to-teal-500 h-2 rounded-full transition-colors" style="width: ${monthPct}%"></div>
                 </div>
                 <div class="flex justify-between items-center mt-1.5 text-[11px] font-bold text-slate-600">
                   <span>Remaining: ৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</span>
@@ -2001,7 +2012,7 @@
             ${canViewAll(u) ? `
             <div class="flex flex-wrap items-center gap-3">
               ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
-              <button onclick="openAiImportModal()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2 transition-all">
+              <button onclick="openAiImportModal()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2 transition-colors">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
               </button>
               ` : ''}
@@ -2755,7 +2766,7 @@
                     else if (idx === 1) rankBadge = `<span class="w-7 h-7 rounded-full bg-slate-300 text-slate-800 flex items-center justify-center font-black ${isMe ? 'ring-4 ring-blue-400' : ''}">2</span>`;
                     else if (idx === 2) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-700 text-white flex items-center justify-center font-black ${isMe ? 'ring-4 ring-blue-400' : ''}">3</span>`;
 
-                    return `<tr class="${isMe ? 'my-rank-row-glow' : 'hover:bg-slate-50/90'} transition-all">
+                    return `<tr class="${isMe ? 'my-rank-row-glow' : 'hover:bg-slate-50/90'} transition-colors">
                       <td class="p-3.5">${rankBadge}</td>
                       <td class="p-3.5 font-extrabold text-slate-900">
                         <div class="inline-flex items-center gap-2 ${isMe ? 'my-rank-name-pill px-3 py-1.5 rounded-xl' : ''}">
@@ -2859,10 +2870,10 @@
                 <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-800 focus:outline-none cursor-pointer">
               </div>
 
-              <button onclick="setReportsDateFilter('${getTodayFormatted()}')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${isShowingToday ? 'bg-blue-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+              <button onclick="setReportsDateFilter('${getTodayFormatted()}')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-colors ${isShowingToday ? 'bg-blue-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
                 Today (${cleanDisplayDate(getTodayFormatted())})
               </button>
-              <button onclick="setReportsDateFilter('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-all ${reportsDateFilter === 'ALL' ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
+              <button onclick="setReportsDateFilter('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-colors ${reportsDateFilter === 'ALL' ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
                 All Dates (${selectedMonthKey})
               </button>
 
@@ -2875,7 +2886,7 @@
               ` : ''}
 
               ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
-              <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-all">
+              <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
               </button>
               ` : ''}
@@ -4086,7 +4097,7 @@
             <!-- Scrollable Body -->
             <div class="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
               <!-- Step 1: Just Upload or Ctrl+V Paste Picture -->
-              <div id="aiUploadDropzone" tabindex="0" class="border-2 border-dashed border-purple-300 hover:border-purple-500 focus:border-purple-600 focus:outline-none bg-purple-50/40 hover:bg-purple-50/80 transition-all rounded-2xl p-6 text-center">
+              <div id="aiUploadDropzone" tabindex="0" class="border-2 border-dashed border-purple-300 hover:border-purple-500 focus:border-purple-600 focus:outline-none bg-purple-50/40 hover:bg-purple-50/80 transition-colors rounded-2xl p-6 text-center">
                 <input type="file" id="aiErpImageInput" accept="image/*" multiple onchange="handleAiErpPicturesUpload(event)" class="hidden">
                 <label for="aiErpImageInput" class="cursor-pointer flex flex-col items-center justify-center">
                   <div class="w-14 h-14 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-2xl shadow-lg mb-3">
@@ -4203,7 +4214,7 @@
                 <button type="button" onclick="closeModal('aiImportModal')" class="px-4 py-2.5 text-xs font-extrabold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
                   Cancel
                 </button>
-                <button type="button" id="aiApproveSubmitBtn" onclick="approveAndSaveAiRecords()" class="px-6 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-xl shadow-lg flex items-center gap-2 transition-all">
+                <button type="button" id="aiApproveSubmitBtn" onclick="approveAndSaveAiRecords()" class="px-6 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-xl shadow-lg flex items-center gap-2 transition-colors">
                   <i class="fa-solid fa-check-double"></i> Approve & Add Selected Data to System
                 </button>
               </div>
@@ -5249,7 +5260,7 @@
 
       return `
         <div class="relative" id="bellNotificationWrapper">
-          <button type="button" onclick="toggleBellNotificationDropdown(event)" title="${isAdminOrSup ? 'Live Agent Login, Logout & Data Activity Notifications' : 'Notifications & Duty Reminders'}" class="w-10 h-10 rounded-xl ${unreadCount > 0 ? 'bg-blue-50 border border-blue-200 text-blue-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} flex items-center justify-center relative transition-all">
+          <button type="button" onclick="toggleBellNotificationDropdown(event)" title="${isAdminOrSup ? 'Live Agent Login, Logout & Data Activity Notifications' : 'Notifications & Duty Reminders'}" class="w-10 h-10 rounded-xl ${unreadCount > 0 ? 'bg-blue-50 border border-blue-200 text-blue-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} flex items-center justify-center relative transition-colors">
             <i class="fa-solid fa-bell text-sm ${unreadCount > 0 ? 'bell-ring' : ''}"></i>
             <span id="headerBellUnreadDot" class="${unreadCount > 0 ? 'flex' : 'hidden'} absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-600 text-white text-[10px] font-black rounded-full items-center justify-center shadow-md ring-2 ring-white">
               ${unreadCount}
@@ -6175,7 +6186,7 @@
                 <!-- Category Filter Pills (All / My Inbox / Groups / Admins / Agents) -->
                 <div class="flex flex-wrap items-center gap-1 pt-0.5">
                   ${filterPills.map(fp => `
-                    <button type="button" onclick="setChatLeftFilter('${fp.key}')" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all ${activeChatLeftFilter === fp.key ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                    <button type="button" onclick="setChatLeftFilter('${fp.key}')" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-colors ${activeChatLeftFilter === fp.key ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
                       <span>${fp.label}</span>
                       ${fp.count > 0 ? `<span class="px-1.5 py-0.2 rounded-full text-[9px] font-black ${activeChatLeftFilter === fp.key ? 'bg-white text-blue-700' : 'bg-red-600 text-white'}">${fp.count}</span>` : ''}
                     </button>
@@ -6189,7 +6200,7 @@
                 </div>
               </div>
 
-              <div class="flex-1 overflow-y-auto p-2.5 space-y-4">
+              <div id="chatLeftSidebarViewport" class="flex-1 overflow-y-auto p-2.5 space-y-4">
                 ${activeChatLeftFilter === 'ALL' || activeChatLeftFilter === 'GROUPS' ? `
                 <!-- Group Channels -->
                 <div>
@@ -6203,11 +6214,11 @@
                       const unreadCnt = getUnreadCountForChannel(gc.id);
                       const lastMsg = [...messages].reverse().find(m => m.roomId === gc.id);
                       return `
-                        <button type="button" onclick="selectChatChannel('${gc.id}')" class="w-full p-2.5 rounded-xl text-left flex items-center justify-between gap-2 transition-all ${isSel ? 'tab-active shadow-md' : (unreadCnt > 0 ? 'bg-blue-50/90 border border-blue-200 text-slate-900' : 'hover:bg-white text-slate-800')}">
+                        <button type="button" onclick="selectChatChannel('${gc.id}')" class="w-full p-2.5 rounded-xl text-left flex items-center justify-between gap-2 transition-colors border ${isSel ? 'tab-active border-transparent shadow-sm' : (unreadCnt > 0 ? 'bg-blue-50/90 border-blue-200 text-slate-900' : 'border-transparent hover:bg-white hover:border-slate-200/80 text-slate-800')}">
                           <div class="min-w-0 flex-1">
                             <div class="flex items-center justify-between gap-1">
                               <span class="text-xs font-black truncate">${gc.name}</span>
-                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shadow animate-pulse">${unreadCnt}</span>` : ''}
+                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shadow ">${unreadCnt}</span>` : ''}
                             </div>
                             <p class="text-[10px] font-bold ${isSel ? 'text-blue-100' : (unreadCnt > 0 ? 'text-blue-800 font-extrabold' : 'text-slate-400')} truncate mt-0.5">
                               ${lastMsg ? `${lastMsg.senderName.split(' ')[0]}: ${lastMsg.text}` : gc.subtitle}
@@ -6254,7 +6265,7 @@
                       }
 
                       return `
-                        <button type="button" onclick="selectChatChannel('${dmId}')" class="w-full p-2.5 rounded-xl text-left flex items-center gap-2.5 transition-all ${isSel ? 'tab-active shadow-md' : (unreadCnt > 0 ? 'bg-blue-50/90 border border-blue-200 text-slate-900' : 'hover:bg-white text-slate-800')}">
+                        <button type="button" onclick="selectChatChannel('${dmId}')" class="w-full p-2.5 rounded-xl text-left flex items-center gap-2.5 transition-colors border ${isSel ? 'tab-active border-transparent shadow-sm' : (unreadCnt > 0 ? 'bg-blue-50/90 border-blue-200 text-slate-900' : 'border-transparent hover:bg-white hover:border-slate-200/80 text-slate-800')}">
                           <div class="relative shrink-0">
                             <div class="w-9 h-9 rounded-xl ${isSel ? 'bg-white/20 text-white' : (usr.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700')} flex items-center justify-center font-black text-xs">
                               ${usr.name.charAt(0)}
@@ -6270,7 +6281,7 @@
                               <p class="text-[10px] font-semibold ${isSel ? 'text-blue-100' : (unreadCnt > 0 ? 'text-blue-900 font-black' : 'text-slate-400')} truncate">
                                 ${lastMsgSub}
                               </p>
-                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shrink-0 shadow animate-bounce">${unreadCnt}</span>` : ''}
+                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shrink-0 shadow ">${unreadCnt}</span>` : ''}
                             </div>
                           </div>
                         </button>
@@ -6610,7 +6621,7 @@
                     { key: 'Team Nazim', label: 'Team Nazim' },
                     { key: 'Team Samad', label: 'Team Samad' }
                   ].map(f => `
-                    <button type="button" onclick="setRoleMgmtTeamFilter('${f.key}')" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all ${roleMgmtTeamFilter === f.key ? 'bg-purple-600 text-white shadow' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
+                    <button type="button" onclick="setRoleMgmtTeamFilter('${f.key}')" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-colors ${roleMgmtTeamFilter === f.key ? 'bg-purple-600 text-white shadow' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
                       ${f.label}
                     </button>
                   `).join('')}
@@ -6623,7 +6634,7 @@
                 </div>
               </div>
 
-              <div class="flex-1 overflow-y-auto p-2.5 space-y-1.5 bg-slate-50/50">
+              <div id="roleLeftSidebarViewport" class="flex-1 overflow-y-auto p-2.5 space-y-1.5 bg-slate-50/50">
                 ${filteredUsers.map(usr => {
                   const isSel = targetUser && String(usr.id) === String(targetUser.id);
                   const uPerms = getEffectivePermissionsForUser(usr);
@@ -6634,7 +6645,7 @@
                     : (usr.role === 'supervisor' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-700');
 
                   return `
-                    <button type="button" onclick="selectRoleMgmtUser('${usr.id}')" class="w-full p-3 rounded-2xl text-left flex items-center justify-between gap-2.5 transition-all ${isSel ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md' : 'bg-white hover:bg-purple-50/60 text-slate-800 border border-slate-200/80'}">
+                    <button type="button" onclick="selectRoleMgmtUser('${usr.id}')" class="w-full p-3 rounded-2xl text-left flex items-center justify-between gap-2.5 transition-colors ${isSel ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md' : 'bg-white hover:bg-purple-50/60 text-slate-800 border border-slate-200/80'}">
                       <div class="flex items-center gap-2.5 min-w-0">
                         <div class="w-9 h-9 rounded-xl ${isSel ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'} flex items-center justify-center font-black text-xs shrink-0">
                           ${usr.name.charAt(0)}
@@ -6731,7 +6742,7 @@
                       ${catFeatures.map(feat => {
                         const isOn = Boolean(targetPerms[feat.key]);
                         return `
-                          <label class="p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start justify-between gap-3 ${isOn ? 'bg-purple-50/40 border-purple-300 shadow-xs' : 'bg-slate-50/70 border-slate-200 opacity-75 hover:opacity-100'}">
+                          <label class="p-3.5 rounded-2xl border transition-colors cursor-pointer flex items-start justify-between gap-3 ${isOn ? 'bg-purple-50/40 border-purple-300 shadow-xs' : 'bg-slate-50/70 border-slate-200 opacity-75 hover:opacity-100'}">
                             <div class="flex items-start gap-3 min-w-0">
                               <div class="w-9 h-9 rounded-xl ${isOn ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-500'} flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-xs transition-colors">
                                 <i class="fa-solid ${feat.icon}"></i>
