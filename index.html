@@ -79,19 +79,32 @@
     localStorage.setItem('gb_webhook_url', DEFAULT_WEBHOOK_URL);
     let webhookUrl = DEFAULT_WEBHOOK_URL;
 
-    const AVAILABLE_MONTHS = [
-      { key: '10/2026', label: 'October 2026' },
-      { key: '11/2026', label: 'November 2026' },
-      { key: '12/2026', label: 'December 2026' },
-      { key: '01/2027', label: 'January 2027' },
-      { key: '02/2027', label: 'February 2027' },
-      { key: '03/2027', label: 'March 2027' }
-    ];
+    function getCurrentMonthKeyStr() {
+      const d = new Date();
+      return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+
+    function buildAvailableMonthsList() {
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const list = [];
+      for (let y = 2026; y <= 2028; y++) {
+        for (let m = 1; m <= 12; m++) {
+          if (y === 2026 && m < 10) continue;
+          if (y === 2028 && m > 6) continue;
+          const key = `${String(m).padStart(2, '0')}/${y}`;
+          list.push({ key, label: `${monthNames[m - 1]} ${y}` });
+        }
+      }
+      return list;
+    }
+
+    const AVAILABLE_MONTHS = buildAvailableMonthsList();
+    const TL_DEFAULT_BASE_TARGET = 522328;
 
     const DEFAULT_USERS = [
       { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
-      { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: '123nazim', grade: 'TL', baseTarget: 0 },
-      { id: '10107', name: 'Md Abdus Samad', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 0 },
+      { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: '123nazim', grade: 'TL', baseTarget: 522328 },
+      { id: '10107', name: 'Md Abdus Samad', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 522328 },
       
       { id: '10191', name: 'Shagor Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A-', baseTarget: 1232174 },
       { id: '10289', name: 'Abdullah Dipu', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A+', baseTarget: 1619218 },
@@ -161,6 +174,9 @@
         copy.role = 'admin';
         copy.name = String(copy.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
         copy.grade = 'TL';
+        if (!copy.baseTarget || Number(copy.baseTarget) === 0) {
+          copy.baseTarget = TL_DEFAULT_BASE_TARGET;
+        }
         // Ensure Nazim's password upgrades from old default 'admin123' to '123nazim'
         if (String(copy.id) === '10122' && (!copy.pass || copy.pass === 'admin123')) {
           copy.pass = '123nazim';
@@ -202,7 +218,16 @@
     }
 
     let activeTab = 'dashboard';
-    let selectedMonthKey = localStorage.getItem('gb_selected_month') || '11/2026';
+    let selectedMonthKey = (function() {
+      const realNowMonth = getCurrentMonthKeyStr();
+      const lastAutoMonth = localStorage.getItem('gb_last_auto_month');
+      if (lastAutoMonth !== realNowMonth) {
+        localStorage.setItem('gb_last_auto_month', realNowMonth);
+        localStorage.setItem('gb_selected_month', realNowMonth);
+        return realNowMonth;
+      }
+      return localStorage.getItem('gb_selected_month') || realNowMonth;
+    })();
     let dashboardScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
     
     let logsFilterScope = 'ALL';
@@ -566,7 +591,10 @@
         const defaultTeam = user.role === 'admin' ? user.team : 'ALL';
         const scope = scopeOverride || dashboardScope || defaultTeam;
         const agents = allUsers.filter(u => u.role === 'agent' && (scope === 'ALL' ? true : u.team === scope));
-        baseTarget = agents.reduce((sum, a) => sum + (Number(a.baseTarget) || 0), 0);
+        const tls = allUsers.filter(u => u.role === 'admin' && (scope === 'ALL' ? true : u.team === scope));
+        const agentsTargetSum = agents.reduce((sum, a) => sum + (Number(a.baseTarget) || 0), 0);
+        const tlsTargetSum = tls.reduce((sum, tl) => sum + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
+        baseTarget = agentsTargetSum + tlsTargetSum;
         agentCount = agents.length || 1;
       } else {
         const freshUser = allUsers.find(u => String(u.id) === String(user.id)) || user;
@@ -610,6 +638,44 @@
       return { totalMoney, earnedRewards };
     }
 
+    let lastSentRequestKey = '';
+    let lastSentRequestTime = 0;
+
+    function deduplicateActivityLogsList(logsArr) {
+      if (!Array.isArray(logsArr)) return [];
+      const result = [];
+      const seenMap = new Map();
+      logsArr.forEach(item => {
+        if (!item) return;
+        const sig = `${item.date}|${item.userId}|${item.action}|${item.details}`;
+        const tStr = String(item.time || '');
+        const m = tStr.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+        let secOfDay = null;
+        if (m) {
+          let hh = parseInt(m[1], 10);
+          const mm = parseInt(m[2], 10) || 0;
+          const ss = parseInt(m[3], 10) || 0;
+          const ap = (m[4] || '').toUpperCase();
+          if (ap === 'PM' && hh < 12) hh += 12;
+          if (ap === 'AM' && hh === 12) hh = 0;
+          secOfDay = hh * 3600 + mm * 60 + ss;
+        }
+        if (seenMap.has(sig)) {
+          const prevSec = seenMap.get(sig);
+          if (secOfDay !== null && prevSec !== null && Math.abs(secOfDay - prevSec) <= 8) {
+            return;
+          }
+          if (tStr === seenMap.get(sig + '_raw')) {
+            return;
+          }
+        }
+        seenMap.set(sig, secOfDay);
+        seenMap.set(sig + '_raw', tStr);
+        result.push(item);
+      });
+      return result;
+    }
+
     async function postToSheet(action, payload) {
       const pingInfo = currentUser ? {
         pingUserId: String(currentUser.id),
@@ -619,37 +685,31 @@
         pingState: getUserOnlineStatus(currentUser.id)
       } : {};
       const fullData = { action, timestamp: new Date().toISOString(), ...pingInfo, ...payload };
-      const params = new URLSearchParams({ action, payload: JSON.stringify(fullData), ...pingInfo, ...payload });
 
-      fetch(`${webhookUrl}?${params.toString()}`, { method: 'GET', mode: 'no-cors' }).catch(() => {});
-      new Image().src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
+      if (action !== 'ATTENDANCE_SYNC') {
+        const reqSignature = `${action}_${fullData.userId || ''}_${fullData.date || ''}_${fullData.logAction || ''}_${fullData.logDetails || ''}`;
+        const nowMs = Date.now();
+        if (reqSignature === lastSentRequestKey && (nowMs - lastSentRequestTime) < 2500) {
+          return;
+        }
+        lastSentRequestKey = reqSignature;
+        lastSentRequestTime = nowMs;
+      }
 
       try {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = webhookUrl;
-        form.target = 'hidden_iframe_target';
-        form.style.display = 'none';
-
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'payload';
-        input.value = JSON.stringify(fullData);
-        form.appendChild(input);
-
-        let iframe = document.getElementById('hidden_iframe_target');
-        if (!iframe) {
-          iframe = document.createElement('iframe');
-          iframe.name = 'hidden_iframe_target';
-          iframe.id = 'hidden_iframe_target';
-          iframe.style.display = 'none';
-          document.body.appendChild(iframe);
-        }
-
-        document.body.appendChild(form);
-        form.submit();
-        setTimeout(() => { if (form.parentNode) form.parentNode.removeChild(form); }, 2000);
-      } catch (e) {}
+        const bodyParams = new URLSearchParams();
+        bodyParams.append('action', action);
+        bodyParams.append('payload', JSON.stringify(fullData));
+        await fetch(webhookUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: bodyParams.toString()
+        });
+      } catch (err) {
+        const params = new URLSearchParams({ action, payload: JSON.stringify(fullData) });
+        new Image().src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
+      }
     }
 
     function fetchFromSheet() {
@@ -731,9 +791,10 @@
         if (onlineStateDiff) changed = true;
       }
       if (Array.isArray(res.activityLogs) && res.activityLogs.length > 0) {
+        const cleanCloudLogs = deduplicateActivityLogsList(res.activityLogs);
         const localLogs = getStored('activity_logs', []);
-        if (JSON.stringify(res.activityLogs) !== JSON.stringify(localLogs)) {
-          setStored('activity_logs', res.activityLogs);
+        if (JSON.stringify(cleanCloudLogs) !== JSON.stringify(localLogs)) {
+          setStored('activity_logs', cleanCloudLogs);
           changed = true;
         }
       }
@@ -1569,6 +1630,7 @@
             ` : ''}
           </div>
 
+          ${canViewAll(u) ? `
           <div class="card-dynamic overflow-hidden overflow-x-auto">
             <table class="w-full text-left text-xs whitespace-nowrap">
               <thead class="table-header-light uppercase font-extrabold">
@@ -1624,25 +1686,50 @@
                 `).join('')}
               </tbody>
               <tfoot class="bg-slate-900 text-white font-black text-xs">
-                <tr>
-                  <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
-                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${agentRows.length} ${agentRows.length === 1 ? 'Agent' : 'Agents'})
-                  </td>
-                  <td class="p-4">৳${totBase.toLocaleString()}</td>
-                  <td class="p-4 text-indigo-300">৳${totWork.toLocaleString()}</td>
-                  <td class="p-4 text-center">${totLeads.toLocaleString()}</td>
-                  <td class="p-4 text-center text-blue-300">${totOrders.toLocaleString()}</td>
-                  <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${totConv}%</span></td>
-                  <td class="p-4 text-emerald-400 text-sm">৳${totRev.toLocaleString()}</td>
-                  <td class="p-4 text-slate-300">৳${totRem.toLocaleString()}</td>
-                  <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${totAchPct}%</span></td>
-                  <td colspan="${isAdmin ? 2 : 1}" class="p-4 text-[11px] text-amber-200">
-                    Ajwa: ${totAjwa.toFixed(2)} | Salt: ${totSalt.toFixed(2)} | Garlic: ${totGarlic.toFixed(2)} | Sun.H: ${totSunH.toFixed(2)} | BS.H: ${totBsH.toFixed(2)} | Ghee: ${totGhee.toFixed(2)} kg
-                  </td>
-                </tr>
+                ${(() => {
+                  const allMonthUsers = getUsersForMonth(selectedMonthKey);
+                  const relevantTLs = (canViewAll(u) && monthlyPerfAgentId === 'ALL')
+                    ? allMonthUsers.filter(usr => usr.role === 'admin' && (monthlyPerfTeamScope === 'ALL' ? true : usr.team === monthlyPerfTeamScope))
+                    : [];
+                  const tlBaseSum = relevantTLs.reduce((sum, tl) => sum + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
+                  const tlWorkSum = Math.round(tlBaseSum * 1.05);
+                  const grandBase = totBase + tlBaseSum;
+                  const grandWork = totWork + tlWorkSum;
+                  const grandRem = Math.max(0, grandWork - totRev);
+                  const grandAchPct = grandWork > 0 ? Math.round((totRev / grandWork) * 100) : 0;
+                  return `
+                  ${tlBaseSum > 0 ? `
+                  <tr class="bg-slate-800 text-slate-200 border-b border-slate-700">
+                    <td colspan="3" class="px-4 py-2.5 text-[11px] font-extrabold text-orange-300">
+                      <i class="fa-solid fa-user-tie mr-1.5"></i> + Team Leader (Grade TL) Target (${relevantTLs.map(t => t.name).join(', ')})
+                    </td>
+                    <td class="px-4 py-2.5">৳${tlBaseSum.toLocaleString()}</td>
+                    <td class="px-4 py-2.5 text-indigo-200">৳${tlWorkSum.toLocaleString()}</td>
+                    <td colspan="${isAdmin ? 8 : 7}" class="px-4 py-2.5 text-[11px] text-slate-400">Included in Team & Overall Target Total</td>
+                  </tr>
+                  ` : ''}
+                  <tr>
+                    <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
+                      <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${agentRows.length} ${agentRows.length === 1 ? 'Agent' : 'Agents'}${relevantTLs.length > 0 ? ` + ${relevantTLs.length} TL` : ''})
+                    </td>
+                    <td class="p-4">৳${grandBase.toLocaleString()}</td>
+                    <td class="p-4 text-indigo-300">৳${grandWork.toLocaleString()}</td>
+                    <td class="p-4 text-center">${totLeads.toLocaleString()}</td>
+                    <td class="p-4 text-center text-blue-300">${totOrders.toLocaleString()}</td>
+                    <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${totConv}%</span></td>
+                    <td class="p-4 text-emerald-400 text-sm">৳${totRev.toLocaleString()}</td>
+                    <td class="p-4 text-slate-300">৳${grandRem.toLocaleString()}</td>
+                    <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${grandAchPct}%</span></td>
+                    <td colspan="${isAdmin ? 2 : 1}" class="p-4 text-[11px] text-amber-200">
+                      Ajwa: ${totAjwa.toFixed(2)} | Salt: ${totSalt.toFixed(2)} | Garlic: ${totGarlic.toFixed(2)} | Sun.H: ${totSunH.toFixed(2)} | BS.H: ${totBsH.toFixed(2)} | Ghee: ${totGhee.toFixed(2)} kg
+                    </td>
+                  </tr>
+                  `;
+                })()}
               </tfoot>
             </table>
           </div>
+          ` : ''}
 
           ${singleAgentObj ? (() => {
             const dTargetSingle = Math.round(singleAgentObj.workTgt / 26);
@@ -1741,7 +1828,7 @@
 
     function renderActivityLogsView() {
       const u = currentUser;
-      const allLogs = getStored('activity_logs', []);
+      const allLogs = deduplicateActivityLogsList(getStored('activity_logs', []));
 
       let visibleLogs = [];
       if (canViewAll(u)) {
@@ -2125,13 +2212,17 @@
     }
 
     function renderRankingAndComparison() {
-      const allUsers = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
+      const monthUsersAll = getUsersForMonth(selectedMonthKey);
+      const allUsers = monthUsersAll.filter(u => u.role === 'agent');
       const allSales = getStored('sales_records', []);
       const monthSales = allSales.filter(s => s.date.endsWith(selectedMonthKey));
 
       function calcTeamStats(teamName) {
         const tAgents = allUsers.filter(a => a.team === teamName);
-        const baseTgt = tAgents.reduce((s, a) => s + Number(a.baseTarget || 0), 0);
+        const tTLs = monthUsersAll.filter(u => u.role === 'admin' && u.team === teamName);
+        const agentsBase = tAgents.reduce((s, a) => s + Number(a.baseTarget || 0), 0);
+        const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
+        const baseTgt = agentsBase + tlBase;
         const workTgt = Math.round(baseTgt * 1.05);
         const tSales = monthSales.filter(s => s.team === teamName);
         const leads = tSales.reduce((s, c) => s + Number(c.leads || 0), 0);
@@ -2587,11 +2678,11 @@
       const activeProds = getActiveProductsForMonth(selectedMonthKey);
       return `
         <div id="productConfigModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+          <div class="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-4 pb-3 border-b">
               <div>
-                <h3 class="text-base font-black text-slate-900">Edit Product Targets & Bonuses (${selectedMonthKey})</h3>
-                <p class="text-xs font-bold text-slate-400">Customize per-agent KG targets and cash bonuses for this month</p>
+                <h3 class="text-base font-black text-slate-900">Edit Monthly Products, Targets & Bonuses (${selectedMonthKey})</h3>
+                <p class="text-xs font-bold text-slate-400">Customize product names, per-agent KG targets, 90% & 100% cash/gift bonuses specifically for ${selectedMonthKey}</p>
               </div>
               <button type="button" onclick="closeModal('productConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -2599,14 +2690,18 @@
               ${Object.keys(activeProds).map(k => {
                 const p = activeProds[k];
                 return `
-                  <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-3 items-center">
+                  <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
                     <div>
-                      <span class="text-xs font-black text-slate-800 block">${p.name}</span>
-                      <span class="text-[10px] font-bold text-slate-400">Per Agent Target</span>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Product Name (${selectedMonthKey})</label>
+                      <input type="text" id="cfg_name_${k}" value="${p.name}" required class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-extrabold text-slate-900">
                     </div>
                     <div>
-                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Target (KG)</label>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Target (KG / Agent)</label>
                       <input type="number" step="0.01" id="cfg_kg_${k}" value="${p.targetKg}" required class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">90% Bonus (৳)</label>
+                      <input type="number" id="cfg_b90_${k}" value="${p.bonus90 || 0}" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
                     </div>
                     <div>
                       <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">100% Bonus (৳)</label>
@@ -2617,7 +2712,7 @@
               }).join('')}
               <div class="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onclick="closeModal('productConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save Monthly Product Config</button>
+                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save ${selectedMonthKey} Product Config</button>
               </div>
             </form>
           </div>
@@ -2635,18 +2730,22 @@
       if (!configs[selectedMonthKey].products) configs[selectedMonthKey].products = {};
 
       Object.keys(DEFAULT_PRODUCTS).forEach(k => {
+        const nameVal = (document.getElementById(`cfg_name_${k}`)?.value || '').trim() || DEFAULT_PRODUCTS[k].name;
         const kgVal = Number(document.getElementById(`cfg_kg_${k}`).value) || DEFAULT_PRODUCTS[k].targetKg;
+        const b90Val = Number(document.getElementById(`cfg_b90_${k}`)?.value) || 0;
         const b100Val = Number(document.getElementById(`cfg_b100_${k}`).value) || 0;
         configs[selectedMonthKey].products[k] = {
+          name: nameVal,
           targetKg: kgVal,
+          bonus90: b90Val,
           bonus100: b100Val
         };
       });
 
       setStored('monthly_configs', configs);
-      const logMeta = recordActivityLog('Updated Product Incentives', `Modified monthly product KG targets & bonuses for ${selectedMonthKey}`);
+      const logMeta = recordActivityLog('Updated Product Incentives', `Modified monthly product names, KG targets & bonuses for ${selectedMonthKey}`);
       await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]), ...logMeta });
-      alert(`Product targets for ${selectedMonthKey} saved and synced!`);
+      alert(`Product names, targets & bonuses for ${selectedMonthKey} saved and synced!`);
       closeModal('productConfigModal');
       renderAppLayout();
     }
@@ -2901,14 +3000,19 @@
                 <div class="p-2 mb-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
                   💡 Enter gram weights in decimals: <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>400gm = 0.4</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Ajwa Dates (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Pink Salt (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Black Garlic (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" placeholder="e.g. 0.25 or 0.5" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Sundarban Honey (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Black Seed Honey (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                  <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Gawa Ghee (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" placeholder="e.g. 0.2, 0.4, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                </div>
+                ${(() => {
+                  const mProds = getActiveProductsForMonth(selectedMonthKey);
+                  return `
+                  <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.ajwa.name} (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.pinkSalt.name} (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.blackGarlic.name} (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" placeholder="e.g. 0.25 or 0.5" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.sunHoney.name} (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.bsHoney.name} (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.gawaGhee.name} (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" placeholder="e.g. 0.2, 0.4, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                  </div>
+                  `;
+                })()}
               </div>
 
               <div class="flex justify-between items-center pt-4 border-t border-slate-100">
@@ -2978,8 +3082,8 @@
                     <option value="A-">Grade A- (1,232,174)</option>
                     <option value="B">Grade B (1,132,174)</option>
                     <option value="C">Grade C (1,032,175)</option>
-                    <option value="Supervisor">Supervisor</option>
-                    ${isNazim ? `<option value="TL">TL (Team Leader)</option>` : ''}
+                    <option value="Supervisor">Supervisor (0)</option>
+                    <option value="TL">Grade TL (522,328)</option>
                   </select>
                 </div>
                 <div>
@@ -2990,7 +3094,7 @@
               <div>
                 <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Monthly Base Target (৳) for ${selectedMonthKey}</label>
                 <input type="number" id="usrTarget" required value="1232174" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-sm font-bold">
-                <p class="text-[10px] font-bold text-amber-600 mt-1">* For Supervisors/Admins, Base Target is 0. For Agents, +5% buffer is added automatically.</p>
+                <p class="text-[10px] font-bold text-amber-600 mt-1">* For TLs (Grade TL), default Base Target is ৳522,328. For Agents & TLs, +5% buffer is added automatically.</p>
               </div>
               <div class="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onclick="closeModal('userModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
@@ -3010,7 +3114,7 @@
         document.getElementById('usrTarget').value = 0;
       } else if (r === 'admin') {
         document.getElementById('usrGrade').value = 'TL';
-        document.getElementById('usrTarget').value = 0;
+        document.getElementById('usrTarget').value = 522328;
       } else {
         document.getElementById('usrGrade').value = 'A-';
         document.getElementById('usrTarget').value = 1232174;
@@ -3019,7 +3123,7 @@
 
     function autoFillGradeTarget() {
       const g = document.getElementById('usrGrade').value;
-      const map = { 'A+': 1619218, 'A': 1332174, 'A-': 1232174, 'B': 1132174, 'C': 1032175, 'Supervisor': 0, 'TL': 0 };
+      const map = { 'A+': 1619218, 'A': 1332174, 'A-': 1232174, 'B': 1132174, 'C': 1032175, 'Supervisor': 0, 'TL': 522328 };
       if (map[g] !== undefined) document.getElementById('usrTarget').value = map[g];
     }
 
@@ -3156,10 +3260,31 @@
 
     let lastSelectedAgentId = null;
 
+    // Night-Shift Aware Default Report Date Helper:
+    // If an agent worked the 11:00 PM Night shift (e.g. entered on the 1st at 11 PM and finishes on the 2nd at 7 AM),
+    // when they submit their report after midnight (12:00 AM – 8:59 AM), their default report date is the Night shift start date (the 1st)!
+    function getEffectiveReportDateForAgent(agentId) {
+      const now = new Date();
+      if (agentId && now.getHours() < 9) {
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const yMonthKey = `${String(yesterday.getMonth() + 1).padStart(2, '0')}/${yesterday.getFullYear()}`;
+        const rosterList = getRosterForMonth(yMonthKey);
+        const myRow = rosterList.find(r => String(r.id) === String(agentId));
+        if (myRow) {
+          const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+          const yShift = String(myRow[dayKeys[yesterday.getDay()]] || '').trim().toUpperCase();
+          if (yShift.includes('NIGHT') || yShift.includes('11:00')) {
+            return `${String(yesterday.getDate()).padStart(2, '0')}/${String(yesterday.getMonth() + 1).padStart(2, '0')}/${yesterday.getFullYear()}`;
+          }
+        }
+      }
+      return getTodayFormatted();
+    }
+
     function openReportModal(agentId, dateStr) {
       if (isSupervisor(currentUser)) return;
-      const targetDate = (dateStr && dateStr !== 'ALL') ? dateStr : getTodayFormatted();
-      document.getElementById('subDate').value = dateToInputVal(targetDate);
+      let resolvedAgentId = currentUser ? currentUser.id : null;
       if (isFullAdmin(currentUser)) {
         const selEl = document.getElementById('subAgentId');
         const allAg = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
@@ -3167,8 +3292,11 @@
         if (selEl && preferredId) {
           selEl.value = preferredId;
           lastSelectedAgentId = preferredId;
+          resolvedAgentId = preferredId;
         }
       }
+      const targetDate = (dateStr && dateStr !== 'ALL') ? dateStr : getEffectiveReportDateForAgent(resolvedAgentId);
+      document.getElementById('subDate').value = dateToInputVal(targetDate);
       onModalChange();
       openModal('submitModal');
     }
