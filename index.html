@@ -460,6 +460,9 @@
         logAction: logEntry.action,
         logDetails: logEntry.details
       };
+      if (currentUser && canViewAll(currentUser)) {
+        syncAdminBellNotificationsFromActivityLogs(logs, false);
+      }
       if (sendStandaloneSync) {
         postToSheet('ACTIVITY_LOG', meta);
       }
@@ -957,7 +960,11 @@
         const cleanCloudLogs = deduplicateActivityLogsList(res.activityLogs);
         const localLogs = getStored('activity_logs', []);
         if (JSON.stringify(cleanCloudLogs) !== JSON.stringify(localLogs)) {
+          const hadPreviousSync = localLogs.length > 0;
           setStored('activity_logs', cleanCloudLogs);
+          if (currentUser && canViewAll(currentUser)) {
+            syncAdminBellNotificationsFromActivityLogs(cleanCloudLogs, hadPreviousSync);
+          }
           changed = true;
         }
       }
@@ -4933,25 +4940,136 @@
       };
     }
 
+    function getBellNotifVisualMeta(n) {
+      const act = String(n.actionType || n.title || '').toUpperCase();
+      if (n.type === 'duty_reminder') {
+        return { bg: 'bg-amber-500 text-white', icon: 'fa-file-pen', badgeBg: 'bg-amber-100 text-amber-800', badgeText: 'Duty Alert' };
+      }
+      if (act.includes('DELETE')) {
+        return { bg: 'bg-red-600 text-white', icon: 'fa-trash-can', badgeBg: 'bg-red-100 text-red-800', badgeText: 'Deleted' };
+      }
+      if (act.includes('UPDATE') || act.includes('EDIT')) {
+        return { bg: 'bg-indigo-600 text-white', icon: 'fa-pen-to-square', badgeBg: 'bg-indigo-100 text-indigo-800', badgeText: 'Edited' };
+      }
+      if (act.includes('SUBMIT') || act.includes('IMPORT') || act.includes('SALES')) {
+        return { bg: 'bg-emerald-600 text-white', icon: 'fa-file-circle-check', badgeBg: 'bg-emerald-100 text-emerald-800', badgeText: 'Data Added' };
+      }
+      if (act.includes('LOGIN')) {
+        return { bg: 'bg-blue-600 text-white', icon: 'fa-right-to-bracket', badgeBg: 'bg-blue-100 text-blue-800', badgeText: 'Logged In' };
+      }
+      if (act.includes('LOGOUT')) {
+        return { bg: 'bg-slate-600 text-white', icon: 'fa-power-off', badgeBg: 'bg-slate-200 text-slate-700', badgeText: 'Logged Out' };
+      }
+      if (act.includes('BREAK')) {
+        return { bg: 'bg-amber-500 text-white', icon: 'fa-mug-hot', badgeBg: 'bg-amber-100 text-amber-800', badgeText: 'On Break' };
+      }
+      if (act.includes('RESUME')) {
+        return { bg: 'bg-teal-600 text-white', icon: 'fa-play', badgeBg: 'bg-teal-100 text-teal-800', badgeText: 'Resumed' };
+      }
+      return { bg: 'bg-purple-600 text-white', icon: 'fa-bell', badgeBg: 'bg-purple-100 text-purple-800', badgeText: 'Activity' };
+    }
+
+    function syncAdminBellNotificationsFromActivityLogs(logsList, triggerLivePopup = false) {
+      if (!currentUser || !canViewAll(currentUser) || !Array.isArray(logsList)) return;
+
+      const seenStorageKey = `gb_admin_seen_act_${currentUser.id}`;
+      const clearedStorageKey = `gb_admin_cleared_act_${currentUser.id}`;
+      let seenSigs = [];
+      let clearedSigs = [];
+      try { seenSigs = JSON.parse(localStorage.getItem(seenStorageKey) || '[]'); } catch (e) {}
+      try { clearedSigs = JSON.parse(localStorage.getItem(clearedStorageKey) || '[]'); } catch (e) {}
+
+      const seenSet = new Set(seenSigs);
+      const clearedSet = new Set(clearedSigs);
+      const isFirstSeed = seenSet.size === 0;
+
+      const myNotifs = getNotificationsForCurrentUser();
+      const existingNotifMap = new Map();
+      myNotifs.forEach(n => { if (n.sig) existingNotifMap.set(n.sig, n); });
+
+      const newlyArrivedForToast = [];
+      const recentLogs = logsList.slice(0, 60);
+
+      for (let i = recentLogs.length - 1; i >= 0; i--) {
+        const log = recentLogs[i];
+        if (!log || !log.userId) continue;
+        const sig = `${log.date}|${log.time}|${log.userId}|${log.action}|${log.details}`;
+        if (clearedSet.has(sig)) continue;
+
+        if (!existingNotifMap.has(sig)) {
+          const isSelfAction = String(log.userId) === String(currentUser.id);
+          // On initial load, mark older historical logs (index >= 5) as read so badge only highlights recent activity
+          const markAsRead = isSelfAction || (isFirstSeed && i >= 5);
+
+          const notifObj = {
+            id: 'actnotif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+            sig: sig,
+            userId: String(currentUser.id),
+            actorId: String(log.userId),
+            actorName: log.userName || ('ID ' + log.userId),
+            actorTeam: log.team || '',
+            actorRole: log.role || 'agent',
+            actionType: log.action || 'Activity',
+            date: log.date || getTodayFormatted(),
+            time: sanitizeTimeDisplay(log.time),
+            title: `${log.userName} (${log.userId}) — ${log.action}`,
+            message: log.details || '',
+            type: 'admin_activity',
+            read: markAsRead
+          };
+
+          myNotifs.unshift(notifObj);
+          existingNotifMap.set(sig, notifObj);
+
+          if (!seenSet.has(sig)) {
+            seenSet.add(sig);
+            if (triggerLivePopup && !isFirstSeed && !isSelfAction) {
+              newlyArrivedForToast.push(notifObj);
+            }
+          }
+        }
+      }
+
+      localStorage.setItem(seenStorageKey, JSON.stringify(Array.from(seenSet).slice(-250)));
+      saveNotificationsForCurrentUser(myNotifs.slice(0, 80));
+
+      // Show live top-right toast for newly arrived agent activity (up to 2 most recent at once)
+      newlyArrivedForToast.slice(-2).forEach(nObj => {
+        const vMeta = getBellNotifVisualMeta(nObj);
+        const toastType = nObj.actionType.toUpperCase().includes('DELETE')
+          ? 'error'
+          : (nObj.actionType.toUpperCase().includes('BREAK') || nObj.actionType.toUpperCase().includes('UPDATE') ? 'warning' : 'success');
+        showPortalToast(nObj.title, nObj.message, toastType);
+      });
+    }
+
     function renderHeaderBellNotificationWidget() {
+      if (currentUser && canViewAll(currentUser)) {
+        const storedLogs = getStored('activity_logs', []);
+        if (storedLogs.length > 0 && getNotificationsForCurrentUser().length === 0) {
+          syncAdminBellNotificationsFromActivityLogs(storedLogs, false);
+        }
+      }
+
       const myNotifs = getNotificationsForCurrentUser();
       const unreadCount = myNotifs.filter(n => !n.read).length;
       const shiftInfo = getAgentTodayRosterShiftInfo(currentUser);
+      const isAdminOrSup = currentUser && canViewAll(currentUser);
 
       return `
         <div class="relative" id="bellNotificationWrapper">
-          <button type="button" onclick="toggleBellNotificationDropdown(event)" title="Notifications & Duty Reminders" class="w-10 h-10 rounded-xl ${unreadCount > 0 ? 'bg-blue-50 border border-blue-200 text-blue-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} flex items-center justify-center relative transition-all">
+          <button type="button" onclick="toggleBellNotificationDropdown(event)" title="${isAdminOrSup ? 'Live Agent Login, Logout & Data Activity Notifications' : 'Notifications & Duty Reminders'}" class="w-10 h-10 rounded-xl ${unreadCount > 0 ? 'bg-blue-50 border border-blue-200 text-blue-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} flex items-center justify-center relative transition-all">
             <i class="fa-solid fa-bell text-sm ${unreadCount > 0 ? 'bell-ring' : ''}"></i>
             <span id="headerBellUnreadDot" class="${unreadCount > 0 ? 'flex' : 'hidden'} absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-600 text-white text-[10px] font-black rounded-full items-center justify-center shadow-md ring-2 ring-white">
               ${unreadCount}
             </span>
           </button>
 
-          <div id="notificationDropdownMenu" class="${notificationDropdownOpen ? '' : 'hidden'} absolute right-0 mt-2.5 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+          <div id="notificationDropdownMenu" class="${notificationDropdownOpen ? '' : 'hidden'} absolute right-0 mt-2.5 w-80 sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
             <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <i class="fa-solid fa-bell text-amber-400 text-xs"></i>
-                <span class="text-xs font-black uppercase tracking-wider">Notifications</span>
+                <span class="text-xs font-black uppercase tracking-wider">${isAdminOrSup ? 'Live Floor & Data Alerts' : 'Notifications'}</span>
                 ${unreadCount > 0 ? `<span class="px-2 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-black">${unreadCount} New</span>` : ''}
               </div>
               <div class="flex items-center gap-2">
@@ -4979,9 +5097,14 @@
                 }
               </div>
             </div>
-            ` : ''}
+            ` : `
+            <div class="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-[10px] font-extrabold text-slate-500">
+              <span><i class="fa-solid fa-bolt text-amber-500 mr-1"></i>Tracks Login, Logout, Break & Data Add/Edit/Delete</span>
+              <button type="button" onclick="notificationDropdownOpen=false; setTab('activity_logs');" class="text-blue-600 hover:underline">View All Logs →</button>
+            </div>
+            `}
 
-            <div class="max-h-80 overflow-y-auto divide-y divide-slate-100">
+            <div class="max-h-96 overflow-y-auto divide-y divide-slate-100">
               ${myNotifs.length === 0 ? `
                 <div class="p-8 text-center">
                   <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
@@ -4991,27 +5114,29 @@
                   <p class="text-[11px] font-semibold text-slate-400 mt-0.5">
                     ${currentUser && currentUser.role === 'agent'
                       ? 'You will receive a "Submit Your Report" alert 5 minutes before your roster duty ends.'
-                      : 'System notifications and duty reminders will appear here.'}
+                      : 'Whenever any agent logs in, logs out, takes a break, or adds/edits/deletes data, it will appear here.'}
                   </p>
                 </div>
-              ` : myNotifs.map(n => `
+              ` : myNotifs.map(n => {
+                const vMeta = getBellNotifVisualMeta(n);
+                return `
                 <div onclick="handleNotificationItemClick('${n.id}')" class="p-3.5 hover:bg-slate-50 transition-colors cursor-pointer flex items-start gap-3 ${!n.read ? 'bg-blue-50/40' : ''}">
-                  <div class="w-8 h-8 rounded-xl ${n.type === 'duty_reminder' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'} flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-sm">
-                    <i class="fa-solid ${n.type === 'duty_reminder' ? 'fa-file-Pen' : 'fa-bell'}"></i>
+                  <div class="w-9 h-9 rounded-xl ${vMeta.bg} flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-sm">
+                    <i class="fa-solid ${vMeta.icon}"></i>
                   </div>
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center justify-between gap-2">
-                      <h5 class="text-xs font-black text-slate-900 truncate">${n.title}</h5>
-                      ${!n.read ? `<span class="w-2 h-2 rounded-full bg-red-600 shrink-0" title="Unread"></span>` : ''}
+                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${vMeta.badgeBg}">${vMeta.badgeText}</span>
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] font-bold text-slate-400">${cleanDisplayDate(n.date)} • ${n.time}</span>
+                        ${!n.read ? `<span class="w-2 h-2 rounded-full bg-red-600 shrink-0" title="Unread"></span>` : ''}
+                      </div>
                     </div>
-                    <p class="text-[11px] font-semibold text-slate-600 mt-0.5 leading-snug">${n.message}</p>
-                    <div class="flex items-center justify-between mt-1.5">
-                      <span class="text-[10px] font-bold text-slate-400"><i class="fa-regular fa-clock mr-1"></i>${n.date} • ${n.time}</span>
-                      ${n.type === 'duty_reminder' ? `<span class="text-[10px] font-black text-blue-600 hover:underline">Submit Report →</span>` : ''}
-                    </div>
+                    <h5 class="text-xs font-black text-slate-900 mt-1 truncate">${n.title}</h5>
+                    <p class="text-[11px] font-semibold text-slate-600 mt-0.5 leading-snug whitespace-normal">${n.message}</p>
                   </div>
                 </div>
-              `).join('')}
+              `}).join('')}
             </div>
           </div>
         </div>
@@ -5022,7 +5147,6 @@
       if (e) e.stopPropagation();
       notificationDropdownOpen = !notificationDropdownOpen;
       if (notificationDropdownOpen) {
-        // Mark all as read when user opens the bell history
         const myNotifs = getNotificationsForCurrentUser().map(n => ({ ...n, read: true }));
         saveNotificationsForCurrentUser(myNotifs);
       }
@@ -5044,14 +5168,39 @@
 
     function clearAllMyNotifications(e) {
       if (e) e.stopPropagation();
+      if (currentUser && canViewAll(currentUser)) {
+        const clearedStorageKey = `gb_admin_cleared_act_${currentUser.id}`;
+        let clearedSigs = [];
+        try { clearedSigs = JSON.parse(localStorage.getItem(clearedStorageKey) || '[]'); } catch (err) {}
+        const currentNotifs = getNotificationsForCurrentUser();
+        currentNotifs.forEach(n => { if (n.sig) clearedSigs.push(n.sig); });
+        localStorage.setItem(clearedStorageKey, JSON.stringify(Array.from(new Set(clearedSigs)).slice(-250)));
+      }
       saveNotificationsForCurrentUser([]);
       renderAppLayout();
     }
 
     function handleNotificationItemClick(notifId) {
-      const myNotifs = getNotificationsForCurrentUser().map(n => n.id === notifId ? { ...n, read: true } : n);
-      saveNotificationsForCurrentUser(myNotifs);
+      const allMyNotifs = getNotificationsForCurrentUser();
+      const clickedNotif = allMyNotifs.find(n => n.id === notifId);
+      const updatedNotifs = allMyNotifs.map(n => n.id === notifId ? { ...n, read: true } : n);
+      saveNotificationsForCurrentUser(updatedNotifs);
       notificationDropdownOpen = false;
+
+      if (clickedNotif && clickedNotif.type === 'admin_activity' && canViewAll(currentUser)) {
+        const actUpper = String(clickedNotif.actionType || '').toUpperCase();
+        if (actUpper.includes('SALES') || actUpper.includes('REPORT') || actUpper.includes('IMPORT')) {
+          setTab('reports');
+          return;
+        }
+        if (actUpper.includes('LOGIN') || actUpper.includes('LOGOUT') || actUpper.includes('BREAK') || actUpper.includes('RESUME') || actUpper.includes('ATTENDANCE')) {
+          setTab('attendance');
+          return;
+        }
+        setTab('activity_logs');
+        return;
+      }
+
       renderAppLayout();
       if (currentUser && (currentUser.role === 'agent' || isFullAdmin(currentUser))) {
         openReportModal();
