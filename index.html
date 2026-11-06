@@ -6442,7 +6442,7 @@
       }
     }
 
-    function handleToggleSingleUserFeature(targetUserId, featureKey, isChecked) {
+    function handleToggleSingleUserFeature(targetUserId, featureKey, checkboxEl) {
       if (!isSuperAdmin(currentUser)) return;
       const uid = String(targetUserId);
       if (uid === '10122') return;
@@ -6451,26 +6451,39 @@
       const targetUser = allUsers.find(u => String(u.id) === uid);
       if (!targetUser) return;
 
-      const permStore = getRolePermissionsStore();
-      if (!permStore[uid]) {
-        permStore[uid] = { ...getDefaultFeaturePermissionsForRole(targetUser.role) };
-      }
-      permStore[uid][featureKey] = Boolean(isChecked);
-      saveRolePermissionsStore(permStore);
-
       const featObj = PORTAL_FEATURES_CATALOG.find(f => f.key === featureKey);
       const featName = featObj ? featObj.label : featureKey;
+      const isChecked = checkboxEl.checked;
 
-      recordActivityLog(
-        'Updated Feature Access',
-        `Nazim ${isChecked ? 'ENABLED' : 'DISABLED'} "${featName}" for ${targetUser.name} (${uid})`,
+      // Revert checkbox visually until confirmed
+      checkboxEl.checked = !isChecked;
+
+      openConfirmWarningModal(
+        `Confirm Permission Change?`,
+        `Are you sure you want to <strong>${isChecked ? 'ENABLE' : 'DISABLE'}</strong> feature <strong>"${featName}"</strong> for <strong>${targetUser.name} (${uid})</strong>?`,
+        'Role & Access Confirmation',
+        async () => {
+          const permStore = getRolePermissionsStore();
+          if (!permStore[uid]) {
+            permStore[uid] = { ...getDefaultFeaturePermissionsForRole(targetUser.role) };
+          }
+          permStore[uid][featureKey] = Boolean(isChecked);
+          saveRolePermissionsStore(permStore);
+
+          recordActivityLog(
+            'Updated Feature Access',
+            `Nazim ${isChecked ? 'ENABLED' : 'DISABLED'} "${featName}" for ${targetUser.name} (${uid})`,
+            true
+          );
+          renderAppLayout();
+          showPortalToast(
+            isChecked ? 'Feature Enabled & Synced' : 'Feature Revoked & Synced',
+            `"${featName}" is now ${isChecked ? 'ACTIVE' : 'OFF'} for ${targetUser.name} (${uid}).`,
+            isChecked ? 'success' : 'warning'
+          );
+        },
+        'Yes, Confirm Change',
         true
-      );
-      renderAppLayout();
-      showPortalToast(
-        isChecked ? 'Feature Enabled Instantly' : 'Feature Revoked Instantly',
-        `"${featName}" is now ${isChecked ? 'ACTIVE' : 'OFF'} for ${targetUser.name} (${uid}).`,
-        isChecked ? 'success' : 'warning'
       );
     }
 
@@ -6483,30 +6496,38 @@
       const targetUser = allUsers.find(u => String(u.id) === uid);
       if (!targetUser) return;
 
-      const permStore = getRolePermissionsStore();
+      openConfirmWarningModal(
+        `Apply Preset "${presetType}"?`,
+        `Are you sure you want to apply preset template <strong>"${presetType}"</strong> to <strong>${targetUser.name} (${uid})</strong>? This will update all their feature permissions instantly upon confirmation.`,
+        'Role Preset Confirmation',
+        async () => {
+          const permStore = getRolePermissionsStore();
+          if (presetType === 'RESET_DEFAULT') {
+            delete permStore[uid];
+          } else if (presetType === 'FULL_ADMIN') {
+            permStore[uid] = { ...getDefaultFeaturePermissionsForRole('admin') };
+          } else if (presetType === 'SUPERVISOR_VIEW') {
+            permStore[uid] = { ...getDefaultFeaturePermissionsForRole('supervisor') };
+          } else if (presetType === 'STANDARD_AGENT') {
+            permStore[uid] = { ...getDefaultFeaturePermissionsForRole('agent') };
+          } else if (presetType === 'ENABLE_ALL') {
+            const allOn = {};
+            PORTAL_FEATURES_CATALOG.forEach(f => { allOn[f.key] = true; });
+            permStore[uid] = allOn;
+          }
 
-      if (presetType === 'RESET_DEFAULT') {
-        delete permStore[uid];
-      } else if (presetType === 'FULL_ADMIN') {
-        permStore[uid] = { ...getDefaultFeaturePermissionsForRole('admin') };
-      } else if (presetType === 'SUPERVISOR_VIEW') {
-        permStore[uid] = { ...getDefaultFeaturePermissionsForRole('supervisor') };
-      } else if (presetType === 'STANDARD_AGENT') {
-        permStore[uid] = { ...getDefaultFeaturePermissionsForRole('agent') };
-      } else if (presetType === 'ENABLE_ALL') {
-        const allOn = {};
-        PORTAL_FEATURES_CATALOG.forEach(f => { allOn[f.key] = true; });
-        permStore[uid] = allOn;
-      }
-
-      saveRolePermissionsStore(permStore);
-      recordActivityLog(
-        'Applied Role Preset',
-        `Nazim applied "${presetType}" permission preset to ${targetUser.name} (${uid})`,
+          saveRolePermissionsStore(permStore);
+          recordActivityLog(
+            'Applied Role Preset',
+            `Nazim applied "${presetType}" permission preset to ${targetUser.name} (${uid})`,
+            true
+          );
+          renderAppLayout();
+          showPortalToast('Permission Preset Applied!', `Updated all feature switches for ${targetUser.name} (${uid}).`, 'success');
+        },
+        'Yes, Apply Preset',
         true
       );
-      renderAppLayout();
-      showPortalToast('Permission Preset Applied!', `Updated all feature switches for ${targetUser.name} (${uid}).`, 'success');
     }
 
     function handleChangeBaseRoleFromAccessPanel(targetUserId, newRoleVal) {
@@ -6541,6 +6562,31 @@
       renderAppLayout();
       showPortalToast('Primary Role Updated!', `${users[idx].name} (${uid}) is now set as ${newRoleVal.toUpperCase()}.`, 'success');
     }
+
+    
+    function promptChangeBaseRole(targetUserId, selectEl) {
+      if (!isSuperAdmin(currentUser)) return;
+      const uid = String(targetUserId);
+      const newRoleVal = selectEl.value;
+      // Revert select visually until confirmed
+      selectEl.value = getUsersForMonth(selectedMonthKey).find(u => String(u.id) === uid)?.role || 'agent';
+
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetUser = allUsers.find(u => String(u.id) === uid);
+      if (!targetUser) return;
+
+      openConfirmWarningModal(
+        `Change Base Role to "${newRoleVal.toUpperCase()}"?`,
+        `Are you sure you want to change primary role of <strong>${targetUser.name} (${uid})</strong> to <strong>${newRoleVal.toUpperCase()}</strong>?`,
+        'Base Role Confirmation',
+        async () => {
+          handleChangeBaseRoleFromAccessPanel(uid, newRoleVal);
+        },
+        'Yes, Change Role',
+        true
+      );
+    }
+
 
     function renderNazimRoleManagementView() {
       if (!isSuperAdmin(currentUser)) return renderDashboard();
@@ -6699,7 +6745,7 @@
                   <!-- Primary Role Switcher -->
                   <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-2xl border border-slate-200">
                     <span class="text-[10px] font-black uppercase text-slate-500 pl-1">Base Role:</span>
-                    <select onchange="handleChangeBaseRoleFromAccessPanel('${targetUser.id}', this.value)" class="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                    <select onchange="promptChangeBaseRole('${targetUser.id}', this)" class="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
                       <option value="agent" ${targetUser.role === 'agent' ? 'selected' : ''}>Sales Agent</option>
                       <option value="supervisor" ${targetUser.role === 'supervisor' ? 'selected' : ''}>Supervisor (View All)</option>
                       <option value="admin" ${targetUser.role === 'admin' ? 'selected' : ''}>Admin / TL</option>
@@ -6755,7 +6801,7 @@
                               </div>
                             </div>
                             <div class="shrink-0 pt-1">
-                              <input type="checkbox" ${isOn ? 'checked' : ''} onchange="handleToggleSingleUserFeature('${targetUser.id}', '${feat.key}', this.checked)" class="w-5 h-5 accent-purple-600 rounded cursor-pointer">
+                              <input type="checkbox" ${isOn ? 'checked' : ''} onchange="handleToggleSingleUserFeature('${targetUser.id}', '${feat.key}', this)" class="w-5 h-5 accent-purple-600 rounded cursor-pointer">
                             </div>
                           </label>
                         `;
