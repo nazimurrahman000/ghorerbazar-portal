@@ -100,6 +100,21 @@
 
     const AVAILABLE_MONTHS = buildAvailableMonthsList();
     const TL_DEFAULT_BASE_TARGET = 522328;
+    const DEFAULT_GRADE_TARGETS = {
+      'A+': 1619218,
+      'A': 1332174,
+      'A-': 1232174,
+      'B': 1132174,
+      'C': 1032175,
+      'TL': 522328,
+      'Supervisor': 0
+    };
+
+    function getGradeTargetsForMonth(mKey) {
+      const configs = getStored('monthly_configs', {});
+      const mCfg = configs[mKey || selectedMonthKey] || {};
+      return { ...DEFAULT_GRADE_TARGETS, ...(mCfg.gradeTargets || {}) };
+    }
 
     const DEFAULT_USERS = [
       { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
@@ -247,7 +262,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen) return true;
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'confirmWarningModal', 'aiImportModal'];
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -431,15 +446,27 @@
     }
 
     function getUsersForMonth(mKey) {
+      const mk = mKey || selectedMonthKey;
       const baseUsers = getStored('users', DEFAULT_USERS).map(normalizeUserRecord);
       const configs = getStored('monthly_configs', {});
-      const mCfg = configs[mKey || selectedMonthKey] || {};
+      const mCfg = configs[mk] || {};
       const userOverrides = mCfg.users || {};
+      const gradeMap = getGradeTargetsForMonth(mk);
+
       return baseUsers.map(u => {
         let updated = { ...u };
         if (userOverrides[u.id]) {
           updated.grade = userOverrides[u.id].grade || u.grade;
-          updated.baseTarget = Number(userOverrides[u.id].baseTarget ?? u.baseTarget);
+          if (userOverrides[u.id].baseTarget !== undefined && userOverrides[u.id].baseTarget !== null) {
+            updated.baseTarget = Number(userOverrides[u.id].baseTarget);
+          } else if (gradeMap[updated.grade] !== undefined) {
+            updated.baseTarget = Number(gradeMap[updated.grade]);
+          }
+        } else if (mCfg.gradeTargets && gradeMap[updated.grade] !== undefined) {
+          updated.baseTarget = Number(gradeMap[updated.grade]);
+        }
+        if (updated.role === 'admin' && (!updated.baseTarget || Number(updated.baseTarget) === 0)) {
+          updated.baseTarget = Number(gradeMap['TL'] || TL_DEFAULT_BASE_TARGET);
         }
         return normalizeUserRecord(updated);
       });
@@ -1102,6 +1129,7 @@
         ${isFullAdmin(u) ? renderEditAttendanceModal() : ''}
         ${isFullAdmin(u) ? renderUserModal() : ''}
         ${isFullAdmin(u) ? renderProductConfigModal() : ''}
+        ${isFullAdmin(u) ? renderGradeConfigModal() : ''}
         ${isFullAdmin(u) ? renderAiImportModal() : ''}
         ${renderConfirmWarningModal()}
       `;
@@ -1541,11 +1569,15 @@
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
         const dateMap = new Map();
         agSales.forEach(s => { if (!dateMap.has(s.date)) dateMap.set(s.date, s); });
-        const uniqueDailyLogs = Array.from(dateMap.values()).sort((a, b) => {
-          const da = parseInt(a.date.split('/')[0], 10) || 0;
-          const db = parseInt(b.date.split('/')[0], 10) || 0;
-          return da - db;
-        });
+        const allMonthRecords = Array.from(dateMap.values());
+        // Exclude MONTHLY_PROD_ summary record from day-by-day rows, but include it in total product sums!
+        const uniqueDailyLogs = allMonthRecords
+          .filter(s => !String(s.date || '').startsWith('MONTHLY_PROD_'))
+          .sort((a, b) => {
+            const da = parseInt(a.date.split('/')[0], 10) || 0;
+            const db = parseInt(b.date.split('/')[0], 10) || 0;
+            return da - db;
+          });
 
         const baseTgt = Number(ag.baseTarget) || 1232174;
         const workTgt = Math.round(baseTgt * 1.05);
@@ -1556,12 +1588,12 @@
         const rem = Math.max(0, workTgt - rev);
         const achPct = workTgt > 0 ? Math.round((rev / workTgt) * 100) : 0;
 
-        const ajwa = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.ajwa) || 0), 0);
-        const pinkSalt = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.pinkSalt) || 0), 0);
-        const blackGarlic = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.blackGarlic) || 0), 0);
-        const sunHoney = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.sunHoney) || 0), 0);
-        const bsHoney = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.bsHoney) || 0), 0);
-        const gawaGhee = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.gawaGhee) || 0), 0);
+        const ajwa = allMonthRecords.reduce((acc, c) => acc + (Number(c.ajwa) || 0), 0);
+        const pinkSalt = allMonthRecords.reduce((acc, c) => acc + (Number(c.pinkSalt) || 0), 0);
+        const blackGarlic = allMonthRecords.reduce((acc, c) => acc + (Number(c.blackGarlic) || 0), 0);
+        const sunHoney = allMonthRecords.reduce((acc, c) => acc + (Number(c.sunHoney) || 0), 0);
+        const bsHoney = allMonthRecords.reduce((acc, c) => acc + (Number(c.bsHoney) || 0), 0);
+        const gawaGhee = allMonthRecords.reduce((acc, c) => acc + (Number(c.gawaGhee) || 0), 0);
 
         totBase += baseTgt;
         totWork += workTgt;
@@ -2393,9 +2425,9 @@
       
       let dateFilteredSales = [];
       if (reportsDateFilter === 'ALL') {
-        dateFilteredSales = rawSales.filter(s => s.date.endsWith(selectedMonthKey));
+        dateFilteredSales = rawSales.filter(s => s.date.endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
       } else {
-        dateFilteredSales = rawSales.filter(s => s.date === reportsDateFilter);
+        dateFilteredSales = rawSales.filter(s => s.date === reportsDateFilter && !String(s.date || '').startsWith('MONTHLY_PROD_'));
       }
 
       let sales = [];
@@ -2611,7 +2643,10 @@
               </p>
             </div>
             ${isFullAdmin(u) ? `
-            <div class="flex items-center gap-2.5">
+            <div class="flex flex-wrap items-center gap-2.5">
+              <button onclick="openGradeConfigModal()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
+                <i class="fa-solid fa-layer-group"></i> Edit Grade & TL Targets (${selectedMonthKey})
+              </button>
               <button onclick="openProductConfigModal()" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
                 <i class="fa-solid fa-gift"></i> Edit Product Incentives (${selectedMonthKey})
               </button>
@@ -2747,6 +2782,94 @@
       await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]), ...logMeta });
       alert(`Product names, targets & bonuses for ${selectedMonthKey} saved and synced!`);
       closeModal('productConfigModal');
+      renderAppLayout();
+    }
+
+    
+    function renderGradeConfigModal() {
+      const gMap = getGradeTargetsForMonth(selectedMonthKey);
+      const gradesList = [
+        { key: 'A+', label: 'Grade A+ (Top Tier Agent)' },
+        { key: 'A', label: 'Grade A (Senior Agent)' },
+        { key: 'A-', label: 'Grade A- (Standard Agent)' },
+        { key: 'B', label: 'Grade B (Mid Agent)' },
+        { key: 'C', label: 'Grade C (Entry Agent)' },
+        { key: 'TL', label: 'Grade TL (Team Leader Individual Target)' }
+      ];
+      return `
+        <div id="gradeConfigModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b">
+              <div>
+                <h3 class="text-base font-black text-slate-900">Edit Monthly Grade & TL Targets (${selectedMonthKey})</h3>
+                <p class="text-xs font-bold text-slate-400">Change base targets for each grade & TL for ${selectedMonthKey}. Saving will automatically update all agents & TLs matching that grade in ${selectedMonthKey}!</p>
+              </div>
+              <button type="button" onclick="closeModal('gradeConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="handleSaveGradeConfig(event)" class="space-y-3">
+              ${gradesList.map(g => {
+                const baseVal = Number(gMap[g.key] || 0);
+                const workVal = Math.round(baseVal * 1.05);
+                return `
+                  <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                    <div>
+                      <span class="text-xs font-black ${g.key === 'TL' ? 'text-purple-700' : 'text-slate-900'} block">${g.label}</span>
+                      <span class="text-[10px] font-bold text-slate-400">Month: ${selectedMonthKey}</span>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Base Target (৳)</label>
+                      <input type="number" id="cfg_grade_${g.key}" value="${baseVal}" required class="w-full px-3 py-1.5 bg-white border rounded-xl text-xs font-extrabold text-slate-900">
+                    </div>
+                    <div>
+                      <span class="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Working (+5% Buffer)</span>
+                      <span class="text-xs font-black text-emerald-600">৳${workVal.toLocaleString()}</span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+              <div class="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onclick="closeModal('gradeConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow">Save & Apply Grade Targets (${selectedMonthKey})</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function openGradeConfigModal() { openModal('gradeConfigModal'); }
+
+    async function handleSaveGradeConfig(e) {
+      e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
+      let configs = getStored('monthly_configs', {});
+      if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {}, gradeTargets: {} };
+      if (!configs[selectedMonthKey].gradeTargets) configs[selectedMonthKey].gradeTargets = {};
+      if (!configs[selectedMonthKey].users) configs[selectedMonthKey].users = {};
+
+      const gradeKeys = ['A+', 'A', 'A-', 'B', 'C', 'TL'];
+      gradeKeys.forEach(gk => {
+        const val = Number(document.getElementById(`cfg_grade_${gk}`)?.value) || 0;
+        configs[selectedMonthKey].gradeTargets[gk] = val;
+      });
+
+      // Automatically update all users in this month whose grade matches one of the updated grades!
+      const currentMonthUsers = getUsersForMonth(selectedMonthKey);
+      currentMonthUsers.forEach(u => {
+        const g = u.role === 'admin' ? 'TL' : u.grade;
+        if (configs[selectedMonthKey].gradeTargets[g] !== undefined) {
+          configs[selectedMonthKey].users[u.id] = {
+            grade: g,
+            baseTarget: configs[selectedMonthKey].gradeTargets[g]
+          };
+        }
+      });
+
+      setStored('monthly_configs', configs);
+      const logMeta = recordActivityLog('Updated Grade Targets', `Updated monthly grade & TL targets for ${selectedMonthKey}`);
+      await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]), ...logMeta });
+      alert(`Grade & TL targets for ${selectedMonthKey} saved and automatically applied to all matching agents & TLs!`);
+      closeModal('gradeConfigModal');
       renderAppLayout();
     }
 
@@ -3076,15 +3199,20 @@
               <div class="grid grid-cols-2 gap-3">
                 <div>
                   <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Grade (${selectedMonthKey})</label>
-                  <select id="usrGrade" onchange="autoFillGradeTarget()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
-                    <option value="A+">Grade A+ (1,619,218)</option>
-                    <option value="A">Grade A (1,332,174)</option>
-                    <option value="A-">Grade A- (1,232,174)</option>
-                    <option value="B">Grade B (1,132,174)</option>
-                    <option value="C">Grade C (1,032,175)</option>
-                    <option value="Supervisor">Supervisor (0)</option>
-                    <option value="TL">Grade TL (522,328)</option>
-                  </select>
+                  ${(() => {
+                    const gMap = getGradeTargetsForMonth(selectedMonthKey);
+                    return `
+                    <select id="usrGrade" onchange="autoFillGradeTarget()" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
+                      <option value="A+">Grade A+ (৳${Number(gMap['A+']).toLocaleString()})</option>
+                      <option value="A">Grade A (৳${Number(gMap['A']).toLocaleString()})</option>
+                      <option value="A-">Grade A- (৳${Number(gMap['A-']).toLocaleString()})</option>
+                      <option value="B">Grade B (৳${Number(gMap['B']).toLocaleString()})</option>
+                      <option value="C">Grade C (৳${Number(gMap['C']).toLocaleString()})</option>
+                      <option value="Supervisor">Supervisor (0)</option>
+                      <option value="TL">Grade TL (৳${Number(gMap['TL']).toLocaleString()})</option>
+                    </select>
+                    `;
+                  })()}
                 </div>
                 <div>
                   <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Password</label>
@@ -3108,22 +3236,23 @@
 
     function onUserRoleSelectChange() {
       const r = document.getElementById('usrRole').value;
+      const gMap = getGradeTargetsForMonth(selectedMonthKey);
       if (r === 'supervisor') {
         document.getElementById('usrTeam').value = 'All Teams';
         document.getElementById('usrGrade').value = 'Supervisor';
         document.getElementById('usrTarget').value = 0;
       } else if (r === 'admin') {
         document.getElementById('usrGrade').value = 'TL';
-        document.getElementById('usrTarget').value = 522328;
+        document.getElementById('usrTarget').value = Number(gMap['TL'] || 522328);
       } else {
         document.getElementById('usrGrade').value = 'A-';
-        document.getElementById('usrTarget').value = 1232174;
+        document.getElementById('usrTarget').value = Number(gMap['A-'] || 1232174);
       }
     }
 
     function autoFillGradeTarget() {
       const g = document.getElementById('usrGrade').value;
-      const map = { 'A+': 1619218, 'A': 1332174, 'A-': 1232174, 'B': 1132174, 'C': 1032175, 'Supervisor': 0, 'TL': 522328 };
+      const map = getGradeTargetsForMonth(selectedMonthKey);
       if (map[g] !== undefined) document.getElementById('usrTarget').value = map[g];
     }
 
@@ -3736,12 +3865,140 @@
       return { prods, foundAnyProd };
     }
 
+    // Helper: Parse ERP Product Sales Summary row (e.g. "1 Black Seed Honey 500g A000006 ... 8 ৳7,089.78")
+    // Calculates: (Variant Weight in KG) × (Quantity Sold) = Total KG
+    function parseErpProductSummaryRow(lineText) {
+      const lower = String(lineText || '').toLowerCase().trim();
+      if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || (lineText.match(/,/g) || []).length >= 3) {
+        return null;
+      }
+
+      let cat = null;
+      if (/black\s*seed\s*honey|bs\.?\s*h|kalojira/i.test(lower)) cat = 'bsHoney';
+      else if (/sundarban\s*honey|sun\.?\s*h/i.test(lower)) cat = 'sunHoney';
+      else if (/gawa\s*ghee|\bghee\b/i.test(lower)) cat = 'gawaGhee';
+      else if (/pink\s*salt|\bsalt\b/i.test(lower)) cat = 'pinkSalt';
+      else if (/black\s*garlic|\bgarlic\b/i.test(lower)) cat = 'blackGarlic';
+      else if (/ajwa/i.test(lower)) cat = 'ajwa';
+      if (!cat) return null;
+
+      const sizeMatch = lower.match(/(\d+(?:\.\d+)?)\s*(kg|gm|g)\b/i);
+      if (!sizeMatch) return null;
+
+      const sizeVal = parseFloat(sizeMatch[1]) || 0;
+      const sizeUnit = sizeMatch[2].toLowerCase();
+      const unitKg = (sizeUnit === 'gm' || sizeUnit === 'g') ? (sizeVal / 1000) : sizeVal;
+
+      const afterSize = lineText.substring(sizeMatch.index + sizeMatch[0].length);
+      // Remove product codes (e.g. A000006) and barcodes (e.g. 8941140150052)
+      const cleaned = afterSize.replace(/\b[A-Za-z0-9]*\d{5,16}\b/g, ' ');
+      const rawTokens = cleaned.match(/\d[\d,]*(?:\.\d+)?/g) || [];
+
+      // In ERP Product Sales Summary table, Cost Price/Total/Profit/Avg Price have decimals (e.g. 0.00, 7,089.78),
+      // while Quantity Sold is a clean positive integer!
+      let qty = 0;
+      const intTokens = rawTokens
+        .filter(t => !t.includes('.'))
+        .map(t => parseInt(t.replace(/,/g, ''), 10))
+        .filter(n => !isNaN(n) && n > 0 && n < 5000);
+
+      if (intTokens.length > 0) {
+        qty = intTokens[0];
+      } else {
+        // Fallback if OCR missed decimal points on prices
+        const nonZero = rawTokens.map(t => parseFloat(t.replace(/,/g, ''))).filter(n => !isNaN(n) && n > 0 && n < 500);
+        if (nonZero.length > 0) qty = nonZero[0];
+      }
+
+      if (qty > 0) {
+        const totalKg = Number((unitKg * qty).toFixed(2));
+        return { cat, unitKg, qty, totalKg, itemSummary: `${sizeMatch[0]} × ${qty} pcs = ${totalKg}kg` };
+      }
+      return null;
+    }
+
+    // Helper: Detect if OCR text is an ERP Monthly Product Sales Report (Date Range / Product Sales Summary)
+    function detectErpMonthlyProductSummaryMode(ocrText) {
+      const s = String(ocrText || '');
+      const hasRangeHeader = /date\s*range|product\s*sales\s*report|products\s*sales\s*summary|quantity\s*sold|order\s*by/i.test(s);
+      // Extract month from Date Range if present (e.g. "01 Nov, 2026 - 30 Nov, 2026")
+      const monthsMap = { jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06', jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12' };
+      const mRange = s.match(/\b(\d{1,2})[\s\-]+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s\-,]*(20\d{2})\b/i);
+      let detectedMonthKey = selectedMonthKey;
+      if (mRange) {
+        const mon = monthsMap[mRange[2].toLowerCase().substring(0, 3)];
+        const yr = mRange[3];
+        if (mon && yr) detectedMonthKey = `${mon}/${yr}`;
+      }
+      return { isProductSummaryReport: hasRangeHeader, detectedMonthKey };
+    }
+
     function analyzeErpOcrText(ocrText) {
       const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
       const existingSales = getStored('sales_records', []);
       const lines = String(ocrText || '').split(/\r?\n/);
 
-      // Check if there is a global date or global agent mentioned in the header of the picture
+      const { isProductSummaryReport, detectedMonthKey } = detectErpMonthlyProductSummaryMode(ocrText);
+
+      // First, check if this is an ERP Monthly Product Sales Summary (like Shagor Ahmed's 01 Nov - 30 Nov Product Sales Report)
+      if (isProductSummaryReport) {
+        let reportAgent = null;
+        // Find agent from "Order By: Shagor Ahmed 10191" or anywhere in header
+        for (const rawLine of lines) {
+          const ag = matchAgentInLine(rawLine, allAgents);
+          if (ag) {
+            reportAgent = ag;
+            break;
+          }
+        }
+        if (!reportAgent && allAgents.length > 0) reportAgent = allAgents[0];
+
+        const sumProds = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
+        const breakdownNotes = [];
+        let matchedRowsCount = 0;
+
+        lines.forEach(rawLine => {
+          const parsedRow = parseErpProductSummaryRow(rawLine);
+          if (parsedRow) {
+            sumProds[parsedRow.cat] = Number((sumProds[parsedRow.cat] + parsedRow.totalKg).toFixed(2));
+            breakdownNotes.push(`${parsedRow.cat}: ${parsedRow.itemSummary}`);
+            matchedRowsCount++;
+          }
+        });
+
+        if (matchedRowsCount > 0 && reportAgent) {
+          const monthlyRecordDateKey = `MONTHLY_PROD_${detectedMonthKey}`;
+          const existingRec = existingSales.find(s => String(s.userId) === String(reportAgent.id) && s.date === monthlyRecordDateKey);
+          const isDuplicate = Boolean(existingRec);
+
+          aiDetectedRecords = [{
+            userId: String(reportAgent.id),
+            userName: reportAgent.name,
+            team: reportAgent.team,
+            date: monthlyRecordDateKey,
+            isMonthlyProductSummary: true,
+            monthKey: detectedMonthKey,
+            breakdownText: breakdownNotes.join(' | '),
+            category: `Monthly Product Total (${detectedMonthKey})`,
+            leads: 0,
+            orders: 0,
+            amount: 0,
+            ajwa: sumProds.ajwa,
+            pinkSalt: sumProds.pinkSalt,
+            blackGarlic: sumProds.blackGarlic,
+            sunHoney: sumProds.sunHoney,
+            bsHoney: sumProds.bsHoney,
+            gawaGhee: sumProds.gawaGhee,
+            isDuplicate: isDuplicate,
+            // Select by default so Admin can 1-click approve updating the agent's monthly product totals!
+            selected: true
+          }];
+          renderAiDetectedPreviewTable();
+          return;
+        }
+      }
+
+      // Standard Date-Wise Multi-Agent Sales & Product Report Parsing
       let currentContextDate = (reportsDateFilter && reportsDateFilter !== 'ALL') ? reportsDateFilter : getTodayFormatted();
       let currentContextAgent = null;
 
@@ -3750,12 +4007,11 @@
       lines.forEach(rawLine => {
         const line = rawLine.trim();
         if (!line || line.length < 2) return;
+        if (/^products:|^report filters:/i.test(line)) return;
 
-        // Update context date if a standalone date header is found
         const detectedDate = extractDateFromText(line, null);
         if (detectedDate) currentContextDate = detectedDate;
 
-        // Check if an agent is mentioned on this line
         const lineAgent = matchAgentInLine(line, allAgents);
         if (lineAgent) currentContextAgent = lineAgent;
 
@@ -3764,22 +4020,39 @@
 
         const rowDate = detectedDate || currentContextDate;
 
-        // Remove agent ID, agent name, and date strings from line before extracting numbers
+        // First check if line is an ERP product summary row (size x qty)
+        const erpProdRow = parseErpProductSummaryRow(line);
+        if (erpProdRow) {
+          const key = `${activeAgent.id}_MONTHLY_PROD_${detectedMonthKey}`;
+          const prev = mergedMap.get(key) || {
+            userId: String(activeAgent.id),
+            userName: activeAgent.name,
+            team: activeAgent.team,
+            date: `MONTHLY_PROD_${detectedMonthKey}`,
+            isMonthlyProductSummary: true,
+            monthKey: detectedMonthKey,
+            category: `Monthly Product Total (${detectedMonthKey})`,
+            leads: 0, orders: 0, amount: 0,
+            ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0
+          };
+          prev[erpProdRow.cat] = Number((prev[erpProdRow.cat] + erpProdRow.totalKg).toFixed(2));
+          mergedMap.set(key, prev);
+          return;
+        }
+
         let cleanedForNums = line
           .replace(new RegExp(activeAgent.id, 'g'), ' ')
           .replace(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]20\d{2}\b/g, ' ')
           .replace(/\b20\d{2}[\/\-]\d{1,2}[\/\-]\d{1,2}\b/g, ' ')
-          .replace(/\d+(?:\.\d+)?\s*%/g, ' '); // ignore conversion % numbers
+          .replace(/\d+(?:\.\d+)?\s*%/g, ' ');
 
         const { prods, foundAnyProd } = extractProductAmountsFromLine(cleanedForNums);
 
-        // Extract all numeric tokens
         const numMatches = cleanedForNums.match(/\d[\d,]*(?:\.\d+)?/g) || [];
         const nums = numMatches
           .map(n => parseFloat(n.replace(/,/g, '')))
           .filter(n => !isNaN(n) && n >= 0);
 
-        // If line only had agent name and no numbers, wait for subsequent lines or skip
         if (nums.length === 0 && !foundAnyProd) return;
 
         const key = `${activeAgent.id}_${rowDate}`;
@@ -3788,6 +4061,7 @@
           userName: activeAgent.name,
           team: activeAgent.team,
           date: rowDate,
+          isMonthlyProductSummary: false,
           category: 'Sales Report',
           leads: 0,
           orders: 0,
@@ -3806,8 +4080,6 @@
           });
         }
 
-        // Heuristic for Sales numbers (Leads, Orders, Amount)
-        // Usually Sales Amount is >= 1500, Leads is 20..1500, Orders is 1..300
         const bigAmounts = nums.filter(n => n >= 1500);
         const smallInts = nums.filter(n => n < 1500 && Number.isInteger(n));
 
@@ -3815,7 +4087,6 @@
           prev.amount = Math.max(...bigAmounts);
         }
         if (smallInts.length >= 2) {
-          // Larger of the two small integers is typically Leads, smaller is Orders
           const sortedSmall = [...smallInts].sort((a, b) => b - a);
           prev.leads = sortedSmall[0];
           prev.orders = sortedSmall[1];
@@ -3823,7 +4094,6 @@
           prev.orders = smallInts[0];
         }
 
-        // Determine detected category label
         const hasSales = prev.amount > 0 || prev.leads > 0 || prev.orders > 0;
         const hasProds = (prev.ajwa + prev.pinkSalt + prev.blackGarlic + prev.sunHoney + prev.bsHoney + prev.gawaGhee) > 0;
         prev.category = (hasSales && hasProds) ? 'Sales + Product' : (hasProds ? 'Product Report' : 'Sales Report');
@@ -3833,15 +4103,16 @@
 
       aiDetectedRecords = Array.from(mergedMap.values());
 
-      // If OCR couldn't find structured agent lines, provide 1 editable row so admin is never stuck
       if (aiDetectedRecords.length === 0 && allAgents.length > 0) {
         const firstAg = allAgents[0];
         aiDetectedRecords.push({
           userId: String(firstAg.id),
           userName: firstAg.name,
           team: firstAg.team,
-          date: currentContextDate,
-          category: 'Sales + Product',
+          date: `MONTHLY_PROD_${selectedMonthKey}`,
+          isMonthlyProductSummary: true,
+          monthKey: selectedMonthKey,
+          category: `Monthly Product Total (${selectedMonthKey})`,
           leads: 0,
           orders: 0,
           amount: 0,
@@ -3849,15 +4120,13 @@
         });
       }
 
-      // Check existing database records for duplicate protection
       aiDetectedRecords = aiDetectedRecords.map(rec => {
         const existingRec = existingSales.find(s => String(s.userId) === String(rec.userId) && s.date === rec.date);
         const isDuplicate = Boolean(existingRec);
         return {
           ...rec,
           isDuplicate,
-          // New records are checked by default; Duplicate records are UNCHECKED by default to prevent accidental overwrite!
-          selected: !isDuplicate
+          selected: rec.isMonthlyProductSummary ? true : !isDuplicate
         };
       });
 
@@ -3871,7 +4140,6 @@
       const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
       const existingSales = getStored('sales_records', []);
 
-      // Re-verify duplicate status whenever Agent or Date is changed in the preview table
       let dupCount = 0;
       aiDetectedRecords.forEach(r => {
         const agObj = allAgents.find(a => String(a.id) === String(r.userId));
@@ -3884,35 +4152,48 @@
       });
 
       const uniqueAgentsCount = new Set(aiDetectedRecords.map(r => r.userId)).size;
-      const uniqueDates = Array.from(new Set(aiDetectedRecords.map(r => r.date)));
+      const hasMonthlySummary = aiDetectedRecords.some(r => String(r.date || '').startsWith('MONTHLY_PROD_'));
 
       const headlineEl = document.getElementById('aiSummaryHeadline');
       const detailsEl = document.getElementById('aiSummaryDetails');
       const dupBanner = document.getElementById('aiDuplicateAlertBanner');
 
       if (headlineEl) {
-        headlineEl.textContent = `AI Detected ${aiDetectedRecords.length} Report Entry(s) across ${uniqueAgentsCount} Agent(s) • Date(s): ${uniqueDates.join(', ')}`;
+        if (hasMonthlySummary && aiDetectedRecords.length === 1) {
+          const rec0 = aiDetectedRecords[0];
+          headlineEl.textContent = `AI Detected Monthly Product Report for ${rec0.userName} (${rec0.userId}) • Month: ${rec0.monthKey || selectedMonthKey}`;
+        } else {
+          headlineEl.textContent = `AI Detected ${aiDetectedRecords.length} Report Entry(s) across ${uniqueAgentsCount} Agent(s)`;
+        }
       }
       if (detailsEl) {
-        detailsEl.textContent = `Please review the detected Sales & Product quantities below. Check the rows you approve and click "Approve & Add Selected Data to System".`;
+        if (hasMonthlySummary) {
+          detailsEl.textContent = `AI calculated total KG from each product size × quantity sold! Approving this will update the agent's Monthly Product Totals on their Dashboard, Central Dashboard & Monthly Performance without adding fake date rows.`;
+        } else {
+          detailsEl.textContent = `Please review the detected Sales & Product quantities below. Check the rows you approve and click "Approve & Add Selected Data to System".`;
+        }
       }
       if (dupBanner) {
-        if (dupCount > 0) dupBanner.classList.remove('hidden');
+        if (dupCount > 0 && !hasMonthlySummary) dupBanner.classList.remove('hidden');
         else dupBanner.classList.add('hidden');
       }
 
       const tbody = document.getElementById('aiDetectedTableBody');
       if (!tbody) return;
 
-      tbody.innerHTML = aiDetectedRecords.map((r, idx) => `
-        <tr class="${r.isDuplicate ? 'bg-amber-50/70' : 'hover:bg-slate-50'} transition-colors">
+      tbody.innerHTML = aiDetectedRecords.map((r, idx) => {
+        const isMonthlyMode = String(r.date || '').startsWith('MONTHLY_PROD_');
+        return `
+        <tr class="${r.isDuplicate && !isMonthlyMode ? 'bg-amber-50/70' : 'hover:bg-slate-50'} transition-colors">
           <td class="p-2.5 text-center">
             <input type="checkbox" ${r.selected ? 'checked' : ''} onchange="onAiRowCheckChange(${idx}, this.checked)" class="w-4 h-4 accent-purple-600 rounded cursor-pointer">
           </td>
           <td class="p-2.5">
-            ${r.isDuplicate
-              ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-200 text-amber-900"><i class="fa-solid fa-triangle-exclamation mr-1"></i>EXISTS IN SYSTEM</span>`
-              : `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800"><i class="fa-solid fa-sparkles mr-1"></i>NEW DATA</span>`
+            ${isMonthlyMode
+              ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-100 text-purple-800"><i class="fa-solid fa-layer-group mr-1"></i>MONTHLY TOTAL</span>`
+              : (r.isDuplicate
+                ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-200 text-amber-900"><i class="fa-solid fa-triangle-exclamation mr-1"></i>EXISTS IN SYSTEM</span>`
+                : `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800"><i class="fa-solid fa-sparkles mr-1"></i>NEW DATA</span>`)
             }
           </td>
           <td class="p-2.5">
@@ -3921,7 +4202,15 @@
             </select>
           </td>
           <td class="p-2.5">
-            <input type="date" value="${dateToInputVal(r.date)}" onchange="onAiRowAgentOrDateChange(${idx}, 'date', inputValToDateStr(this.value))" class="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-extrabold text-slate-800">
+            <div class="flex items-center gap-1.5">
+              <select onchange="onAiRowModeToggle(${idx}, this.value)" class="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-extrabold text-slate-700">
+                <option value="MONTHLY" ${isMonthlyMode ? 'selected' : ''}>Monthly Total (No Date)</option>
+                <option value="DATE" ${!isMonthlyMode ? 'selected' : ''}>Specific Date</option>
+              </select>
+              ${!isMonthlyMode ? `
+                <input type="date" value="${dateToInputVal(r.date)}" onchange="onAiRowAgentOrDateChange(${idx}, 'date', inputValToDateStr(this.value))" class="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-extrabold text-slate-800">
+              ` : `<span class="text-[11px] font-black text-purple-700">${r.date.replace('MONTHLY_PROD_', '')}</span>`}
+            </div>
           </td>
           <td class="p-2.5">
             <span class="px-2 py-1 rounded-lg bg-purple-50 text-purple-700 font-extrabold text-[10px] border border-purple-200">${r.category}</span>
@@ -3959,14 +4248,29 @@
             </button>
           </td>
         </tr>
-      `).join('');
+      `}).join('');
 
       updateAiFooterSummary();
     }
 
+    function onAiRowModeToggle(idx, modeVal) {
+      if (!aiDetectedRecords[idx]) return;
+      if (modeVal === 'MONTHLY') {
+        aiDetectedRecords[idx].date = `MONTHLY_PROD_${selectedMonthKey}`;
+        aiDetectedRecords[idx].isMonthlyProductSummary = true;
+        aiDetectedRecords[idx].category = `Monthly Product Total (${selectedMonthKey})`;
+        aiDetectedRecords[idx].selected = true;
+      } else {
+        aiDetectedRecords[idx].date = getTodayFormatted();
+        aiDetectedRecords[idx].isMonthlyProductSummary = false;
+        aiDetectedRecords[idx].category = 'Sales + Product';
+      }
+      renderAiDetectedPreviewTable();
+    }
+
     function onAiRowCheckChange(idx, isChecked) {
       if (!aiDetectedRecords[idx]) return;
-      if (aiDetectedRecords[idx].isDuplicate && isChecked) {
+      if (aiDetectedRecords[idx].isDuplicate && !String(aiDetectedRecords[idx].date || '').startsWith('MONTHLY_PROD_') && isChecked) {
         const ok = confirm(`Duplicate Warning: ${aiDetectedRecords[idx].userName} already has a report on ${aiDetectedRecords[idx].date}.\n\nDo you want to approve updating/merging this existing record?`);
         if (!ok) {
           renderAiDetectedPreviewTable();
@@ -3983,13 +4287,13 @@
       const existingSales = getStored('sales_records', []);
       const isDup = existingSales.some(s => String(s.userId) === String(aiDetectedRecords[idx].userId) && s.date === aiDetectedRecords[idx].date);
       aiDetectedRecords[idx].isDuplicate = isDup;
-      aiDetectedRecords[idx].selected = !isDup;
+      aiDetectedRecords[idx].selected = String(aiDetectedRecords[idx].date || '').startsWith('MONTHLY_PROD_') ? true : !isDup;
       renderAiDetectedPreviewTable();
     }
 
     function toggleAllAiRows(checked) {
       aiDetectedRecords.forEach(r => {
-        if (checked && r.isDuplicate) return; // keep duplicates protected unless individually confirmed
+        if (checked && r.isDuplicate && !String(r.date || '').startsWith('MONTHLY_PROD_')) return;
         r.selected = checked;
       });
       renderAiDetectedPreviewTable();
@@ -4037,7 +4341,7 @@
         return;
       }
 
-      const dupApproved = approvedRows.filter(r => r.isDuplicate);
+      const dupApproved = approvedRows.filter(r => r.isDuplicate && !String(r.date || '').startsWith('MONTHLY_PROD_'));
       if (dupApproved.length > 0) {
         const confirmOverwrite = confirm(`Warning: ${dupApproved.length} selected row(s) already exist in the system for the same Agent & Date.\n\nClick OK to confirm updating them with the non-zero values from this import.`);
         if (!confirmOverwrite) return;
@@ -4050,14 +4354,13 @@
         const agObj = allAgents.find(a => String(a.id) === String(item.userId));
         if (!agObj) continue;
 
+        const isMonthlyProd = String(item.date || '').startsWith('MONTHLY_PROD_');
         const existingIdx = sales.findIndex(s => String(s.userId) === String(agObj.id) && s.date === item.date);
         const oldRec = existingIdx !== -1 ? sales[existingIdx] : null;
 
-        // Smart merge: if updating an existing record and the picture only had Product Report (or only Sales Report),
-        // preserve existing non-zero fields unless new non-zero values were provided!
-        const finalLeads = Number(item.leads) > 0 ? Number(item.leads) : (oldRec ? Number(oldRec.leads) || 0 : 0);
-        const finalOrders = Number(item.orders) > 0 ? Number(item.orders) : (oldRec ? Number(oldRec.orders) || 0 : 0);
-        const finalAmount = Number(item.amount) > 0 ? Number(item.amount) : (oldRec ? Number(oldRec.amount) || 0 : 0);
+        const finalLeads = isMonthlyProd ? 0 : (Number(item.leads) > 0 ? Number(item.leads) : (oldRec ? Number(oldRec.leads) || 0 : 0));
+        const finalOrders = isMonthlyProd ? 0 : (Number(item.orders) > 0 ? Number(item.orders) : (oldRec ? Number(oldRec.orders) || 0 : 0));
+        const finalAmount = isMonthlyProd ? 0 : (Number(item.amount) > 0 ? Number(item.amount) : (oldRec ? Number(oldRec.amount) || 0 : 0));
 
         const entry = {
           userId: String(agObj.id),
@@ -4068,40 +4371,48 @@
           orders: finalOrders,
           amount: finalAmount,
           ratio: finalLeads > 0 ? Number(((finalOrders / finalLeads) * 100).toFixed(2)) : 0,
-          ajwa: Number(item.ajwa) > 0 ? Number(item.ajwa) : (oldRec ? Number(oldRec.ajwa) || 0 : 0),
-          pinkSalt: Number(item.pinkSalt) > 0 ? Number(item.pinkSalt) : (oldRec ? Number(oldRec.pinkSalt) || 0 : 0),
-          blackGarlic: Number(item.blackGarlic) > 0 ? Number(item.blackGarlic) : (oldRec ? Number(oldRec.blackGarlic) || 0 : 0),
-          sunHoney: Number(item.sunHoney) > 0 ? Number(item.sunHoney) : (oldRec ? Number(oldRec.sunHoney) || 0 : 0),
-          bsHoney: Number(item.bsHoney) > 0 ? Number(item.bsHoney) : (oldRec ? Number(oldRec.bsHoney) || 0 : 0),
-          gawaGhee: Number(item.gawaGhee) > 0 ? Number(item.gawaGhee) : (oldRec ? Number(oldRec.gawaGhee) || 0 : 0)
+          ajwa: Number(item.ajwa) >= 0 ? Number(item.ajwa) : (oldRec ? Number(oldRec.ajwa) || 0 : 0),
+          pinkSalt: Number(item.pinkSalt) >= 0 ? Number(item.pinkSalt) : (oldRec ? Number(oldRec.pinkSalt) || 0 : 0),
+          blackGarlic: Number(item.blackGarlic) >= 0 ? Number(item.blackGarlic) : (oldRec ? Number(oldRec.blackGarlic) || 0 : 0),
+          sunHoney: Number(item.sunHoney) >= 0 ? Number(item.sunHoney) : (oldRec ? Number(oldRec.sunHoney) || 0 : 0),
+          bsHoney: Number(item.bsHoney) >= 0 ? Number(item.bsHoney) : (oldRec ? Number(oldRec.bsHoney) || 0 : 0),
+          gawaGhee: Number(item.gawaGhee) >= 0 ? Number(item.gawaGhee) : (oldRec ? Number(oldRec.gawaGhee) || 0 : 0)
         };
 
         if (existingIdx !== -1) sales[existingIdx] = entry;
         else sales.unshift(entry);
 
-        const mKey = item.date.substring(3);
-        if (mKey && mKey.length === 7) {
-          selectedMonthKey = mKey;
-          localStorage.setItem('gb_selected_month', selectedMonthKey);
+        if (isMonthlyProd) {
+          const mKey = item.date.replace('MONTHLY_PROD_', '');
+          if (mKey && mKey.length === 7) {
+            selectedMonthKey = mKey;
+            localStorage.setItem('gb_selected_month', selectedMonthKey);
+          }
+        } else {
+          const mKey = item.date.substring(3);
+          if (mKey && mKey.length === 7) {
+            selectedMonthKey = mKey;
+            localStorage.setItem('gb_selected_month', selectedMonthKey);
+          }
+          reportsDateFilter = item.date;
         }
-        reportsDateFilter = item.date;
 
         const logMeta = recordActivityLog(
-          existingIdx !== -1 ? 'AI ERP Updated Report' : 'AI ERP Imported Report',
-          `AI ERP Import for ${agObj.name} (${item.date}) — Amt: ৳${entry.amount.toLocaleString()}, Orders: ${entry.orders}`
+          isMonthlyProd ? 'AI Monthly Product Import' : (existingIdx !== -1 ? 'AI ERP Updated Report' : 'AI ERP Imported Report'),
+          isMonthlyProd
+            ? `AI ERP Monthly Product Summary for ${agObj.name} (${selectedMonthKey}) — Ajwa:${entry.ajwa}kg, Salt:${entry.pinkSalt}kg, Garlic:${entry.blackGarlic}kg, Sun.H:${entry.sunHoney}kg, BS.H:${entry.bsHoney}kg, Ghee:${entry.gawaGhee}kg`
+            : `AI ERP Import for ${agObj.name} (${item.date}) — Amt: ৳${entry.amount.toLocaleString()}, Orders: ${entry.orders}`
         );
         await postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta });
       }
 
       setStored('sales_records', sales);
-      alert(`Successfully approved and added ${approvedRows.length} report record(s) to the Portal & Google Sheet!`);
+      alert(`Successfully approved and updated ${approvedRows.length} report record(s) across the Portal & Google Sheet!`);
       closeModal('aiImportModal');
       renderAppLayout();
       setTimeout(fetchFromSheet, 1500);
     }
 
-
-    
     // =========================================================================
     // DUTY ROSTER BASED AUTO NOTIFICATION SYSTEM (POINTS 1, 2, 3, 4)
     // =========================================================================
