@@ -67,6 +67,23 @@
       color: #ffffff;
       box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
     }
+    @keyframes modalPopSmooth {
+      0% { opacity: 0; transform: scale(0.95) translateY(8px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-card-anim {
+      animation: modalPopSmooth 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .card-dynamic:hover {
+      transform: translateY(-1.5px);
+      box-shadow: 0 10px 24px -6px rgba(15, 23, 42, 0.08);
+    }
+    button, select, input {
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    button:active {
+      transform: scale(0.97);
+    }
   </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col">
@@ -262,7 +279,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen) return true;
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal'];
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -434,15 +451,78 @@
       return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>Offline</span>`;
     }
 
-    function getActiveProductsForMonth(mKey) {
+    const EXTRA_PRODUCT_STYLES = [
+      { style: 'prod-amber', badge: 'bg-amber-500 text-white', bar: 'bg-amber-500', icon: 'fa-box-open' },
+      { style: 'prod-rose', badge: 'bg-rose-500 text-white', bar: 'bg-rose-500', icon: 'fa-jar' },
+      { style: 'prod-purple', badge: 'bg-purple-600 text-white', bar: 'bg-purple-600', icon: 'fa-spa' },
+      { style: 'prod-orange', badge: 'bg-orange-500 text-white', bar: 'bg-orange-500', icon: 'fa-droplet' },
+      { style: 'prod-blue', badge: 'bg-blue-600 text-white', bar: 'bg-blue-600', icon: 'fa-bottle-droplet' },
+      { style: 'prod-emerald', badge: 'bg-emerald-600 text-white', bar: 'bg-emerald-600', icon: 'fa-award' }
+    ];
+
+    // Returns ALL products configured for a month (including disabled ones) for the Admin Config Modal
+    function getAllConfiguredProductsForMonth(mKey) {
       const configs = getStored('monthly_configs', {});
       const mCfg = configs[mKey || selectedMonthKey] || {};
       const prodOverrides = mCfg.products || {};
       const result = {};
       Object.keys(DEFAULT_PRODUCTS).forEach(k => {
-        result[k] = { ...DEFAULT_PRODUCTS[k], ...(prodOverrides[k] || {}) };
+        const ov = prodOverrides[k] || {};
+        result[k] = { ...DEFAULT_PRODUCTS[k], ...ov, enabled: ov.enabled !== false };
+      });
+      // Also include any custom products added by Admin for this month
+      Object.keys(prodOverrides).forEach((k, idx) => {
+        if (!result[k]) {
+          const st = EXTRA_PRODUCT_STYLES[idx % EXTRA_PRODUCT_STYLES.length];
+          const ov = prodOverrides[k];
+          result[k] = {
+            name: ov.name || 'Custom Product',
+            targetKg: Number(ov.targetKg) || 10,
+            style: ov.style || st.style,
+            badge: ov.badge || st.badge,
+            bar: ov.bar || st.bar,
+            icon: ov.icon || st.icon,
+            bonus90: Number(ov.bonus90) || 0,
+            bonus100: Number(ov.bonus100) || 0,
+            item100: ov.item100 || '',
+            enabled: ov.enabled !== false,
+            isCustom: true
+          };
+        }
       });
       return result;
+    }
+
+    // Returns ONLY active/enabled products for the selected month (could be 4, 5, 6, 7+ products!)
+    function getActiveProductsForMonth(mKey) {
+      const all = getAllConfiguredProductsForMonth(mKey);
+      const active = {};
+      Object.keys(all).forEach(k => {
+        if (all[k].enabled !== false) {
+          active[k] = all[k];
+        }
+      });
+      return active;
+    }
+
+    // Helper: Format product summary string dynamically for any active products in the month
+    function formatDynamicProductsInline(recordObj, mKey, useDecimals = false) {
+      const activeProds = getActiveProductsForMonth(mKey || selectedMonthKey);
+      return Object.keys(activeProds).map(k => {
+        const shortName = activeProds[k].name.split(' ')[0];
+        const rawVal = Number(recordObj[k]) || 0;
+        const valStr = useDecimals ? rawVal.toFixed(2) : rawVal;
+        return `${shortName}: <strong>${valStr}</strong>`;
+      }).join(' | ');
+    }
+
+    function formatDynamicProductsFooter(totalsObj, mKey) {
+      const activeProds = getActiveProductsForMonth(mKey || selectedMonthKey);
+      return Object.keys(activeProds).map(k => {
+        const shortName = activeProds[k].name.split(' ')[0];
+        const rawVal = Number(totalsObj[k]) || 0;
+        return `${shortName}: ${rawVal.toFixed(2)}`;
+      }).join(' | ') + ' kg';
     }
 
     function getUsersForMonth(mKey) {
@@ -908,24 +988,79 @@
       init();
     }
 
-    async function handleLogout() {
-      if (currentUser) {
-        if (currentUser.role === 'agent') {
-          if (!confirm('Are you sure you want to End Duty & Logout for today?')) return;
+    function renderLogoutConfirmModal() {
+      const isAgent = currentUser && currentUser.role === 'agent';
+      return `
+        <div id="logoutConfirmModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center text-2xl mx-auto mb-4 shadow-lg shadow-red-500/30">
+              <i class="fa-solid fa-power-off"></i>
+            </div>
+            <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-red-50 text-red-600 border border-red-200">
+              ${isAgent ? 'End Duty Session' : 'Sign Out Confirmation'}
+            </span>
+            <h3 class="text-lg font-black text-slate-900 mt-2">
+              ${isAgent ? 'Do you want to end your duty and log out?' : 'Do you want to log out of the portal?'}
+            </h3>
+            <p class="text-xs font-bold text-slate-500 mt-1.5 leading-relaxed">
+              ${isAgent
+                ? 'Your working hours for today will be saved and your status will be marked as Completed.'
+                : 'You can sign back in anytime using your Employee ID and password.'}
+            </p>
+            <div class="grid grid-cols-2 gap-3 mt-6 pt-4 border-t border-slate-100">
+              <button type="button" onclick="closeModal('logoutConfirmModal')" class="w-full py-3 text-xs font-extrabold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all">
+                No, Stay Logged In
+              </button>
+              <button type="button" onclick="executeInstantLogout()" class="w-full py-3 text-xs font-extrabold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 rounded-xl shadow-lg shadow-red-600/25 flex items-center justify-center gap-2 transition-all">
+                <i class="fa-solid fa-right-from-bracket"></i> Yes, Log Out Now
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function handleLogout() {
+      if (!currentUser) {
+        document.getElementById('app').innerHTML = renderLogin();
+        return;
+      }
+      openModal('logoutConfirmModal');
+    }
+
+    function executeInstantLogout() {
+      const loggingOutUser = currentUser ? { ...currentUser } : null;
+      let attSyncPayload = null;
+      let logoutPayload = null;
+
+      if (loggingOutUser) {
+        if (loggingOutUser.role === 'agent') {
           const today = getTodayFormatted();
           let attList = getStored('attendance_records', []);
-          let rec = attList.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+          let rec = attList.find(a => String(a.userId) === String(loggingOutUser.id) && a.date === today);
           if (rec) {
             rec.status = 'Completed';
             rec.breakReason = '-';
             rec.logoutTime = getNowTimeStr();
             setStored('attendance_records', attList);
-            await postToSheet('ATTENDANCE_SYNC', rec);
+            attSyncPayload = { ...rec };
           }
         }
-        const logMeta = recordActivityLog('User Logout', `Logged out of the portal (${currentUser.role.toUpperCase()})`);
-        await postToSheet('USER_LOGOUT', { userId: String(currentUser.id), userName: currentUser.name, team: currentUser.team, ...logMeta });
+        const logMeta = recordActivityLog('User Logout', `Logged out of the portal (${loggingOutUser.role.toUpperCase()})`);
+        logoutPayload = {
+          userId: String(loggingOutUser.id),
+          userName: loggingOutUser.name,
+          team: loggingOutUser.team,
+          pingUserId: String(loggingOutUser.id),
+          pingName: loggingOutUser.name,
+          pingRole: loggingOutUser.role,
+          pingTeam: loggingOutUser.team,
+          pingState: 'Offline',
+          ...logMeta
+        };
       }
+
+      // Immediately clear timers, session state, and render Login screen (Zero Delay!)
       if (pollInterval) clearInterval(pollInterval);
       if (dutyTimerInterval) clearInterval(dutyTimerInterval);
       if (dutyReminderInterval) clearInterval(dutyReminderInterval);
@@ -933,6 +1068,14 @@
       currentUser = null;
       localStorage.removeItem('gb_session_user');
       document.getElementById('app').innerHTML = renderLogin();
+
+      // Fire cloud syncs non-blocking in the background
+      if (attSyncPayload) {
+        postToSheet('ATTENDANCE_SYNC', attSyncPayload).catch(() => {});
+      }
+      if (logoutPayload) {
+        postToSheet('USER_LOGOUT', logoutPayload).catch(() => {});
+      }
     }
 
     function setTab(tab) {
@@ -1132,6 +1275,7 @@
         ${isFullAdmin(u) ? renderGradeConfigModal() : ''}
         ${isFullAdmin(u) ? renderAiImportModal() : ''}
         ${renderConfirmWarningModal()}
+        ${renderLogoutConfirmModal()}
       `;
       document.getElementById('app').innerHTML = html;
 
@@ -1163,7 +1307,7 @@
     function renderConfirmWarningModal() {
       return `
         <div id="confirmWarningModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-red-200">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-red-200">
             <div class="flex items-center gap-3.5 mb-4">
               <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-xl shrink-0 shadow-sm">
                 <i class="fa-solid fa-triangle-exclamation"></i>
@@ -1312,17 +1456,14 @@
       const sprintPct = tInfo.sprintGoal > 0 ? Math.min(100, Math.round((sprintSalesAmount / tInfo.sprintGoal) * 100)) : 0;
       const monthPct = tInfo.workingTarget > 0 ? Math.min(100, Math.round((monthTotalAmount / tInfo.workingTarget) * 100)) : 0;
 
-      const pTotals = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
-      thisMonthSales.forEach(s => {
-        pTotals.ajwa += (Number(s.ajwa) || 0);
-        pTotals.pinkSalt += (Number(s.pinkSalt) || 0);
-        pTotals.blackGarlic += (Number(s.blackGarlic) || 0);
-        pTotals.sunHoney += (Number(s.sunHoney) || 0);
-        pTotals.bsHoney += (Number(s.bsHoney) || 0);
-        pTotals.gawaGhee += (Number(s.gawaGhee) || 0);
-      });
-
       const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      const pTotals = {};
+      Object.keys(activeProds).forEach(k => { pTotals[k] = 0; });
+      thisMonthSales.forEach(s => {
+        Object.keys(activeProds).forEach(k => {
+          pTotals[k] += (Number(s[k]) || 0);
+        });
+      });
       const incentiveSummary = calculateEarnedIncentives(pTotals, tInfo.agentCount, selectedMonthKey);
 
       return `
@@ -1562,15 +1703,17 @@
         displayedAgents = teamFilteredAgents.filter(a => String(a.id) === String(monthlyPerfAgentId));
       }
 
+      const activeProdsMp = getActiveProductsForMonth(selectedMonthKey);
+      const grandProdTotals = {};
+      Object.keys(activeProdsMp).forEach(k => { grandProdTotals[k] = 0; });
+
       let totBase = 0, totWork = 0, totLeads = 0, totOrders = 0, totRev = 0;
-      let totAjwa = 0, totSalt = 0, totGarlic = 0, totSunH = 0, totBsH = 0, totGhee = 0;
 
       const agentRows = displayedAgents.map(ag => {
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
         const dateMap = new Map();
         agSales.forEach(s => { if (!dateMap.has(s.date)) dateMap.set(s.date, s); });
         const allMonthRecords = Array.from(dateMap.values());
-        // Exclude MONTHLY_PROD_ summary record from day-by-day rows, but include it in total product sums!
         const uniqueDailyLogs = allMonthRecords
           .filter(s => !String(s.date || '').startsWith('MONTHLY_PROD_'))
           .sort((a, b) => {
@@ -1588,28 +1731,21 @@
         const rem = Math.max(0, workTgt - rev);
         const achPct = workTgt > 0 ? Math.round((rev / workTgt) * 100) : 0;
 
-        const ajwa = allMonthRecords.reduce((acc, c) => acc + (Number(c.ajwa) || 0), 0);
-        const pinkSalt = allMonthRecords.reduce((acc, c) => acc + (Number(c.pinkSalt) || 0), 0);
-        const blackGarlic = allMonthRecords.reduce((acc, c) => acc + (Number(c.blackGarlic) || 0), 0);
-        const sunHoney = allMonthRecords.reduce((acc, c) => acc + (Number(c.sunHoney) || 0), 0);
-        const bsHoney = allMonthRecords.reduce((acc, c) => acc + (Number(c.bsHoney) || 0), 0);
-        const gawaGhee = allMonthRecords.reduce((acc, c) => acc + (Number(c.gawaGhee) || 0), 0);
+        const agProdTotals = {};
+        Object.keys(activeProdsMp).forEach(k => {
+          agProdTotals[k] = allMonthRecords.reduce((acc, c) => acc + (Number(c[k]) || 0), 0);
+          grandProdTotals[k] += agProdTotals[k];
+        });
 
         totBase += baseTgt;
         totWork += workTgt;
         totLeads += leads;
         totOrders += orders;
         totRev += rev;
-        totAjwa += ajwa;
-        totSalt += pinkSalt;
-        totGarlic += blackGarlic;
-        totSunH += sunHoney;
-        totBsH += bsHoney;
-        totGhee += gawaGhee;
 
         return {
           ...ag, baseTgt, workTgt, leads, orders, rev, conv, rem, achPct,
-          ajwa, pinkSalt, blackGarlic, sunHoney, bsHoney, gawaGhee, daysCount: uniqueDailyLogs.length, dailyLogs: uniqueDailyLogs
+          ...agProdTotals, daysCount: uniqueDailyLogs.length, dailyLogs: uniqueDailyLogs
         };
       }).sort((a, b) => b.rev - a.rev || b.orders - a.orders);
 
@@ -1699,7 +1835,7 @@
                       <span class="px-2.5 py-1 rounded-md ${r.achPct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${r.achPct}%</span>
                     </td>
                     <td class="p-3.5 text-[11px] font-bold text-slate-600">
-                      Ajwa: <strong>${r.ajwa.toFixed(2)}</strong> | Salt: <strong>${r.pinkSalt.toFixed(2)}</strong> | Garlic: <strong>${r.blackGarlic.toFixed(2)}</strong> | Sun.H: <strong>${r.sunHoney.toFixed(2)}</strong> | BS.H: <strong>${r.bsHoney.toFixed(2)}</strong> | Ghee: <strong>${r.gawaGhee.toFixed(2)}</strong>
+                      ${formatDynamicProductsInline(r, selectedMonthKey, true)}
                     </td>
                     ${isAdmin ? `
                     <td class="p-3.5 text-right space-x-1" onclick="event.stopPropagation()">
@@ -1753,7 +1889,7 @@
                     <td class="p-4 text-slate-300">৳${grandRem.toLocaleString()}</td>
                     <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${grandAchPct}%</span></td>
                     <td colspan="${isAdmin ? 2 : 1}" class="p-4 text-[11px] text-amber-200">
-                      Ajwa: ${totAjwa.toFixed(2)} | Salt: ${totSalt.toFixed(2)} | Garlic: ${totGarlic.toFixed(2)} | Sun.H: ${totSunH.toFixed(2)} | BS.H: ${totBsH.toFixed(2)} | Ghee: ${totGhee.toFixed(2)} kg
+                      ${formatDynamicProductsFooter(grandProdTotals, selectedMonthKey)}
                     </td>
                   </tr>
                   `;
@@ -1817,7 +1953,7 @@
                           <td class="p-3.5 font-bold text-slate-500">৳${dTargetSingle.toLocaleString()}</td>
                           <td class="p-3.5"><span class="px-2.5 py-0.5 rounded ${dAch >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${dAch}%</span></td>
                           <td class="p-3.5 text-[11px] font-bold text-slate-600">
-                            Ajwa: <strong>${dl.ajwa||0}</strong> | Salt: <strong>${dl.pinkSalt||0}</strong> | Garlic: <strong>${dl.blackGarlic||0}</strong> | Sun.H: <strong>${dl.sunHoney||0}</strong> | BS.H: <strong>${dl.bsHoney||0}</strong> | Ghee: <strong>${dl.gawaGhee||0}</strong>
+                            ${formatDynamicProductsInline(dl, selectedMonthKey, false)}
                           </td>
                           ${isAdmin ? `
                           <td class="p-3.5 text-right space-x-1">
@@ -1845,7 +1981,7 @@
                       <td class="p-4 text-slate-300">৳${sumDailyTgtSingle.toLocaleString()} <span class="text-[10px] text-slate-400">(Month: ৳${singleAgentObj.workTgt.toLocaleString()})</span></td>
                       <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${singleAgentObj.achPct}% of Month</span></td>
                       <td colspan="${isAdmin ? 2 : 1}" class="p-4 text-[11px] text-amber-200">
-                        Ajwa: ${singleAgentObj.ajwa.toFixed(2)} | Salt: ${singleAgentObj.pinkSalt.toFixed(2)} | Garlic: ${singleAgentObj.blackGarlic.toFixed(2)} | Sun.H: ${singleAgentObj.sunHoney.toFixed(2)} | BS.H: ${singleAgentObj.bsHoney.toFixed(2)} | Ghee: ${singleAgentObj.gawaGhee.toFixed(2)} kg
+                        ${formatDynamicProductsFooter(singleAgentObj, selectedMonthKey)}
                       </td>
                     </tr>
                   </tfoot>
@@ -2444,8 +2580,10 @@
       });
       sales = Array.from(uniqueMap.values()).sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0) || (Number(b.orders) || 0) - (Number(a.orders) || 0));
 
+      const activeProdsRep = getActiveProductsForMonth(selectedMonthKey);
+      const repProdSums = {};
+      Object.keys(activeProdsRep).forEach(k => { repProdSums[k] = 0; });
       let sumLeads = 0, sumOrders = 0, sumAmount = 0, sumDailyTgt = 0;
-      let sumAjwa = 0, sumSalt = 0, sumGarlic = 0, sumSunH = 0, sumBsH = 0, sumGhee = 0;
 
       sales.forEach(s => {
         const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
@@ -2456,12 +2594,9 @@
         sumOrders += Number(s.orders) || 0;
         sumAmount += Number(s.amount) || 0;
         sumDailyTgt += agDailyTarget;
-        sumAjwa += Number(s.ajwa) || 0;
-        sumSalt += Number(s.pinkSalt) || 0;
-        sumGarlic += Number(s.blackGarlic) || 0;
-        sumSunH += Number(s.sunHoney) || 0;
-        sumBsH += Number(s.bsHoney) || 0;
-        sumGhee += Number(s.gawaGhee) || 0;
+        Object.keys(activeProdsRep).forEach(k => {
+          repProdSums[k] += Number(s[k]) || 0;
+        });
       });
 
       const sumConv = sumLeads > 0 ? ((sumOrders / sumLeads) * 100).toFixed(2) : '0.00';
@@ -2558,7 +2693,7 @@
                       </span>
                     </td>
                     <td class="p-3.5 text-[11px] font-bold text-slate-600">
-                      Ajwa: <strong>${s.ajwa||0}</strong> | Salt: <strong>${s.pinkSalt||0}</strong> | Garlic: <strong>${s.blackGarlic||0}</strong> | Sun.H: <strong>${s.sunHoney||0}</strong> | BS.H: <strong>${s.bsHoney||0}</strong> | Ghee: <strong>${s.gawaGhee||0}</strong>
+                      ${formatDynamicProductsInline(s, selectedMonthKey, false)}
                     </td>
                     ${isFullAdmin(u) || u.role === 'agent' ? `
                     <td class="p-3.5 text-right space-x-1">
@@ -2586,7 +2721,7 @@
                   <td class="p-4 text-slate-300">৳${sumDailyTgt.toLocaleString()}</td>
                   <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${sumAchPct}%</span></td>
                   <td colspan="${isFullAdmin(u) || u.role === 'agent' ? '2' : '1'}" class="p-4 text-[11px] text-amber-200">
-                    Ajwa: ${sumAjwa.toFixed(2)} | Salt: ${sumSalt.toFixed(2)} | Garlic: ${sumGarlic.toFixed(2)} | Sun.H: ${sumSunH.toFixed(2)} | BS.H: ${sumBsH.toFixed(2)} | Ghee: ${sumGhee.toFixed(2)} kg
+                    ${formatDynamicProductsFooter(repProdSums, selectedMonthKey)}
                   </td>
                 </tr>
               </tfoot>
@@ -2710,44 +2845,71 @@
     }
 
     function renderProductConfigModal() {
-      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      const allProds = getAllConfiguredProductsForMonth(selectedMonthKey);
+      const activeCount = Object.values(allProds).filter(p => p.enabled !== false).length;
       return `
         <div id="productConfigModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-4 pb-3 border-b">
               <div>
-                <h3 class="text-base font-black text-slate-900">Edit Monthly Products, Targets & Bonuses (${selectedMonthKey})</h3>
-                <p class="text-xs font-bold text-slate-400">Customize product names, per-agent KG targets, 90% & 100% cash/gift bonuses specifically for ${selectedMonthKey}</p>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-base font-black text-slate-900">Edit Monthly Products, Count, Targets & Bonuses (${selectedMonthKey})</h3>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">${activeCount} Active Products</span>
+                </div>
+                <p class="text-xs font-bold text-slate-400 mt-0.5">
+                  Check/uncheck to enable 4, 5, 6 or more products for ${selectedMonthKey}, edit names/targets, or click "+ Add New Product" below!
+                </p>
               </div>
               <button type="button" onclick="closeModal('productConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <form onsubmit="handleSaveProductConfig(event)" class="space-y-3">
-              ${Object.keys(activeProds).map(k => {
-                const p = activeProds[k];
-                return `
-                  <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
-                    <div>
-                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Product Name (${selectedMonthKey})</label>
-                      <input type="text" id="cfg_name_${k}" value="${p.name}" required class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-extrabold text-slate-900">
+              <div id="productConfigRowsContainer" class="space-y-2.5">
+                ${Object.keys(allProds).map(k => {
+                  const p = allProds[k];
+                  const isEnabled = p.enabled !== false;
+                  return `
+                    <div class="p-3.5 rounded-2xl border ${isEnabled ? 'bg-slate-50 border-slate-200' : 'bg-slate-100/60 border-slate-200 opacity-60'} grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center" data-prod-key="${k}">
+                      <div class="sm:col-span-1 flex items-center justify-center">
+                        <input type="checkbox" id="cfg_en_${k}" ${isEnabled ? 'checked' : ''} class="w-4 h-4 accent-blue-600 rounded cursor-pointer" title="Enable/Disable this product for ${selectedMonthKey}">
+                      </div>
+                      <div class="sm:col-span-4">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Product Name (${selectedMonthKey})</label>
+                        <input type="text" id="cfg_name_${k}" value="${p.name}" required class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-extrabold text-slate-900">
+                      </div>
+                      <div class="sm:col-span-2">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Target (KG)</label>
+                        <input type="number" step="0.01" id="cfg_kg_${k}" value="${p.targetKg}" required class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                      </div>
+                      <div class="sm:col-span-2">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">90% Bonus (৳)</label>
+                        <input type="number" id="cfg_b90_${k}" value="${p.bonus90 || 0}" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                      </div>
+                      <div class="sm:col-span-2">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">100% Bonus (৳)</label>
+                        <input type="number" id="cfg_b100_${k}" value="${p.bonus100 || 0}" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                      </div>
+                      <div class="sm:col-span-1 flex items-center justify-center pt-3">
+                        ${p.isCustom ? `
+                          <button type="button" onclick="handleRemoveCustomProduct('${k}')" title="Delete Custom Product" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center">
+                            <i class="fa-solid fa-trash-can text-xs"></i>
+                          </button>
+                        ` : `
+                          <span class="text-[9px] font-extrabold text-slate-400 uppercase" title="Uncheck on left to hide for this month">Core</span>
+                        `}
+                      </div>
                     </div>
-                    <div>
-                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Target (KG / Agent)</label>
-                      <input type="number" step="0.01" id="cfg_kg_${k}" value="${p.targetKg}" required class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
-                    </div>
-                    <div>
-                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">90% Bonus (৳)</label>
-                      <input type="number" id="cfg_b90_${k}" value="${p.bonus90 || 0}" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
-                    </div>
-                    <div>
-                      <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">100% Bonus (৳)</label>
-                      <input type="number" id="cfg_b100_${k}" value="${p.bonus100 || 0}" class="w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-bold">
-                    </div>
-                  </div>
-                `;
-              }).join('')}
-              <div class="flex justify-end gap-2 pt-3 border-t">
-                <button type="button" onclick="closeModal('productConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
-                <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save ${selectedMonthKey} Product Config</button>
+                  `;
+                }).join('')}
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t">
+                <button type="button" onclick="handleAddCustomProductSlot()" class="px-3.5 py-2 text-xs font-extrabold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl flex items-center gap-1.5">
+                  <i class="fa-solid fa-plus-circle"></i> + Add New Product for ${selectedMonthKey}
+                </button>
+                <div class="flex items-center gap-2">
+                  <button type="button" onclick="closeModal('productConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                  <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow">Save ${selectedMonthKey} Product Config</button>
+                </div>
               </div>
             </form>
           </div>
@@ -2757,35 +2919,87 @@
 
     function openProductConfigModal() { openModal('productConfigModal'); }
 
-    async function handleSaveProductConfig(e) {
-      e.preventDefault();
+    function handleAddCustomProductSlot() {
       if (!isFullAdmin(currentUser)) return;
+      // Save any current edits in the modal before adding a new slot
+      syncProductModalInputsToStorage();
       let configs = getStored('monthly_configs', {});
       if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
       if (!configs[selectedMonthKey].products) configs[selectedMonthKey].products = {};
 
-      Object.keys(DEFAULT_PRODUCTS).forEach(k => {
-        const nameVal = (document.getElementById(`cfg_name_${k}`)?.value || '').trim() || DEFAULT_PRODUCTS[k].name;
-        const kgVal = Number(document.getElementById(`cfg_kg_${k}`).value) || DEFAULT_PRODUCTS[k].targetKg;
-        const b90Val = Number(document.getElementById(`cfg_b90_${k}`)?.value) || 0;
-        const b100Val = Number(document.getElementById(`cfg_b100_${k}`).value) || 0;
+      const newKey = 'customProd_' + Date.now();
+      const idx = Object.keys(configs[selectedMonthKey].products).length;
+      const st = EXTRA_PRODUCT_STYLES[idx % EXTRA_PRODUCT_STYLES.length];
+      configs[selectedMonthKey].products[newKey] = {
+        name: 'New Product ' + (idx + 1),
+        targetKg: 25,
+        bonus90: 500,
+        bonus100: 1000,
+        style: st.style,
+        badge: st.badge,
+        bar: st.bar,
+        icon: st.icon,
+        enabled: true,
+        isCustom: true
+      };
+      setStored('monthly_configs', configs);
+      renderAppLayout();
+      openModal('productConfigModal');
+    }
+
+    function handleRemoveCustomProduct(prodKey) {
+      if (!isFullAdmin(currentUser)) return;
+      syncProductModalInputsToStorage();
+      let configs = getStored('monthly_configs', {});
+      if (configs[selectedMonthKey] && configs[selectedMonthKey].products) {
+        delete configs[selectedMonthKey].products[prodKey];
+        setStored('monthly_configs', configs);
+      }
+      renderAppLayout();
+      openModal('productConfigModal');
+    }
+
+    function syncProductModalInputsToStorage() {
+      const allProds = getAllConfiguredProductsForMonth(selectedMonthKey);
+      let configs = getStored('monthly_configs', {});
+      if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
+      if (!configs[selectedMonthKey].products) configs[selectedMonthKey].products = {};
+
+      Object.keys(allProds).forEach(k => {
+        const enEl = document.getElementById(`cfg_en_${k}`);
+        const nameEl = document.getElementById(`cfg_name_${k}`);
+        const kgEl = document.getElementById(`cfg_kg_${k}`);
+        const b90El = document.getElementById(`cfg_b90_${k}`);
+        const b100El = document.getElementById(`cfg_b100_${k}`);
+        if (!nameEl) return;
+
         configs[selectedMonthKey].products[k] = {
-          name: nameVal,
-          targetKg: kgVal,
-          bonus90: b90Val,
-          bonus100: b100Val
+          ...(configs[selectedMonthKey].products[k] || {}),
+          enabled: enEl ? enEl.checked : true,
+          name: nameEl.value.trim() || allProds[k].name,
+          targetKg: Number(kgEl?.value) || allProds[k].targetKg,
+          bonus90: Number(b90El?.value) || 0,
+          bonus100: Number(b100El?.value) || 0,
+          isCustom: Boolean(allProds[k].isCustom)
         };
       });
-
       setStored('monthly_configs', configs);
-      const logMeta = recordActivityLog('Updated Product Incentives', `Modified monthly product names, KG targets & bonuses for ${selectedMonthKey}`);
+      return configs;
+    }
+
+    async function handleSaveProductConfig(e) {
+      e.preventDefault();
+      if (!isFullAdmin(currentUser)) return;
+      const configs = syncProductModalInputsToStorage();
+
+      const activeCount = Object.values(getActiveProductsForMonth(selectedMonthKey)).length;
+      const logMeta = recordActivityLog('Updated Product Incentives', `Configured ${activeCount} active products, targets & bonuses for ${selectedMonthKey}`);
       await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]), ...logMeta });
-      alert(`Product names, targets & bonuses for ${selectedMonthKey} saved and synced!`);
+      alert(`Saved! ${activeCount} active product(s) configured for ${selectedMonthKey}.`);
       closeModal('productConfigModal');
       renderAppLayout();
     }
 
-    
     function renderGradeConfigModal() {
       const gMap = getGradeTargetsForMonth(selectedMonthKey);
       const gradesList = [
@@ -2798,7 +3012,7 @@
       ];
       return `
         <div id="gradeConfigModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-4 pb-3 border-b">
               <div>
                 <h3 class="text-base font-black text-slate-900">Edit Monthly Grade & TL Targets (${selectedMonthKey})</h3>
@@ -2876,7 +3090,7 @@
     function renderBreakModal() {
       return `
         <div id="breakModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
             <div class="flex items-center justify-between mb-4 pb-3 border-b">
               <div class="flex items-center gap-2.5">
                 <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center"><i class="fa-solid fa-mug-hot"></i></div>
@@ -2914,7 +3128,7 @@
       const allAgents = getStored('users', []).filter(u => u.role === 'agent');
       return `
         <div id="editAttModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
             <div class="flex items-center justify-between mb-4 pb-3 border-b">
               <h3 class="text-base font-black text-slate-900">Admin: Add / Edit Attendance Record</h3>
               <button type="button" onclick="closeModal('editAttModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
@@ -3066,7 +3280,7 @@
       
       return `
         <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto border border-slate-200">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto border border-slate-200">
             <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
               <div>
                 <h3 class="text-base font-black text-slate-900">Daily Sales & Product Entry</h3>
@@ -3127,12 +3341,12 @@
                   const mProds = getActiveProductsForMonth(selectedMonthKey);
                   return `
                   <div class="grid grid-cols-2 gap-3">
-                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.ajwa.name} (kg)</label><input type="number" step="0.01" id="subAjwa" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.pinkSalt.name} (kg)</label><input type="number" step="0.01" id="subPinkSalt" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.blackGarlic.name} (kg)</label><input type="number" step="0.01" id="subBlackGarlic" min="0" placeholder="e.g. 0.25 or 0.5" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.sunHoney.name} (kg)</label><input type="number" step="0.01" id="subSunHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.bsHoney.name} (kg)</label><input type="number" step="0.01" id="subBSHoney" min="0" placeholder="e.g. 0.25, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
-                    <div><label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds.gawaGhee.name} (kg)</label><input type="number" step="0.01" id="subGawaGhee" min="0" placeholder="e.g. 0.2, 0.4, 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"></div>
+                    ${Object.keys(mProds).map(k => `
+                      <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds[k].name} (kg)</label>
+                        <input type="number" step="0.01" id="subProd_${k}" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
+                      </div>
+                    `).join('')}
                   </div>
                   `;
                 })()}
@@ -3159,7 +3373,7 @@
       const isNazim = isSuperAdmin(currentUser);
       return `
         <div id="userModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
             <div class="flex items-center justify-between mb-4 pb-3 border-b">
               <div>
                 <h3 class="text-base font-black text-slate-900">Create / Edit User ID (${selectedMonthKey})</h3>
@@ -3441,19 +3655,25 @@
       const sales = getStored('sales_records', []);
       const existing = sales.find(s => String(s.userId) === String(agentId) && s.date === dateStr);
       
+      const activeProdsModal = getActiveProductsForMonth(selectedMonthKey);
       if (existing) {
         document.getElementById('subLeads').value = existing.leads || 0;
         document.getElementById('subOrders').value = existing.orders || 0;
         document.getElementById('subAmount').value = existing.amount || 0;
-        document.getElementById('subAjwa').value = existing.ajwa || '';
-        document.getElementById('subPinkSalt').value = existing.pinkSalt || '';
-        document.getElementById('subBlackGarlic').value = existing.blackGarlic || '';
-        document.getElementById('subSunHoney').value = existing.sunHoney || '';
-        document.getElementById('subBSHoney').value = existing.bsHoney || '';
-        document.getElementById('subGawaGhee').value = existing.gawaGhee || '';
+        Object.keys(activeProdsModal).forEach(k => {
+          const el = document.getElementById(`subProd_${k}`);
+          if (el) el.value = existing[k] || '';
+        });
         document.getElementById('deleteReportBtn').classList.remove('hidden');
       } else {
-        ['subLeads','subOrders','subAmount','subAjwa','subPinkSalt','subBlackGarlic','subSunHoney','subBSHoney','subGawaGhee'].forEach(id => document.getElementById(id).value = '');
+        ['subLeads','subOrders','subAmount'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.value = '';
+        });
+        Object.keys(activeProdsModal).forEach(k => {
+          const el = document.getElementById(`subProd_${k}`);
+          if (el) el.value = '';
+        });
         document.getElementById('deleteReportBtn').classList.add('hidden');
       }
       updateLiveRatio();
@@ -3495,6 +3715,12 @@
       }
       reportsDateFilter = dateStr;
 
+      const activeProdsSubmit = getActiveProductsForMonth(selectedMonthKey);
+      const prodValuesObj = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
+      Object.keys(activeProdsSubmit).forEach(k => {
+        prodValuesObj[k] = Number(document.getElementById(`subProd_${k}`)?.value) || 0;
+      });
+
       const entry = {
         userId: String(targetAgent.id),
         userName: targetAgent.name,
@@ -3504,12 +3730,7 @@
         orders: orders,
         amount: amount,
         ratio: leads > 0 ? Number(((orders / leads) * 100).toFixed(2)) : 0,
-        ajwa: Number(document.getElementById('subAjwa').value) || 0,
-        pinkSalt: Number(document.getElementById('subPinkSalt').value) || 0,
-        blackGarlic: Number(document.getElementById('subBlackGarlic').value) || 0,
-        sunHoney: Number(document.getElementById('subSunHoney').value) || 0,
-        bsHoney: Number(document.getElementById('subBSHoney').value) || 0,
-        gawaGhee: Number(document.getElementById('subGawaGhee').value) || 0
+        ...prodValuesObj
       };
 
       sales = sales.filter(s => !(String(s.userId) === String(entry.userId) && s.date === entry.date));
@@ -3569,7 +3790,7 @@
     function renderAiImportModal() {
       return `
         <div id="aiImportModal" class="hidden fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl max-w-6xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-6xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col">
             <!-- Modal Header -->
             <div class="flex items-center justify-between pb-4 border-b border-slate-200 shrink-0">
               <div class="flex items-center gap-3">
@@ -3593,20 +3814,25 @@
 
             <!-- Scrollable Body -->
             <div class="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
-              <!-- Step 1: Just Upload Picture -->
-              <div id="aiUploadDropzone" class="border-2 border-dashed border-purple-300 hover:border-purple-500 bg-purple-50/40 hover:bg-purple-50/80 transition-all rounded-2xl p-6 text-center">
+              <!-- Step 1: Just Upload or Ctrl+V Paste Picture -->
+              <div id="aiUploadDropzone" tabindex="0" class="border-2 border-dashed border-purple-300 hover:border-purple-500 focus:border-purple-600 focus:outline-none bg-purple-50/40 hover:bg-purple-50/80 transition-all rounded-2xl p-6 text-center">
                 <input type="file" id="aiErpImageInput" accept="image/*" multiple onchange="handleAiErpPicturesUpload(event)" class="hidden">
                 <label for="aiErpImageInput" class="cursor-pointer flex flex-col items-center justify-center">
                   <div class="w-14 h-14 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-2xl shadow-lg mb-3">
                     <i class="fa-solid fa-cloud-arrow-up"></i>
                   </div>
-                  <span class="text-sm font-black text-slate-900">Click Here to Upload ERP Report Picture(s)</span>
+                  <span class="text-sm font-black text-slate-900">Click to Upload OR Press <kbd class="px-2 py-0.5 bg-purple-600 text-white rounded-md text-xs shadow">Ctrl + V</kbd> to Paste Copied Screenshot!</span>
                   <span class="text-xs font-bold text-slate-500 mt-1">
-                    No pre-selection needed! Upload 1 or multiple screenshots containing single or multiple agents, dates, sales or product reports.
+                    Take a screenshot (Win+Shift+S / PrtSc) and press <strong>Ctrl + V</strong> anywhere in this popup, or click below to select image files.
                   </span>
-                  <span class="mt-3 px-4 py-1.5 bg-white border border-purple-200 rounded-xl text-[11px] font-extrabold text-purple-700 shadow-sm">
-                    <i class="fa-regular fa-image mr-1"></i> Select Image (PNG, JPG, JPEG)
-                  </span>
+                  <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    <span class="px-4 py-1.5 bg-white border border-purple-200 rounded-xl text-[11px] font-extrabold text-purple-700 shadow-sm">
+                      <i class="fa-regular fa-image mr-1"></i> Select Image (PNG, JPG, JPEG)
+                    </span>
+                    <span class="px-3.5 py-1.5 bg-purple-100 border border-purple-200 rounded-xl text-[11px] font-extrabold text-purple-800">
+                      <i class="fa-regular fa-clipboard mr-1"></i> Ctrl + V Clipboard Paste Ready
+                    </span>
+                  </div>
                 </label>
               </div>
 
@@ -3731,14 +3957,12 @@
       analyzeErpOcrText(rawText);
     }
 
-    async function handleAiErpPicturesUpload(event) {
-      const files = Array.from(event.target.files || []);
-      if (files.length === 0) return;
+    async function processAiErpImageFiles(files) {
+      if (!files || files.length === 0) return;
 
       const progBox = document.getElementById('aiScanProgressBox');
       const resBox = document.getElementById('aiAnalysisResultContainer');
       const stageTitle = document.getElementById('aiScanStageTitle');
-      const stageSub = document.getElementById('aiScanStageSub');
       const pctBadge = document.getElementById('aiScanPctBadge');
 
       if (progBox) progBox.classList.remove('hidden');
@@ -3748,7 +3972,8 @@
       try {
         for (let i = 0; i < files.length; i++) {
           const f = files[i];
-          if (stageTitle) stageTitle.textContent = `AI Scanning Picture ${i + 1} of ${files.length} (${f.name})...`;
+          const labelName = f.name || `Pasted Screenshot #${i + 1}`;
+          if (stageTitle) stageTitle.textContent = `AI Scanning Picture ${i + 1} of ${files.length} (${labelName})...`;
           const worker = await Tesseract.createWorker('eng');
           const ret = await worker.recognize(f);
           await worker.terminate();
@@ -3765,9 +3990,40 @@
         analyzeErpOcrText('');
       } finally {
         if (progBox) progBox.classList.add('hidden');
-        event.target.value = '';
       }
     }
+
+    async function handleAiErpPicturesUpload(event) {
+      const files = Array.from(event.target.files || []);
+      if (files.length === 0) return;
+      await processAiErpImageFiles(files);
+      event.target.value = '';
+    }
+
+    // Listen for Ctrl+V (Clipboard Paste) to directly upload copied screenshots into AI ERP Importer!
+    window.addEventListener('paste', async (e) => {
+      if (!currentUser || !isFullAdmin(currentUser)) return;
+      const aiModalEl = document.getElementById('aiImportModal');
+      const isAiModalVisible = aiModalEl && !aiModalEl.classList.contains('hidden');
+      if (!isAiModalVisible) return;
+
+      const clipboardItems = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+      if (!clipboardItems) return;
+
+      const imageFiles = [];
+      for (let i = 0; i < clipboardItems.length; i++) {
+        const item = clipboardItems[i];
+        if (item.type && item.type.indexOf('image') !== -1) {
+          const blob = item.getAsFile();
+          if (blob) imageFiles.push(blob);
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        await processAiErpImageFiles(imageFiles);
+      }
+    });
 
     // Helper: Fuzzy match agent from text line or token
     function matchAgentInLine(lineText, allAgents) {
