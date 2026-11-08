@@ -270,6 +270,9 @@
     let monthlyPerfTeamScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
     let monthlyPerfAgentId = 'ALL';
 
+    let driveProdTeamScope = 'ALL';
+    let driveProdAgentId = 'ALL';
+
     let activityTeamFilter = 'ALL';
 
     let pollInterval = null;
@@ -295,6 +298,7 @@
       // Section 1: Sidebar Navigation Tabs
       { key: 'tab_dashboard', category: 'Sidebar Tabs', label: 'Dashboard & Targets Tab', desc: 'View main KPI cards, sprint progress & product targets', icon: 'fa-gauge-high', color: 'text-blue-600' },
       { key: 'tab_monthly_perf', category: 'Sidebar Tabs', label: 'Monthly Performance Tab', desc: 'View monthly performance summary & date-wise breakdown', icon: 'fa-chart-column', color: 'text-purple-600' },
+      { key: 'tab_drive_product', category: 'Sidebar Tabs', label: 'Drive Product Tab', desc: 'View all agents Drive Product KG targets, achieved quantities & date-wise submissions', icon: 'fa-box-open', color: 'text-amber-500' },
       { key: 'tab_reports', category: 'Sidebar Tabs', label: 'Daily Sales Reports Tab', desc: 'Access daily sales & conversion logs table', icon: 'fa-file-invoice', color: 'text-blue-600' },
       { key: 'tab_ranking', category: 'Sidebar Tabs', label: 'Team vs Team & Ranking Tab', desc: 'View floor leaderboard & team head-to-head comparison', icon: 'fa-trophy', color: 'text-amber-500' },
       { key: 'tab_roster', category: 'Sidebar Tabs', label: 'Duty Roster Tab', desc: 'View weekly shift schedule and Day Off (DO) table', icon: 'fa-calendar-week', color: 'text-indigo-600' },
@@ -330,6 +334,7 @@
       return {
         tab_dashboard: true,
         tab_monthly_perf: true,
+        tab_drive_product: true,
         tab_reports: true,
         tab_ranking: true,
         tab_roster: true,
@@ -1374,6 +1379,11 @@
                   <i class="fa-solid fa-chart-column text-sm text-purple-600"></i> Monthly Performance
                 </button>
                 ` : ''}
+                ${hasFeatureAccess(u, 'tab_drive_product') ? `
+                <button onclick="setTab('drive_product')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'drive_product' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-box-open text-sm text-amber-500"></i> Drive Product
+                </button>
+                ` : ''}
                 ${hasFeatureAccess(u, 'tab_reports') ? `
                 <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-file-invoice text-sm text-blue-600"></i> Daily Sales Reports
@@ -1536,6 +1546,7 @@
       }
       if (activeTab === 'dashboard') return renderDashboard();
       if (activeTab === 'monthly_perf' && hasFeatureAccess(currentUser, 'tab_monthly_perf')) return renderMonthlyPerformanceView();
+      if (activeTab === 'drive_product' && hasFeatureAccess(currentUser, 'tab_drive_product')) return renderDriveProductView();
       if (activeTab === 'roster' && hasFeatureAccess(currentUser, 'tab_roster')) return renderDutyRosterView();
       if (activeTab === 'attendance' && hasFeatureAccess(currentUser, 'tab_attendance')) return renderAttendanceView();
       if (activeTab === 'activity_logs' && hasFeatureAccess(currentUser, 'tab_activity_logs')) return renderActivityLogsView();
@@ -1573,6 +1584,86 @@
           </div>
         </div>
       `;
+    }
+
+    
+    // STRICT DEDUPLICATION ENGINE: Ensures 1 record per Agent per Date (or 1 Monthly Summary per Agent per Month)
+    // Eliminates duplicate date double-counting and fixes Dashboard vs Table mismatches!
+    function deduplicateSalesRecordsList(records) {
+      if (!Array.isArray(records)) return [];
+      const map = new Map();
+      records.forEach(s => {
+        if (!s || !s.userId || !s.date) return;
+        const cleanDate = String(s.date).replace(/^'/, '').trim();
+        const key = `${String(s.userId).trim()}_${cleanDate}`;
+        if (!map.has(key)) {
+          map.set(key, { ...s, date: cleanDate });
+        }
+      });
+      return Array.from(map.values());
+    }
+
+    // Smart Per-Agent Product KG Resolver:
+    // If an agent has a MONTHLY_PROD_MM/YYYY summary uploaded via AI ERP Product Report,
+    // use the higher of (Monthly ERP Summary vs Sum of Daily Entries) per product so daily & monthly never double-count!
+    // Also returns the exact submission date/timestamp for each record.
+    function computeAgentDriveProductStats(agentObj, monthSalesList, mKey) {
+      const mk = mKey || selectedMonthKey;
+      const activeProds = getActiveProductsForMonth(mk);
+      const agSales = deduplicateSalesRecordsList(monthSalesList).filter(s => String(s.userId) === String(agentObj.id));
+
+      const dailyEntries = agSales.filter(s => !String(s.date || '').startsWith('MONTHLY_PROD_'));
+      const monthlySummaryEntry = agSales.find(s => String(s.date || '') === `MONTHLY_PROD_${mk}`);
+
+      const prodKg = {};
+      Object.keys(activeProds).forEach(k => {
+        const dailySum = dailyEntries.reduce((acc, c) => acc + (Number(c[k]) || 0), 0);
+        const monthlyVal = monthlySummaryEntry ? (Number(monthlySummaryEntry[k]) || 0) : 0;
+        prodKg[k] = Number(Math.max(dailySum, monthlyVal).toFixed(2));
+      });
+
+      const productLogs = agSales.filter(s => {
+        return Object.keys(activeProds).some(k => (Number(s[k]) || 0) > 0);
+      });
+
+      let lastSubmittedDate = '-';
+      if (productLogs.length > 0) {
+        const firstLog = productLogs[0];
+        if (String(firstLog.date).startsWith('MONTHLY_PROD_')) {
+          lastSubmittedDate = firstLog.submittedAt || `ERP Summary (${mk})`;
+        } else {
+          lastSubmittedDate = cleanDisplayDate(firstLog.date) + (firstLog.time ? ` • ${firstLog.time}` : '');
+        }
+      }
+
+      const totalKgAll = Object.keys(activeProds).reduce((sum, k) => sum + (prodKg[k] || 0), 0);
+      const totalTargetKgAll = Object.keys(activeProds).reduce((sum, k) => sum + (Number(activeProds[k].targetKg) || 0), 0);
+      const overallPct = totalTargetKgAll > 0 ? Math.round((totalKgAll / totalTargetKgAll) * 100) : 0;
+      const incentive = calculateEarnedIncentives(prodKg, 1, mk);
+
+      return {
+        agent: agentObj,
+        prodKg,
+        totalKgAll: Number(totalKgAll.toFixed(2)),
+        totalTargetKgAll: Number(totalTargetKgAll.toFixed(2)),
+        overallPct,
+        incentiveMoney: incentive.totalMoney,
+        incentiveRewards: incentive.earnedRewards,
+        lastSubmittedDate,
+        productLogs,
+        allDailyLogs: dailyEntries,
+        monthlySummaryEntry
+      };
+    }
+
+    function setDriveProdTeam(scope) {
+      driveProdTeamScope = scope;
+      driveProdAgentId = 'ALL';
+      renderAppLayout();
+    }
+    function setDriveProdAgent(agId) {
+      driveProdAgentId = agId;
+      renderAppLayout();
     }
 
     function renderCompactTopWidgets(incentiveSummary) {
@@ -1680,7 +1771,8 @@
       }
 
       const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
-      const thisMonthSales = mySales.filter(s => s.date.endsWith(selectedMonthKey));
+      const deduplicatedMySales = deduplicateSalesRecordsList(mySales);
+      const thisMonthSales = deduplicatedMySales.filter(s => s.date.endsWith(selectedMonthKey) && !String(s.date).startsWith('MONTHLY_PROD_'));
       
       const sprintSalesAmount = thisMonthSales.reduce((acc, curr) => {
         const d = parseInt(curr.date.split('/')[0], 10);
@@ -1701,9 +1793,19 @@
       const activeProds = getActiveProductsForMonth(selectedMonthKey);
       const pTotals = {};
       Object.keys(activeProds).forEach(k => { pTotals[k] = 0; });
-      thisMonthSales.forEach(s => {
+
+      // Calculate exact deduplicated product totals across the selected scope so Dashboard matches Drive Product tab 100%!
+      const allAgentsInScope = monthUsers.filter(usr => {
+        if (usr.role !== 'agent') return false;
+        if (canViewAll(u)) return dashboardScope === 'ALL' ? true : usr.team === dashboardScope;
+        return String(usr.id) === String(u.id);
+      });
+      const allMonthSales = deduplicateSalesRecordsList(allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey)));
+
+      allAgentsInScope.forEach(agObj => {
+        const agStats = computeAgentDriveProductStats(agObj, allMonthSales, selectedMonthKey);
         Object.keys(activeProds).forEach(k => {
-          pTotals[k] += (Number(s[k]) || 0);
+          pTotals[k] = Number(((pTotals[k] || 0) + (agStats.prodKg[k] || 0)).toFixed(2));
         });
       });
       const incentiveSummary = calculateEarnedIncentives(pTotals, tInfo.agentCount, selectedMonthKey);
@@ -1883,8 +1985,11 @@
                 <i class="fa-solid fa-gift text-blue-600 mr-1.5"></i> 
                 Facebook Product Incentive Targets (${canViewAll(u) ? `${dashboardScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
               </h3>
-              <div class="flex items-center gap-2">
-                ${hasFeatureAccess(u, 'feat_edit_products') ? `<button onclick="openProductConfigModal()" class="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[11px] font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
+              <div class="flex flex-wrap items-center gap-2">
+                <button onclick="setTab('drive_product')" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
+                  <i class="fa-solid fa-box-open"></i> Drive Product Details (Agent & Date-wise)
+                </button>
+                ${hasFeatureAccess(u, 'feat_edit_products') ? `<button onclick="openProductConfigModal()" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-[11px] font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
                 <span class="px-2.5 py-0.5 rounded-full bg-white border text-[10px] font-extrabold text-slate-600">90% = Entry Bonus | 100% = Full Bonus</span>
               </div>
             </div>
@@ -1897,7 +2002,7 @@
                 const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
                 const isUnlocked = pct >= 90;
                 return `
-                  <div class="${p.style} card-dynamic p-4 ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
+                  <div onclick="setTab('drive_product')" title="Click to view agent-wise & date-wise Drive Product details" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
                     <div class="flex justify-between items-start mb-2">
                       <div>
                         <h4 class="font-black text-sm text-slate-900">${p.name} ${isUnlocked ? '🔥' : ''}</h4>
@@ -1919,6 +2024,232 @@
                 `;
               }).join('')}
             </div>
+          </div>
+        </div>
+      `;
+    }
+
+    
+    function renderDriveProductView() {
+      const u = currentUser;
+      const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+      const monthSales = allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey));
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      const prodKeys = Object.keys(activeProds);
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      const teamFilteredAgents = driveProdTeamScope === 'ALL'
+        ? allAgents
+        : allAgents.filter(a => a.team === driveProdTeamScope);
+
+      const displayedAgents = driveProdAgentId === 'ALL'
+        ? teamFilteredAgents
+        : teamFilteredAgents.filter(a => String(a.id) === String(driveProdAgentId));
+
+      const grandProdTotals = {};
+      prodKeys.forEach(k => { grandProdTotals[k] = 0; });
+      let grandTotalKg = 0;
+      let grandTargetKg = 0;
+
+      const rowsData = displayedAgents.map(ag => {
+        const st = computeAgentDriveProductStats(ag, monthSales, selectedMonthKey);
+        prodKeys.forEach(k => {
+          grandProdTotals[k] = Number(((grandProdTotals[k] || 0) + (st.prodKg[k] || 0)).toFixed(2));
+        });
+        grandTotalKg = Number((grandTotalKg + st.totalKgAll).toFixed(2));
+        grandTargetKg = Number((grandTargetKg + st.totalTargetKgAll).toFixed(2));
+        return st;
+      }).sort((a, b) => b.totalKgAll - a.totalKgAll);
+
+      const grandPct = grandTargetKg > 0 ? Math.round((grandTotalKg / grandTargetKg) * 100) : 0;
+
+      const allSubmittedProductLogs = monthSales
+        .filter(s => {
+          if (driveProdTeamScope !== 'ALL' && s.team !== driveProdTeamScope) return false;
+          if (driveProdAgentId !== 'ALL' && String(s.userId) !== String(driveProdAgentId)) return false;
+          return prodKeys.some(k => (Number(s[k]) || 0) > 0);
+        })
+        .sort((a, b) => {
+          const da = parseInt(String(a.date).split('/')[0], 10) || 99;
+          const db = parseInt(String(b.date).split('/')[0], 10) || 99;
+          return db - da;
+        });
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">Floor-Wide Transparency</span>
+                <span class="text-xs font-bold text-slate-400">Month: ${monthLabel}</span>
+              </div>
+              <h2 class="text-xl font-black text-slate-900 mt-1">
+                <i class="fa-solid fa-box-open text-amber-500 mr-2"></i>Drive Product Target & Achievement Leaderboard (${monthLabel})
+              </h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">
+                Every Agent & Admin can view how many KG of each Drive Product every agent has sold, along with exact submission dates.
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+                <button onclick="setDriveProdTeam('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All Teams (17)</button>
+                <button onclick="setDriveProdTeam('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
+                <button onclick="setDriveProdTeam('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
+              </div>
+
+              <div class="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
+                <i class="fa-solid fa-user-check text-amber-600 text-xs"></i>
+                <select onchange="setDriveProdAgent(this.value)" class="bg-transparent text-xs font-extrabold text-amber-900 focus:outline-none cursor-pointer">
+                  <option value="ALL" ${driveProdAgentId === 'ALL' ? 'selected' : ''}>All Agents (${teamFilteredAgents.length})</option>
+                  ${teamFilteredAgents.map(ag => `<option value="${ag.id}" ${String(driveProdAgentId) === String(ag.id) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
+                </select>
+              </div>
+
+              ${hasFeatureAccess(u, 'feat_edit_products') ? `
+              <button onclick="openProductConfigModal()" class="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-extrabold">
+                <i class="fa-solid fa-sliders mr-1"></i> Edit Product Targets
+              </button>
+              ` : ''}
+              ${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? `
+              <button onclick="openReportModal(driveProdAgentId !== 'ALL' ? driveProdAgentId : '')" class="px-4 py-2 tab-active text-white rounded-xl text-xs font-extrabold shadow">
+                <i class="fa-solid fa-plus-circle mr-1"></i> Submit Drive Product Entry
+              </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- Table 1: Agent-Wise Drive Product Total Sold (KG) vs Target -->
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <div class="px-5 py-3 bg-slate-900 text-white flex items-center justify-between">
+              <span class="text-xs font-black uppercase tracking-wider"><i class="fa-solid fa-ranking-star text-amber-400 mr-1.5"></i>Agent-Wise Drive Product Achievement Summary (${monthLabel})</span>
+              <span class="text-[11px] font-bold text-slate-300">Click any agent row to filter their date-wise submissions below</span>
+            </div>
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">SL</th>
+                  <th class="p-3.5">Agent Name & ID</th>
+                  <th class="p-3.5">Team</th>
+                  ${prodKeys.map(k => `<th class="p-3.5 text-center">${activeProds[k].name}<br><span class="text-[10px] text-slate-400 font-bold">Target: ${activeProds[k].targetKg} kg</span></th>`).join('')}
+                  <th class="p-3.5 text-center">Total Sold (KG)</th>
+                  <th class="p-3.5 text-center">Achieved %</th>
+                  <th class="p-3.5">Last Submitted Date</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${rowsData.map((st, idx) => {
+                  const isMe = String(st.agent.id) === String(u.id);
+                  return `
+                    <tr onclick="setDriveProdAgent('${st.agent.id}')" class="cursor-pointer ${isMe ? 'bg-blue-50/70 font-extrabold' : 'hover:bg-slate-50'}">
+                      <td class="p-3.5 font-black text-slate-500">#${idx + 1}</td>
+                      <td class="p-3.5 font-extrabold text-slate-900">
+                        ${st.agent.name} <span class="text-slate-400 text-[10px]">(${st.agent.id})</span>
+                        ${isMe ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[9px] font-black">YOU</span>` : ''}
+                      </td>
+                      <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${st.agent.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${st.agent.team}</span></td>
+                      ${prodKeys.map(k => {
+                        const val = st.prodKg[k] || 0;
+                        const tgt = Number(activeProds[k].targetKg) || 1;
+                        const pct = Math.round((val / tgt) * 100);
+                        return `
+                          <td class="p-3.5 text-center">
+                            <span class="font-black text-sm ${val > 0 ? 'text-slate-900' : 'text-slate-300'}">${val.toFixed(2)} kg</span>
+                            <span class="block text-[10px] font-bold ${pct >= 90 ? 'text-emerald-600 font-black' : 'text-slate-400'}">${pct}%</span>
+                          </td>
+                        `;
+                      }).join('')}
+                      <td class="p-3.5 text-center font-black text-emerald-700 text-sm">${st.totalKgAll.toFixed(2)} kg</td>
+                      <td class="p-3.5 text-center"><span class="px-2.5 py-1 rounded-md ${st.overallPct >= 90 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${st.overallPct}%</span></td>
+                      <td class="p-3.5 font-bold text-slate-600"><i class="fa-regular fa-calendar-check text-blue-600 mr-1"></i>${st.lastSubmittedDate}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+              <tfoot class="bg-slate-900 text-white font-black text-xs">
+                <tr>
+                  <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${rowsData.length} ${rowsData.length === 1 ? 'Agent' : 'Agents'})
+                  </td>
+                  ${prodKeys.map(k => {
+                    const totVal = grandProdTotals[k] || 0;
+                    const totTgt = (Number(activeProds[k].targetKg) || 0) * (rowsData.length || 1);
+                    const pct = totTgt > 0 ? Math.round((totVal / totTgt) * 100) : 0;
+                    return `<td class="p-4 text-center text-amber-300">${totVal.toFixed(2)} kg <span class="block text-[10px] text-slate-300">(${pct}% of ${totTgt.toFixed(1)}kg)</span></td>`;
+                  }).join('')}
+                  <td class="p-4 text-center text-emerald-400 text-sm">${grandTotalKg.toFixed(2)} kg</td>
+                  <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950">${grandPct}%</span></td>
+                  <td class="p-4 text-slate-300">Floor Total (${selectedMonthKey})</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- Table 2: Date-Wise Drive Product Submission History (Shows Exact Date Submitted + Which Agent Cut How Much) -->
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <div class="px-5 py-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
+              <div>
+                <h3 class="text-xs font-black uppercase text-amber-900">
+                  <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>Date-Wise Drive Product Submissions Log (${allSubmittedProductLogs.length} Entries)
+                </h3>
+                <p class="text-[11px] font-bold text-amber-700">Shows exact Report Date, Submitted Timestamp, Agent Name, and KG sold per product</p>
+              </div>
+              ${driveProdAgentId !== 'ALL' ? `
+              <button onclick="setDriveProdAgent('ALL')" class="px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-extrabold text-amber-900 hover:bg-amber-100">
+                <i class="fa-solid fa-arrow-left mr-1"></i> Show All Agents
+              </button>
+              ` : ''}
+            </div>
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Report Date</th>
+                  <th class="p-3.5">Submitted Time</th>
+                  <th class="p-3.5">Agent Name</th>
+                  <th class="p-3.5">Team</th>
+                  ${prodKeys.map(k => `<th class="p-3.5 text-center">${activeProds[k].name} (kg)</th>`).join('')}
+                  <th class="p-3.5 text-center">Row Total (kg)</th>
+                  ${(isAdmin || u.role === 'agent') ? `<th class="p-3.5 text-right">Actions</th>` : ''}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${allSubmittedProductLogs.length === 0 ? `
+                  <tr><td colspan="${prodKeys.length + 6}" class="p-8 text-center text-slate-400 font-bold">No Drive Product entries submitted for ${monthLabel} yet.</td></tr>
+                ` : allSubmittedProductLogs.map(log => {
+                  const isMonthlySummary = String(log.date).startsWith('MONTHLY_PROD_');
+                  const rowSumKg = prodKeys.reduce((acc, k) => acc + (Number(log[k]) || 0), 0);
+                  const canEditRow = isAdmin || String(log.userId) === String(u.id);
+                  return `
+                    <tr class="hover:bg-slate-50">
+                      <td class="p-3.5 font-extrabold text-slate-900">
+                        ${isMonthlySummary
+                          ? `<span class="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-black">ERP Monthly Summary (${log.date.replace('MONTHLY_PROD_', '')})</span>`
+                          : cleanDisplayDate(log.date)
+                        }
+                      </td>
+                      <td class="p-3.5 font-mono text-[11px] font-bold text-blue-600">${log.submittedAt || log.time || 'Synced'}</td>
+                      <td class="p-3.5 font-extrabold text-slate-900">${log.userName} <span class="text-slate-400 text-[10px]">(${log.userId})</span></td>
+                      <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${log.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${log.team}</span></td>
+                      ${prodKeys.map(k => {
+                        const v = Number(log[k]) || 0;
+                        return `<td class="p-3.5 text-center font-black ${v > 0 ? 'text-emerald-700' : 'text-slate-300'}">${v > 0 ? v.toFixed(2) : '-'}</td>`;
+                      }).join('')}
+                      <td class="p-3.5 text-center font-black text-slate-900">${rowSumKg.toFixed(2)} kg</td>
+                      ${(isAdmin || u.role === 'agent') ? `
+                      <td class="p-3.5 text-right space-x-1">
+                        ${canEditRow ? `
+                          ${!isMonthlySummary ? `<button onclick="openReportModal('${log.userId}', '${log.date}')" class="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>` : ''}
+                          <button onclick="handleDirectDeleteReport('${log.userId}', '${log.userName}', '${log.date}')" class="px-2.5 py-1 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>
+                        ` : '-'}
+                      </td>
+                      ` : ''}
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
           </div>
         </div>
       `;
@@ -4484,19 +4815,14 @@
       if (!cat) return null;
 
       const sizeMatch = lower.match(/(\d+(?:\.\d+)?)\s*(kg|gm|g)\b/i);
-      if (!sizeMatch) return null;
-
-      const sizeVal = parseFloat(sizeMatch[1]) || 0;
-      const sizeUnit = sizeMatch[2].toLowerCase();
+      const sizeVal = sizeMatch ? (parseFloat(sizeMatch[1]) || 1) : 1;
+      const sizeUnit = sizeMatch ? sizeMatch[2].toLowerCase() : 'kg';
       const unitKg = (sizeUnit === 'gm' || sizeUnit === 'g') ? (sizeVal / 1000) : sizeVal;
 
-      const afterSize = lineText.substring(sizeMatch.index + sizeMatch[0].length);
-      // Remove product codes (e.g. A000006) and barcodes (e.g. 8941140150052)
+      const afterSize = sizeMatch ? lineText.substring(sizeMatch.index + sizeMatch[0].length) : lineText;
       const cleaned = afterSize.replace(/\b[A-Za-z0-9]*\d{5,16}\b/g, ' ');
       const rawTokens = cleaned.match(/\d[\d,]*(?:\.\d+)?/g) || [];
 
-      // In ERP Product Sales Summary table, Cost Price/Total/Profit/Avg Price have decimals (e.g. 0.00, 7,089.78),
-      // while Quantity Sold is a clean positive integer!
       let qty = 0;
       const intTokens = rawTokens
         .filter(t => !t.includes('.'))
@@ -4506,23 +4832,20 @@
       if (intTokens.length > 0) {
         qty = intTokens[0];
       } else {
-        // Fallback if OCR missed decimal points on prices
         const nonZero = rawTokens.map(t => parseFloat(t.replace(/,/g, ''))).filter(n => !isNaN(n) && n > 0 && n < 500);
         if (nonZero.length > 0) qty = nonZero[0];
       }
 
       if (qty > 0) {
         const totalKg = Number((unitKg * qty).toFixed(2));
-        return { cat, unitKg, qty, totalKg, itemSummary: `${sizeMatch[0]} × ${qty} pcs = ${totalKg}kg` };
+        return { cat, unitKg, qty, totalKg, itemSummary: `${sizeMatch ? sizeMatch[0] : '1kg'} × ${qty} pcs = ${totalKg}kg` };
       }
       return null;
     }
 
-    // Helper: Detect if OCR text is an ERP Monthly Product Sales Report (Date Range / Product Sales Summary)
     function detectErpMonthlyProductSummaryMode(ocrText) {
       const s = String(ocrText || '');
       const hasRangeHeader = /date\s*range|product\s*sales\s*report|products\s*sales\s*summary|quantity\s*sold|order\s*by/i.test(s);
-      // Extract month from Date Range if present (e.g. "01 Nov, 2026 - 30 Nov, 2026")
       const monthsMap = { jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06', jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12' };
       const mRange = s.match(/\b(\d{1,2})[\s\-]+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s\-,]*(20\d{2})\b/i);
       let detectedMonthKey = selectedMonthKey;
@@ -4536,74 +4859,96 @@
 
     function analyzeErpOcrText(ocrText) {
       const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
-      const existingSales = getStored('sales_records', []);
-      const lines = String(ocrText || '').split(/\r?\n/);
+      const existingSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+      const fullText = String(ocrText || '');
+      const lines = fullText.split(/\r?\n/);
 
-      const { isProductSummaryReport, detectedMonthKey } = detectErpMonthlyProductSummaryMode(ocrText);
-
-      // First, check if this is an ERP Monthly Product Sales Summary (like Shagor Ahmed's 01 Nov - 30 Nov Product Sales Report)
-      if (isProductSummaryReport) {
-        let reportAgent = null;
-        // Find agent from "Order By: Shagor Ahmed 10191" or anywhere in header
+      // 1. Detect Agent across the entire OCR text (Prioritizing "Order By:", "Agent:", or exact Name/ID anywhere in image)
+      let globalDetectedAgent = null;
+      for (const rawLine of lines) {
+        if (/order\s*by|agent|employee|name|id/i.test(rawLine)) {
+          const ag = matchAgentInLine(rawLine, allAgents);
+          if (ag) { globalDetectedAgent = ag; break; }
+        }
+      }
+      if (!globalDetectedAgent) {
         for (const rawLine of lines) {
           const ag = matchAgentInLine(rawLine, allAgents);
-          if (ag) {
-            reportAgent = ag;
-            break;
-          }
-        }
-        if (!reportAgent && allAgents.length > 0) reportAgent = allAgents[0];
-
-        const sumProds = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
-        const breakdownNotes = [];
-        let matchedRowsCount = 0;
-
-        lines.forEach(rawLine => {
-          const parsedRow = parseErpProductSummaryRow(rawLine);
-          if (parsedRow) {
-            sumProds[parsedRow.cat] = Number((sumProds[parsedRow.cat] + parsedRow.totalKg).toFixed(2));
-            breakdownNotes.push(`${parsedRow.cat}: ${parsedRow.itemSummary}`);
-            matchedRowsCount++;
-          }
-        });
-
-        if (matchedRowsCount > 0 && reportAgent) {
-          const monthlyRecordDateKey = `MONTHLY_PROD_${detectedMonthKey}`;
-          const existingRec = existingSales.find(s => String(s.userId) === String(reportAgent.id) && s.date === monthlyRecordDateKey);
-          const isDuplicate = Boolean(existingRec);
-
-          aiDetectedRecords = [{
-            userId: String(reportAgent.id),
-            userName: reportAgent.name,
-            team: reportAgent.team,
-            date: monthlyRecordDateKey,
-            isMonthlyProductSummary: true,
-            monthKey: detectedMonthKey,
-            breakdownText: breakdownNotes.join(' | '),
-            category: `Monthly Product Total (${detectedMonthKey})`,
-            leads: 0,
-            orders: 0,
-            amount: 0,
-            ajwa: sumProds.ajwa,
-            pinkSalt: sumProds.pinkSalt,
-            blackGarlic: sumProds.blackGarlic,
-            sunHoney: sumProds.sunHoney,
-            bsHoney: sumProds.bsHoney,
-            gawaGhee: sumProds.gawaGhee,
-            isDuplicate: isDuplicate,
-            // Select by default so Admin can 1-click approve updating the agent's monthly product totals!
-            selected: true
-          }];
-          renderAiDetectedPreviewTable();
-          return;
+          if (ag) { globalDetectedAgent = ag; break; }
         }
       }
 
-      // Standard Date-Wise Multi-Agent Sales & Product Report Parsing
-      let currentContextDate = (reportsDateFilter && reportsDateFilter !== 'ALL') ? reportsDateFilter : getTodayFormatted();
-      let currentContextAgent = null;
+      const { isProductSummaryReport, detectedMonthKey } = detectErpMonthlyProductSummaryMode(fullText);
 
-      const mergedMap = new Map(); // key: `${userId}_${date}`
+      // 2. Check if image has ERP Product Sales rows (Variant Weight x Quantity Sold)
+      const sumProds = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
+      const breakdownNotes = [];
+      let matchedProdRowsCount = 0;
+
+      lines.forEach(rawLine => {
+        const parsedRow = parseErpProductSummaryRow(rawLine);
+        if (parsedRow) {
+          sumProds[parsedRow.cat] = Number((sumProds[parsedRow.cat] + parsedRow.totalKg).toFixed(2));
+          breakdownNotes.push(`${parsedRow.cat}: ${parsedRow.itemSummary}`);
+          matchedProdRowsCount++;
+        } else {
+          const { prods, foundAnyProd } = extractProductAmountsFromLine(rawLine);
+          if (foundAnyProd) {
+            Object.keys(prods).forEach(pk => {
+              if (prods[pk] > 0) {
+                sumProds[pk] = Number((sumProds[pk] + prods[pk]).toFixed(2));
+                matchedProdRowsCount++;
+              }
+            });
+          }
+        }
+      });
+
+      let summaryOrders = 0, summaryLeads = 0, summaryAmount = 0;
+      const cleanFull = fullText.replace(/b(?=\d)/gi, '৳');
+      const moneyMatches = cleanFull.match(/(?:৳|tk|bdt)\s*(\d[\d,]*(?:\.\d+)?)/gi) || [];
+      if (moneyMatches.length > 0) {
+        const parsedMoney = moneyMatches.map(m => parseFloat(m.replace(/[^\d.]/g, ''))).filter(n => !isNaN(n) && n >= 500);
+        if (parsedMoney.length > 0) summaryAmount = Math.round(Math.max(...parsedMoney));
+      }
+
+      if ((isProductSummaryReport || matchedProdRowsCount > 0) && (matchedProdRowsCount > 0 || summaryAmount > 0)) {
+        const targetAg = globalDetectedAgent || allAgents[0];
+        const monthlyRecordDateKey = `MONTHLY_PROD_${detectedMonthKey}`;
+        const existingRec = existingSales.find(s => String(s.userId) === String(targetAg.id) && s.date === monthlyRecordDateKey);
+
+        aiDetectedRecords = [{
+          userId: String(targetAg.id),
+          userName: targetAg.name,
+          team: targetAg.team,
+          agentWasAutoDetected: Boolean(globalDetectedAgent),
+          date: monthlyRecordDateKey,
+          isMonthlyProductSummary: true,
+          monthKey: detectedMonthKey,
+          breakdownText: breakdownNotes.join(' | '),
+          category: globalDetectedAgent
+            ? `Detected: ${targetAg.name} (${detectedMonthKey})`
+            : `Select Agent Below (${detectedMonthKey})`,
+          leads: summaryLeads,
+          orders: summaryOrders,
+          amount: 0,
+          ajwa: sumProds.ajwa,
+          pinkSalt: sumProds.pinkSalt,
+          blackGarlic: sumProds.blackGarlic,
+          sunHoney: sumProds.sunHoney,
+          bsHoney: sumProds.bsHoney,
+          gawaGhee: sumProds.gawaGhee,
+          isDuplicate: Boolean(existingRec),
+          selected: true
+        }];
+        renderAiDetectedPreviewTable();
+        return;
+      }
+
+      // 3. Standard Date-Wise Multi-Agent or Single-Agent Sales Report Parsing
+      let currentContextDate = extractDateFromText(fullText, null) || ((reportsDateFilter && reportsDateFilter !== 'ALL') ? reportsDateFilter : getTodayFormatted());
+      let currentContextAgent = globalDetectedAgent;
+      const mergedMap = new Map();
 
       lines.forEach(rawLine => {
         const line = rawLine.trim();
@@ -4620,27 +4965,6 @@
         if (!activeAgent) return;
 
         const rowDate = detectedDate || currentContextDate;
-
-        // First check if line is an ERP product summary row (size x qty)
-        const erpProdRow = parseErpProductSummaryRow(line);
-        if (erpProdRow) {
-          const key = `${activeAgent.id}_MONTHLY_PROD_${detectedMonthKey}`;
-          const prev = mergedMap.get(key) || {
-            userId: String(activeAgent.id),
-            userName: activeAgent.name,
-            team: activeAgent.team,
-            date: `MONTHLY_PROD_${detectedMonthKey}`,
-            isMonthlyProductSummary: true,
-            monthKey: detectedMonthKey,
-            category: `Monthly Product Total (${detectedMonthKey})`,
-            leads: 0, orders: 0, amount: 0,
-            ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0
-          };
-          prev[erpProdRow.cat] = Number((prev[erpProdRow.cat] + erpProdRow.totalKg).toFixed(2));
-          mergedMap.set(key, prev);
-          return;
-        }
-
         let cleanedForNums = line
           .replace(new RegExp(activeAgent.id, 'g'), ' ')
           .replace(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]20\d{2}\b/g, ' ')
@@ -4648,11 +4972,8 @@
           .replace(/\d+(?:\.\d+)?\s*%/g, ' ');
 
         const { prods, foundAnyProd } = extractProductAmountsFromLine(cleanedForNums);
-
         const numMatches = cleanedForNums.match(/\d[\d,]*(?:\.\d+)?/g) || [];
-        const nums = numMatches
-          .map(n => parseFloat(n.replace(/,/g, '')))
-          .filter(n => !isNaN(n) && n >= 0);
+        const nums = numMatches.map(n => parseFloat(n.replace(/,/g, ''))).filter(n => !isNaN(n) && n > 0);
 
         if (nums.length === 0 && !foundAnyProd) return;
 
@@ -4661,63 +4982,58 @@
           userId: String(activeAgent.id),
           userName: activeAgent.name,
           team: activeAgent.team,
+          agentWasAutoDetected: true,
           date: rowDate,
           isMonthlyProductSummary: false,
-          category: 'Sales Report',
-          leads: 0,
-          orders: 0,
-          amount: 0,
-          ajwa: 0,
-          pinkSalt: 0,
-          blackGarlic: 0,
-          sunHoney: 0,
-          bsHoney: 0,
-          gawaGhee: 0
+          category: `Detected: ${activeAgent.name}`,
+          leads: 0, orders: 0, amount: 0,
+          ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0
         };
 
         if (foundAnyProd) {
-          Object.keys(prods).forEach(pk => {
-            if (prods[pk] > 0) prev[pk] = prods[pk];
-          });
+          Object.keys(prods).forEach(pk => { if (prods[pk] > 0) prev[pk] = prods[pk]; });
         }
 
-        const bigAmounts = nums.filter(n => n >= 1500);
-        const smallInts = nums.filter(n => n < 1500 && Number.isInteger(n));
+        const bigAmounts = nums.filter(n => n >= 1200);
+        const smallInts = nums.filter(n => n < 1200 && Number.isInteger(n));
 
-        if (bigAmounts.length > 0) {
-          prev.amount = Math.max(...bigAmounts);
-        }
+        if (bigAmounts.length > 0) prev.amount = Math.max(prev.amount, Math.round(Math.max(...bigAmounts)));
         if (smallInts.length >= 2) {
           const sortedSmall = [...smallInts].sort((a, b) => b - a);
-          prev.leads = sortedSmall[0];
-          prev.orders = sortedSmall[1];
-        } else if (smallInts.length === 1 && !foundAnyProd && prev.orders === 0) {
+          prev.leads = Math.max(prev.leads, sortedSmall[0]);
+          prev.orders = Math.max(prev.orders, sortedSmall[1]);
+        } else if (smallInts.length === 1 && prev.orders === 0) {
           prev.orders = smallInts[0];
         }
 
-        const hasSales = prev.amount > 0 || prev.leads > 0 || prev.orders > 0;
-        const hasProds = (prev.ajwa + prev.pinkSalt + prev.blackGarlic + prev.sunHoney + prev.bsHoney + prev.gawaGhee) > 0;
-        prev.category = (hasSales && hasProds) ? 'Sales + Product' : (hasProds ? 'Product Report' : 'Sales Report');
-
-        mergedMap.set(key, prev);
+        if (prev.amount > 0 || prev.leads > 0 || prev.orders > 0 || foundAnyProd) {
+          mergedMap.set(key, prev);
+        }
       });
 
       aiDetectedRecords = Array.from(mergedMap.values());
 
-      if (aiDetectedRecords.length === 0 && allAgents.length > 0) {
-        const firstAg = allAgents[0];
+      if (aiDetectedRecords.length === 0) {
+        const allNums = (fullText.replace(/\b202\d\b/g, ' ').match(/\d[\d,]*(?:\.\d+)?/g) || [])
+          .map(n => parseFloat(n.replace(/,/g, '')))
+          .filter(n => !isNaN(n) && n > 0);
+        const bigs = allNums.filter(n => n >= 1200 && n < 10000000);
+        const smalls = allNums.filter(n => n > 0 && n < 1000 && Number.isInteger(n));
+
+        const targetAg = globalDetectedAgent || allAgents[0];
         aiDetectedRecords.push({
-          userId: String(firstAg.id),
-          userName: firstAg.name,
-          team: firstAg.team,
-          date: `MONTHLY_PROD_${selectedMonthKey}`,
-          isMonthlyProductSummary: true,
-          monthKey: selectedMonthKey,
-          category: `Monthly Product Total (${selectedMonthKey})`,
-          leads: 0,
-          orders: 0,
-          amount: 0,
-          ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0
+          userId: String(targetAg.id),
+          userName: targetAg.name,
+          team: targetAg.team,
+          agentWasAutoDetected: Boolean(globalDetectedAgent),
+          date: currentContextDate,
+          isMonthlyProductSummary: false,
+          category: globalDetectedAgent ? `Detected: ${targetAg.name}` : 'Select Agent Name',
+          leads: smalls.length >= 2 ? Math.max(...smalls) : 0,
+          orders: smalls.length >= 1 ? Math.min(...smalls) : 0,
+          amount: bigs.length > 0 ? Math.round(Math.max(...bigs)) : 0,
+          ajwa: sumProds.ajwa, pinkSalt: sumProds.pinkSalt, blackGarlic: sumProds.blackGarlic,
+          sunHoney: sumProds.sunHoney, bsHoney: sumProds.bsHoney, gawaGhee: sumProds.gawaGhee
         });
       }
 
@@ -4760,11 +5076,18 @@
       const dupBanner = document.getElementById('aiDuplicateAlertBanner');
 
       if (headlineEl) {
-        if (hasMonthlySummary && aiDetectedRecords.length === 1) {
+        if (aiDetectedRecords.length === 1) {
           const rec0 = aiDetectedRecords[0];
-          headlineEl.textContent = `AI Detected Monthly Product Report for ${rec0.userName} (${rec0.userId}) • Month: ${rec0.monthKey || selectedMonthKey}`;
+          const prodSummary = ['ajwa','pinkSalt','blackGarlic','sunHoney','bsHoney','gawaGhee']
+            .filter(k => (Number(rec0[k]) || 0) > 0)
+            .map(k => `${k}: ${rec0[k]}kg`).join(', ');
+          if (rec0.agentWasAutoDetected) {
+            headlineEl.innerHTML = `<span class="text-emerald-700">✅ Agent Found in Image: <strong>${rec0.userName} (${rec0.userId})</strong></span> — ${rec0.amount > 0 ? `Sales: ৳${Number(rec0.amount).toLocaleString()}, Orders: ${rec0.orders}` : ''} ${prodSummary ? `| Products: ${prodSummary}` : ''}. Do you want to upload this to the system?`;
+          } else {
+            headlineEl.innerHTML = `<span class="text-amber-700">⚠️ Agent Name Not Clear in Image — Please select the Agent from the dropdown below!</span> ${rec0.amount > 0 ? `Detected Sales: ৳${Number(rec0.amount).toLocaleString()}` : ''} ${prodSummary ? `| Detected Products: ${prodSummary}` : ''}`;
+          }
         } else {
-          headlineEl.textContent = `AI Detected ${aiDetectedRecords.length} Report Entry(s) across ${uniqueAgentsCount} Agent(s)`;
+          headlineEl.textContent = `AI Detected ${aiDetectedRecords.length} Report Entry(s) across ${uniqueAgentsCount} Agent(s) — Review & Confirm Upload Below`;
         }
       }
       if (detailsEl) {
