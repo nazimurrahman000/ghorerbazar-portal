@@ -146,7 +146,7 @@
       { id: '11042', name: 'Md. Ashiqur Rahman', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'B', baseTarget: 1132174 },
       { id: '10328', name: 'Sheikh MD Rayhan', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
       { id: '10135', name: 'Ranju Ahmed', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'A', baseTarget: 1332174 },
-      { id: '10357', name: 'Md. Faruque Hossain', role: 'agent', team: 'Team Nazim', pass: '123456', grade: 'Pending', baseTarget: 0 },
+      { id: '10357', name: 'Md. Faruque Hossain', role: 'agent', team: 'Floating', pass: '123456', grade: 'Pending', baseTarget: 0 },
 
       { id: '10098', name: 'Habibur Rahman Shuvo', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A-', baseTarget: 1232174 },
       { id: '10136', name: 'Al-Amin Kazi', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A+', baseTarget: 1619218 },
@@ -178,7 +178,7 @@
       { id: '11042', name: 'Md. Ashiqur Rahman', team: 'Team Nazim', sat: 'DO', sun: '3:00 PM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
       { id: '10328', name: 'Sheikh MD Rayhan', team: 'Team Nazim', sat: '7:00 AM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
       { id: '10135', name: 'Ranju Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '10:00 AM', tue: '7:00 AM', wed: '3:00 PM', thu: 'Night', fri: 'DO' },
-      { id: '10357', name: 'Md. Faruque Hossain', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' }
+      { id: '10357', name: 'Md. Faruque Hossain', team: 'Floating', sat: '3:00 PM', sun: '3:00 PM', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' }
     ];
 
     const DEFAULT_PRODUCTS = {
@@ -226,15 +226,24 @@
 
     (function seedDefaultUsers() {
       const existing = localStorage.getItem('gb_users');
+      const migFlag = localStorage.getItem('gb_faruque_floating_v1');
       if (!existing) {
         localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS.map(normalizeUserRecord)));
+        localStorage.setItem('gb_faruque_floating_v1', '1');
       } else {
         try {
           const parsed = JSON.parse(existing);
           const map = new Map();
           DEFAULT_USERS.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
-          parsed.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
+          parsed.forEach(u => {
+            const norm = normalizeUserRecord(u);
+            if (!migFlag && String(norm.id) === '10357' && norm.grade === 'Pending') {
+              norm.team = 'Floating';
+            }
+            map.set(String(norm.id), norm);
+          });
           localStorage.setItem('gb_users', JSON.stringify(Array.from(map.values())));
+          localStorage.setItem('gb_faruque_floating_v1', '1');
         } catch (e) {
           localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS.map(normalizeUserRecord)));
         }
@@ -284,7 +293,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen) return true;
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal'];
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -727,8 +736,9 @@
         const usr = allUsers.find(u => String(u.id) === String(defRow.id));
         return {
           ...defRow,
+          ...(override || {}),
           name: usr ? usr.name : defRow.name,
-          ...(override || {})
+          team: usr ? usr.team : (override && override.team ? override.team : defRow.team)
         };
       });
     }
@@ -1012,6 +1022,7 @@
     function isUserInteractingWithControl() {
       const active = document.activeElement;
       if (!active) return false;
+      if (active.id === 'chatComposerInput') return false;
       const tag = (active.tagName || '').toUpperCase();
       return tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA';
     }
@@ -1084,11 +1095,50 @@
       }
       if (res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
         const localCfg = getStored('monthly_configs', {});
-        if (JSON.stringify(res.monthlyConfigs) !== JSON.stringify(localCfg)) {
+        const mergedConfigs = { ...localCfg, ...res.monthlyConfigs };
+
+        if (localCfg['CHAT_AND_NOTICES'] || res.monthlyConfigs['CHAT_AND_NOTICES']) {
+          const locHub = localCfg['CHAT_AND_NOTICES'] || {};
+          const cldHub = res.monthlyConfigs['CHAT_AND_NOTICES'] || {};
+
+          const msgMap = new Map();
+          (Array.isArray(cldHub.messages) ? cldHub.messages : []).forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
+          (Array.isArray(locHub.messages) ? locHub.messages : []).forEach(m => {
+            if (m && m.id && !msgMap.has(m.id) && (Date.now() - Number(m.ts || 0) < 20000)) {
+              msgMap.set(m.id, m);
+            }
+          });
+          const mergedMsgs = Array.from(msgMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-220);
+
+          const noticeMap = new Map();
+          (Array.isArray(cldHub.notices) ? cldHub.notices : []).forEach(n => { if (n && n.id) noticeMap.set(n.id, n); });
+          (Array.isArray(locHub.notices) ? locHub.notices : []).forEach(n => {
+            if (n && n.id && !noticeMap.has(n.id) && (Date.now() - Number(n.ts || 0) < 20000)) {
+              noticeMap.set(n.id, n);
+            }
+          });
+          const mergedNotices = Array.from(noticeMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-40);
+
+          const mergedReads = {};
+          const locReads = (locHub.readReceipts && typeof locHub.readReceipts === 'object') ? locHub.readReceipts : {};
+          const cldReads = (cldHub.readReceipts && typeof cldHub.readReceipts === 'object') ? cldHub.readReceipts : {};
+          new Set([...Object.keys(locReads), ...Object.keys(cldReads)]).forEach(uid => {
+            mergedReads[uid] = {};
+            const uLoc = locReads[uid] || {};
+            const uCld = cldReads[uid] || {};
+            new Set([...Object.keys(uLoc), ...Object.keys(uCld)]).forEach(rId => {
+              mergedReads[uid][rId] = Math.max(Number(uLoc[rId] || 0), Number(uCld[rId] || 0));
+            });
+          });
+
+          mergedConfigs['CHAT_AND_NOTICES'] = { messages: mergedMsgs, notices: mergedNotices, readReceipts: mergedReads };
+        }
+
+        if (JSON.stringify(mergedConfigs) !== JSON.stringify(localCfg)) {
           const hadPrevCfg = Object.keys(localCfg).length > 0;
-          setStored('monthly_configs', res.monthlyConfigs);
+          setStored('monthly_configs', mergedConfigs);
           if (currentUser) {
-            syncIncomingChatAndNoticesFromConfigs(res.monthlyConfigs, hadPrevCfg);
+            syncIncomingChatAndNoticesFromConfigs(mergedConfigs, hadPrevCfg);
           }
           changed = true;
         }
@@ -1132,7 +1182,7 @@
         fetchFromSheet();
         startRosterDutyNotificationWatcher();
         if (pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(fetchFromSheet, 4000);
+        pollInterval = setInterval(fetchFromSheet, 2200);
       } else {
         document.getElementById('app').innerHTML = renderLogin();
       }
@@ -1334,6 +1384,9 @@
       const savedChatLeftTop = prevChatLeft ? prevChatLeft.scrollTop : 0;
       const prevRoleLeft = document.getElementById('roleLeftSidebarViewport');
       const savedRoleLeftTop = prevRoleLeft ? prevRoleLeft.scrollTop : 0;
+      const prevChatInput = document.getElementById('chatComposerInput');
+      const savedChatInputVal = prevChatInput ? prevChatInput.value : '';
+      const wasChatInputFocused = document.activeElement && document.activeElement.id === 'chatComposerInput';
       const savedScrollLeft = prevMainEl ? prevMainEl.scrollLeft : 0;
       const tableScrollPositions = Array.from(document.querySelectorAll('.overflow-x-auto')).map(el => ({
         top: el.scrollTop,
@@ -1473,6 +1526,10 @@
                   <i class="fa-solid fa-bullhorn text-xs"></i> Post Notice
                 </button>
                 ` : ''}
+                <button onclick="openModal('noticeBoardModal')" title="Open Official Floor Notice Board" class="px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-colors">
+                  <i class="fa-solid fa-clipboard-list text-amber-600 text-xs"></i>
+                  <span class="hidden sm:inline">Notice Board</span>
+                </button>
                 ${renderHeaderBellNotificationWidget()}
                 <button onclick="hasFeatureAccess(currentUser, 'tab_agents') ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl flex items-center gap-2 transition-colors">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
@@ -1506,6 +1563,8 @@
         ${hasFeatureAccess(u, 'feat_ai_erp_import') ? renderAiImportModal() : ''}
         ${renderConfirmWarningModal()}
         ${hasFeatureAccess(u, 'feat_post_notice') ? renderAnnouncementModal() : ''}
+        ${renderDriveProductModal()}
+        ${renderNoticeBoardModal()}
         ${renderLogoutConfirmModal()}
       `;
       document.getElementById('app').innerHTML = html;
@@ -1530,6 +1589,14 @@
       const newRoleLeft = document.getElementById('roleLeftSidebarViewport');
       if (newRoleLeft) {
         newRoleLeft.scrollTop = savedRoleLeftTop;
+      }
+      const newChatInput = document.getElementById('chatComposerInput');
+      if (newChatInput && savedChatInputVal) {
+        newChatInput.value = savedChatInputVal;
+      }
+      if (newChatInput && wasChatInputFocused) {
+        newChatInput.focus();
+        try { newChatInput.setSelectionRange(newChatInput.value.length, newChatInput.value.length); } catch (e) {}
       }
       const newTables = document.querySelectorAll('.overflow-x-auto');
       tableScrollPositions.forEach((pos, idx) => {
@@ -1607,6 +1674,21 @@
     // If an agent has a MONTHLY_PROD_MM/YYYY summary uploaded via AI ERP Product Report,
     // use the higher of (Monthly ERP Summary vs Sum of Daily Entries) per product so daily & monthly never double-count!
     // Also returns the exact submission date/timestamp for each record.
+    function formatFullMonthDateDisplay(rawDateStr) {
+      if (!rawDateStr) return '-';
+      const s = String(rawDateStr).replace(/^'/, '').trim();
+      const p = s.split('/');
+      if (p.length === 3) {
+        const fullMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const mIdx = parseInt(p[1], 10) - 1;
+        const dayNum = parseInt(p[0], 10);
+        if (mIdx >= 0 && mIdx < 12 && !isNaN(dayNum)) {
+          return `${fullMonths[mIdx]} ${dayNum}, ${p[2]}`;
+        }
+      }
+      return s;
+    }
+
     function computeAgentDriveProductStats(agentObj, monthSalesList, mKey) {
       const mk = mKey || selectedMonthKey;
       const activeProds = getActiveProductsForMonth(mk);
@@ -1626,13 +1708,19 @@
         return Object.keys(activeProds).some(k => (Number(s[k]) || 0) > 0);
       });
 
-      let lastSubmittedDate = '-';
-      if (productLogs.length > 0) {
+      let lastSubmittedDate = 'Not Updated Yet';
+      if (monthlySummaryEntry && (monthlySummaryEntry.lastUpdatedDate || monthlySummaryEntry.submittedAt)) {
+        const rawSub = String(monthlySummaryEntry.lastUpdatedDate || monthlySummaryEntry.submittedAt).split(',')[0].trim();
+        lastSubmittedDate = formatFullMonthDateDisplay(rawSub);
+      } else if (productLogs.length > 0) {
         const firstLog = productLogs[0];
-        if (String(firstLog.date).startsWith('MONTHLY_PROD_')) {
-          lastSubmittedDate = firstLog.submittedAt || `ERP Summary (${mk})`;
+        if (firstLog.lastUpdatedDate) {
+          lastSubmittedDate = firstLog.lastUpdatedDate;
+        } else if (String(firstLog.date).startsWith('MONTHLY_PROD_')) {
+          const rawSub = firstLog.submittedAt ? String(firstLog.submittedAt).split(',')[0].trim() : getTodayFormatted();
+          lastSubmittedDate = formatFullMonthDateDisplay(rawSub);
         } else {
-          lastSubmittedDate = cleanDisplayDate(firstLog.date) + (firstLog.time ? ` • ${firstLog.time}` : '');
+          lastSubmittedDate = formatFullMonthDateDisplay(firstLog.date);
         }
       }
 
@@ -2030,6 +2118,132 @@
     }
 
     
+    function renderDriveProductModal() {
+      const u = currentUser;
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      return `
+        <div id="driveProdModal" class="hidden fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <div>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">Till-Now Cumulative Total</span>
+                <h3 class="text-base font-black text-slate-900 mt-1">Update Drive Product Total (${monthLabel})</h3>
+                <p class="text-xs font-bold text-slate-400">Enter total KG sold till now for ${monthLabel}. Last Update will show <strong>${formatFullMonthDateDisplay(getTodayFormatted())}</strong>.</p>
+              </div>
+              <button type="button" onclick="closeModal('driveProdModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form onsubmit="handleSaveDriveProductTotal(event)" class="space-y-4">
+              <div class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'}">
+                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent</label>
+                <select id="dpModalAgentId" onchange="onDriveProdModalAgentChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900">
+                  ${allAgents.map(ag => `<option value="${ag.id}">${ag.name} (${ag.id} • ${ag.team})</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
+                💡 Enter total KG sold till today: <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                ${Object.keys(activeProds).map(k => `
+                  <div>
+                    <label class="block text-[11px] font-extrabold text-slate-700 mb-1">${activeProds[k].name} (Total KG)</label>
+                    <input type="number" step="0.01" min="0" id="dpInput_${k}" placeholder="0.00" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-900">
+                    <span class="text-[10px] font-bold text-slate-400">Target: ${activeProds[k].targetKg} kg</span>
+                  </div>
+                `).join('')}
+              </div>
+
+              <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeModal('driveProdModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 rounded-xl shadow-lg">
+                  <i class="fa-solid fa-check-double mr-1"></i> Save Till-Now Total & Sync
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function openDriveProductModal(agentId) {
+      if (!currentUser) return;
+      const selEl = document.getElementById('dpModalAgentId');
+      const targetId = (hasFeatureAccess(currentUser, 'feat_manage_all_sales') && agentId) ? agentId : currentUser.id;
+      if (selEl && targetId) selEl.value = targetId;
+      onDriveProdModalAgentChange();
+      openModal('driveProdModal');
+    }
+
+    function onDriveProdModalAgentChange() {
+      const u = currentUser;
+      const agId = hasFeatureAccess(u, 'feat_manage_all_sales') ? (document.getElementById('dpModalAgentId')?.value || u.id) : u.id;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const agObj = allUsers.find(a => String(a.id) === String(agId)) || u;
+      const monthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(selectedMonthKey));
+      const st = computeAgentDriveProductStats(agObj, monthSales, selectedMonthKey);
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      Object.keys(activeProds).forEach(k => {
+        const inp = document.getElementById(`dpInput_${k}`);
+        if (inp) inp.value = st.prodKg[k] || 0;
+      });
+    }
+
+    function handleSaveDriveProductTotal(e) {
+      e.preventDefault();
+      const u = currentUser;
+      const agId = hasFeatureAccess(u, 'feat_manage_all_sales') ? (document.getElementById('dpModalAgentId')?.value || u.id) : u.id;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetAgent = allUsers.find(a => String(a.id) === String(agId)) || u;
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+
+      const prodValuesObj = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
+      Object.keys(activeProds).forEach(k => {
+        prodValuesObj[k] = Number(document.getElementById(`dpInput_${k}`)?.value) || 0;
+      });
+
+      const lastUpdateFormatted = formatFullMonthDateDisplay(getTodayFormatted());
+      const monthlyKeyDate = `MONTHLY_PROD_${selectedMonthKey}`;
+
+      let sales = getStored('sales_records', []);
+      sales = sales.map(s => {
+        if (String(s.userId) === String(targetAgent.id) && String(s.date || '').endsWith(selectedMonthKey) && !String(s.date).startsWith('MONTHLY_PROD_')) {
+          const copy = { ...s };
+          Object.keys(activeProds).forEach(k => { copy[k] = 0; });
+          return copy;
+        }
+        return s;
+      });
+
+      sales = sales.filter(s => !(String(s.userId) === String(targetAgent.id) && s.date === monthlyKeyDate));
+      const entry = {
+        userId: String(targetAgent.id),
+        userName: targetAgent.name,
+        team: targetAgent.team,
+        date: monthlyKeyDate,
+        lastUpdatedDate: lastUpdateFormatted,
+        submittedAt: lastUpdateFormatted,
+        leads: 0, orders: 0, amount: 0, ratio: 0,
+        ...prodValuesObj
+      };
+      sales.unshift(entry);
+      setStored('sales_records', sales);
+
+      const logMeta = recordActivityLog(
+        'Updated Drive Product Total',
+        `Updated till-now Drive Product total for ${targetAgent.name} (${selectedMonthKey}) — Last Update: ${lastUpdateFormatted}`
+      );
+
+      closeModal('driveProdModal');
+      renderAppLayout();
+      showPortalToast('Drive Product Total Synced!', `Updated ${targetAgent.name}'s total (Last Update: ${lastUpdateFormatted}).`, 'success');
+      postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta }).catch(() => {});
+    }
+
     function renderDriveProductView() {
       const u = currentUser;
       const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
@@ -2065,37 +2279,25 @@
 
       const grandPct = grandTargetKg > 0 ? Math.round((grandTotalKg / grandTargetKg) * 100) : 0;
 
-      const allSubmittedProductLogs = monthSales
-        .filter(s => {
-          if (driveProdTeamScope !== 'ALL' && s.team !== driveProdTeamScope) return false;
-          if (driveProdAgentId !== 'ALL' && String(s.userId) !== String(driveProdAgentId)) return false;
-          return prodKeys.some(k => (Number(s[k]) || 0) > 0);
-        })
-        .sort((a, b) => {
-          const da = parseInt(String(a.date).split('/')[0], 10) || 99;
-          const db = parseInt(String(b.date).split('/')[0], 10) || 99;
-          return db - da;
-        });
-
       return `
         <div class="space-y-6">
           <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
               <div class="flex items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">Floor-Wide Transparency</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">Till-Now Cumulative Totals</span>
                 <span class="text-xs font-bold text-slate-400">Month: ${monthLabel}</span>
               </div>
               <h2 class="text-xl font-black text-slate-900 mt-1">
-                <i class="fa-solid fa-box-open text-amber-500 mr-2"></i>Drive Product Target & Achievement Leaderboard (${monthLabel})
+                <i class="fa-solid fa-box-open text-amber-500 mr-2"></i>Drive Product Total Achievement (${monthLabel})
               </h2>
               <p class="text-xs font-bold text-slate-500 mt-0.5">
-                Every Agent & Admin can view how many KG of each Drive Product every agent has sold, along with exact submission dates.
+                Every Agent & Admin can view how many KG of each Drive Product every agent has sold till now, and update their cumulative total anytime.
               </p>
             </div>
 
             <div class="flex flex-wrap items-center gap-2.5">
               <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-                <button onclick="setDriveProdTeam('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All Teams (17)</button>
+                <button onclick="setDriveProdTeam('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (${allAgents.length})</button>
                 <button onclick="setDriveProdTeam('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
                 <button onclick="setDriveProdTeam('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
               </div>
@@ -2113,19 +2315,16 @@
                 <i class="fa-solid fa-sliders mr-1"></i> Edit Product Targets
               </button>
               ` : ''}
-              ${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? `
-              <button onclick="openReportModal(driveProdAgentId !== 'ALL' ? driveProdAgentId : '')" class="px-4 py-2 tab-active text-white rounded-xl text-xs font-extrabold shadow">
-                <i class="fa-solid fa-plus-circle mr-1"></i> Submit Drive Product Entry
+              <button onclick="openDriveProductModal('${u.role === 'agent' ? u.id : (driveProdAgentId !== 'ALL' ? driveProdAgentId : '')}')" class="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-1.5">
+                <i class="fa-solid fa-pen-to-square"></i> Update Till-Now Drive Product Total
               </button>
-              ` : ''}
             </div>
           </div>
 
-          <!-- Table 1: Agent-Wise Drive Product Total Sold (KG) vs Target -->
           <div class="card-dynamic overflow-hidden overflow-x-auto">
             <div class="px-5 py-3 bg-slate-900 text-white flex items-center justify-between">
-              <span class="text-xs font-black uppercase tracking-wider"><i class="fa-solid fa-ranking-star text-amber-400 mr-1.5"></i>Agent-Wise Drive Product Achievement Summary (${monthLabel})</span>
-              <span class="text-[11px] font-bold text-slate-300">Click any agent row to filter their date-wise submissions below</span>
+              <span class="text-xs font-black uppercase tracking-wider"><i class="fa-solid fa-ranking-star text-amber-400 mr-1.5"></i>Agent-Wise Drive Product Till-Now Total (${monthLabel})</span>
+              <span class="text-[11px] font-bold text-slate-300">Shows cumulative total KG sold till now & Last Update date</span>
             </div>
             <table class="w-full text-left text-xs whitespace-nowrap">
               <thead class="table-header-light uppercase font-extrabold">
@@ -2136,20 +2335,22 @@
                   ${prodKeys.map(k => `<th class="p-3.5 text-center">${activeProds[k].name}<br><span class="text-[10px] text-slate-400 font-bold">Target: ${activeProds[k].targetKg} kg</span></th>`).join('')}
                   <th class="p-3.5 text-center">Total Sold (KG)</th>
                   <th class="p-3.5 text-center">Achieved %</th>
-                  <th class="p-3.5">Last Submitted Date</th>
+                  <th class="p-3.5">Last Update</th>
+                  <th class="p-3.5 text-right">Action</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
                 ${rowsData.map((st, idx) => {
                   const isMe = String(st.agent.id) === String(u.id);
+                  const canUpdateThisRow = isAdmin || isMe;
                   return `
-                    <tr onclick="setDriveProdAgent('${st.agent.id}')" class="cursor-pointer ${isMe ? 'bg-blue-50/70 font-extrabold' : 'hover:bg-slate-50'}">
+                    <tr class="${isMe ? 'bg-blue-50/70 font-extrabold' : 'hover:bg-slate-50'}">
                       <td class="p-3.5 font-black text-slate-500">#${idx + 1}</td>
                       <td class="p-3.5 font-extrabold text-slate-900">
                         ${st.agent.name} <span class="text-slate-400 text-[10px]">(${st.agent.id})</span>
                         ${isMe ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[9px] font-black">YOU</span>` : ''}
                       </td>
-                      <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${st.agent.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${st.agent.team}</span></td>
+                      <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${st.agent.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (st.agent.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800')}">${st.agent.team}</span></td>
                       ${prodKeys.map(k => {
                         const val = st.prodKg[k] || 0;
                         const tgt = Number(activeProds[k].targetKg) || 1;
@@ -2163,7 +2364,14 @@
                       }).join('')}
                       <td class="p-3.5 text-center font-black text-emerald-700 text-sm">${st.totalKgAll.toFixed(2)} kg</td>
                       <td class="p-3.5 text-center"><span class="px-2.5 py-1 rounded-md ${st.overallPct >= 90 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${st.overallPct}%</span></td>
-                      <td class="p-3.5 font-bold text-slate-600"><i class="fa-regular fa-calendar-check text-blue-600 mr-1"></i>${st.lastSubmittedDate}</td>
+                      <td class="p-3.5 font-bold text-slate-700"><i class="fa-regular fa-calendar-check text-amber-600 mr-1.5"></i>Last Update: <strong class="text-slate-900">${st.lastSubmittedDate}</strong></td>
+                      <td class="p-3.5 text-right">
+                        ${canUpdateThisRow ? `
+                          <button onclick="openDriveProductModal('${st.agent.id}')" class="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-extrabold text-[11px]">
+                            <i class="fa-solid fa-pen mr-1"></i>Update Total
+                          </button>
+                        ` : '-'}
+                      </td>
                     </tr>
                   `;
                 }).join('')}
@@ -2181,74 +2389,9 @@
                   }).join('')}
                   <td class="p-4 text-center text-emerald-400 text-sm">${grandTotalKg.toFixed(2)} kg</td>
                   <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950">${grandPct}%</span></td>
-                  <td class="p-4 text-slate-300">Floor Total (${selectedMonthKey})</td>
+                  <td colspan="2" class="p-4 text-slate-300">Floor Total (${selectedMonthKey})</td>
                 </tr>
               </tfoot>
-            </table>
-          </div>
-
-          <!-- Table 2: Date-Wise Drive Product Submission History (Shows Exact Date Submitted + Which Agent Cut How Much) -->
-          <div class="card-dynamic overflow-hidden overflow-x-auto">
-            <div class="px-5 py-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
-              <div>
-                <h3 class="text-xs font-black uppercase text-amber-900">
-                  <i class="fa-solid fa-clock-rotate-left mr-1.5"></i>Date-Wise Drive Product Submissions Log (${allSubmittedProductLogs.length} Entries)
-                </h3>
-                <p class="text-[11px] font-bold text-amber-700">Shows exact Report Date, Submitted Timestamp, Agent Name, and KG sold per product</p>
-              </div>
-              ${driveProdAgentId !== 'ALL' ? `
-              <button onclick="setDriveProdAgent('ALL')" class="px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-extrabold text-amber-900 hover:bg-amber-100">
-                <i class="fa-solid fa-arrow-left mr-1"></i> Show All Agents
-              </button>
-              ` : ''}
-            </div>
-            <table class="w-full text-left text-xs whitespace-nowrap">
-              <thead class="table-header-light uppercase font-extrabold">
-                <tr>
-                  <th class="p-3.5">Report Date</th>
-                  <th class="p-3.5">Submitted Time</th>
-                  <th class="p-3.5">Agent Name</th>
-                  <th class="p-3.5">Team</th>
-                  ${prodKeys.map(k => `<th class="p-3.5 text-center">${activeProds[k].name} (kg)</th>`).join('')}
-                  <th class="p-3.5 text-center">Row Total (kg)</th>
-                  ${(isAdmin || u.role === 'agent') ? `<th class="p-3.5 text-right">Actions</th>` : ''}
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 font-semibold">
-                ${allSubmittedProductLogs.length === 0 ? `
-                  <tr><td colspan="${prodKeys.length + 6}" class="p-8 text-center text-slate-400 font-bold">No Drive Product entries submitted for ${monthLabel} yet.</td></tr>
-                ` : allSubmittedProductLogs.map(log => {
-                  const isMonthlySummary = String(log.date).startsWith('MONTHLY_PROD_');
-                  const rowSumKg = prodKeys.reduce((acc, k) => acc + (Number(log[k]) || 0), 0);
-                  const canEditRow = isAdmin || String(log.userId) === String(u.id);
-                  return `
-                    <tr class="hover:bg-slate-50">
-                      <td class="p-3.5 font-extrabold text-slate-900">
-                        ${isMonthlySummary
-                          ? `<span class="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[10px] font-black">ERP Monthly Summary (${log.date.replace('MONTHLY_PROD_', '')})</span>`
-                          : cleanDisplayDate(log.date)
-                        }
-                      </td>
-                      <td class="p-3.5 font-mono text-[11px] font-bold text-blue-600">${log.submittedAt || log.time || 'Synced'}</td>
-                      <td class="p-3.5 font-extrabold text-slate-900">${log.userName} <span class="text-slate-400 text-[10px]">(${log.userId})</span></td>
-                      <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${log.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${log.team}</span></td>
-                      ${prodKeys.map(k => {
-                        const v = Number(log[k]) || 0;
-                        return `<td class="p-3.5 text-center font-black ${v > 0 ? 'text-emerald-700' : 'text-slate-300'}">${v > 0 ? v.toFixed(2) : '-'}</td>`;
-                      }).join('')}
-                      <td class="p-3.5 text-center font-black text-slate-900">${rowSumKg.toFixed(2)} kg</td>
-                      ${(isAdmin || u.role === 'agent') ? `
-                      <td class="p-3.5 text-right space-x-1">
-                        ${canEditRow ? `
-                          ${!isMonthlySummary ? `<button onclick="openReportModal('${log.userId}', '${log.date}')" class="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>` : ''}
-                          <button onclick="handleDirectDeleteReport('${log.userId}', '${log.userName}', '${log.date}')" class="px-2.5 py-1 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>
-                        ` : '-'}
-                      </td>
-                      ` : ''}
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
             </table>
           </div>
         </div>
@@ -2663,6 +2806,7 @@
 
       const samadRows = roster.filter(r => r.team === 'Team Samad');
       const nazimRows = roster.filter(r => r.team === 'Team Nazim');
+      const floatingRows = roster.filter(r => r.team !== 'Team Samad' && r.team !== 'Team Nazim');
 
       function computeRosterSummary(rows, excludeTL) {
         const filtered = excludeTL ? rows.filter(r => !r.isTL && r.id !== '10107' && r.id !== '10122') : rows;
@@ -2810,6 +2954,40 @@
               ${renderTeamSummaryTable('Team Nazim — Roster Summary', nazimSum)}
             </div>
           </div>
+
+          ${floatingRows.length > 0 ? `
+          <div class="card-dynamic overflow-hidden border-2 border-purple-200">
+            <div class="bg-gradient-to-r from-purple-700 to-indigo-700 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+              <span class="font-black text-xs uppercase tracking-wider"><i class="fa-solid fa-user-astronaut mr-1.5"></i>Facebook Floating Agents Pool (Unassigned to Nazim/Samad — Included in Overall Facebook Combined)</span>
+              <span class="text-[10px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full">Assign to a team anytime using buttons on the right</span>
+            </div>
+            <table class="w-full text-[11px] border-collapse">
+              <thead class="bg-slate-50 font-extrabold text-slate-600">
+                <tr>
+                  <th class="px-1.5 py-2 border border-slate-200">ID</th>
+                  <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
+                  ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
+                  ${hasFeatureAccess(u, 'feat_manage_users') ? `<th class="px-2 py-2 border border-slate-200 text-center">Quick Assign Team</th>` : ''}
+                </tr>
+              </thead>
+              <tbody>
+                ${floatingRows.map(r => `
+                  <tr class="hover:bg-purple-50/40">
+                    <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold text-purple-700">${r.id}</td>
+                    <td class="px-2 py-2 border border-slate-200 font-extrabold text-slate-900 whitespace-nowrap">${r.name} <span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-[9px] font-black ml-1">Floating</span></td>
+                    ${days.map(d => renderShiftCell(r, d)).join('')}
+                    ${hasFeatureAccess(u, 'feat_manage_users') ? `
+                    <td class="px-2 py-1.5 border border-slate-200 text-center space-x-1 whitespace-nowrap">
+                      <button onclick="quickAssignAgentToTeam('${r.id}', 'Team Nazim')" class="px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-md font-extrabold text-[10px]">+ Team Nazim</button>
+                      <button onclick="quickAssignAgentToTeam('${r.id}', 'Team Samad')" class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-extrabold text-[10px]">+ Team Samad</button>
+                    </td>
+                    ` : ''}
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ` : ''}
 
           <div class="card-dynamic overflow-hidden max-w-4xl mx-auto">
             <div class="bg-slate-900 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Facebook Team Roster Summary (Combined)</div>
@@ -3310,6 +3488,49 @@
       `;
     }
 
+    
+    function quickAssignAgentToTeam(agentId, newTeamName) {
+      if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetUser = allUsers.find(u => String(u.id) === String(agentId));
+      if (!targetUser) return;
+
+      openConfirmWarningModal(
+        `Assign ${targetUser.name} to ${newTeamName}?`,
+        `Are you sure you want to assign <strong>${targetUser.name} (${targetUser.id})</strong> from <strong>${targetUser.team}</strong> to <strong>${newTeamName}</strong>? All their sales, roster, and targets will immediately sync under ${newTeamName}.`,
+        'Team Assignment Confirmation',
+        async () => {
+          let users = getStored('users', DEFAULT_USERS);
+          const idx = users.findIndex(u => String(u.id) === String(agentId));
+          if (idx !== -1) {
+            users[idx].team = newTeamName;
+            setStored('users', users);
+          }
+
+          let sales = getStored('sales_records', []);
+          sales = sales.map(s => String(s.userId) === String(agentId) ? { ...s, team: newTeamName } : s);
+          setStored('sales_records', sales);
+
+          let attList = getStored('attendance_records', []);
+          attList = attList.map(a => String(a.userId) === String(agentId) ? { ...a, team: newTeamName } : a);
+          setStored('attendance_records', attList);
+
+          let rosterList = getStored('roster_records', []);
+          rosterList = rosterList.map(r => String(r.id) === String(agentId) ? { ...r, team: newTeamName } : r);
+          setStored('roster_records', rosterList);
+
+          const logMeta = recordActivityLog('Assigned Agent Team', `Assigned ${targetUser.name} (${targetUser.id}) to ${newTeamName}`);
+          renderAppLayout();
+          showPortalToast('Team Assigned & Synced!', `${targetUser.name} is now assigned to ${newTeamName}.`, 'success');
+          if (idx !== -1) {
+            postToSheet('SAVE_USER', { ...users[idx], ...logMeta }).catch(() => {});
+          }
+        },
+        `Yes, Assign to ${newTeamName}`,
+        true
+      );
+    }
+
     function renderManageAgents() {
       const u = currentUser;
       let allUsers = getUsersForMonth(selectedMonthKey);
@@ -3418,6 +3639,10 @@
                     <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
                     ${hasFeatureAccess(u, 'feat_manage_users') ? `
                     <td class="p-3.5 text-right space-x-1">
+                      ${usr.role === 'agent' && usr.team === 'Floating' ? `
+                        <button onclick="quickAssignAgentToTeam('${usr.id}', 'Team Nazim')" class="px-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-extrabold text-[10px] shadow-xs" title="Assign ${usr.name} to Team Nazim">+ Team Nazim</button>
+                        <button onclick="quickAssignAgentToTeam('${usr.id}', 'Team Samad')" class="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-extrabold text-[10px] shadow-xs" title="Assign ${usr.name} to Team Samad">+ Team Samad</button>
+                      ` : ''}
                       ${isSuperAdmin(u) ? `<button onclick="openUserRoleControlForId('${usr.id}')" class="px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg font-extrabold hover:bg-purple-100" title="Manage Features & Permissions for ${usr.name}"><i class="fa-solid fa-user-shield mr-1"></i>Roles</button>` : ''}
                       ${canEdit ? `<button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>` : `<span class="px-2.5 py-1 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-lg"><i class="fa-solid fa-lock mr-1"></i>Protected</span>`}
                       ${canDel ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
@@ -3995,6 +4220,7 @@
                   <select id="usrTeam" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
                     <option value="Team Nazim">Team Nazim</option>
                     <option value="Team Samad">Team Samad</option>
+                    <option value="Floating">Floating (Unassigned Pool)</option>
                     <option value="All Teams">All Teams (Supervisor)</option>
                   </select>
                 </div>
@@ -5714,6 +5940,7 @@
 
       if (clickedNotif && clickedNotif.type === 'admin_notice') {
         renderAppLayout();
+        openModal('noticeBoardModal');
         return;
       }
       if (clickedNotif && clickedNotif.type === 'chat_dm' && clickedNotif.roomId) {
@@ -5963,24 +6190,17 @@
       if (!hub.readReceipts) hub.readReceipts = {};
       if (!hub.readReceipts[uid]) hub.readReceipts[uid] = {};
 
-      const prevReadTs = Math.max(
-        Number(hub.readReceipts[uid][channelId] || 0),
-        Number(getLastReadMapForUser()[channelId] || 0)
-      );
-
-      // Check if there are any messages in this channel sent by someone else after prevReadTs
-      const hasNewFromOthers = hub.messages.some(m =>
-        m.roomId === channelId &&
-        String(m.senderId) !== uid &&
-        Number(m.ts || 0) > prevReadTs
-      );
+      const prevCloudReadTs = Number(hub.readReceipts[uid][channelId] || 0);
+      const latestMsgFromOthersTs = hub.messages
+        .filter(m => m.roomId === channelId && String(m.senderId) !== uid)
+        .reduce((max, m) => Math.max(max, Number(m.ts || 0)), 0);
 
       const localMap = getLastReadMapForUser();
-      localMap[channelId] = nowTs;
+      localMap[channelId] = Math.max(nowTs, latestMsgFromOthersTs);
       localStorage.setItem(`gb_chat_read_${uid}`, JSON.stringify(localMap));
 
-      if (hasNewFromOthers || !hub.readReceipts[uid][channelId]) {
-        hub.readReceipts[uid][channelId] = nowTs;
+      if (latestMsgFromOthersTs > prevCloudReadTs) {
+        hub.readReceipts[uid][channelId] = Math.max(nowTs, latestMsgFromOthersTs);
         if (syncToCloudIfNeeded) {
           saveChatAndNoticeHubStore(hub);
         } else {
@@ -6274,10 +6494,17 @@
         });
       }
 
+      // Mark notice as seen by sender before syncing so it never fires a duplicate toast
+      const seenNoticeKey = `gb_seen_notices_${currentUser.id}`;
+      let seenNotices = [];
+      try { seenNotices = JSON.parse(localStorage.getItem(seenNoticeKey) || '[]'); } catch (err) {}
+      seenNotices.push(newNotice.id);
+      localStorage.setItem(seenNoticeKey, JSON.stringify(seenNotices.slice(-100)));
+
       saveChatAndNoticeHubStore(hub);
       syncIncomingChatAndNoticesFromConfigs(getStored('monthly_configs', {}), false);
 
-      recordActivityLog('Broadcasted Official Notice', `Sent Notice "${titleVal}" (${targetVal}): ${msgVal}`, true);
+      recordActivityLog('Broadcasted Official Notice', `Sent Notice "${titleVal}" (${targetVal}): ${msgVal}`, false);
       document.getElementById('annMessageInput').value = '';
       closeModal('announceModal');
       renderAppLayout();
@@ -6293,6 +6520,67 @@
       openModal('announceModal');
       showPortalToast('Notice Removed', 'Deleted the announcement from the broadcast list.', 'warning');
     }
+
+    function renderNoticeBoardModal() {
+      const { notices } = getChatAndNoticeHubStore();
+      const visibleNotices = notices.filter(nt => {
+        if (!nt) return false;
+        if (nt.targetTeam && nt.targetTeam !== 'ALL' && !canViewAll(currentUser) && currentUser.team !== nt.targetTeam) return false;
+        return true;
+      }).slice().reverse();
+
+      return `
+        <div id="noticeBoardModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-base shadow-md">
+                  <i class="fa-solid fa-clipboard-list"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-black text-slate-900">Official Floor Notice Board</h3>
+                  <p class="text-xs font-bold text-slate-400">All official announcements and instructions broadcasted by Admin / TL</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                ${hasFeatureAccess(currentUser, 'feat_post_notice') ? `
+                  <button type="button" onclick="closeModal('noticeBoardModal'); openAnnouncementModal();" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold">
+                    + Post New Notice
+                  </button>
+                ` : ''}
+                <button type="button" onclick="closeModal('noticeBoardModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto py-4 space-y-3 pr-1">
+              ${visibleNotices.length === 0 ? `
+                <div class="p-10 text-center text-slate-400 font-bold text-xs">No official notices have been posted yet.</div>
+              ` : visibleNotices.map(nt => `
+                <div class="p-4 rounded-2xl bg-gradient-to-r from-amber-50/90 to-orange-50/60 border border-amber-200 shadow-2xs">
+                  <div class="flex items-center justify-between gap-2 mb-1.5">
+                    <div class="flex items-center gap-2">
+                      <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-[9px] font-black uppercase">${nt.targetTeam || 'ALL TEAMS'}</span>
+                      <h4 class="text-sm font-black text-slate-900">${nt.title}</h4>
+                    </div>
+                    <span class="text-[10px] font-bold text-slate-500"><i class="fa-regular fa-clock mr-1"></i>${nt.date} • ${nt.time}</span>
+                  </div>
+                  <p class="text-xs font-bold text-slate-700 leading-relaxed whitespace-pre-wrap">${nt.message}</p>
+                  <div class="mt-2 pt-2 border-t border-amber-200/60 flex items-center justify-between text-[10px] font-extrabold text-amber-800">
+                    <span>Posted by: ${nt.senderName}</span>
+                    ${hasFeatureAccess(currentUser, 'feat_post_notice') ? `
+                      <button type="button" onclick="handleDeleteOfficialNotice('${nt.id}'); closeModal('announceModal'); openModal('noticeBoardModal');" class="text-red-600 hover:underline">
+                        <i class="fa-solid fa-trash-can mr-1"></i>Delete Notice
+                      </button>
+                    ` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
 
     // =========================================================================
     // UNIFIED INBOX, GROUP CHANNELS & 1-ON-1 PERSONAL CHAT VIEW WITH SEEN STATUS
@@ -6349,6 +6637,7 @@
 
       saveChatAndNoticeHubStore(hub);
       markChatChannelRead(activeChatChannelId, false);
+      setTimeout(fetchFromSheet, 700);
 
       inputEl.value = '';
       renderAppLayout();
@@ -6662,8 +6951,8 @@
                   if (isDmChannel) {
                     if (isMine) {
                       seenStatusHtml = isSeen
-                        ? `<span class="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600" title="${seenTooltip}"><i class="fa-solid fa-check-double"></i> Seen</span>`
-                        : `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400" title="${seenTooltip}"><i class="fa-solid fa-check"></i> Sent</span>`;
+                        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black shadow-2xs" title="${seenTooltip}"><i class="fa-solid fa-check-double text-emerald-600"></i> Seen by ${seenNames[0]}</span>`
+                        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold" title="${seenTooltip}"><i class="fa-solid fa-check"></i> Sent (Unread)</span>`;
                     }
                   } else {
                     // Group Message Seen Indicator (Visible on all group messages so everyone knows who saw it!)
