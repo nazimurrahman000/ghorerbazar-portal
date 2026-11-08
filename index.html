@@ -282,6 +282,9 @@
     let driveProdTeamScope = 'ALL';
     let driveProdAgentId = 'ALL';
 
+    let sprintTabPhase = 'AUTO'; // 'AUTO' | 'S1' | 'S2' | 'S3'
+    let sprintTabTeamScope = 'ALL'; // 'ALL' | 'Team Nazim' | 'Team Samad'
+
     let activityTeamFilter = 'ALL';
 
     let pollInterval = null;
@@ -307,6 +310,7 @@
       // Section 1: Sidebar Navigation Tabs
       { key: 'tab_dashboard', category: 'Sidebar Tabs', label: 'Dashboard & Targets Tab', desc: 'View main KPI cards, sprint progress & product targets', icon: 'fa-gauge-high', color: 'text-blue-600' },
       { key: 'tab_monthly_perf', category: 'Sidebar Tabs', label: 'Monthly Performance Tab', desc: 'View monthly performance summary & date-wise breakdown', icon: 'fa-chart-column', color: 'text-purple-600' },
+      { key: 'tab_sprint_target', category: 'Sidebar Tabs', label: 'Sprint Target Tab', desc: 'View live 10-day Sprint leaderboard, agent sprint goals & TL 80%/100% milestones', icon: 'fa-bolt', color: 'text-blue-600' },
       { key: 'tab_drive_product', category: 'Sidebar Tabs', label: 'Drive Product Tab', desc: 'View all agents Drive Product KG targets, achieved quantities & date-wise submissions', icon: 'fa-box-open', color: 'text-amber-500' },
       { key: 'tab_reports', category: 'Sidebar Tabs', label: 'Daily Sales Reports Tab', desc: 'Access daily sales & conversion logs table', icon: 'fa-file-invoice', color: 'text-blue-600' },
       { key: 'tab_ranking', category: 'Sidebar Tabs', label: 'Ranking Tab', desc: 'View floor leaderboard & team head-to-head comparison', icon: 'fa-trophy', color: 'text-amber-500' },
@@ -343,6 +347,7 @@
       return {
         tab_dashboard: true,
         tab_monthly_perf: true,
+        tab_sprint_target: true,
         tab_drive_product: true,
         tab_reports: true,
         tab_ranking: true,
@@ -1646,6 +1651,14 @@
                   <i class="fa-solid fa-chart-column text-sm text-purple-600"></i> Monthly Performance
                 </button>
                 ` : ''}
+                ${hasFeatureAccess(u, 'tab_sprint_target') ? `
+                <button onclick="setTab('sprint_target')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'sprint_target' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <span class="flex items-center gap-3">
+                    <i class="fa-solid fa-bolt text-sm ${activeTab === 'sprint_target' ? 'text-amber-300' : 'text-blue-600'}"></i> Sprint Target
+                  </span>
+                  <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${activeTab === 'sprint_target' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'}">LIVE</span>
+                </button>
+                ` : ''}
                 ${hasFeatureAccess(u, 'tab_drive_product') ? `
                 <button onclick="setTab('drive_product')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'drive_product' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-box-open text-sm text-amber-500"></i> Drive Product
@@ -1832,6 +1845,7 @@
       }
       if (activeTab === 'dashboard') return renderDashboard();
       if (activeTab === 'monthly_perf' && hasFeatureAccess(currentUser, 'tab_monthly_perf')) return renderMonthlyPerformanceView();
+      if (activeTab === 'sprint_target' && hasFeatureAccess(currentUser, 'tab_sprint_target')) return renderSprintTargetView();
       if (activeTab === 'drive_product' && hasFeatureAccess(currentUser, 'tab_drive_product')) return renderDriveProductView();
       if (activeTab === 'roster' && hasFeatureAccess(currentUser, 'tab_roster')) return renderDutyRosterView();
       if (activeTab === 'attendance' && hasFeatureAccess(currentUser, 'tab_attendance')) return renderAttendanceView();
@@ -2260,15 +2274,72 @@
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            ${canViewAll(u) ? (() => {
+              const target80 = Math.round(tInfo.workingTarget * 0.80);
+              const target100 = tInfo.workingTarget;
+              const rem80 = Math.max(0, target80 - monthTotalAmount);
+              const rem100 = Math.max(0, target100 - monthTotalAmount);
+              const hit80 = monthTotalAmount >= target80 && target80 > 0;
+              const hit100 = monthTotalAmount >= target100 && target100 > 0;
+              const rawPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
+              return `
+              <div class="sprint-banner p-4 rounded-2xl shadow-sm border-2 ${hit100 ? 'border-emerald-400' : (hit80 ? 'border-amber-400' : 'border-blue-200')}">
+                <div class="flex justify-between items-start gap-2">
+                  <div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">TL / Team Total Target Reward</span>
+                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-white text-indigo-800 border border-indigo-200')}">
+                        ${hit100 ? '🏆 100% Full Reward Unlocked!' : (hit80 ? '🔥 80% Reward Unlocked!' : '80% & 100% Milestones')}
+                      </span>
+                    </div>
+                    <h3 class="text-base font-black text-slate-900 mt-1">
+                      ${dashboardScope === 'ALL' ? 'Overall Floor Milestone (80% / 100%)' : `${dashboardScope} — TL Reward Milestone`}
+                    </h3>
+                  </div>
+                  <button onclick="setTab('sprint_target')" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 shrink-0 transition-colors" title="View all agents' live 10-day Sprint performance">
+                    <i class="fa-solid fa-bolt text-amber-300"></i> Agent Sprints
+                  </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5 mt-3">
+                  <div class="p-2.5 rounded-xl bg-white/90 border ${hit80 ? 'border-emerald-400 bg-emerald-50/40' : 'border-blue-200'}">
+                    <div class="flex items-center justify-between">
+                      <span class="text-[10px] font-black uppercase ${hit80 ? 'text-emerald-700' : 'text-blue-700'}">🎯 80% Reward Goal</span>
+                      <span class="text-[10px] font-black ${hit80 ? 'text-emerald-600' : 'text-amber-600'}">${hit80 ? '✅ Achieved' : `Need ৳${rem80.toLocaleString()}`}</span>
+                    </div>
+                    <strong class="text-sm font-black text-slate-900 block mt-0.5">৳${target80.toLocaleString()}</strong>
+                  </div>
+                  <div class="p-2.5 rounded-xl bg-white/90 border ${hit100 ? 'border-emerald-400 bg-emerald-50/40' : 'border-indigo-200'}">
+                    <div class="flex items-center justify-between">
+                      <span class="text-[10px] font-black uppercase ${hit100 ? 'text-emerald-700' : 'text-indigo-700'}">🏆 100% Full Target</span>
+                      <span class="text-[10px] font-black ${hit100 ? 'text-emerald-600' : 'text-indigo-600'}">${hit100 ? '✅ Achieved' : `Need ৳${rem100.toLocaleString()}`}</span>
+                    </div>
+                    <strong class="text-sm font-black text-slate-900 block mt-0.5">৳${target100.toLocaleString()}</strong>
+                  </div>
+                </div>
+
+                <div class="mt-2.5">
+                  <div class="relative progress-track h-2.5 bg-white border border-blue-200/60">
+                    <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 h-2.5 rounded-full transition-all" style="width: ${monthPct}%"></div>
+                    <div class="absolute top-0 bottom-0 w-0.5 bg-amber-500" style="left: 80%" title="80% Reward Threshold"></div>
+                  </div>
+                  <div class="flex justify-between items-center mt-1 text-[10px] font-extrabold text-slate-600">
+                    <span>Achieved: <strong class="text-indigo-700">৳${monthTotalAmount.toLocaleString()} (${rawPct}%)</strong></span>
+                    <span class="text-amber-700">80% Mark: ৳${target80.toLocaleString()} | 100%: ৳${target100.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+              `;
+            })() : `
             <div class="sprint-banner p-4 rounded-2xl shadow-sm">
               <div class="flex justify-between items-start">
                 <div>
                   <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-blue-600 text-white">Current 10-Day Sprint</span>
                   <h3 class="text-base font-black text-slate-900 mt-1">${tInfo.sprintName} (${tInfo.sprintPct * 100}% Goal)</h3>
                 </div>
-                <div class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm shadow-sm">
-                  <i class="fa-solid fa-bolt"></i>
-                </div>
+                <button onclick="setTab('sprint_target')" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
+                  <i class="fa-solid fa-bolt text-amber-300"></i> Sprint Leaderboard
+                </button>
               </div>
               <div class="mt-3">
                 <div class="flex justify-between text-xs font-extrabold mb-1">
@@ -2284,6 +2355,7 @@
                 </div>
               </div>
             </div>
+            `}
 
             <div class="monthly-banner p-4 rounded-2xl shadow-sm">
               <div class="flex justify-between items-start">
@@ -3741,6 +3813,394 @@
                   `;
                 }).join('')}
               </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    
+    // =========================================================================
+    // SPRINT TARGET & LEADERBOARD VIEW (AGENT 10-DAY SPRINTS + TL 80%/100% REWARD)
+    // =========================================================================
+    function getAutoCurrentSprintPhase() {
+      const d = new Date().getDate();
+      if (d <= 10) return 'S1';
+      if (d <= 20) return 'S2';
+      return 'S3';
+    }
+
+    function setSprintTabPhase(phase) {
+      sprintTabPhase = phase;
+      renderAppLayout();
+    }
+
+    function setSprintTabTeam(scope) {
+      sprintTabTeamScope = scope;
+      renderAppLayout();
+    }
+
+    function exportSprintTargetCsv() {
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const allAgents = allUsers.filter(u => u.role === 'agent');
+      const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+      const effPhase = sprintTabPhase === 'AUTO' ? getAutoCurrentSprintPhase() : sprintTabPhase;
+      const phaseMeta = {
+        S1: { label: 'Sprint 1 (Days 1-10)', pct: 0.40 },
+        S2: { label: 'Sprint 2 (Days 11-20)', pct: 0.35 },
+        S3: { label: 'Sprint 3 (Days 21-31)', pct: 0.35 }
+      }[effPhase];
+
+      const filteredAgents = sprintTabTeamScope === 'ALL'
+        ? allAgents
+        : allAgents.filter(a => a.team === sprintTabTeamScope);
+
+      const rows = filteredAgents.map(ag => {
+        const baseTgt = Number(ag.baseTarget) || 0;
+        const workTgt = Math.round(baseTgt * 1.05);
+        const s1Goal = Math.round(workTgt * 0.40);
+        const s2Goal = Math.round(workTgt * 0.35);
+        const s3Goal = Math.round(workTgt * 0.35);
+
+        const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+        let s1Sales = 0, s2Sales = 0, s3Sales = 0, activeSprintOrders = 0, activeSprintLeads = 0;
+
+        agSales.forEach(s => {
+          const day = parseInt(String(s.date).split('/')[0], 10) || 0;
+          const amt = Number(s.amount) || 0;
+          if (day <= 10) {
+            s1Sales += amt;
+            if (effPhase === 'S1') { activeSprintOrders += Number(s.orders) || 0; activeSprintLeads += Number(s.leads) || 0; }
+          } else if (day <= 20) {
+            s2Sales += amt;
+            if (effPhase === 'S2') { activeSprintOrders += Number(s.orders) || 0; activeSprintLeads += Number(s.leads) || 0; }
+          } else {
+            s3Sales += amt;
+            if (effPhase === 'S3') { activeSprintOrders += Number(s.orders) || 0; activeSprintLeads += Number(s.leads) || 0; }
+          }
+        });
+
+        const curGoal = effPhase === 'S1' ? s1Goal : (effPhase === 'S2' ? s2Goal : s3Goal);
+        const curSales = effPhase === 'S1' ? s1Sales : (effPhase === 'S2' ? s2Sales : s3Sales);
+        const curRem = Math.max(0, curGoal - curSales);
+        const curPct = curGoal > 0 ? Number(((curSales / curGoal) * 100).toFixed(2)) : 0;
+
+        return {
+          ag, workTgt, s1Goal, s1Sales, s2Goal, s2Sales, s3Goal, s3Sales,
+          curGoal, curSales, curRem, curPct, activeSprintOrders, activeSprintLeads
+        };
+      }).sort((a, b) => b.curSales - a.curSales || b.curPct - a.curPct);
+
+      const headers = [
+        'Rank', 'Emp ID', 'Agent Name', 'Team', 'Grade', 'Monthly Working Target (+5%)',
+        `${phaseMeta.label} Goal`, `${phaseMeta.label} Achieved`, `${phaseMeta.label} Remaining`, `${phaseMeta.label} Achieved (%)`,
+        'Sprint 1 (1-10) Achieved', 'Sprint 2 (11-20) Achieved', 'Sprint 3 (21-31) Achieved'
+      ];
+
+      const csvRows = rows.map((r, i) => [
+        i + 1, r.ag.id, r.ag.name, r.ag.team, r.ag.grade, r.workTgt,
+        r.curGoal, r.curSales, r.curRem, `${r.curPct}%`,
+        r.s1Sales, r.s2Sales, r.s3Sales
+      ]);
+
+      const safeMonth = selectedMonthKey.replace('/', '-');
+      downloadPortalCsvFile(`Sprint_Target_${effPhase}_${sprintTabTeamScope.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, csvRows);
+    }
+
+    function renderSprintTargetView() {
+      const u = currentUser;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const allAgents = allUsers.filter(usr => usr.role === 'agent');
+      const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      const autoPhase = getAutoCurrentSprintPhase();
+      const effPhase = sprintTabPhase === 'AUTO' ? autoPhase : sprintTabPhase;
+      const phaseInfo = {
+        S1: { key: 'S1', name: 'Sprint 1 (Days 1–10)', short: 'Sprint 1 (1–10)', pct: 0.40, pctLabel: '40% of Monthly Target' },
+        S2: { key: 'S2', name: 'Sprint 2 (Days 11–20)', short: 'Sprint 2 (11–20)', pct: 0.35, pctLabel: '35% of Monthly Target' },
+        S3: { key: 'S3', name: 'Sprint 3 (Days 21–31)', short: 'Sprint 3 (21–31)', pct: 0.35, pctLabel: '35% of Monthly Target' }
+      }[effPhase];
+
+      // Calculate TL (Nazim & Samad) 80% & 100% Total Target Reward Milestones
+      function calcTLMilestone(teamName, tlName) {
+        const tAgents = allAgents.filter(a => a.team === teamName);
+        const tTLs = allUsers.filter(usr => usr.role === 'admin' && usr.team === teamName);
+        const agentsBase = tAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0);
+        const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
+        const totalWorkTgt = Math.round((agentsBase + tlBase) * 1.05);
+        const target80 = Math.round(totalWorkTgt * 0.80);
+        const target100 = totalWorkTgt;
+        const achieved = monthSales.filter(s => s.team === teamName).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+        const pct = target100 > 0 ? Number(((achieved / target100) * 100).toFixed(1)) : 0;
+        const rem80 = Math.max(0, target80 - achieved);
+        const rem100 = Math.max(0, target100 - achieved);
+        return { teamName, tlName, agentCount: tAgents.length, target80, target100, achieved, pct, rem80, rem100 };
+      }
+
+      const nazimTL = calcTLMilestone('Team Nazim', 'Md. Nazimur Rahman');
+      const samadTL = calcTLMilestone('Team Samad', 'Md Abdus Samad');
+
+      // Filter Agents by Team Scope
+      const filteredAgents = sprintTabTeamScope === 'ALL'
+        ? allAgents
+        : allAgents.filter(a => a.team === sprintTabTeamScope);
+
+      let sumWorkTgt = 0, sumCurGoal = 0, sumCurSales = 0, sumS1 = 0, sumS2 = 0, sumS3 = 0;
+
+      const rankedSprintAgents = filteredAgents.map(ag => {
+        const baseTgt = Number(ag.baseTarget) || 0;
+        const workTgt = Math.round(baseTgt * 1.05);
+        const s1Goal = Math.round(workTgt * 0.40);
+        const s2Goal = Math.round(workTgt * 0.35);
+        const s3Goal = Math.round(workTgt * 0.35);
+
+        const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+        let s1Sales = 0, s2Sales = 0, s3Sales = 0, sprintOrders = 0, sprintLeads = 0;
+
+        agSales.forEach(s => {
+          const day = parseInt(String(s.date).split('/')[0], 10) || 0;
+          const amt = Number(s.amount) || 0;
+          if (day <= 10) {
+            s1Sales += amt;
+            if (effPhase === 'S1') { sprintOrders += Number(s.orders) || 0; sprintLeads += Number(s.leads) || 0; }
+          } else if (day <= 20) {
+            s2Sales += amt;
+            if (effPhase === 'S2') { sprintOrders += Number(s.orders) || 0; sprintLeads += Number(s.leads) || 0; }
+          } else {
+            s3Sales += amt;
+            if (effPhase === 'S3') { sprintOrders += Number(s.orders) || 0; sprintLeads += Number(s.leads) || 0; }
+          }
+        });
+
+        const curGoal = effPhase === 'S1' ? s1Goal : (effPhase === 'S2' ? s2Goal : s3Goal);
+        const curSales = effPhase === 'S1' ? s1Sales : (effPhase === 'S2' ? s2Sales : s3Sales);
+        const curRem = Math.max(0, curGoal - curSales);
+        const curPct = curGoal > 0 ? Number(((curSales / curGoal) * 100).toFixed(1)) : 0;
+        const s1Pct = s1Goal > 0 ? Math.round((s1Sales / s1Goal) * 100) : 0;
+        const s2Pct = s2Goal > 0 ? Math.round((s2Sales / s2Goal) * 100) : 0;
+        const s3Pct = s3Goal > 0 ? Math.round((s3Sales / s3Goal) * 100) : 0;
+        const conv = sprintLeads > 0 ? ((sprintOrders / sprintLeads) * 100).toFixed(1) : '0.0';
+
+        sumWorkTgt += workTgt;
+        sumCurGoal += curGoal;
+        sumCurSales += curSales;
+        sumS1 += s1Sales;
+        sumS2 += s2Sales;
+        sumS3 += s3Sales;
+
+        return {
+          ...ag, workTgt, s1Goal, s1Sales, s1Pct, s2Goal, s2Sales, s2Pct, s3Goal, s3Sales, s3Pct,
+          curGoal, curSales, curRem, curPct, sprintOrders, sprintLeads, conv
+        };
+      }).sort((a, b) => b.curSales - a.curSales || b.curPct - a.curPct);
+
+      const mySprintRankIdx = u.role === 'agent'
+        ? rankedSprintAgents.findIndex(a => String(a.id) === String(u.id))
+        : -1;
+      const mySprintRank = mySprintRankIdx !== -1 ? mySprintRankIdx + 1 : null;
+      const overallCurPct = sumCurGoal > 0 ? ((sumCurSales / sumCurGoal) * 100).toFixed(1) : '0.0';
+
+      return `
+        <div class="space-y-6">
+          <!-- Top Header & Controls -->
+          <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-600 text-white">
+                  <i class="fa-solid fa-bolt text-amber-300 mr-1"></i>Active: ${phaseInfo.name}
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900">
+                  ${phaseInfo.pctLabel}
+                </span>
+                ${mySprintRank ? `
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white shadow-xs">
+                    ⭐ Your Sprint Rank: #${mySprintRank}
+                  </span>
+                ` : ''}
+              </div>
+              <h2 class="text-xl font-black text-slate-900 mt-1">
+                <i class="fa-solid fa-bolt text-blue-600 mr-2"></i>Agent Sprint Target Competition (${monthLabel})
+              </h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">
+                Live 10-day Sprint race across all agents (Sprint 1: 40% • Sprint 2: 35% • Sprint 3: 35%) + Team Leader 80% & 100% Total Target Milestones.
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              <!-- Sprint Phase Selector -->
+              <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+                <button onclick="setSprintTabPhase('AUTO')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'AUTO' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                  Active Now (${autoPhase})
+                </button>
+                <button onclick="setSprintTabPhase('S1')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'S1' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                  Sprint 1 (1–10)
+                </button>
+                <button onclick="setSprintTabPhase('S2')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'S2' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                  Sprint 2 (11–20)
+                </button>
+                <button onclick="setSprintTabPhase('S3')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'S3' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                  Sprint 3 (21–31)
+                </button>
+              </div>
+
+              <!-- Team Filter -->
+              <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+                <button onclick="setSprintTabTeam('ALL')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (${allAgents.length})</button>
+                <button onclick="setSprintTabTeam('Team Nazim')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
+                <button onclick="setSprintTabTeam('Team Samad')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
+              </div>
+
+              <button onclick="exportSprintTargetCsv()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
+                <i class="fa-solid fa-file-csv"></i> Download CSV
+              </button>
+            </div>
+          </div>
+
+          <!-- Admin / Team Leader Total Target Milestones (80% & 100% Reward) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            ${[
+              { data: nazimTL, border: 'border-t-orange-500', pill: 'bg-orange-100 text-orange-800', bar: 'from-orange-500 to-amber-500' },
+              { data: samadTL, border: 'border-t-blue-600', pill: 'bg-blue-100 text-blue-800', bar: 'from-blue-600 to-indigo-600' }
+            ].map(item => {
+              const st = item.data;
+              const hit80 = st.achieved >= st.target80 && st.target80 > 0;
+              const hit100 = st.achieved >= st.target100 && st.target100 > 0;
+              return `
+                <div class="card-dynamic p-4 border-t-4 ${item.border}">
+                  <div class="flex justify-between items-start mb-3">
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${item.pill}">${st.teamName} • TL Milestone</span>
+                        <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600')}">
+                          ${hit100 ? '🏆 100% Full Reward!' : (hit80 ? '🔥 80% Reward Unlocked!' : 'No Sprint — 80% / 100% Total Target')}
+                        </span>
+                      </div>
+                      <h4 class="text-sm font-black text-slate-900 mt-1">TL: ${st.tlName} (${st.agentCount} Agents + TL Target)</h4>
+                    </div>
+                    <div class="text-right">
+                      <span class="text-2xl font-black text-slate-900">${st.pct}%</span>
+                      <span class="block text-[9px] font-extrabold uppercase text-slate-400">Of Total Target</span>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-center mb-2.5">
+                    <div>
+                      <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Achieved Revenue</span>
+                      <strong class="text-xs font-black text-emerald-600">৳${st.achieved.toLocaleString()}</strong>
+                    </div>
+                    <div class="border-x border-slate-200">
+                      <span class="text-[9px] font-extrabold uppercase text-amber-700 block">🎯 80% Reward Goal</span>
+                      <strong class="text-xs font-black text-slate-900">৳${st.target80.toLocaleString()}</strong>
+                      <span class="block text-[9px] font-bold ${hit80 ? 'text-emerald-600' : 'text-amber-600'}">${hit80 ? 'Unlocked ✅' : `Need ৳${st.rem80.toLocaleString()}`}</span>
+                    </div>
+                    <div>
+                      <span class="text-[9px] font-extrabold uppercase text-indigo-700 block">🏆 100% Full Target</span>
+                      <strong class="text-xs font-black text-slate-900">৳${st.target100.toLocaleString()}</strong>
+                      <span class="block text-[9px] font-bold ${hit100 ? 'text-emerald-600' : 'text-indigo-600'}">${hit100 ? 'Unlocked ✅' : `Need ৳${st.rem100.toLocaleString()}`}</span>
+                    </div>
+                  </div>
+                  <div class="relative progress-track h-2 bg-slate-100">
+                    <div class="bg-gradient-to-r ${item.bar} h-2 rounded-full" style="width:${Math.min(100, st.pct)}%"></div>
+                    <div class="absolute top-0 bottom-0 w-0.5 bg-amber-500" style="left:80%" title="80% Reward Milestone"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Agent Sprint Competition Leaderboard Table -->
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <div class="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-bolt text-amber-400"></i>
+                <span class="text-xs font-black uppercase tracking-wider">${phaseInfo.name} — Live Agent Leaderboard (${rankedSprintAgents.length} Agents)</span>
+              </div>
+              <span class="text-[11px] font-bold text-slate-300">Sorted by highest ${phaseInfo.short} Sales • Floor ${phaseInfo.short} Achieved: <strong class="text-amber-300">${overallCurPct}%</strong></span>
+            </div>
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5 text-center">Rank</th>
+                  <th class="p-3.5">Agent Name</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5">Grade</th>
+                  <th class="p-3.5 bg-blue-50/60 text-blue-900">${phaseInfo.short} Target</th>
+                  <th class="p-3.5 bg-blue-50/60 text-blue-900">${phaseInfo.short} Achieved</th>
+                  <th class="p-3.5 bg-blue-50/60 text-blue-900">Remaining</th>
+                  <th class="p-3.5 bg-blue-50/60 text-blue-900 text-center">${phaseInfo.short} Progress</th>
+                  <th class="p-3.5 text-center">Sprint 1 (40%)<br><span class="text-[9px] text-slate-400">Days 1–10</span></th>
+                  <th class="p-3.5 text-center">Sprint 2 (35%)<br><span class="text-[9px] text-slate-400">Days 11–20</span></th>
+                  <th class="p-3.5 text-center">Sprint 3 (35%)<br><span class="text-[9px] text-slate-400">Days 21–31</span></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${rankedSprintAgents.map((ag, idx) => {
+                  const isMe = String(ag.id) === String(u.id);
+                  const pos = idx + 1;
+                  let rankBadge = `<span class="w-7 h-7 rounded-full ${isMe ? 'bg-blue-600 text-white ring-4 ring-blue-300' : 'bg-slate-100 text-slate-700'} inline-flex items-center justify-center font-black">${pos}</span>`;
+                  if (idx === 0) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-400 text-white inline-flex items-center justify-center font-black shadow"><i class="fa-solid fa-trophy text-[11px]"></i></span>`;
+                  else if (idx === 1) rankBadge = `<span class="w-7 h-7 rounded-full bg-slate-300 text-slate-900 inline-flex items-center justify-center font-black">2</span>`;
+                  else if (idx === 2) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-700 text-white inline-flex items-center justify-center font-black">3</span>`;
+
+                  const barPct = Math.min(100, Math.round(ag.curPct));
+                  const statusColor = ag.curPct >= 100 ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : (ag.curPct >= 75 ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-amber-100 text-amber-800 border-amber-300');
+
+                  return `
+                    <tr class="${isMe ? 'my-rank-row-glow' : 'hover:bg-slate-50/90'} transition-colors">
+                      <td class="p-3.5 text-center">${rankBadge}</td>
+                      <td class="p-3.5 font-extrabold text-slate-900">
+                        <div class="flex items-center gap-2.5">
+                          ${renderUserAvatarHtml(ag, 'w-8 h-8 rounded-xl text-xs', 'bg-blue-100 text-blue-700', false)}
+                          <div>
+                            <span>${ag.name}</span> <span class="text-slate-400 text-[10px]">(${ag.id})</span>
+                            ${isMe ? `<span class="ml-1 px-2 py-0.5 rounded bg-blue-600 text-white text-[9px] font-black">YOU • #${pos}</span>` : ''}
+                            <span class="block text-[10px] font-bold text-slate-400">${ag.sprintOrders} Orders / ${ag.sprintLeads} Leads (${ag.conv}%)</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${ag.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (ag.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800')}">${ag.team}</span></td>
+                      <td class="p-3.5 font-black text-slate-700">${ag.grade}</td>
+                      <td class="p-3.5 font-extrabold text-slate-700 bg-blue-50/30">৳${ag.curGoal.toLocaleString()}</td>
+                      <td class="p-3.5 font-black text-emerald-600 text-sm bg-blue-50/30">৳${ag.curSales.toLocaleString()}</td>
+                      <td class="p-3.5 font-bold text-slate-500 bg-blue-50/30">${ag.curRem === 0 && ag.curGoal > 0 ? `<span class="text-emerald-600 font-black">Completed 🔥</span>` : `৳${ag.curRem.toLocaleString()}`}</td>
+                      <td class="p-3.5 bg-blue-50/30">
+                        <div class="flex flex-col items-center min-w-[115px]">
+                          <span class="px-2 py-0.5 rounded-md border text-[11px] font-black ${statusColor}">${ag.curPct}%</span>
+                          <div class="w-full progress-track h-1.5 bg-white mt-1">
+                            <div class="${ag.curPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'} h-1.5 rounded-full" style="width:${barPct}%"></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="p-3.5 text-center ${effPhase === 'S1' ? 'font-black text-blue-700' : 'text-slate-500'}">
+                        ৳${ag.s1Sales.toLocaleString()} <span class="block text-[10px] font-bold">(${ag.s1Pct}% of ৳${ag.s1Goal.toLocaleString()})</span>
+                      </td>
+                      <td class="p-3.5 text-center ${effPhase === 'S2' ? 'font-black text-blue-700' : 'text-slate-500'}">
+                        ৳${ag.s2Sales.toLocaleString()} <span class="block text-[10px] font-bold">(${ag.s2Pct}% of ৳${ag.s2Goal.toLocaleString()})</span>
+                      </td>
+                      <td class="p-3.5 text-center ${effPhase === 'S3' ? 'font-black text-blue-700' : 'text-slate-500'}">
+                        ৳${ag.s3Sales.toLocaleString()} <span class="block text-[10px] font-bold">(${ag.s3Pct}% of ৳${ag.s3Goal.toLocaleString()})</span>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+              <tfoot class="bg-slate-900 text-white font-black text-xs">
+                <tr>
+                  <td colspan="4" class="p-4 uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Agent Sprint Sum (${rankedSprintAgents.length} Agents)
+                  </td>
+                  <td class="p-4 text-blue-200">৳${sumCurGoal.toLocaleString()}</td>
+                  <td class="p-4 text-emerald-400 text-sm">৳${sumCurSales.toLocaleString()}</td>
+                  <td class="p-4 text-slate-300">৳${Math.max(0, sumCurGoal - sumCurSales).toLocaleString()}</td>
+                  <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black">${overallCurPct}%</span></td>
+                  <td class="p-4 text-center text-slate-300">৳${sumS1.toLocaleString()}</td>
+                  <td class="p-4 text-center text-slate-300">৳${sumS2.toLocaleString()}</td>
+                  <td class="p-4 text-center text-slate-300">৳${sumS3.toLocaleString()}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
