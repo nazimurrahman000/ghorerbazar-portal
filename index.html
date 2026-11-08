@@ -276,7 +276,7 @@
     let logsFilterScope = 'ALL';
     let reportsDateFilter = getTodayFormatted();
 
-    let monthlyPerfTeamScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
+    let monthlyPerfTeamScope = 'ALL';
     let monthlyPerfAgentId = 'ALL';
 
     let driveProdTeamScope = 'ALL';
@@ -293,7 +293,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen) return true;
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal'];
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -309,10 +309,10 @@
       { key: 'tab_monthly_perf', category: 'Sidebar Tabs', label: 'Monthly Performance Tab', desc: 'View monthly performance summary & date-wise breakdown', icon: 'fa-chart-column', color: 'text-purple-600' },
       { key: 'tab_drive_product', category: 'Sidebar Tabs', label: 'Drive Product Tab', desc: 'View all agents Drive Product KG targets, achieved quantities & date-wise submissions', icon: 'fa-box-open', color: 'text-amber-500' },
       { key: 'tab_reports', category: 'Sidebar Tabs', label: 'Daily Sales Reports Tab', desc: 'Access daily sales & conversion logs table', icon: 'fa-file-invoice', color: 'text-blue-600' },
-      { key: 'tab_ranking', category: 'Sidebar Tabs', label: 'Team vs Team & Ranking Tab', desc: 'View floor leaderboard & team head-to-head comparison', icon: 'fa-trophy', color: 'text-amber-500' },
+      { key: 'tab_ranking', category: 'Sidebar Tabs', label: 'Ranking Tab', desc: 'View floor leaderboard & team head-to-head comparison', icon: 'fa-trophy', color: 'text-amber-500' },
       { key: 'tab_roster', category: 'Sidebar Tabs', label: 'Duty Roster Tab', desc: 'View weekly shift schedule and Day Off (DO) table', icon: 'fa-calendar-week', color: 'text-indigo-600' },
       { key: 'tab_attendance', category: 'Sidebar Tabs', label: 'Attendance & Duty Logs Tab', desc: 'View login/logout times, working hours & break history', icon: 'fa-clock', color: 'text-emerald-600' },
-      { key: 'tab_chat', category: 'Sidebar Tabs', label: 'Team & Personal Chat Tab', desc: 'Access group channels & 1-on-1 personal inbox', icon: 'fa-comments', color: 'text-blue-600' },
+      { key: 'tab_chat', category: 'Sidebar Tabs', label: 'Chat Tab', desc: 'Access group channels & 1-on-1 personal inbox', icon: 'fa-comments', color: 'text-blue-600' },
       { key: 'tab_activity_logs', category: 'Sidebar Tabs', label: 'Activity Logs Tab', desc: 'View system activity timeline & audit logs', icon: 'fa-list-check', color: 'text-rose-500' },
       { key: 'tab_agents', category: 'Sidebar Tabs', label: 'Target Setup & IDs Tab', desc: 'View registered user accounts, grades & target setup page', icon: 'fa-sliders', color: 'text-blue-600' },
 
@@ -613,6 +613,220 @@
       return 'Offline';
     }
 
+    
+    // =========================================================================
+    // USER PROFILE PICTURE / AVATAR UPLOAD & DISPLAY ENGINE
+    // =========================================================================
+    function getUserAvatarStore() {
+      const configs = getStored('monthly_configs', {});
+      return (configs['USER_AVATARS'] && typeof configs['USER_AVATARS'] === 'object')
+        ? configs['USER_AVATARS']
+        : {};
+    }
+
+    function getUserAvatarUrl(userId) {
+      if (!userId) return '';
+      const uid = String(userId);
+      const localAv = localStorage.getItem('gb_avatar_' + uid);
+      if (localAv) return localAv;
+      const store = getUserAvatarStore();
+      return store[uid] || '';
+    }
+
+    function renderUserAvatarHtml(userObj, sizeClasses = 'w-9 h-9 rounded-xl text-xs', fallbackBg = 'tab-active text-white', allowClickUpload = false) {
+      if (!userObj) return '';
+      const avUrl = getUserAvatarUrl(userObj.id);
+      const initial = (userObj.name || 'U').charAt(0).toUpperCase();
+      const clickAttr = allowClickUpload ? `onclick="event.stopPropagation(); openProfilePicModal('${userObj.id}')" title="Click to upload/change profile picture"` : '';
+      const cursorCls = allowClickUpload ? 'cursor-pointer hover:opacity-90 ring-2 ring-blue-500/30' : '';
+      if (avUrl) {
+        return `<img src="${avUrl}" alt="${userObj.name}" ${clickAttr} class="${sizeClasses} object-cover shadow-xs shrink-0 border border-slate-200 ${cursorCls}">`;
+      }
+      return `<div ${clickAttr} class="${sizeClasses} ${fallbackBg} flex items-center justify-center font-black shadow-xs shrink-0 ${cursorCls}">${initial}</div>`;
+    }
+
+    let profilePicTargetUserId = null;
+
+    function renderProfilePicModal() {
+      if (!currentUser) return '';
+      const targetId = profilePicTargetUserId || currentUser.id;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetUser = allUsers.find(u => String(u.id) === String(targetId)) || currentUser;
+      const currentAv = getUserAvatarUrl(targetUser.id);
+
+      return `
+        <div id="profilePicModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-center">
+            <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+              <div class="text-left">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-700">Profile Picture</span>
+                <h3 class="text-base font-black text-slate-900 mt-0.5">${targetUser.name} (${targetUser.id})</h3>
+              </div>
+              <button type="button" onclick="closeModal('profilePicModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="flex flex-col items-center justify-center my-4">
+              <div id="profilePicPreviewBox" class="w-24 h-24 rounded-3xl overflow-hidden border-4 border-blue-100 shadow-lg flex items-center justify-center bg-slate-100 mb-3">
+                ${currentAv
+                  ? `<img src="${currentAv}" class="w-full h-full object-cover">`
+                  : `<span class="text-3xl font-black text-blue-600">${targetUser.name.charAt(0)}</span>`
+                }
+              </div>
+              <p class="text-xs font-bold text-slate-500">Upload a square photo. It will automatically compress & sync next to ${String(targetUser.id) === String(currentUser.id) ? 'your' : targetUser.name + "'s"} name across the portal!</p>
+            </div>
+
+            <input type="file" id="profilePicFileInput" accept="image/*" onchange="handleProfilePicSelected(event)" class="hidden">
+            <div class="flex flex-col gap-2.5 mt-4">
+              <label for="profilePicFileInput" class="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-md cursor-pointer flex items-center justify-center gap-2">
+                <i class="fa-solid fa-camera"></i> Choose & Upload Photo
+              </label>
+              ${currentAv ? `
+              <button type="button" onclick="handleRemoveProfilePic('${targetUser.id}')" class="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-extrabold">
+                <i class="fa-solid fa-trash-can mr-1"></i> Remove Current Photo
+              </button>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openProfilePicModal(userId) {
+      if (!currentUser) return;
+      const uid = userId || currentUser.id;
+      if (String(uid) !== String(currentUser.id) && !hasFeatureAccess(currentUser, 'feat_manage_users')) {
+        return;
+      }
+      profilePicTargetUserId = String(uid);
+      renderAppLayout();
+      openModal('profilePicModal');
+    }
+
+    function handleProfilePicSelected(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file || !currentUser) return;
+      const targetId = String(profilePicTargetUserId || currentUser.id);
+
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const size = 96;
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          const minDim = Math.min(img.width, img.height);
+          const sx = (img.width - minDim) / 2;
+          const sy = (img.height - minDim) / 2;
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
+
+          localStorage.setItem('gb_avatar_' + targetId, compressedDataUrl);
+          const configs = getStored('monthly_configs', {});
+          if (!configs['USER_AVATARS'] || typeof configs['USER_AVATARS'] !== 'object') {
+            configs['USER_AVATARS'] = {};
+          }
+          configs['USER_AVATARS'][targetId] = compressedDataUrl;
+          setStored('monthly_configs', configs);
+
+          closeModal('profilePicModal');
+          renderAppLayout();
+          showPortalToast('Profile Picture Updated!', 'Your profile photo is now live across the portal.', 'success');
+
+          postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: 'USER_AVATARS',
+            configJson: JSON.stringify(configs['USER_AVATARS'])
+          }).catch(() => {});
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function handleRemoveProfilePic(userId) {
+      const targetId = String(userId || profilePicTargetUserId || currentUser.id);
+      localStorage.removeItem('gb_avatar_' + targetId);
+      const configs = getStored('monthly_configs', {});
+      if (configs['USER_AVATARS'] && configs['USER_AVATARS'][targetId]) {
+        delete configs['USER_AVATARS'][targetId];
+        setStored('monthly_configs', configs);
+        postToSheet('SAVE_MONTHLY_CONFIG', {
+          monthKey: 'USER_AVATARS',
+          configJson: JSON.stringify(configs['USER_AVATARS'])
+        }).catch(() => {});
+      }
+      closeModal('profilePicModal');
+      renderAppLayout();
+      showPortalToast('Profile Picture Removed', 'Reverted to default initial badge.', 'warning');
+    }
+
+    // =========================================================================
+    // ADMIN CHAT MESSAGE DELETE MODAL (DELETE FOR ONLY ME vs EVERYONE)
+    // =========================================================================
+    let pendingDeleteChatMsgId = null;
+
+    function getHiddenChatMessagesForCurrentUser() {
+      if (!currentUser) return new Set();
+      try {
+        const arr = JSON.parse(localStorage.getItem(`gb_hidden_chat_msgs_${currentUser.id}`) || '[]');
+        return new Set(Array.isArray(arr) ? arr : []);
+      } catch (e) {
+        return new Set();
+      }
+    }
+
+    function renderChatDeleteModal() {
+      return `
+        <div id="chatDeleteModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-center">
+            <div class="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-xl mx-auto mb-3 shadow-xs">
+              <i class="fa-solid fa-trash-can"></i>
+            </div>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-red-50 text-red-600">Admin Message Control</span>
+            <h3 class="text-base font-black text-slate-900 mt-1.5">How would you like to delete this message?</h3>
+            <p class="text-xs font-bold text-slate-500 mt-1">Choose whether to hide this message only from your panel or permanently remove it for everyone.</p>
+            <div class="flex flex-col gap-2.5 mt-5 pt-4 border-t border-slate-100">
+              <button type="button" onclick="executeAdminChatDelete('EVERYONE')" class="w-full py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center justify-center gap-2">
+                <i class="fa-solid fa-users-slash"></i> Delete for Everyone (All Panels)
+              </button>
+              <button type="button" onclick="executeAdminChatDelete('ONLY_ME')" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2">
+                <i class="fa-solid fa-user-Secret"></i> Delete for Only Me (My Panel Only)
+              </button>
+              <button type="button" onclick="closeModal('chatDeleteModal')" class="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function executeAdminChatDelete(mode) {
+      if (!currentUser || !isFullAdmin(currentUser) || !pendingDeleteChatMsgId) {
+        closeModal('chatDeleteModal');
+        return;
+      }
+      const msgId = pendingDeleteChatMsgId;
+      pendingDeleteChatMsgId = null;
+      closeModal('chatDeleteModal');
+
+      if (mode === 'ONLY_ME') {
+        const set = getHiddenChatMessagesForCurrentUser();
+        set.add(msgId);
+        localStorage.setItem(`gb_hidden_chat_msgs_${currentUser.id}`, JSON.stringify(Array.from(set).slice(-300)));
+        renderAppLayout();
+        showPortalToast('Removed for You', 'Message hidden from your chat panel only.', 'warning');
+        return;
+      }
+
+      const hub = getChatAndNoticeHubStore();
+      hub.messages = hub.messages.filter(m => m.id !== msgId);
+      saveChatAndNoticeHubStore(hub);
+      renderAppLayout();
+      showPortalToast('Deleted for Everyone', 'Message permanently removed from all panels.', 'warning');
+    }
+
     function renderOnlineStatusBadge(userId) {
       const st = getUserOnlineStatus(userId);
       if (st === 'Online') {
@@ -725,6 +939,8 @@
       });
     }
 
+    let pendingRosterEditsMap = {}; // { [monthKey_empId]: { sat, sun, ... } }
+
     function getRosterForMonth(mKey) {
       const mk = mKey || selectedMonthKey;
       const savedList = getStored('roster_records', []);
@@ -733,10 +949,12 @@
 
       return DEFAULT_ROSTER.map(defRow => {
         const override = monthRows.find(r => String(r.id) === String(defRow.id));
+        const pendingOv = pendingRosterEditsMap[`${mk}_${defRow.id}`];
         const usr = allUsers.find(u => String(u.id) === String(defRow.id));
         return {
           ...defRow,
           ...(override || {}),
+          ...(pendingOv || {}),
           name: usr ? usr.name : defRow.name,
           team: usr ? usr.team : (override && override.team ? override.team : defRow.team)
         };
@@ -1165,7 +1383,7 @@
         currentUser = normalizeUserRecord(currentUser);
         if (currentUser.role === 'admin') {
           dashboardScope = currentUser.team;
-          monthlyPerfTeamScope = currentUser.team;
+          monthlyPerfTeamScope = 'ALL';
         } else if (currentUser.role === 'supervisor') {
           dashboardScope = 'ALL';
           monthlyPerfTeamScope = 'ALL';
@@ -1182,7 +1400,7 @@
         fetchFromSheet();
         startRosterDutyNotificationWatcher();
         if (pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(fetchFromSheet, 1600);
+        pollInterval = setInterval(fetchFromSheet, 1100);
       } else {
         document.getElementById('app').innerHTML = renderLogin();
       }
@@ -1198,7 +1416,7 @@
       currentUser = user;
       setStored('session_user', user);
       dashboardScope = user.role === 'admin' ? user.team : 'ALL';
-      monthlyPerfTeamScope = user.role === 'admin' ? user.team : 'ALL';
+      monthlyPerfTeamScope = 'ALL';
       monthlyPerfAgentId = 'ALL';
       logsFilterScope = 'ALL';
       reportsDateFilter = getTodayFormatted();
@@ -1313,11 +1531,7 @@
       } else if (tab === 'attendance') {
         logsFilterScope = 'ALL';
       } else if (tab === 'monthly_perf') {
-        if (currentUser && currentUser.role === 'admin') {
-          monthlyPerfTeamScope = currentUser.team;
-        } else {
-          monthlyPerfTeamScope = 'ALL';
-        }
+        monthlyPerfTeamScope = 'ALL';
         monthlyPerfAgentId = 'ALL';
       }
       renderAppLayout();
@@ -1444,7 +1658,7 @@
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_ranking') ? `
                 <button onclick="setTab('ranking')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'ranking' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Team vs Team & Ranking
+                  <i class="fa-solid fa-trophy text-sm text-amber-500"></i> Ranking
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_roster') ? `
@@ -1460,7 +1674,7 @@
                 ${hasFeatureAccess(u, 'tab_chat') ? `
                 <button onclick="setTab('chat')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'chat' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <span class="flex items-center gap-3">
-                    <i class="fa-solid fa-comments text-sm ${activeTab === 'chat' ? 'text-white' : 'text-blue-600'}"></i> Team & Personal Chat
+                    <i class="fa-solid fa-comments text-sm ${activeTab === 'chat' ? 'text-white' : 'text-blue-600'}"></i> Chat
                   </span>
                   ${(() => {
                     const unreadChat = getUnreadChatCountForUser();
@@ -1508,7 +1722,7 @@
               <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
                 <span class="text-slate-300">/</span>
-                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab === 'agents' ? 'Target Setup & IDs' : (activeTab === 'chat' ? 'Team & Personal Chat' : (activeTab === 'role_management' ? 'Role & Feature Access Control (Nazim Exclusive)' : activeTab.replace('_', ' ')))}</h2>
+                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab === 'agents' ? 'Target Setup & IDs' : (activeTab === 'chat' ? 'Chat' : (activeTab === 'ranking' ? 'Ranking' : (activeTab === 'role_management' ? 'Role & Feature Access Control (Nazim Exclusive)' : activeTab.replace('_', ' '))))}</h2>
                 <span class="text-slate-300">•</span>
                 <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
                   <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
@@ -1539,12 +1753,15 @@
                 <button onclick="fetchFromSheet()" class="px-3.5 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-xl flex items-center gap-2 hover:bg-emerald-100 transition-colors">
                   <i class="fa-solid fa-cloud-arrow-down text-xs"></i> Sync Now
                 </button>
-                <div class="flex items-center gap-3 pl-4 border-l border-slate-200 py-1">
-                  <div class="w-10 h-10 rounded-xl tab-active text-white flex items-center justify-center font-black text-sm shadow-sm shrink-0">
-                    ${u.name.charAt(0)}
+                <div onclick="openProfilePicModal('${u.id}')" title="Click to upload or change your Profile Picture" class="flex items-center gap-3 pl-4 border-l border-slate-200 py-1 cursor-pointer group">
+                  <div class="relative shrink-0">
+                    ${renderUserAvatarHtml(u, 'w-10 h-10 rounded-xl text-sm', 'tab-active text-white', false)}
+                    <span class="w-4 h-4 rounded-full bg-slate-900 text-white flex items-center justify-center text-[8px] absolute -bottom-1 -right-1 shadow ring-2 ring-white group-hover:bg-blue-600">
+                      <i class="fa-solid fa-camera"></i>
+                    </span>
                   </div>
                   <div class="text-left leading-tight">
-                    <p class="text-sm font-extrabold text-slate-900">${u.name}</p>
+                    <p class="text-sm font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">${u.name}</p>
                     <p class="text-[11px] font-extrabold ${isSupervisor(u) ? 'text-purple-600' : 'text-orange-600'} uppercase mt-0.5">${roleBadgeText}</p>
                   </div>
                 </div>
@@ -1565,6 +1782,8 @@
         ${hasFeatureAccess(u, 'feat_post_notice') ? renderAnnouncementModal() : ''}
         ${renderDriveProductModal()}
         ${renderNoticeBoardModal()}
+        ${renderProfilePicModal()}
+        ${renderChatDeleteModal()}
         ${renderLogoutConfirmModal()}
       `;
       document.getElementById('app').innerHTML = html;
@@ -1675,18 +1894,33 @@
     // use the higher of (Monthly ERP Summary vs Sum of Daily Entries) per product so daily & monthly never double-count!
     // Also returns the exact submission date/timestamp for each record.
     function formatFullMonthDateDisplay(rawDateStr) {
-      if (!rawDateStr) return '-';
-      const s = String(rawDateStr).replace(/^'/, '').trim();
-      const p = s.split('/');
+      if (!rawDateStr || rawDateStr === '-' || rawDateStr === 'Not Updated Yet') return 'Not Updated Yet';
+      let s = String(rawDateStr).replace(/^'/, '').trim();
+      let rangeSuffix = '';
+      const rangeMatch = s.match(/\((\d{1,2}\s+[A-Za-z]+\s+20\d{2}\s*[–\-]\s*\d{1,2}\s+[A-Za-z]+\s+20\d{2})\)/);
+      if (rangeMatch) {
+        rangeSuffix = ` (${rangeMatch[1]})`;
+        s = s.replace(rangeMatch[0], '').trim();
+      }
+      if (s.includes('GMT') || s.includes('00:00:00') || /^[A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d{1,2}\s+20\d{2}/.test(s)) {
+        const parsedD = new Date(s.replace(/\s*\(.*?\)\s*/g, ''));
+        if (!isNaN(parsedD.getTime())) {
+          const fullMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+          return `${fullMonths[parsedD.getMonth()]} ${parsedD.getDate()}, ${parsedD.getFullYear()}${rangeSuffix}`;
+        }
+      }
+      const mainDatePart = s.split(',')[0].trim();
+      const p = mainDatePart.split('/');
       if (p.length === 3) {
         const fullMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
         const mIdx = parseInt(p[1], 10) - 1;
         const dayNum = parseInt(p[0], 10);
+        const yrNum = p[2].split(' ')[0];
         if (mIdx >= 0 && mIdx < 12 && !isNaN(dayNum)) {
-          return `${fullMonths[mIdx]} ${dayNum}, ${p[2]}`;
+          return `${fullMonths[mIdx]} ${dayNum}, ${yrNum}${rangeSuffix}`;
         }
       }
-      return s;
+      return s + rangeSuffix;
     }
 
     function computeAgentDriveProductStats(agentObj, monthSalesList, mKey) {
@@ -1715,10 +1949,9 @@
           coveredDateRange = monthlySummaryEntry.coveredDateRange;
         }
         if (monthlySummaryEntry.lastUpdatedDate) {
-          lastSubmittedDate = monthlySummaryEntry.lastUpdatedDate;
+          lastSubmittedDate = formatFullMonthDateDisplay(monthlySummaryEntry.lastUpdatedDate);
         } else if (monthlySummaryEntry.submittedAt) {
-          const rawSub = String(monthlySummaryEntry.submittedAt).split(',')[0].trim();
-          lastSubmittedDate = formatFullMonthDateDisplay(rawSub);
+          lastSubmittedDate = formatFullMonthDateDisplay(monthlySummaryEntry.submittedAt);
         } else {
           lastSubmittedDate = formatFullMonthDateDisplay(getTodayFormatted());
         }
@@ -1726,10 +1959,9 @@
         const firstLog = productLogs[0];
         if (firstLog.coveredDateRange) coveredDateRange = firstLog.coveredDateRange;
         if (firstLog.lastUpdatedDate) {
-          lastSubmittedDate = firstLog.lastUpdatedDate;
+          lastSubmittedDate = formatFullMonthDateDisplay(firstLog.lastUpdatedDate);
         } else if (String(firstLog.date).startsWith('MONTHLY_PROD_')) {
-          const rawSub = firstLog.submittedAt ? String(firstLog.submittedAt).split(',')[0].trim() : getTodayFormatted();
-          lastSubmittedDate = formatFullMonthDateDisplay(rawSub);
+          lastSubmittedDate = formatFullMonthDateDisplay(firstLog.submittedAt || getTodayFormatted());
         } else {
           lastSubmittedDate = formatFullMonthDateDisplay(firstLog.date);
         }
@@ -2496,23 +2728,47 @@
                     <tr class="${isMe ? 'bg-blue-50/70 font-extrabold' : 'hover:bg-slate-50'}">
                       <td class="p-3.5 font-black text-slate-500">#${idx + 1}</td>
                       <td class="p-3.5 font-extrabold text-slate-900">
-                        ${st.agent.name} <span class="text-slate-400 text-[10px]">(${st.agent.id})</span>
-                        ${isMe ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[9px] font-black">YOU</span>` : ''}
+                        <div class="flex items-center gap-2.5">
+                          ${renderUserAvatarHtml(st.agent, 'w-8 h-8 rounded-xl text-xs', 'bg-amber-100 text-amber-800', isMe || isAdmin)}
+                          <div>
+                            <span>${st.agent.name}</span> <span class="text-slate-400 text-[10px]">(${st.agent.id})</span>
+                            ${isMe ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[9px] font-black">YOU</span>` : ''}
+                          </div>
+                        </div>
                       </td>
                       <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${st.agent.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (st.agent.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800')}">${st.agent.team}</span></td>
                       ${prodKeys.map(k => {
                         const val = st.prodKg[k] || 0;
                         const tgt = Number(activeProds[k].targetKg) || 1;
                         const pct = Math.round((val / tgt) * 100);
+                        const barWidth = Math.min(100, pct);
+                        const badgeClass = pct >= 90
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : (val > 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-400 border-slate-100');
+                        const barColor = pct >= 90 ? 'bg-emerald-500' : (val > 0 ? 'bg-amber-500' : 'bg-slate-200');
                         return `
-                          <td class="p-3.5 text-center">
-                            <span class="font-black text-sm ${val > 0 ? 'text-slate-900' : 'text-slate-300'}">${val.toFixed(2)} <span class="text-[10px] text-slate-400 font-bold">/ ${tgt} kg</span></span>
-                            <span class="block text-[10px] font-bold ${pct >= 90 ? 'text-emerald-600 font-black' : 'text-slate-500'}">${pct}% Achieved</span>
+                          <td class="p-2.5 text-center align-middle">
+                            <div class="inline-flex flex-col items-center justify-center px-2.5 py-1.5 rounded-xl border ${badgeClass} min-w-[104px]">
+                              <div class="flex items-baseline gap-1">
+                                <span class="font-black text-xs ${val > 0 ? 'text-slate-900' : 'text-slate-400'}">${val.toFixed(2)} kg</span>
+                                <span class="text-[9px] font-extrabold ${pct >= 90 ? 'text-emerald-700' : 'text-slate-500'}">(${pct}%)</span>
+                              </div>
+                              <div class="w-full bg-slate-200/70 h-1 rounded-full mt-1 overflow-hidden">
+                                <div class="${barColor} h-1 rounded-full" style="width:${barWidth}%"></div>
+                              </div>
+                              <span class="text-[9px] font-bold text-slate-400 mt-0.5">Goal: ${tgt} kg</span>
+                            </div>
                           </td>
                         `;
                       }).join('')}
-                      <td class="p-3.5 font-bold text-slate-700">
-                        <i class="fa-regular fa-calendar-check text-amber-600 mr-1.5"></i>Last Update: <strong class="text-slate-900">${st.lastSubmittedDate}</strong>
+                      <td class="p-3.5">
+                        ${st.lastSubmittedDate === 'Not Updated Yet'
+                          ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-400 text-[11px] font-bold"><i class="fa-regular fa-clock"></i> Not Updated Yet</span>`
+                          : `<div class="inline-flex flex-col px-3 py-1.5 rounded-xl bg-amber-50/80 border border-amber-200">
+                              <span class="text-[11px] font-black text-slate-900"><i class="fa-regular fa-calendar-check text-amber-600 mr-1"></i>${st.lastSubmittedDate.split('(')[0].trim()}</span>
+                              ${st.lastSubmittedDate.includes('(') ? `<span class="text-[9px] font-bold text-amber-800">Range: ${st.lastSubmittedDate.substring(st.lastSubmittedDate.indexOf('(') + 1).replace(')', '')}</span>` : ''}
+                            </div>`
+                        }
                       </td>
                       <td class="p-3.5 text-right">
                         ${canUpdateThisRow ? `
@@ -2569,7 +2825,7 @@
 
       const safeMonth = selectedMonthKey.replace('/', '-');
 
-      // If a single agent is selected (or logged in as an agent), export both their Summary AND Date-Wise Breakdown!
+      // If a single agent is selected (or logged in as an agent), export both their Monthly Target Summary AND Date-Wise Breakdown!
       if (displayedAgents.length === 1) {
         const ag = displayedAgents[0];
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id) && !String(s.date || '').startsWith('MONTHLY_PROD_'))
@@ -2581,21 +2837,34 @@
         const headers = [
           'Date', 'Emp ID', 'Agent Name', 'Team', 'Grade',
           'Leads', 'Orders', 'Conv. Ratio (%)', 'Sales Amount (BDT)',
-          'Daily Target (BDT)', 'Daily Achieved (%)'
+          'Daily Target (BDT)', 'Daily Achieved (%)',
+          'Monthly Working Target (+5%)', 'Monthly Achieved Revenue (BDT)', 'Monthly Remaining (BDT)', 'Monthly Achievement Ratio (%)'
         ];
         let totL = 0, totO = 0, totAmt = 0;
-        const rows = agSales.map(dl => {
+        agSales.forEach(dl => {
+          totL += Number(dl.leads) || 0;
+          totO += Number(dl.orders) || 0;
+          totAmt += Number(dl.amount) || 0;
+        });
+        const totConv = totL > 0 ? ((totO / totL) * 100).toFixed(2) + '%' : '0.00%';
+        const totRem = Math.max(0, workTgt - totAmt);
+        const totAch = workTgt > 0 ? ((totAmt / workTgt) * 100).toFixed(2) + '%' : '0.00%';
+
+        const rows = agSales.map((dl, idx) => {
           const l = Number(dl.leads) || 0;
           const o = Number(dl.orders) || 0;
           const amt = Number(dl.amount) || 0;
-          totL += l; totO += o; totAmt += amt;
           const conv = l > 0 ? ((o / l) * 100).toFixed(2) + '%' : '0.00%';
           const ach = dailyTgt > 0 ? Math.round((amt / dailyTgt) * 100) + '%' : '0%';
-          return [dl.date, ag.id, ag.name, ag.team, ag.grade, l, o, conv, amt, dailyTgt, ach];
+          return [
+            dl.date, ag.id, ag.name, ag.team, ag.grade, l, o, conv, amt, dailyTgt, ach,
+            idx === 0 ? workTgt : '',
+            idx === 0 ? totAmt : '',
+            idx === 0 ? totRem : '',
+            idx === 0 ? totAch : ''
+          ];
         });
-        const totConv = totL > 0 ? ((totO / totL) * 100).toFixed(2) + '%' : '0.00%';
-        const totAch = workTgt > 0 ? Math.round((totAmt / workTgt) * 100) + '%' : '0%';
-        rows.push(['MONTHLY TOTAL', ag.id, ag.name, ag.team, ag.grade, totL, totO, totConv, totAmt, workTgt, totAch]);
+        rows.push(['MONTHLY TOTAL', ag.id, ag.name, ag.team, ag.grade, totL, totO, totConv, totAmt, workTgt, totAch, workTgt, totAmt, totRem, totAch]);
 
         downloadPortalCsvFile(`Monthly_Performance_${ag.name.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, rows);
         return;
@@ -2803,7 +3072,12 @@
               <tbody class="divide-y divide-slate-100 font-semibold">
                 ${agentRows.map(r => `
                   <tr class="hover:bg-slate-50/90 ${canViewAll(u) ? 'cursor-pointer' : ''}" onclick="${canViewAll(u) ? `setMonthlyPerfAgent('${r.id}')` : ''}" title="${canViewAll(u) ? 'Click to view & edit date-by-date monthly records for this agent' : ''}">
-                    <td class="p-3.5 font-extrabold text-slate-900">${r.name} <span class="text-slate-400 text-[10px]">(${r.id})</span></td>
+                    <td class="p-3.5 font-extrabold text-slate-900">
+                      <div class="flex items-center gap-2.5">
+                        ${renderUserAvatarHtml(r, 'w-8 h-8 rounded-xl text-xs', 'bg-purple-100 text-purple-800', false)}
+                        <span>${r.name} <span class="text-slate-400 text-[10px]">(${r.id})</span></span>
+                      </div>
+                    </td>
                     <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${r.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${r.team}</span></td>
                     <td class="p-3.5 font-black text-slate-700">${r.grade}</td>
                     <td class="p-3.5 font-bold text-slate-500">৳${r.baseTgt.toLocaleString()}</td>
@@ -2886,6 +3160,34 @@
             const sumDailyTgtSingle = dTargetSingle * singleAgentObj.dailyLogs.length;
             return `
             <div class="space-y-3 mt-6">
+              <!-- Single Agent Monthly Target, Achievement & Ratio Summary Card -->
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 rounded-2xl shadow-md">
+                <div class="p-2.5 rounded-xl bg-white/10">
+                  <span class="text-[10px] font-extrabold uppercase text-slate-300 block">Monthly Base Target</span>
+                  <strong class="text-sm font-black text-white">৳${singleAgentObj.baseTgt.toLocaleString()}</strong>
+                  <span class="text-[10px] font-bold text-amber-300 block">Grade: ${singleAgentObj.grade}</span>
+                </div>
+                <div class="p-2.5 rounded-xl bg-white/10">
+                  <span class="text-[10px] font-extrabold uppercase text-indigo-200 block">Working Target (+5%)</span>
+                  <strong class="text-sm font-black text-indigo-300">৳${singleAgentObj.workTgt.toLocaleString()}</strong>
+                  <span class="text-[10px] font-bold text-slate-300 block">Daily: ৳${dTargetSingle.toLocaleString()}</span>
+                </div>
+                <div class="p-2.5 rounded-xl bg-white/10">
+                  <span class="text-[10px] font-extrabold uppercase text-emerald-200 block">Monthly Achieved</span>
+                  <strong class="text-sm font-black text-emerald-400">৳${singleAgentObj.rev.toLocaleString()}</strong>
+                  <span class="text-[10px] font-bold text-slate-300 block">${singleAgentObj.orders} Orders / ${singleAgentObj.leads} Leads (${singleAgentObj.conv}%)</span>
+                </div>
+                <div class="p-2.5 rounded-xl bg-white/10">
+                  <span class="text-[10px] font-extrabold uppercase text-rose-200 block">Remaining Target</span>
+                  <strong class="text-sm font-black text-rose-300">৳${singleAgentObj.rem.toLocaleString()}</strong>
+                  <span class="text-[10px] font-bold text-slate-300 block">${singleAgentObj.daysCount} Active Days</span>
+                </div>
+                <div class="p-2.5 rounded-xl bg-amber-500/20 border border-amber-400/40 flex flex-col justify-between">
+                  <span class="text-[10px] font-extrabold uppercase text-amber-300 block">Monthly Achievement Ratio</span>
+                  <strong class="text-lg font-black text-amber-400">${singleAgentObj.workTgt > 0 ? ((singleAgentObj.rev / singleAgentObj.workTgt) * 100).toFixed(2) : '0.00'}%</strong>
+                </div>
+              </div>
+
               <div class="flex flex-wrap items-center justify-between gap-3 bg-white px-5 py-3.5 rounded-2xl border border-slate-200">
                 <div>
                   <h3 class="text-base font-black text-slate-900">
@@ -3151,17 +3453,36 @@
 
       return `
         <div class="space-y-5">
-          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200">
-            <div>
-              <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-calendar-week text-blue-600 mr-2"></i>Duty Roster (${monthTitle})</h2>
-              <p class="text-xs font-bold text-slate-500">
-                ${isEditable ? 'Admin Mode: Click any shift dropdown in the table to change schedule. Changes auto-save & update summaries!' : 'View weekly shift schedule and Day Off (DO) assignments.'}
-              </p>
+          ${(() => {
+            const pendingCount = Object.keys(pendingRosterEditsMap).filter(k => k.startsWith(selectedMonthKey + '_')).length;
+            return `
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border ${pendingCount > 0 ? 'border-2 border-amber-400 bg-amber-50/40' : 'border-slate-200'}">
+              <div>
+                <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-calendar-week text-blue-600 mr-2"></i>Duty Roster (${monthTitle})</h2>
+                <p class="text-xs font-bold text-slate-500">
+                  ${isEditable ? 'Admin Mode: Change any shift dropdowns below, then click "Save Roster Changes" to confirm & sync.' : 'View weekly shift schedule and Day Off (DO) assignments.'}
+                </p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2.5">
+                ${pendingCount > 0 ? `
+                  <span class="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-900 text-xs font-black animate-pulse">
+                    <i class="fa-solid fa-pen-to-square mr-1"></i>${pendingCount} Unsaved Roster Change(s)
+                  </span>
+                  <button type="button" onclick="discardPendingRosterChanges()" class="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-extrabold transition-colors">
+                    Discard
+                  </button>
+                  <button type="button" onclick="confirmAndSaveAllRosterChanges()" class="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-floppy-disk"></i> Save Roster Changes
+                  </button>
+                ` : `
+                  <span class="px-3 py-1.5 rounded-xl bg-orange-100 text-orange-800 text-xs font-black">
+                    DO = Day Off • Night = 11:00 PM
+                  </span>
+                `}
+              </div>
             </div>
-            <span class="px-3 py-1.5 rounded-xl bg-orange-100 text-orange-800 text-xs font-black">
-              DO = Day Off • Night = 11:00 PM
-            </span>
-          </div>
+            `;
+          })()}
 
           <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <div>
@@ -3284,24 +3605,58 @@
       `;
     }
 
-    async function handleRosterShiftChange(empId, dayKey, newShift) {
+    function handleRosterShiftChange(empId, dayKey, newShift) {
       if (!hasFeatureAccess(currentUser, 'feat_edit_roster')) return;
       const roster = getRosterForMonth(selectedMonthKey);
       const targetRow = roster.find(r => String(r.id) === String(empId));
       if (!targetRow) return;
 
-      targetRow[dayKey] = newShift;
-      targetRow.monthKey = selectedMonthKey;
-
-      let savedList = getStored('roster_records', []);
-      const idx = savedList.findIndex(r => r.monthKey === selectedMonthKey && String(r.id) === String(empId));
-      if (idx !== -1) savedList[idx] = targetRow;
-      else savedList.push(targetRow);
-      setStored('roster_records', savedList);
-
-      const logMeta = recordActivityLog('Updated Duty Roster', `Changed ${targetRow.name}'s (${empId}) ${dayKey.toUpperCase()} shift to "${newShift}" (${selectedMonthKey})`);
+      const updatedRow = { ...targetRow, [dayKey]: newShift, monthKey: selectedMonthKey };
+      pendingRosterEditsMap[`${selectedMonthKey}_${empId}`] = updatedRow;
       renderAppLayout();
-      await postToSheet('SAVE_ROSTER_ROW', { ...targetRow, ...logMeta });
+    }
+
+    function discardPendingRosterChanges() {
+      Object.keys(pendingRosterEditsMap).forEach(k => {
+        if (k.startsWith(selectedMonthKey + '_')) delete pendingRosterEditsMap[k];
+      });
+      renderAppLayout();
+      showPortalToast('Changes Discarded', 'Reverted unsaved Duty Roster edits.', 'warning');
+    }
+
+    function confirmAndSaveAllRosterChanges() {
+      if (!hasFeatureAccess(currentUser, 'feat_edit_roster')) return;
+      const keys = Object.keys(pendingRosterEditsMap).filter(k => k.startsWith(selectedMonthKey + '_'));
+      if (keys.length === 0) return;
+
+      const changedRows = keys.map(k => pendingRosterEditsMap[k]);
+      const namesList = changedRows.map(r => `${r.name} (${r.id})`).join(', ');
+
+      openConfirmWarningModal(
+        `Save ${changedRows.length} Duty Roster Change(s)?`,
+        `You have modified the weekly shift schedule for <strong>${changedRows.length} member(s)</strong>: ${namesList}.<br><br>Do you want to save and sync these roster updates across all panels and Google Sheet?`,
+        'Duty Roster Save Confirmation',
+        async () => {
+          let savedList = getStored('roster_records', []);
+          for (const row of changedRows) {
+            const idx = savedList.findIndex(r => r.monthKey === selectedMonthKey && String(r.id) === String(row.id));
+            if (idx !== -1) savedList[idx] = row;
+            else savedList.push(row);
+            delete pendingRosterEditsMap[`${selectedMonthKey}_${row.id}`];
+          }
+          setStored('roster_records', savedList);
+
+          const logMeta = recordActivityLog('Updated Duty Roster', `Saved Duty Roster updates for ${namesList} (${selectedMonthKey})`);
+          renderAppLayout();
+          showPortalToast('Duty Roster Saved & Synced!', `Updated schedule for ${changedRows.length} member(s).`, 'success');
+
+          for (const row of changedRows) {
+            await postToSheet('SAVE_ROSTER_ROW', { ...row, ...logMeta }).catch(() => {});
+          }
+        },
+        'Yes, Save & Sync Roster',
+        true
+      );
     }
 
     function renderAttendanceView() {
@@ -3538,7 +3893,8 @@
                     return `<tr class="${isMe ? 'my-rank-row-glow' : 'hover:bg-slate-50/90'} transition-colors">
                       <td class="p-3.5">${rankBadge}</td>
                       <td class="p-3.5 font-extrabold text-slate-900">
-                        <div class="inline-flex items-center gap-2 ${isMe ? 'my-rank-name-pill px-3 py-1.5 rounded-xl' : ''}">
+                        <div class="inline-flex items-center gap-2.5 ${isMe ? 'my-rank-name-pill px-3 py-1.5 rounded-xl' : ''}">
+                          ${renderUserAvatarHtml(ag, 'w-8 h-8 rounded-xl text-xs', 'bg-blue-100 text-blue-700', isMe)}
                           <span>${ag.name}</span>
                           <span class="${isMe ? 'text-blue-100' : 'text-slate-400'} text-[10px]">(${ag.id})</span>
                           ${isMe
@@ -3582,11 +3938,14 @@
         dateFilteredSales = rawSales.filter(s => s.date === reportsDateFilter && !String(s.date || '').startsWith('MONTHLY_PROD_'));
       }
 
+      // Everyone (including Agents) can see all agents' daily sales reports on the selected date for healthy floor competition!
       let sales = [];
-      if (canViewAll(u)) {
-        sales = logsFilterScope === 'ALL' ? dateFilteredSales : dateFilteredSales.filter(s => s.team === logsFilterScope);
-      } else {
+      if (logsFilterScope === 'ALL') {
+        sales = dateFilteredSales;
+      } else if (logsFilterScope === 'MINE') {
         sales = dateFilteredSales.filter(s => String(s.userId) === String(u.id));
+      } else {
+        sales = dateFilteredSales.filter(s => s.team === logsFilterScope);
       }
 
       const uniqueMap = new Map();
@@ -3596,9 +3955,6 @@
       });
       sales = Array.from(uniqueMap.values()).sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0) || (Number(b.orders) || 0) - (Number(a.orders) || 0));
 
-      const activeProdsRep = getActiveProductsForMonth(selectedMonthKey);
-      const repProdSums = {};
-      Object.keys(activeProdsRep).forEach(k => { repProdSums[k] = 0; });
       let sumLeads = 0, sumOrders = 0, sumAmount = 0, sumDailyTgt = 0;
 
       sales.forEach(s => {
@@ -3610,25 +3966,27 @@
         sumOrders += Number(s.orders) || 0;
         sumAmount += Number(s.amount) || 0;
         sumDailyTgt += agDailyTarget;
-        Object.keys(activeProdsRep).forEach(k => {
-          repProdSums[k] += Number(s[k]) || 0;
-        });
       });
 
       const sumConv = sumLeads > 0 ? ((sumOrders / sumLeads) * 100).toFixed(2) : '0.00';
       const sumAchPct = sumDailyTgt > 0 ? Math.round((sumAmount / sumDailyTgt) * 100) : 0;
       const isShowingToday = reportsDateFilter === getTodayFormatted();
+      const totalAgentsCount = allUsers.filter(usr => usr.role === 'agent').length;
 
       return `
         <div class="space-y-6">
           <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
-              <h2 class="text-xl font-black text-slate-900">
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800"><i class="fa-solid fa-fire text-amber-500 mr-1"></i>Live Floor Competition</span>
+                <span class="text-xs font-extrabold text-emerald-600">${sales.length} ${ reportsDateFilter === 'ALL' ? 'Total Entries' : `of ${totalAgentsCount} Agents Submitted`}</span>
+              </div>
+              <h2 class="text-xl font-black text-slate-900 mt-1">
                 <i class="fa-solid fa-file-invoice text-blue-600 mr-2"></i>
-                Daily Sales & Conversion Logs (${reportsDateFilter === 'ALL' ? `Full Month • ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)})
+                Daily Sales & Conversion Leaderboard (${reportsDateFilter === 'ALL' ? `Full Month • ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)})
               </h2>
               <p class="text-xs font-bold text-slate-500 mt-0.5">
-                Showing entries for <strong>${reportsDateFilter === 'ALL' ? `All Dates in ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)}</strong> — use the date picker to inspect any specific date
+                Showing all agents' sales reports for <strong>${reportsDateFilter === 'ALL' ? `All Dates in ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)}</strong> sorted by highest sales amount!
               </p>
             </div>
 
@@ -3646,13 +4004,12 @@
                 All Dates (${selectedMonthKey})
               </button>
 
-              ${canViewAll(u) ? `
-              <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
-                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (17)</option>
+              <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold cursor-pointer">
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Floor Agents (${totalAgentsCount})</option>
                 <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
                 <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+                ${u.role === 'agent' ? `<option value="MINE" ${logsFilterScope === 'MINE' ? 'selected' : ''}>Only My Reports</option>` : ''}
               </select>
-              ` : ''}
 
               ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
               <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
@@ -3661,7 +4018,7 @@
               ` : ''}
               ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
               <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
-                <i class="fa-solid fa-plus mr-1"></i> Add New Report
+                <i class="fa-solid fa-plus mr-1"></i> ${u.role === 'agent' ? 'Submit My Report' : 'Add New Report'}
               </button>
               ` : ''}
             </div>
@@ -3671,12 +4028,13 @@
             <table class="w-full text-left text-xs whitespace-nowrap">
               <thead class="table-header-light uppercase font-extrabold">
                 <tr>
+                  <th class="p-3.5 text-center">Rank</th>
                   <th class="p-3.5">Date</th>
                   <th class="p-3.5">Agent</th>
                   <th class="p-3.5">Team</th>
-                  <th class="p-3.5">Leads</th>
-                  <th class="p-3.5">Orders</th>
-                  <th class="p-3.5">Conv. Ratio</th>
+                  <th class="p-3.5 text-center">Leads</th>
+                  <th class="p-3.5 text-center">Orders</th>
+                  <th class="p-3.5 text-center">Conv. Ratio</th>
                   <th class="p-3.5">Sales Amount</th>
                   <th class="p-3.5">Daily Target (÷26)</th>
                   <th class="p-3.5">Daily Achieved</th>
@@ -3684,37 +4042,55 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
-                ${sales.length === 0 ? `<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted for ${reportsDateFilter === 'ALL' ? selectedMonthKey : cleanDisplayDate(reportsDateFilter)} yet.</td></tr>` : ''}
-                ${sales.map(s => {
+                ${sales.length === 0 ? `<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted for ${reportsDateFilter === 'ALL' ? selectedMonthKey : cleanDisplayDate(reportsDateFilter)} yet. Be the first to submit today!</td></tr>` : ''}
+                ${sales.map((s, idx) => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
                   const agWorkTarget = Math.round(((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174) * 1.05);
                   const agDailyTarget = Math.round(agWorkTarget / 26);
                   const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
                   const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
+                  const isMe = String(s.userId) === String(u.id);
+                  const canEditThisRow = hasFeatureAccess(u, 'feat_manage_all_sales') || (hasFeatureAccess(u, 'feat_submit_own_sales') && isMe);
+
+                  let rankPill = `<span class="w-6 h-6 rounded-full bg-slate-100 text-slate-600 inline-flex items-center justify-center font-black text-[11px]">#${idx + 1}</span>`;
+                  if (idx === 0) rankPill = `<span class="w-6 h-6 rounded-full bg-amber-400 text-white inline-flex items-center justify-center font-black text-[11px] shadow-xs" title="1st Place"><i class="fa-solid fa-trophy text-[10px]"></i></span>`;
+                  else if (idx === 1) rankPill = `<span class="w-6 h-6 rounded-full bg-slate-300 text-slate-900 inline-flex items-center justify-center font-black text-[11px]" title="2nd Place">2</span>`;
+                  else if (idx === 2) rankPill = `<span class="w-6 h-6 rounded-full bg-amber-700 text-white inline-flex items-center justify-center font-black text-[11px]" title="3rd Place">3</span>`;
 
                   return `
-                  <tr class="hover:bg-slate-50/90">
+                  <tr class="${isMe ? 'bg-blue-50/75 font-extrabold' : 'hover:bg-slate-50/90'}">
+                    <td class="p-3.5 text-center">${rankPill}</td>
                     <td class="p-3.5 font-bold text-slate-700">${cleanDisplayDate(s.date)}</td>
-                    <td class="p-3.5 font-extrabold text-slate-900">${s.userName} <span class="text-slate-400 text-[10px]">(${s.userId})</span></td>
-                    <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${s.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${s.team}</span></td>
-                    <td class="p-3.5 font-bold text-slate-700">${s.leads}</td>
-                    <td class="p-3.5 font-black text-blue-600">${s.orders}</td>
-                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-extrabold">${convRatio}%</span></td>
-                    <td class="p-3.5 font-black text-emerald-600">৳${Number(s.amount).toLocaleString()}</td>
+                    <td class="p-3.5 font-extrabold text-slate-900">
+                      <div class="flex items-center gap-2.5">
+                        ${renderUserAvatarHtml(agObj, 'w-7 h-7 rounded-xl text-[11px]', 'bg-blue-100 text-blue-700', false)}
+                        <div>
+                          <span>${s.userName}</span> <span class="text-slate-400 text-[10px]">(${s.userId})</span>
+                          ${isMe ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-blue-600 text-white text-[9px] font-black">YOU</span>` : ''}
+                        </div>
+                      </div>
+                    </td>
+                    <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${s.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (s.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800')}">${s.team}</span></td>
+                    <td class="p-3.5 text-center font-bold text-slate-700">${s.leads}</td>
+                    <td class="p-3.5 text-center font-black text-blue-600">${s.orders}</td>
+                    <td class="p-3.5 text-center"><span class="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-extrabold">${convRatio}%</span></td>
+                    <td class="p-3.5 font-black text-emerald-600 text-sm">৳${Number(s.amount).toLocaleString()}</td>
                     <td class="p-3.5 font-bold text-slate-500">৳${agDailyTarget.toLocaleString()}</td>
                     <td class="p-3.5">
                       <span class="px-2.5 py-1 rounded-md ${dailyAchPct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">
                         ${dailyAchPct}%
                       </span>
                     </td>
-                    ${(hasFeatureAccess(u, 'feat_manage_all_sales') || (hasFeatureAccess(u, 'feat_submit_own_sales') && String(s.userId) === String(u.id))) ? `
+                    ${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? `
                     <td class="p-3.5 text-right space-x-1">
-                      <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
-                        <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
-                      </button>
-                      <button onclick="handleDirectDeleteReport('${s.userId}', '${s.userName}', '${s.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100 transition-colors">
-                        <i class="fa-solid fa-trash-can mr-1"></i> Delete
-                      </button>
+                      ${canEditThisRow ? `
+                        <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
+                          <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
+                        </button>
+                        <button onclick="handleDirectDeleteReport('${s.userId}', '${s.userName}', '${s.date}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100 transition-colors">
+                          <i class="fa-solid fa-trash-can mr-1"></i> Delete
+                        </button>
+                      ` : `<span class="text-[10px] font-bold text-slate-300">—</span>`}
                     </td>
                     ` : ''}
                   </tr>
@@ -3723,12 +4099,12 @@
               ${sales.length > 0 ? `
               <tfoot class="bg-slate-900 text-white font-black text-xs">
                 <tr>
-                  <td colspan="3" class="p-4 uppercase tracking-wider text-amber-400">
-                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${sales.length} ${sales.length === 1 ? 'Entry' : 'Entries'})
+                  <td colspan="4" class="p-4 uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${sales.length} ${sales.length === 1 ? 'Agent Entry' : 'Agent Entries'})
                   </td>
-                  <td class="p-4">${sumLeads.toLocaleString()}</td>
-                  <td class="p-4 text-blue-300">${sumOrders.toLocaleString()}</td>
-                  <td class="p-4"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${sumConv}%</span></td>
+                  <td class="p-4 text-center">${sumLeads.toLocaleString()}</td>
+                  <td class="p-4 text-center text-blue-300">${sumOrders.toLocaleString()}</td>
+                  <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${sumConv}%</span></td>
                   <td class="p-4 text-emerald-400 text-sm">৳${sumAmount.toLocaleString()}</td>
                   <td class="p-4 text-slate-300">৳${sumDailyTgt.toLocaleString()}</td>
                   <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${sumAchPct}%</span></td>
@@ -3742,7 +4118,6 @@
       `;
     }
 
-    
     function quickAssignAgentToTeam(agentId, newTeamName) {
       if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
       const allUsers = getUsersForMonth(selectedMonthKey);
@@ -3883,7 +4258,12 @@
                   return `
                   <tr class="hover:bg-slate-50">
                     <td class="p-3.5 font-black text-blue-600">${usr.id}</td>
-                    <td class="p-3.5 font-extrabold text-slate-900">${usr.name}</td>
+                    <td class="p-3.5 font-extrabold text-slate-900">
+                      <div class="flex items-center gap-2.5">
+                        ${renderUserAvatarHtml(usr, 'w-8 h-8 rounded-xl text-xs', 'bg-blue-100 text-blue-700', String(usr.id) === String(u.id) || hasFeatureAccess(u, 'feat_manage_users'))}
+                        <span>${usr.name}</span>
+                      </div>
+                    </td>
                     <td class="p-3.5">${renderOnlineStatusBadge(usr.id)}</td>
                     <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
                     <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (usr.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${usr.team}</span></td>
@@ -5272,8 +5652,9 @@
     // Helper: Parse ERP Product Sales Summary row (e.g. "1 Black Seed Honey 500g A000006 ... 8 ৳7,089.78")
     // Calculates: (Variant Weight in KG) × (Quantity Sold) = Total KG
     function parseErpProductSummaryRow(lineText) {
-      const lower = String(lineText || '').toLowerCase().trim();
-      if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || /^total\s*:/i.test(lower) || (lineText.match(/,/g) || []).length >= 4) {
+      const raw = String(lineText || '').trim();
+      const lower = raw.toLowerCase();
+      if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || /^total\s*:/i.test(lower) || /product\s*name.*quantity\s*sold/i.test(lower)) {
         return null;
       }
 
@@ -5286,44 +5667,56 @@
       else if (/ajwa/i.test(lower)) cat = 'ajwa';
       if (!cat) return null;
 
-      // Extract weight size: e.g. 500g, 500 gm, 250g, 100gm, 400gm, 1kg, 0.5kg
+      let sizeVal = 1;
+      let sizeUnit = 'kg';
+      let sizeEndIdx = 0;
+      let sizeLabel = '1kg';
+
       const sizeMatch = lower.match(/(\d+(?:\.\d+)?)\s*(kg|gm|g)\b/i);
-      const sizeVal = sizeMatch ? (parseFloat(sizeMatch[1]) || 1) : 1;
-      const sizeUnit = sizeMatch ? sizeMatch[2].toLowerCase() : 'kg';
-      const unitKg = (sizeUnit === 'gm' || sizeUnit === 'g') ? (sizeVal / 1000) : sizeVal;
-
-      const afterSize = sizeMatch ? lineText.substring(sizeMatch.index + sizeMatch[0].length) : lineText;
-
-      // Strip Product Codes (e.g., A000006, A00215) & Barcodes (e.g., 8941140150052)
-      let tail = afterSize
-        .replace(/\b[A-Za-z]+\d{3,10}\b/g, ' ')
-        .replace(/\b\d{6,16}\b/g, ' ');
-
-      // Normalize OCR-misread Cost Price '৳0.00' (Tesseract often reads '৳0.00' as 'b0.00', '60.00', '80.00', '0.00')
-      // In Ghorerbazar ERP Product Sales Summary, the token right after Cost Price (0.00) is ALWAYS Quantity Sold!
-      let qty = 0;
-      const afterZeroCostMatch = tail.match(/(?:[৳b68t]\s*)?0[.,]00\s+(\d{1,4})\b/i);
-      if (afterZeroCostMatch) {
-        qty = parseInt(afterZeroCostMatch[1], 10) || 0;
+      if (sizeMatch) {
+        sizeVal = parseFloat(sizeMatch[1]) || 1;
+        sizeUnit = sizeMatch[2].toLowerCase();
+        sizeEndIdx = sizeMatch.index + sizeMatch[0].length;
+        sizeLabel = sizeMatch[0].replace(/\s+/g, '');
+      } else {
+        const misreadSize = lower.match(/\b(500|250|200|400|100)\s*[9qgo0]\b/i);
+        if (misreadSize) {
+          sizeVal = parseFloat(misreadSize[1]);
+          sizeUnit = 'g';
+          sizeEndIdx = misreadSize.index + misreadSize[0].length;
+          sizeLabel = `${misreadSize[1]}g`;
+        }
       }
 
-      if (!qty || qty <= 0) {
-        // Fallback: Remove all decimal money/price tokens (e.g. 7,089.78, 6,400.00, 886.22, b0.00) and find the standalone integer Quantity Sold
-        const withoutDecimals = tail
-          .replace(/(?:[৳b68t]\s*)?\d[\d,]*\.\d{1,2}\b/gi, ' ')
-          .replace(/\b\d{1,3}(?:,\d{3})+\b/g, ' ');
-        const intMatches = withoutDecimals.match(/\b(\d{1,4})\b/g) || [];
-        const validInts = intMatches
-          .map(t => parseInt(t, 10))
-          .filter(n => !isNaN(n) && n > 0 && n < 2000);
-        if (validInts.length > 0) {
-          qty = validInts[0];
-        }
+      const unitKg = (sizeUnit === 'gm' || sizeUnit === 'g') ? (sizeVal / 1000) : sizeVal;
+      const afterSize = sizeEndIdx > 0 ? raw.substring(sizeEndIdx) : raw;
+
+      let tail = afterSize;
+      const storeMatch = tail.match(/ghorer\s*bazar/i);
+      if (storeMatch) {
+        tail = tail.substring(storeMatch.index + storeMatch[0].length);
+      } else {
+        tail = tail
+          .replace(/\b[A-Za-z0-9]*\d{5,16}\b/g, ' ')
+          .replace(/\b[A-Za-z]+\d{3,8}\b/g, ' ');
+      }
+
+      tail = tail.replace(/(?:[৳b68t€$]\s*)?0[.,]00\b/gi, ' ');
+      tail = tail
+        .replace(/(?:[৳b68t€$]\s*)?\d[\d,]*\.\d{2}\b/gi, ' ')
+        .replace(/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g, ' ');
+
+      const intTokens = (tail.match(/\b(\d{1,4})\b/g) || [])
+        .map(t => parseInt(t, 10))
+        .filter(n => !isNaN(n) && n > 0 && n < 2000);
+
+      let qty = 0;
+      if (intTokens.length > 0) {
+        qty = storeMatch ? intTokens[0] : intTokens[intTokens.length - 1];
       }
 
       if (qty > 0) {
         const totalKg = Number((unitKg * qty).toFixed(2));
-        const sizeLabel = sizeMatch ? sizeMatch[0].replace(/\s+/g, '') : '1kg';
         return { cat, unitKg, qty, totalKg, itemSummary: `${sizeLabel} × ${qty} pcs = ${totalKg}kg` };
       }
       return null;
@@ -6956,16 +7349,12 @@
     }
 
     function handleDeleteChatMessage(msgId) {
-      if (!currentUser) return;
-      const hub = getChatAndNoticeHubStore();
-      const targetMsg = hub.messages.find(m => m.id === msgId);
-      if (!targetMsg) return;
-      if (!isFullAdmin(currentUser) && String(targetMsg.senderId) !== String(currentUser.id)) return;
-
-      hub.messages = hub.messages.filter(m => m.id !== msgId);
-      saveChatAndNoticeHubStore(hub);
-      renderAppLayout();
-      showPortalToast('Message Deleted', 'Removed message from chat history.', 'warning');
+      if (!currentUser || !isFullAdmin(currentUser)) {
+        showPortalToast('Admin Only', 'Only Admins can delete chat messages.', 'error');
+        return;
+      }
+      pendingDeleteChatMsgId = msgId;
+      openModal('chatDeleteModal');
     }
 
     function renderChatHubView() {
@@ -7052,7 +7441,8 @@
         }
       }
 
-      const channelMessages = messages.filter(m => m.roomId === activeChatChannelId);
+      const hiddenSet = getHiddenChatMessagesForCurrentUser();
+      const channelMessages = messages.filter(m => m.roomId === activeChatChannelId && !hiddenSet.has(m.id));
       const latestNotice = notices.length > 0 ? notices[notices.length - 1] : null;
 
       const filterPills = [
@@ -7189,9 +7579,7 @@
                       return `
                         <button type="button" onclick="selectChatChannel('${dmId}')" class="w-full p-2.5 rounded-xl text-left flex items-center gap-2.5 transition-colors border ${isSel ? 'tab-active border-transparent shadow-sm' : (unreadCnt > 0 ? 'bg-blue-50/90 border-blue-200 text-slate-900' : 'border-transparent hover:bg-white hover:border-slate-200/80 text-slate-800')}">
                           <div class="relative shrink-0">
-                            <div class="w-9 h-9 rounded-xl ${isSel ? 'bg-white/20 text-white' : (usr.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700')} flex items-center justify-center font-black text-xs">
-                              ${usr.name.charAt(0)}
-                            </div>
+                            ${renderUserAvatarHtml(usr, 'w-9 h-9 rounded-xl text-xs', isSel ? 'bg-white/20 text-white' : (usr.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'), false)}
                             <span class="w-2.5 h-2.5 rounded-full ${dotCol} ring-2 ring-white absolute -bottom-0.5 -right-0.5" title="${st}"></span>
                           </div>
                           <div class="min-w-0 flex-1">
@@ -7252,7 +7640,7 @@
                   </div>
                 ` : channelMessages.map(m => {
                   const isMine = String(m.senderId) === String(u.id);
-                  const canDelMsg = isMine || isFullAdmin(u);
+                  const canDelMsg = isFullAdmin(u);
                   const seenNames = getSeenByUsersForMessage(m, allUsers);
                   const isSeen = seenNames.length > 0;
                   const seenTooltip = isSeen ? `Seen by: ${seenNames.join(', ')}` : 'Sent (Not seen yet)';
