@@ -1005,7 +1005,7 @@
       let pingQuery = '';
       if (currentUser) {
         const st = getUserOnlineStatus(currentUser.id);
-        pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}`;
+        pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}&monthKey=${encodeURIComponent(selectedMonthKey)}`;
       }
       const script = document.createElement('script');
       script.src = `${webhookUrl}?callback=${cbName}&t=${Date.now()}${pingQuery}`;
@@ -1709,11 +1709,22 @@
       });
 
       let lastSubmittedDate = 'Not Updated Yet';
-      if (monthlySummaryEntry && (monthlySummaryEntry.lastUpdatedDate || monthlySummaryEntry.submittedAt)) {
-        const rawSub = String(monthlySummaryEntry.lastUpdatedDate || monthlySummaryEntry.submittedAt).split(',')[0].trim();
-        lastSubmittedDate = formatFullMonthDateDisplay(rawSub);
+      let coveredDateRange = `01/${mk} – ${getTodayFormatted()}`;
+      if (monthlySummaryEntry) {
+        if (monthlySummaryEntry.coveredDateRange) {
+          coveredDateRange = monthlySummaryEntry.coveredDateRange;
+        }
+        if (monthlySummaryEntry.lastUpdatedDate) {
+          lastSubmittedDate = monthlySummaryEntry.lastUpdatedDate;
+        } else if (monthlySummaryEntry.submittedAt) {
+          const rawSub = String(monthlySummaryEntry.submittedAt).split(',')[0].trim();
+          lastSubmittedDate = formatFullMonthDateDisplay(rawSub);
+        } else {
+          lastSubmittedDate = formatFullMonthDateDisplay(getTodayFormatted());
+        }
       } else if (productLogs.length > 0) {
         const firstLog = productLogs[0];
+        if (firstLog.coveredDateRange) coveredDateRange = firstLog.coveredDateRange;
         if (firstLog.lastUpdatedDate) {
           lastSubmittedDate = firstLog.lastUpdatedDate;
         } else if (String(firstLog.date).startsWith('MONTHLY_PROD_')) {
@@ -1738,6 +1749,7 @@
         incentiveMoney: incentive.totalMoney,
         incentiveRewards: incentive.earnedRewards,
         lastSubmittedDate,
+        coveredDateRange,
         productLogs,
         allDailyLogs: dailyEntries,
         monthlySummaryEntry
@@ -2118,6 +2130,98 @@
     }
 
     
+    function getMonthStartDateInputVal(mKey) {
+      const mk = mKey || selectedMonthKey;
+      const parts = mk.split('/');
+      if (parts.length === 2) return `${parts[1]}-${parts[0]}-01`;
+      return dateToInputVal(getTodayFormatted());
+    }
+
+    function downloadPortalCsvFile(filename, headersArr, rowsArr) {
+      const escapeCsvCell = (val) => {
+        const s = String(val === null || val === undefined ? '' : val).replace(/"/g, '""');
+        return `"${s}"`;
+      };
+      const csvLines = [
+        headersArr.map(escapeCsvCell).join(','),
+        ...rowsArr.map(row => row.map(escapeCsvCell).join(','))
+      ];
+      // Add UTF-8 BOM so Excel opens Bangladeshi Taka (৳) and characters cleanly
+      const blob = new Blob(['\uFEFF' + csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showPortalToast('CSV File Downloaded!', `Saved "${filename}" to your device.`, 'success');
+    }
+
+    function exportDriveProductCsv() {
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+      const monthSales = allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey));
+      const activeProds = getActiveProductsForMonth(selectedMonthKey);
+      const prodKeys = Object.keys(activeProds);
+
+      const teamFilteredAgents = driveProdTeamScope === 'ALL'
+        ? allAgents
+        : allAgents.filter(a => a.team === driveProdTeamScope);
+      const displayedAgents = driveProdAgentId === 'ALL'
+        ? teamFilteredAgents
+        : teamFilteredAgents.filter(a => String(a.id) === String(driveProdAgentId));
+
+      const grandProdTotals = {};
+      prodKeys.forEach(k => { grandProdTotals[k] = 0; });
+      let grandTotalKg = 0;
+      let grandTargetKg = 0;
+
+      const rowsData = displayedAgents.map(ag => {
+        const st = computeAgentDriveProductStats(ag, monthSales, selectedMonthKey);
+        prodKeys.forEach(k => {
+          grandProdTotals[k] = Number(((grandProdTotals[k] || 0) + (st.prodKg[k] || 0)).toFixed(2));
+        });
+        grandTotalKg = Number((grandTotalKg + st.totalKgAll).toFixed(2));
+        grandTargetKg = Number((grandTargetKg + st.totalTargetKgAll).toFixed(2));
+        return st;
+      }).sort((a, b) => b.totalKgAll - a.totalKgAll);
+
+      const headers = [
+        'SL', 'Emp ID', 'Agent Name', 'Team',
+        ...prodKeys.map(k => `${activeProds[k].name} Sold (KG)`),
+        'Total Sold (KG)', 'Total Target (KG)', 'Achievement (%)', 'Covered Date Range', 'Last Update Date'
+      ];
+
+      const csvRows = rowsData.map((st, idx) => [
+        idx + 1,
+        st.agent.id,
+        st.agent.name,
+        st.agent.team,
+        ...prodKeys.map(k => (st.prodKg[k] || 0).toFixed(2)),
+        st.totalKgAll.toFixed(2),
+        st.totalTargetKgAll.toFixed(2),
+        `${st.overallPct}%`,
+        st.coveredDateRange || '-',
+        st.lastSubmittedDate || '-'
+      ]);
+
+      const grandPct = grandTargetKg > 0 ? Math.round((grandTotalKg / grandTargetKg) * 100) : 0;
+      csvRows.push([
+        'TOTAL', 'ALL', `GRAND TOTAL (${rowsData.length} Agents)`, driveProdTeamScope,
+        ...prodKeys.map(k => (grandProdTotals[k] || 0).toFixed(2)),
+        grandTotalKg.toFixed(2),
+        grandTargetKg.toFixed(2),
+        `${grandPct}%`,
+        `Month: ${selectedMonthKey}`,
+        formatFullMonthDateDisplay(getTodayFormatted())
+      ]);
+
+      const safeMonth = selectedMonthKey.replace('/', '-');
+      downloadPortalCsvFile(`Drive_Product_${driveProdTeamScope.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, csvRows);
+    }
+
     function renderDriveProductModal() {
       const u = currentUser;
       const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
@@ -2129,9 +2233,9 @@
           <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
               <div>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">Till-Now Cumulative Total</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">Date-Range Cumulative Entry</span>
                 <h3 class="text-base font-black text-slate-900 mt-1">Update Drive Product Total (${monthLabel})</h3>
-                <p class="text-xs font-bold text-slate-400">Enter total KG sold till now for ${monthLabel}. Last Update will show <strong>${formatFullMonthDateDisplay(getTodayFormatted())}</strong>.</p>
+                <p class="text-xs font-bold text-slate-400">Select the covered date range and enter the agent's total KG sold. Last Update will show <strong>${formatFullMonthDateDisplay(getTodayFormatted())}</strong>.</p>
               </div>
               <button type="button" onclick="closeModal('driveProdModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -2144,8 +2248,26 @@
                 </select>
               </div>
 
+              <!-- Date Range Selection (From Date -> To Date) -->
+              <div class="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-black uppercase text-blue-800"><i class="fa-regular fa-calendar-days mr-1"></i>Select Covered Date Range</span>
+                  <span class="text-[10px] font-extrabold text-blue-600">Batch / Multi-Day Total</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">From Date (Start)</label>
+                    <input type="date" id="dpFromDate" required class="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl text-xs font-extrabold text-slate-900">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">To Date (End / Till Now)</label>
+                    <input type="date" id="dpToDate" required class="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl text-xs font-extrabold text-slate-900">
+                  </div>
+                </div>
+              </div>
+
               <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
-                💡 Enter total KG sold till today: <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
+                💡 Enter total KG sold across this date range: <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
               </div>
 
               <div class="grid grid-cols-2 gap-3">
@@ -2161,7 +2283,7 @@
               <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <button type="button" onclick="closeModal('driveProdModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
                 <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 rounded-xl shadow-lg">
-                  <i class="fa-solid fa-check-double mr-1"></i> Save Till-Now Total & Sync
+                  <i class="fa-solid fa-check-double mr-1"></i> Save Date-Range Total & Sync
                 </button>
               </div>
             </form>
@@ -2175,6 +2297,12 @@
       const selEl = document.getElementById('dpModalAgentId');
       const targetId = (hasFeatureAccess(currentUser, 'feat_manage_all_sales') && agentId) ? agentId : currentUser.id;
       if (selEl && targetId) selEl.value = targetId;
+
+      const fromEl = document.getElementById('dpFromDate');
+      const toEl = document.getElementById('dpToDate');
+      if (fromEl) fromEl.value = getMonthStartDateInputVal(selectedMonthKey);
+      if (toEl) toEl.value = dateToInputVal(getTodayFormatted());
+
       onDriveProdModalAgentChange();
       openModal('driveProdModal');
     }
@@ -2201,12 +2329,16 @@
       const targetAgent = allUsers.find(a => String(a.id) === String(agId)) || u;
       const activeProds = getActiveProductsForMonth(selectedMonthKey);
 
+      const fromDateStr = inputValToDateStr(document.getElementById('dpFromDate')?.value);
+      const toDateStr = inputValToDateStr(document.getElementById('dpToDate')?.value);
+      const rangeLabel = `${cleanDisplayDate(fromDateStr)} – ${cleanDisplayDate(toDateStr)}`;
+
       const prodValuesObj = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
       Object.keys(activeProds).forEach(k => {
         prodValuesObj[k] = Number(document.getElementById(`dpInput_${k}`)?.value) || 0;
       });
 
-      const lastUpdateFormatted = formatFullMonthDateDisplay(getTodayFormatted());
+      const lastUpdateFormatted = formatFullMonthDateDisplay(toDateStr || getTodayFormatted());
       const monthlyKeyDate = `MONTHLY_PROD_${selectedMonthKey}`;
 
       let sales = getStored('sales_records', []);
@@ -2225,8 +2357,9 @@
         userName: targetAgent.name,
         team: targetAgent.team,
         date: monthlyKeyDate,
-        lastUpdatedDate: lastUpdateFormatted,
-        submittedAt: lastUpdateFormatted,
+        coveredDateRange: rangeLabel,
+        lastUpdatedDate: `${lastUpdateFormatted} (${rangeLabel})`,
+        submittedAt: `${lastUpdateFormatted} (${rangeLabel})`,
         leads: 0, orders: 0, amount: 0, ratio: 0,
         ...prodValuesObj
       };
@@ -2235,12 +2368,12 @@
 
       const logMeta = recordActivityLog(
         'Updated Drive Product Total',
-        `Updated till-now Drive Product total for ${targetAgent.name} (${selectedMonthKey}) — Last Update: ${lastUpdateFormatted}`
+        `Updated Drive Product total for ${targetAgent.name} (${rangeLabel}) — Last Update: ${lastUpdateFormatted}`
       );
 
       closeModal('driveProdModal');
       renderAppLayout();
-      showPortalToast('Drive Product Total Synced!', `Updated ${targetAgent.name}'s total (Last Update: ${lastUpdateFormatted}).`, 'success');
+      showPortalToast('Drive Product Total Synced!', `Updated ${targetAgent.name}'s total (${rangeLabel}).`, 'success');
       postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta }).catch(() => {});
     }
 
@@ -2284,14 +2417,14 @@
           <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
               <div class="flex items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">Till-Now Cumulative Totals</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">Date-Range Cumulative Totals</span>
                 <span class="text-xs font-bold text-slate-400">Month: ${monthLabel}</span>
               </div>
               <h2 class="text-xl font-black text-slate-900 mt-1">
                 <i class="fa-solid fa-box-open text-amber-500 mr-2"></i>Drive Product Total Achievement (${monthLabel})
               </h2>
               <p class="text-xs font-bold text-slate-500 mt-0.5">
-                Every Agent & Admin can view how many KG of each Drive Product every agent has sold till now, and update their cumulative total anytime.
+                Select a date range to enter cumulative product totals, filter by team/agent, or download the selected data as a CSV spreadsheet.
               </p>
             </div>
 
@@ -2310,13 +2443,17 @@
                 </select>
               </div>
 
+              <button onclick="exportDriveProductCsv()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors" title="Download filtered Drive Product table as CSV">
+                <i class="fa-solid fa-file-csv"></i> Download CSV
+              </button>
+
               ${hasFeatureAccess(u, 'feat_edit_products') ? `
               <button onclick="openProductConfigModal()" class="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-extrabold">
                 <i class="fa-solid fa-sliders mr-1"></i> Edit Product Targets
               </button>
               ` : ''}
               <button onclick="openDriveProductModal('${u.role === 'agent' ? u.id : (driveProdAgentId !== 'ALL' ? driveProdAgentId : '')}')" class="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-1.5">
-                <i class="fa-solid fa-pen-to-square"></i> Update Till-Now Drive Product Total
+                <i class="fa-solid fa-calendar-plus"></i> Add / Update Drive Product (Date Range)
               </button>
             </div>
           </div>
@@ -2335,7 +2472,7 @@
                   ${prodKeys.map(k => `<th class="p-3.5 text-center">${activeProds[k].name}<br><span class="text-[10px] text-slate-400 font-bold">Target: ${activeProds[k].targetKg} kg</span></th>`).join('')}
                   <th class="p-3.5 text-center">Total Sold (KG)</th>
                   <th class="p-3.5 text-center">Achieved %</th>
-                  <th class="p-3.5">Last Update</th>
+                  <th class="p-3.5">Last Update & Date Range</th>
                   <th class="p-3.5 text-right">Action</th>
                 </tr>
               </thead>
@@ -2364,7 +2501,9 @@
                       }).join('')}
                       <td class="p-3.5 text-center font-black text-emerald-700 text-sm">${st.totalKgAll.toFixed(2)} kg</td>
                       <td class="p-3.5 text-center"><span class="px-2.5 py-1 rounded-md ${st.overallPct >= 90 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${st.overallPct}%</span></td>
-                      <td class="p-3.5 font-bold text-slate-700"><i class="fa-regular fa-calendar-check text-amber-600 mr-1.5"></i>Last Update: <strong class="text-slate-900">${st.lastSubmittedDate}</strong></td>
+                      <td class="p-3.5 font-bold text-slate-700">
+                        <i class="fa-regular fa-calendar-check text-amber-600 mr-1.5"></i>Last Update: <strong class="text-slate-900">${st.lastSubmittedDate}</strong>
+                      </td>
                       <td class="p-3.5 text-right">
                         ${canUpdateThisRow ? `
                           <button onclick="openDriveProductModal('${st.agent.id}')" class="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-extrabold text-[11px]">
@@ -2396,6 +2535,112 @@
           </div>
         </div>
       `;
+    }
+
+    
+    function exportMonthlyPerformanceCsv() {
+      const u = currentUser;
+      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      const monthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(selectedMonthKey));
+      const activeProdsMp = getActiveProductsForMonth(selectedMonthKey);
+      const prodKeys = Object.keys(activeProdsMp);
+
+      let teamFilteredAgents = allAgents;
+      if (canViewAll(u)) {
+        if (monthlyPerfTeamScope !== 'ALL') {
+          teamFilteredAgents = allAgents.filter(a => a.team === monthlyPerfTeamScope);
+        }
+      } else {
+        teamFilteredAgents = allAgents.filter(a => String(a.id) === String(u.id));
+      }
+
+      let displayedAgents = teamFilteredAgents;
+      if (canViewAll(u) && monthlyPerfAgentId !== 'ALL') {
+        displayedAgents = teamFilteredAgents.filter(a => String(a.id) === String(monthlyPerfAgentId));
+      }
+
+      const safeMonth = selectedMonthKey.replace('/', '-');
+
+      // If a single agent is selected (or logged in as an agent), export both their Summary AND Date-Wise Breakdown!
+      if (displayedAgents.length === 1) {
+        const ag = displayedAgents[0];
+        const agSales = monthSales.filter(s => String(s.userId) === String(ag.id) && !String(s.date || '').startsWith('MONTHLY_PROD_'))
+          .sort((a, b) => (parseInt(a.date.split('/')[0], 10) || 0) - (parseInt(b.date.split('/')[0], 10) || 0));
+        const baseTgt = Number(ag.baseTarget) || 0;
+        const workTgt = Math.round(baseTgt * 1.05);
+        const dailyTgt = Math.round(workTgt / 26);
+
+        const headers = [
+          'Date', 'Emp ID', 'Agent Name', 'Team', 'Grade',
+          'Leads', 'Orders', 'Conv. Ratio (%)', 'Sales Amount (BDT)',
+          'Daily Target (BDT)', 'Daily Achieved (%)'
+        ];
+        let totL = 0, totO = 0, totAmt = 0;
+        const rows = agSales.map(dl => {
+          const l = Number(dl.leads) || 0;
+          const o = Number(dl.orders) || 0;
+          const amt = Number(dl.amount) || 0;
+          totL += l; totO += o; totAmt += amt;
+          const conv = l > 0 ? ((o / l) * 100).toFixed(2) + '%' : '0.00%';
+          const ach = dailyTgt > 0 ? Math.round((amt / dailyTgt) * 100) + '%' : '0%';
+          return [dl.date, ag.id, ag.name, ag.team, ag.grade, l, o, conv, amt, dailyTgt, ach];
+        });
+        const totConv = totL > 0 ? ((totO / totL) * 100).toFixed(2) + '%' : '0.00%';
+        const totAch = workTgt > 0 ? Math.round((totAmt / workTgt) * 100) + '%' : '0%';
+        rows.push(['MONTHLY TOTAL', ag.id, ag.name, ag.team, ag.grade, totL, totO, totConv, totAmt, workTgt, totAch]);
+
+        downloadPortalCsvFile(`Monthly_Performance_${ag.name.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, rows);
+        return;
+      }
+
+      // Multi-agent summary CSV export
+      const headers = [
+        'SL', 'Emp ID', 'Agent Name', 'Team', 'Grade',
+        'Base Target (BDT)', 'Working Target (+5%)', 'Leads', 'Orders', 'Conv. Ratio (%)',
+        'Achieved Revenue (BDT)', 'Remaining (BDT)', 'Achieved (%)',
+        ...prodKeys.map(k => `${activeProdsMp[k].name} (KG)`)
+      ];
+
+      let totBase = 0, totWork = 0, totLeads = 0, totOrders = 0, totRev = 0;
+      const grandProds = {};
+      prodKeys.forEach(k => { grandProds[k] = 0; });
+
+      const agentRows = displayedAgents.map(ag => {
+        const agSales = monthSales.filter(s => String(s.userId) === String(ag.id) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+        const baseTgt = Number(ag.baseTarget) || 0;
+        const workTgt = Math.round(baseTgt * 1.05);
+        const leads = agSales.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
+        const orders = agSales.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
+        const rev = agSales.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+        const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) + '%' : '0.00%';
+        const rem = Math.max(0, workTgt - rev);
+        const achPct = workTgt > 0 ? Math.round((rev / workTgt) * 100) + '%' : '0%';
+        const dpStats = computeAgentDriveProductStats(ag, monthSales, selectedMonthKey);
+
+        totBase += baseTgt; totWork += workTgt; totLeads += leads; totOrders += orders; totRev += rev;
+        prodKeys.forEach(k => { grandProds[k] = Number(((grandProds[k] || 0) + (dpStats.prodKg[k] || 0)).toFixed(2)); });
+
+        return { ag, baseTgt, workTgt, leads, orders, conv, rev, rem, achPct, prodKg: dpStats.prodKg };
+      }).sort((a, b) => b.rev - a.rev);
+
+      const csvRows = agentRows.map((r, idx) => [
+        idx + 1, r.ag.id, r.ag.name, r.ag.team, r.ag.grade,
+        r.baseTgt, r.workTgt, r.leads, r.orders, r.conv,
+        r.rev, r.rem, r.achPct,
+        ...prodKeys.map(k => (r.prodKg[k] || 0).toFixed(2))
+      ]);
+
+      const grandConv = totLeads > 0 ? ((totOrders / totLeads) * 100).toFixed(2) + '%' : '0.00%';
+      const grandRem = Math.max(0, totWork - totRev);
+      const grandAch = totWork > 0 ? Math.round((totRev / totWork) * 100) + '%' : '0%';
+      csvRows.push([
+        'TOTAL', 'ALL', `GRAND TOTAL (${agentRows.length} Agents)`, monthlyPerfTeamScope, '-',
+        totBase, totWork, totLeads, totOrders, grandConv,
+        totRev, grandRem, grandAch,
+        ...prodKeys.map(k => (grandProds[k] || 0).toFixed(2))
+      ]);
+
+      downloadPortalCsvFile(`Monthly_Performance_${monthlyPerfTeamScope.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, csvRows);
     }
 
     function renderMonthlyPerformanceView() {
@@ -2474,17 +2719,27 @@
       return `
         <div class="space-y-6">
           <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
-            <div>
-              <h2 class="text-xl font-black text-slate-900">
-                <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>Monthly Performance Report (${monthLabel})
-              </h2>
-              <p class="text-xs font-bold text-slate-500 mt-0.5">
-                ${canViewAll(u) ? `Sorted by Sales Amount. Click any agent or use Admin Actions to edit/delete date-wise records with full cross-panel sync.` : `View your complete monthly summary and date-wise performance table with total sum for ${monthLabel}.`}
-              </p>
+            <div class="flex flex-wrap items-center justify-between gap-3 w-full lg:w-auto">
+              <div>
+                <h2 class="text-xl font-black text-slate-900">
+                  <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>Monthly Performance Report (${monthLabel})
+                </h2>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">
+                  ${canViewAll(u) ? `Sorted by Sales Amount. Filter by Team/Agent and click Download CSV anytime.` : `View your complete monthly summary and date-wise performance table with CSV download.`}
+                </p>
+              </div>
+              ${!canViewAll(u) ? `
+              <button onclick="exportMonthlyPerformanceCsv()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
+                <i class="fa-solid fa-file-csv"></i> Download CSV
+              </button>
+              ` : ''}
             </div>
 
             ${canViewAll(u) ? `
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-center gap-2.5">
+              <button onclick="exportMonthlyPerformanceCsv()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5 transition-colors" title="Download currently filtered Monthly Performance data as CSV">
+                <i class="fa-solid fa-file-csv"></i> Download CSV
+              </button>
               ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
               <button onclick="openAiImportModal()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2 transition-colors">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
