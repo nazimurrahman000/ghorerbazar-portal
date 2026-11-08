@@ -1473,6 +1473,10 @@
                   <i class="fa-solid fa-bullhorn text-xs"></i> Post Notice
                 </button>
                 ` : ''}
+                <button onclick="openModal('noticeBoardModal')" title="Open Official Floor Notice Board" class="px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-colors">
+                  <i class="fa-solid fa-clipboard-list text-amber-600 text-xs"></i>
+                  <span class="hidden sm:inline">Notice Board</span>
+                </button>
                 ${renderHeaderBellNotificationWidget()}
                 <button onclick="hasFeatureAccess(currentUser, 'tab_agents') ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-extrabold rounded-xl flex items-center gap-2 transition-colors">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
@@ -1506,6 +1510,8 @@
         ${hasFeatureAccess(u, 'feat_ai_erp_import') ? renderAiImportModal() : ''}
         ${renderConfirmWarningModal()}
         ${hasFeatureAccess(u, 'feat_post_notice') ? renderAnnouncementModal() : ''}
+        ${renderDriveProductModal()}
+        ${renderNoticeBoardModal()}
         ${renderLogoutConfirmModal()}
       `;
       document.getElementById('app').innerHTML = html;
@@ -2663,6 +2669,7 @@
 
       const samadRows = roster.filter(r => r.team === 'Team Samad');
       const nazimRows = roster.filter(r => r.team === 'Team Nazim');
+      const floatingRows = roster.filter(r => r.team !== 'Team Samad' && r.team !== 'Team Nazim');
 
       function computeRosterSummary(rows, excludeTL) {
         const filtered = excludeTL ? rows.filter(r => !r.isTL && r.id !== '10107' && r.id !== '10122') : rows;
@@ -2810,6 +2817,40 @@
               ${renderTeamSummaryTable('Team Nazim — Roster Summary', nazimSum)}
             </div>
           </div>
+
+          ${floatingRows.length > 0 ? `
+          <div class="card-dynamic overflow-hidden border-2 border-purple-200">
+            <div class="bg-gradient-to-r from-purple-700 to-indigo-700 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+              <span class="font-black text-xs uppercase tracking-wider"><i class="fa-solid fa-user-astronaut mr-1.5"></i>Facebook Floating Agents Pool (Unassigned to Nazim/Samad — Included in Overall Facebook Combined)</span>
+              <span class="text-[10px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full">Assign to a team anytime using buttons on the right</span>
+            </div>
+            <table class="w-full text-[11px] border-collapse">
+              <thead class="bg-slate-50 font-extrabold text-slate-600">
+                <tr>
+                  <th class="px-1.5 py-2 border border-slate-200">ID</th>
+                  <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
+                  ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
+                  ${hasFeatureAccess(u, 'feat_manage_users') ? `<th class="px-2 py-2 border border-slate-200 text-center">Quick Assign Team</th>` : ''}
+                </tr>
+              </thead>
+              <tbody>
+                ${floatingRows.map(r => `
+                  <tr class="hover:bg-purple-50/40">
+                    <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold text-purple-700">${r.id}</td>
+                    <td class="px-2 py-2 border border-slate-200 font-extrabold text-slate-900 whitespace-nowrap">${r.name} <span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-[9px] font-black ml-1">Floating</span></td>
+                    ${days.map(d => renderShiftCell(r, d)).join('')}
+                    ${hasFeatureAccess(u, 'feat_manage_users') ? `
+                    <td class="px-2 py-1.5 border border-slate-200 text-center space-x-1 whitespace-nowrap">
+                      <button onclick="quickAssignAgentToTeam('${r.id}', 'Team Nazim')" class="px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-md font-extrabold text-[10px]">+ Team Nazim</button>
+                      <button onclick="quickAssignAgentToTeam('${r.id}', 'Team Samad')" class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-extrabold text-[10px]">+ Team Samad</button>
+                    </td>
+                    ` : ''}
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ` : ''}
 
           <div class="card-dynamic overflow-hidden max-w-4xl mx-auto">
             <div class="bg-slate-900 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Facebook Team Roster Summary (Combined)</div>
@@ -3310,6 +3351,49 @@
       `;
     }
 
+    
+    function quickAssignAgentToTeam(agentId, newTeamName) {
+      if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const targetUser = allUsers.find(u => String(u.id) === String(agentId));
+      if (!targetUser) return;
+
+      openConfirmWarningModal(
+        `Assign ${targetUser.name} to ${newTeamName}?`,
+        `Are you sure you want to assign <strong>${targetUser.name} (${targetUser.id})</strong> from <strong>${targetUser.team}</strong> to <strong>${newTeamName}</strong>? All their sales, roster, and targets will immediately sync under ${newTeamName}.`,
+        'Team Assignment Confirmation',
+        async () => {
+          let users = getStored('users', DEFAULT_USERS);
+          const idx = users.findIndex(u => String(u.id) === String(agentId));
+          if (idx !== -1) {
+            users[idx].team = newTeamName;
+            setStored('users', users);
+          }
+
+          let sales = getStored('sales_records', []);
+          sales = sales.map(s => String(s.userId) === String(agentId) ? { ...s, team: newTeamName } : s);
+          setStored('sales_records', sales);
+
+          let attList = getStored('attendance_records', []);
+          attList = attList.map(a => String(a.userId) === String(agentId) ? { ...a, team: newTeamName } : a);
+          setStored('attendance_records', attList);
+
+          let rosterList = getStored('roster_records', []);
+          rosterList = rosterList.map(r => String(r.id) === String(agentId) ? { ...r, team: newTeamName } : r);
+          setStored('roster_records', rosterList);
+
+          const logMeta = recordActivityLog('Assigned Agent Team', `Assigned ${targetUser.name} (${targetUser.id}) to ${newTeamName}`);
+          renderAppLayout();
+          showPortalToast('Team Assigned & Synced!', `${targetUser.name} is now assigned to ${newTeamName}.`, 'success');
+          if (idx !== -1) {
+            postToSheet('SAVE_USER', { ...users[idx], ...logMeta }).catch(() => {});
+          }
+        },
+        `Yes, Assign to ${newTeamName}`,
+        true
+      );
+    }
+
     function renderManageAgents() {
       const u = currentUser;
       let allUsers = getUsersForMonth(selectedMonthKey);
@@ -3418,6 +3502,10 @@
                     <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
                     ${hasFeatureAccess(u, 'feat_manage_users') ? `
                     <td class="p-3.5 text-right space-x-1">
+                      ${usr.role === 'agent' && usr.team === 'Floating' ? `
+                        <button onclick="quickAssignAgentToTeam('${usr.id}', 'Team Nazim')" class="px-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-extrabold text-[10px] shadow-xs" title="Assign ${usr.name} to Team Nazim">+ Team Nazim</button>
+                        <button onclick="quickAssignAgentToTeam('${usr.id}', 'Team Samad')" class="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-extrabold text-[10px] shadow-xs" title="Assign ${usr.name} to Team Samad">+ Team Samad</button>
+                      ` : ''}
                       ${isSuperAdmin(u) ? `<button onclick="openUserRoleControlForId('${usr.id}')" class="px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg font-extrabold hover:bg-purple-100" title="Manage Features & Permissions for ${usr.name}"><i class="fa-solid fa-user-shield mr-1"></i>Roles</button>` : ''}
                       ${canEdit ? `<button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>` : `<span class="px-2.5 py-1 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-lg"><i class="fa-solid fa-lock mr-1"></i>Protected</span>`}
                       ${canDel ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
@@ -3995,6 +4083,7 @@
                   <select id="usrTeam" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
                     <option value="Team Nazim">Team Nazim</option>
                     <option value="Team Samad">Team Samad</option>
+                    <option value="Floating">Floating (Unassigned Pool)</option>
                     <option value="All Teams">All Teams (Supervisor)</option>
                   </select>
                 </div>
@@ -5714,6 +5803,7 @@
 
       if (clickedNotif && clickedNotif.type === 'admin_notice') {
         renderAppLayout();
+        openModal('noticeBoardModal');
         return;
       }
       if (clickedNotif && clickedNotif.type === 'chat_dm' && clickedNotif.roomId) {
@@ -6274,10 +6364,17 @@
         });
       }
 
+      // Mark notice as seen by sender before syncing so it never fires a duplicate toast
+      const seenNoticeKey = `gb_seen_notices_${currentUser.id}`;
+      let seenNotices = [];
+      try { seenNotices = JSON.parse(localStorage.getItem(seenNoticeKey) || '[]'); } catch (err) {}
+      seenNotices.push(newNotice.id);
+      localStorage.setItem(seenNoticeKey, JSON.stringify(seenNotices.slice(-100)));
+
       saveChatAndNoticeHubStore(hub);
       syncIncomingChatAndNoticesFromConfigs(getStored('monthly_configs', {}), false);
 
-      recordActivityLog('Broadcasted Official Notice', `Sent Notice "${titleVal}" (${targetVal}): ${msgVal}`, true);
+      recordActivityLog('Broadcasted Official Notice', `Sent Notice "${titleVal}" (${targetVal}): ${msgVal}`, false);
       document.getElementById('annMessageInput').value = '';
       closeModal('announceModal');
       renderAppLayout();
@@ -6293,6 +6390,67 @@
       openModal('announceModal');
       showPortalToast('Notice Removed', 'Deleted the announcement from the broadcast list.', 'warning');
     }
+
+    function renderNoticeBoardModal() {
+      const { notices } = getChatAndNoticeHubStore();
+      const visibleNotices = notices.filter(nt => {
+        if (!nt) return false;
+        if (nt.targetTeam && nt.targetTeam !== 'ALL' && !canViewAll(currentUser) && currentUser.team !== nt.targetTeam) return false;
+        return true;
+      }).slice().reverse();
+
+      return `
+        <div id="noticeBoardModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-base shadow-md">
+                  <i class="fa-solid fa-clipboard-list"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-black text-slate-900">Official Floor Notice Board</h3>
+                  <p class="text-xs font-bold text-slate-400">All official announcements and instructions broadcasted by Admin / TL</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                ${hasFeatureAccess(currentUser, 'feat_post_notice') ? `
+                  <button type="button" onclick="closeModal('noticeBoardModal'); openAnnouncementModal();" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold">
+                    + Post New Notice
+                  </button>
+                ` : ''}
+                <button type="button" onclick="closeModal('noticeBoardModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto py-4 space-y-3 pr-1">
+              ${visibleNotices.length === 0 ? `
+                <div class="p-10 text-center text-slate-400 font-bold text-xs">No official notices have been posted yet.</div>
+              ` : visibleNotices.map(nt => `
+                <div class="p-4 rounded-2xl bg-gradient-to-r from-amber-50/90 to-orange-50/60 border border-amber-200 shadow-2xs">
+                  <div class="flex items-center justify-between gap-2 mb-1.5">
+                    <div class="flex items-center gap-2">
+                      <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-[9px] font-black uppercase">${nt.targetTeam || 'ALL TEAMS'}</span>
+                      <h4 class="text-sm font-black text-slate-900">${nt.title}</h4>
+                    </div>
+                    <span class="text-[10px] font-bold text-slate-500"><i class="fa-regular fa-clock mr-1"></i>${nt.date} • ${nt.time}</span>
+                  </div>
+                  <p class="text-xs font-bold text-slate-700 leading-relaxed whitespace-pre-wrap">${nt.message}</p>
+                  <div class="mt-2 pt-2 border-t border-amber-200/60 flex items-center justify-between text-[10px] font-extrabold text-amber-800">
+                    <span>Posted by: ${nt.senderName}</span>
+                    ${hasFeatureAccess(currentUser, 'feat_post_notice') ? `
+                      <button type="button" onclick="handleDeleteOfficialNotice('${nt.id}'); closeModal('announceModal'); openModal('noticeBoardModal');" class="text-red-600 hover:underline">
+                        <i class="fa-solid fa-trash-can mr-1"></i>Delete Notice
+                      </button>
+                    ` : ''}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
 
     // =========================================================================
     // UNIFIED INBOX, GROUP CHANNELS & 1-ON-1 PERSONAL CHAT VIEW WITH SEEN STATUS
