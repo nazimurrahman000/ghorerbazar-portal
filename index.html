@@ -2188,34 +2188,48 @@
         return st;
       }).sort((a, b) => b.totalKgAll - a.totalKgAll);
 
+      const prodExpandedHeaders = [];
+      prodKeys.forEach(k => {
+        const pName = activeProds[k].name;
+        const pTgt = activeProds[k].targetKg;
+        prodExpandedHeaders.push(`${pName} Sold (kg)`, `${pName} Target (${pTgt} kg)`, `${pName} Achieved (%)`);
+      });
+
       const headers = [
         'SL', 'Emp ID', 'Agent Name', 'Team',
-        ...prodKeys.map(k => `${activeProds[k].name} Sold (KG)`),
-        'Total Sold (KG)', 'Total Target (KG)', 'Achievement (%)', 'Covered Date Range', 'Last Update Date'
+        ...prodExpandedHeaders,
+        'Last Update & Date Range'
       ];
 
-      const csvRows = rowsData.map((st, idx) => [
-        idx + 1,
-        st.agent.id,
-        st.agent.name,
-        st.agent.team,
-        ...prodKeys.map(k => (st.prodKg[k] || 0).toFixed(2)),
-        st.totalKgAll.toFixed(2),
-        st.totalTargetKgAll.toFixed(2),
-        `${st.overallPct}%`,
-        st.coveredDateRange || '-',
-        st.lastSubmittedDate || '-'
-      ]);
+      const csvRows = rowsData.map((st, idx) => {
+        const prodCells = [];
+        prodKeys.forEach(k => {
+          const sold = Number(st.prodKg[k] || 0);
+          const tgt = Number(activeProds[k].targetKg || 0);
+          const pct = tgt > 0 ? Math.round((sold / tgt) * 100) + '%' : '0%';
+          prodCells.push(sold.toFixed(2), tgt.toFixed(2), pct);
+        });
+        return [
+          idx + 1,
+          st.agent.id,
+          st.agent.name,
+          st.agent.team,
+          ...prodCells,
+          st.lastSubmittedDate || '-'
+        ];
+      });
 
-      const grandPct = grandTargetKg > 0 ? Math.round((grandTotalKg / grandTargetKg) * 100) : 0;
+      const grandProdCells = [];
+      prodKeys.forEach(k => {
+        const totSold = Number(grandProdTotals[k] || 0);
+        const totTgt = Number((activeProds[k].targetKg || 0) * (rowsData.length || 1));
+        const pct = totTgt > 0 ? Math.round((totSold / totTgt) * 100) + '%' : '0%';
+        grandProdCells.push(totSold.toFixed(2), totTgt.toFixed(2), pct);
+      });
       csvRows.push([
         'TOTAL', 'ALL', `GRAND TOTAL (${rowsData.length} Agents)`, driveProdTeamScope,
-        ...prodKeys.map(k => (grandProdTotals[k] || 0).toFixed(2)),
-        grandTotalKg.toFixed(2),
-        grandTargetKg.toFixed(2),
-        `${grandPct}%`,
-        `Month: ${selectedMonthKey}`,
-        formatFullMonthDateDisplay(getTodayFormatted())
+        ...grandProdCells,
+        `Month: ${selectedMonthKey}`
       ]);
 
       const safeMonth = selectedMonthKey.replace('/', '-');
@@ -2469,9 +2483,7 @@
                   <th class="p-3.5">SL</th>
                   <th class="p-3.5">Agent Name & ID</th>
                   <th class="p-3.5">Team</th>
-                  ${prodKeys.map(k => `<th class="p-3.5 text-center">${activeProds[k].name}<br><span class="text-[10px] text-slate-400 font-bold">Target: ${activeProds[k].targetKg} kg</span></th>`).join('')}
-                  <th class="p-3.5 text-center">Total Sold (KG)</th>
-                  <th class="p-3.5 text-center">Achieved %</th>
+                  ${prodKeys.map(k => `<th class="p-3.5 text-center">${activeProds[k].name}<br><span class="text-[10px] text-amber-600 font-extrabold">Target: ${activeProds[k].targetKg} kg</span></th>`).join('')}
                   <th class="p-3.5">Last Update & Date Range</th>
                   <th class="p-3.5 text-right">Action</th>
                 </tr>
@@ -2494,13 +2506,11 @@
                         const pct = Math.round((val / tgt) * 100);
                         return `
                           <td class="p-3.5 text-center">
-                            <span class="font-black text-sm ${val > 0 ? 'text-slate-900' : 'text-slate-300'}">${val.toFixed(2)} kg</span>
-                            <span class="block text-[10px] font-bold ${pct >= 90 ? 'text-emerald-600 font-black' : 'text-slate-400'}">${pct}%</span>
+                            <span class="font-black text-sm ${val > 0 ? 'text-slate-900' : 'text-slate-300'}">${val.toFixed(2)} <span class="text-[10px] text-slate-400 font-bold">/ ${tgt} kg</span></span>
+                            <span class="block text-[10px] font-bold ${pct >= 90 ? 'text-emerald-600 font-black' : 'text-slate-500'}">${pct}% Achieved</span>
                           </td>
                         `;
                       }).join('')}
-                      <td class="p-3.5 text-center font-black text-emerald-700 text-sm">${st.totalKgAll.toFixed(2)} kg</td>
-                      <td class="p-3.5 text-center"><span class="px-2.5 py-1 rounded-md ${st.overallPct >= 90 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${st.overallPct}%</span></td>
                       <td class="p-3.5 font-bold text-slate-700">
                         <i class="fa-regular fa-calendar-check text-amber-600 mr-1.5"></i>Last Update: <strong class="text-slate-900">${st.lastSubmittedDate}</strong>
                       </td>
@@ -2524,10 +2534,8 @@
                     const totVal = grandProdTotals[k] || 0;
                     const totTgt = (Number(activeProds[k].targetKg) || 0) * (rowsData.length || 1);
                     const pct = totTgt > 0 ? Math.round((totVal / totTgt) * 100) : 0;
-                    return `<td class="p-4 text-center text-amber-300">${totVal.toFixed(2)} kg <span class="block text-[10px] text-slate-300">(${pct}% of ${totTgt.toFixed(1)}kg)</span></td>`;
+                    return `<td class="p-4 text-center text-amber-300">${totVal.toFixed(2)} / ${totTgt.toFixed(2)} kg <span class="block text-[10px] text-emerald-300 font-black">${pct}% Achieved</span></td>`;
                   }).join('')}
-                  <td class="p-4 text-center text-emerald-400 text-sm">${grandTotalKg.toFixed(2)} kg</td>
-                  <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950">${grandPct}%</span></td>
                   <td colspan="2" class="p-4 text-slate-300">Floor Total (${selectedMonthKey})</td>
                 </tr>
               </tfoot>
@@ -5282,7 +5290,7 @@
     // Calculates: (Variant Weight in KG) × (Quantity Sold) = Total KG
     function parseErpProductSummaryRow(lineText) {
       const lower = String(lineText || '').toLowerCase().trim();
-      if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || (lineText.match(/,/g) || []).length >= 3) {
+      if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || /^total\s*:/i.test(lower) || (lineText.match(/,/g) || []).length >= 4) {
         return null;
       }
 
@@ -5295,38 +5303,52 @@
       else if (/ajwa/i.test(lower)) cat = 'ajwa';
       if (!cat) return null;
 
+      // Extract weight size: e.g. 500g, 500 gm, 250g, 100gm, 400gm, 1kg, 0.5kg
       const sizeMatch = lower.match(/(\d+(?:\.\d+)?)\s*(kg|gm|g)\b/i);
       const sizeVal = sizeMatch ? (parseFloat(sizeMatch[1]) || 1) : 1;
       const sizeUnit = sizeMatch ? sizeMatch[2].toLowerCase() : 'kg';
       const unitKg = (sizeUnit === 'gm' || sizeUnit === 'g') ? (sizeVal / 1000) : sizeVal;
 
       const afterSize = sizeMatch ? lineText.substring(sizeMatch.index + sizeMatch[0].length) : lineText;
-      const cleaned = afterSize.replace(/\b[A-Za-z0-9]*\d{5,16}\b/g, ' ');
-      const rawTokens = cleaned.match(/\d[\d,]*(?:\.\d+)?/g) || [];
 
+      // Strip Product Codes (e.g., A000006, A00215) & Barcodes (e.g., 8941140150052)
+      let tail = afterSize
+        .replace(/\b[A-Za-z]+\d{3,10}\b/g, ' ')
+        .replace(/\b\d{6,16}\b/g, ' ');
+
+      // Normalize OCR-misread Cost Price '৳0.00' (Tesseract often reads '৳0.00' as 'b0.00', '60.00', '80.00', '0.00')
+      // In Ghorerbazar ERP Product Sales Summary, the token right after Cost Price (0.00) is ALWAYS Quantity Sold!
       let qty = 0;
-      const intTokens = rawTokens
-        .filter(t => !t.includes('.'))
-        .map(t => parseInt(t.replace(/,/g, ''), 10))
-        .filter(n => !isNaN(n) && n > 0 && n < 5000);
+      const afterZeroCostMatch = tail.match(/(?:[৳b68t]\s*)?0[.,]00\s+(\d{1,4})\b/i);
+      if (afterZeroCostMatch) {
+        qty = parseInt(afterZeroCostMatch[1], 10) || 0;
+      }
 
-      if (intTokens.length > 0) {
-        qty = intTokens[0];
-      } else {
-        const nonZero = rawTokens.map(t => parseFloat(t.replace(/,/g, ''))).filter(n => !isNaN(n) && n > 0 && n < 500);
-        if (nonZero.length > 0) qty = nonZero[0];
+      if (!qty || qty <= 0) {
+        // Fallback: Remove all decimal money/price tokens (e.g. 7,089.78, 6,400.00, 886.22, b0.00) and find the standalone integer Quantity Sold
+        const withoutDecimals = tail
+          .replace(/(?:[৳b68t]\s*)?\d[\d,]*\.\d{1,2}\b/gi, ' ')
+          .replace(/\b\d{1,3}(?:,\d{3})+\b/g, ' ');
+        const intMatches = withoutDecimals.match(/\b(\d{1,4})\b/g) || [];
+        const validInts = intMatches
+          .map(t => parseInt(t, 10))
+          .filter(n => !isNaN(n) && n > 0 && n < 2000);
+        if (validInts.length > 0) {
+          qty = validInts[0];
+        }
       }
 
       if (qty > 0) {
         const totalKg = Number((unitKg * qty).toFixed(2));
-        return { cat, unitKg, qty, totalKg, itemSummary: `${sizeMatch ? sizeMatch[0] : '1kg'} × ${qty} pcs = ${totalKg}kg` };
+        const sizeLabel = sizeMatch ? sizeMatch[0].replace(/\s+/g, '') : '1kg';
+        return { cat, unitKg, qty, totalKg, itemSummary: `${sizeLabel} × ${qty} pcs = ${totalKg}kg` };
       }
       return null;
     }
 
     function detectErpMonthlyProductSummaryMode(ocrText) {
       const s = String(ocrText || '');
-      const hasRangeHeader = /date\s*range|product\s*sales\s*report|products\s*sales\s*summary|quantity\s*sold|order\s*by/i.test(s);
+      const hasRangeHeader = /date\s*range|product\s*sales\s*report|products\s*sales\s*summary|quantity\s*sold|product\s*code|barcode|order\s*by/i.test(s);
       const monthsMap = { jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06', jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12' };
       const mRange = s.match(/\b(\d{1,2})[\s\-]+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s\-,]*(20\d{2})\b/i);
       let detectedMonthKey = selectedMonthKey;
@@ -5372,7 +5394,7 @@
           sumProds[parsedRow.cat] = Number((sumProds[parsedRow.cat] + parsedRow.totalKg).toFixed(2));
           breakdownNotes.push(`${parsedRow.cat}: ${parsedRow.itemSummary}`);
           matchedProdRowsCount++;
-        } else {
+        } else if (!isProductSummaryReport) {
           const { prods, foundAnyProd } = extractProductAmountsFromLine(rawLine);
           if (foundAnyProd) {
             Object.keys(prods).forEach(pk => {
@@ -5388,27 +5410,29 @@
       let summaryOrders = 0, summaryLeads = 0, summaryAmount = 0;
       const cleanFull = fullText.replace(/b(?=\d)/gi, '৳');
       const moneyMatches = cleanFull.match(/(?:৳|tk|bdt)\s*(\d[\d,]*(?:\.\d+)?)/gi) || [];
-      if (moneyMatches.length > 0) {
+      if (moneyMatches.length > 0 && !isProductSummaryReport) {
         const parsedMoney = moneyMatches.map(m => parseFloat(m.replace(/[^\d.]/g, ''))).filter(n => !isNaN(n) && n >= 500);
         if (parsedMoney.length > 0) summaryAmount = Math.round(Math.max(...parsedMoney));
       }
 
       if ((isProductSummaryReport || matchedProdRowsCount > 0) && (matchedProdRowsCount > 0 || summaryAmount > 0)) {
-        const targetAg = globalDetectedAgent || allAgents[0];
+        const detectedUid = globalDetectedAgent ? String(globalDetectedAgent.id) : '';
+        const detectedName = globalDetectedAgent ? globalDetectedAgent.name : 'Select Agent';
+        const detectedTeam = globalDetectedAgent ? globalDetectedAgent.team : '';
         const monthlyRecordDateKey = `MONTHLY_PROD_${detectedMonthKey}`;
-        const existingRec = existingSales.find(s => String(s.userId) === String(targetAg.id) && s.date === monthlyRecordDateKey);
+        const existingRec = detectedUid ? existingSales.find(s => String(s.userId) === detectedUid && s.date === monthlyRecordDateKey) : null;
 
         aiDetectedRecords = [{
-          userId: String(targetAg.id),
-          userName: targetAg.name,
-          team: targetAg.team,
+          userId: detectedUid,
+          userName: detectedName,
+          team: detectedTeam,
           agentWasAutoDetected: Boolean(globalDetectedAgent),
           date: monthlyRecordDateKey,
           isMonthlyProductSummary: true,
           monthKey: detectedMonthKey,
           breakdownText: breakdownNotes.join(' | '),
           category: globalDetectedAgent
-            ? `Detected: ${targetAg.name} (${detectedMonthKey})`
+            ? `Detected: ${detectedName} (${detectedMonthKey})`
             : `Select Agent Below (${detectedMonthKey})`,
           leads: summaryLeads,
           orders: summaryOrders,
@@ -5501,15 +5525,17 @@
         const bigs = allNums.filter(n => n >= 1200 && n < 10000000);
         const smalls = allNums.filter(n => n > 0 && n < 1000 && Number.isInteger(n));
 
-        const targetAg = globalDetectedAgent || allAgents[0];
+        const detectedUid = globalDetectedAgent ? String(globalDetectedAgent.id) : '';
+        const detectedName = globalDetectedAgent ? globalDetectedAgent.name : 'Select Agent';
+        const detectedTeam = globalDetectedAgent ? globalDetectedAgent.team : '';
         aiDetectedRecords.push({
-          userId: String(targetAg.id),
-          userName: targetAg.name,
-          team: targetAg.team,
+          userId: detectedUid,
+          userName: detectedName,
+          team: detectedTeam,
           agentWasAutoDetected: Boolean(globalDetectedAgent),
           date: currentContextDate,
           isMonthlyProductSummary: false,
-          category: globalDetectedAgent ? `Detected: ${targetAg.name}` : 'Select Agent Name',
+          category: globalDetectedAgent ? `Detected: ${detectedName}` : 'Select Agent Name',
           leads: smalls.length >= 2 ? Math.max(...smalls) : 0,
           orders: smalls.length >= 1 ? Math.min(...smalls) : 0,
           amount: bigs.length > 0 ? Math.round(Math.max(...bigs)) : 0,
@@ -5519,7 +5545,7 @@
       }
 
       aiDetectedRecords = aiDetectedRecords.map(rec => {
-        const existingRec = existingSales.find(s => String(s.userId) === String(rec.userId) && s.date === rec.date);
+        const existingRec = rec.userId ? existingSales.find(s => String(s.userId) === String(rec.userId) && s.date === rec.date) : null;
         const isDuplicate = Boolean(existingRec);
         return {
           ...rec,
@@ -5544,36 +5570,43 @@
         if (agObj) {
           r.userName = agObj.name;
           r.team = agObj.team;
+        } else {
+          r.userName = 'Select Agent';
+          r.team = '';
         }
-        r.isDuplicate = existingSales.some(s => String(s.userId) === String(r.userId) && s.date === r.date);
+        r.isDuplicate = r.userId ? existingSales.some(s => String(s.userId) === String(r.userId) && s.date === r.date) : false;
         if (r.isDuplicate) dupCount++;
       });
 
-      const uniqueAgentsCount = new Set(aiDetectedRecords.map(r => r.userId)).size;
+      const uniqueAgentsCount = new Set(aiDetectedRecords.filter(r => r.userId).map(r => r.userId)).size;
       const hasMonthlySummary = aiDetectedRecords.some(r => String(r.date || '').startsWith('MONTHLY_PROD_'));
 
       const headlineEl = document.getElementById('aiSummaryHeadline');
       const detailsEl = document.getElementById('aiSummaryDetails');
       const dupBanner = document.getElementById('aiDuplicateAlertBanner');
 
+      const prodDisplayNames = { ajwa:'Ajwa Dates', pinkSalt:'Pink Salt', blackGarlic:'Black Garlic', sunHoney:'Sundarban Honey', bsHoney:'Black Seed Honey', gawaGhee:'Gawa Ghee' };
+
       if (headlineEl) {
         if (aiDetectedRecords.length === 1) {
           const rec0 = aiDetectedRecords[0];
           const prodSummary = ['ajwa','pinkSalt','blackGarlic','sunHoney','bsHoney','gawaGhee']
             .filter(k => (Number(rec0[k]) || 0) > 0)
-            .map(k => `${k}: ${rec0[k]}kg`).join(', ');
-          if (rec0.agentWasAutoDetected) {
-            headlineEl.innerHTML = `<span class="text-emerald-700">✅ Agent Found in Image: <strong>${rec0.userName} (${rec0.userId})</strong></span> — ${rec0.amount > 0 ? `Sales: ৳${Number(rec0.amount).toLocaleString()}, Orders: ${rec0.orders}` : ''} ${prodSummary ? `| Products: ${prodSummary}` : ''}. Do you want to upload this to the system?`;
+            .map(k => `${prodDisplayNames[k]}: <strong>${rec0[k]}kg</strong>`).join(', ');
+          if (rec0.userId) {
+            headlineEl.innerHTML = `<span class="text-emerald-700">✅ Agent Ready: <strong>${rec0.userName} (${rec0.userId})</strong></span> ${rec0.amount > 0 ? `| Sales: ৳${Number(rec0.amount).toLocaleString()}, Orders: ${rec0.orders}` : ''} ${prodSummary ? `| Detected Products: ${prodSummary}` : ''}`;
           } else {
-            headlineEl.innerHTML = `<span class="text-amber-700">⚠️ Agent Name Not Clear in Image — Please select the Agent from the dropdown below!</span> ${rec0.amount > 0 ? `Detected Sales: ৳${Number(rec0.amount).toLocaleString()}` : ''} ${prodSummary ? `| Detected Products: ${prodSummary}` : ''}`;
+            headlineEl.innerHTML = `<span class="text-rose-600">⚠️ Agent Name Not in Screenshot — Please select the Agent from the red dropdown below!</span> ${prodSummary ? `<br><span class="text-slate-800 text-xs">📦 Extracted Product Totals: ${prodSummary}</span>` : ''}`;
           }
         } else {
           headlineEl.textContent = `AI Detected ${aiDetectedRecords.length} Report Entry(s) across ${uniqueAgentsCount} Agent(s) — Review & Confirm Upload Below`;
         }
       }
       if (detailsEl) {
-        if (hasMonthlySummary) {
-          detailsEl.textContent = `AI calculated total KG from each product size × quantity sold! Approving this will update the agent's Monthly Product Totals on their Dashboard, Central Dashboard & Monthly Performance without adding fake date rows.`;
+        if (hasMonthlySummary && aiDetectedRecords[0]?.breakdownText) {
+          detailsEl.innerHTML = `<span class="text-purple-800 font-extrabold">Item Breakdown:</span> ${aiDetectedRecords[0].breakdownText}`;
+        } else if (hasMonthlySummary) {
+          detailsEl.textContent = `AI calculated total KG from each product size × quantity sold! Select the agent (if not detected) and click Approve to update their Till-Now Drive Product Total.`;
         } else {
           detailsEl.textContent = `Please review the detected Sales & Product quantities below. Check the rows you approve and click "Approve & Add Selected Data to System".`;
         }
@@ -5588,28 +5621,32 @@
 
       tbody.innerHTML = aiDetectedRecords.map((r, idx) => {
         const isMonthlyMode = String(r.date || '').startsWith('MONTHLY_PROD_');
+        const isMissingAgent = !r.userId;
         return `
-        <tr class="${r.isDuplicate && !isMonthlyMode ? 'bg-amber-50/70' : 'hover:bg-slate-50'} transition-colors">
+        <tr class="${isMissingAgent ? 'bg-rose-50/60' : (r.isDuplicate && !isMonthlyMode ? 'bg-amber-50/70' : 'hover:bg-slate-50')} transition-colors">
           <td class="p-2.5 text-center">
             <input type="checkbox" ${r.selected ? 'checked' : ''} onchange="onAiRowCheckChange(${idx}, this.checked)" class="w-4 h-4 accent-purple-600 rounded cursor-pointer">
           </td>
           <td class="p-2.5">
-            ${isMonthlyMode
-              ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-100 text-purple-800"><i class="fa-solid fa-layer-group mr-1"></i>MONTHLY TOTAL</span>`
-              : (r.isDuplicate
-                ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-200 text-amber-900"><i class="fa-solid fa-triangle-exclamation mr-1"></i>EXISTS IN SYSTEM</span>`
-                : `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800"><i class="fa-solid fa-sparkles mr-1"></i>NEW DATA</span>`)
+            ${isMissingAgent
+              ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-600 text-white animate-pulse"><i class="fa-solid fa-user-check mr-1"></i>SELECT AGENT</span>`
+              : (isMonthlyMode
+                ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-100 text-purple-800"><i class="fa-solid fa-layer-group mr-1"></i>TILL-NOW TOTAL</span>`
+                : (r.isDuplicate
+                  ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-200 text-amber-900"><i class="fa-solid fa-triangle-exclamation mr-1"></i>EXISTS IN SYSTEM</span>`
+                  : `<span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800"><i class="fa-solid fa-sparkles mr-1"></i>NEW DATA</span>`))
             }
           </td>
           <td class="p-2.5">
-            <select onchange="onAiRowAgentOrDateChange(${idx}, 'userId', this.value)" class="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-extrabold text-slate-900">
-              ${allAgents.map(ag => `<option value="${ag.id}" ${String(ag.id) === String(r.userId) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
+            <select onchange="onAiRowAgentOrDateChange(${idx}, 'userId', this.value)" class="px-2.5 py-1.5 ${isMissingAgent ? 'bg-rose-50 border-2 border-rose-500 text-rose-900 ring-2 ring-rose-200' : 'bg-white border border-slate-200 text-slate-900'} rounded-lg text-xs font-extrabold cursor-pointer">
+              <option value="" ${!r.userId ? 'selected' : ''}>-- Choose Agent Name --</option>
+              ${allAgents.map(ag => `<option value="${ag.id}" ${String(ag.id) === String(r.userId) ? 'selected' : ''}>${ag.name} (${ag.id} • ${ag.team})</option>`).join('')}
             </select>
           </td>
           <td class="p-2.5">
             <div class="flex items-center gap-1.5">
               <select onchange="onAiRowModeToggle(${idx}, this.value)" class="px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-extrabold text-slate-700">
-                <option value="MONTHLY" ${isMonthlyMode ? 'selected' : ''}>Monthly Total (No Date)</option>
+                <option value="MONTHLY" ${isMonthlyMode ? 'selected' : ''}>Till-Now Product Total</option>
                 <option value="DATE" ${!isMonthlyMode ? 'selected' : ''}>Specific Date</option>
               </select>
               ${!isMonthlyMode ? `
@@ -5618,7 +5655,7 @@
             </div>
           </td>
           <td class="p-2.5">
-            <span class="px-2 py-1 rounded-lg bg-purple-50 text-purple-700 font-extrabold text-[10px] border border-purple-200">${r.category}</span>
+            <span class="px-2 py-1 rounded-lg ${isMissingAgent ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-purple-50 text-purple-700 border-purple-200'} font-extrabold text-[10px] border">${r.userId ? `Ready: ${r.userName}` : 'Choose Agent on Left'}</span>
           </td>
           <td class="p-2.5 text-center">
             <input type="number" min="0" value="${r.leads}" oninput="aiDetectedRecords[${idx}].leads=Number(this.value)||0" class="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-center font-bold text-slate-800">
@@ -5663,7 +5700,7 @@
       if (modeVal === 'MONTHLY') {
         aiDetectedRecords[idx].date = `MONTHLY_PROD_${selectedMonthKey}`;
         aiDetectedRecords[idx].isMonthlyProductSummary = true;
-        aiDetectedRecords[idx].category = `Monthly Product Total (${selectedMonthKey})`;
+        aiDetectedRecords[idx].category = `Till-Now Product Total (${selectedMonthKey})`;
         aiDetectedRecords[idx].selected = true;
       } else {
         aiDetectedRecords[idx].date = getTodayFormatted();
@@ -5685,8 +5722,13 @@
     function onAiRowAgentOrDateChange(idx, field, val) {
       if (!aiDetectedRecords[idx]) return;
       aiDetectedRecords[idx][field] = val;
+      if (field === 'userId' && val) {
+        aiDetectedRecords[idx].agentWasAutoDetected = true;
+      }
       const existingSales = getStored('sales_records', []);
-      const isDup = existingSales.some(s => String(s.userId) === String(aiDetectedRecords[idx].userId) && s.date === aiDetectedRecords[idx].date);
+      const isDup = aiDetectedRecords[idx].userId
+        ? existingSales.some(s => String(s.userId) === String(aiDetectedRecords[idx].userId) && s.date === aiDetectedRecords[idx].date)
+        : false;
       aiDetectedRecords[idx].isDuplicate = isDup;
       aiDetectedRecords[idx].selected = String(aiDetectedRecords[idx].date || '').startsWith('MONTHLY_PROD_') ? true : !isDup;
       renderAiDetectedPreviewTable();
@@ -5701,22 +5743,17 @@
     }
 
     function addManualAiRow() {
-      const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
-      const firstAg = allAgents[0];
-      if (!firstAg) return;
-      const d = (reportsDateFilter && reportsDateFilter !== 'ALL') ? reportsDateFilter : getTodayFormatted();
-      const existingSales = getStored('sales_records', []);
-      const isDup = existingSales.some(s => String(s.userId) === String(firstAg.id) && s.date === d);
       aiDetectedRecords.push({
-        userId: String(firstAg.id),
-        userName: firstAg.name,
-        team: firstAg.team,
-        date: d,
-        category: 'Sales + Product',
+        userId: '',
+        userName: 'Select Agent',
+        team: '',
+        date: `MONTHLY_PROD_${selectedMonthKey}`,
+        isMonthlyProductSummary: true,
+        category: 'Select Agent Name',
         leads: 0, orders: 0, amount: 0,
         ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0,
-        isDuplicate: isDup,
-        selected: !isDup
+        isDuplicate: false,
+        selected: true
       });
       renderAiDetectedPreviewTable();
     }
@@ -5738,12 +5775,24 @@
       let sales = getStored('sales_records', []);
       const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
       const syncPayloads = [];
+      const lastUpdateFormatted = formatFullMonthDateDisplay(getTodayFormatted());
 
       for (const item of approvedRows) {
         const agObj = allAgents.find(a => String(a.id) === String(item.userId));
         if (!agObj) continue;
 
         const isMonthlyProd = String(item.date || '').startsWith('MONTHLY_PROD_');
+        if (isMonthlyProd) {
+          const mKey = item.date.replace('MONTHLY_PROD_', '') || selectedMonthKey;
+          // Clear any old daily product numbers for this agent in this month so the new Till-Now Total is exact
+          sales = sales.map(s => {
+            if (String(s.userId) === String(agObj.id) && String(s.date || '').endsWith(mKey) && !String(s.date).startsWith('MONTHLY_PROD_')) {
+              return { ...s, ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
+            }
+            return s;
+          });
+        }
+
         const existingIdx = sales.findIndex(s => String(s.userId) === String(agObj.id) && s.date === item.date);
         const oldRec = existingIdx !== -1 ? sales[existingIdx] : null;
 
@@ -5756,16 +5805,18 @@
           userName: agObj.name,
           team: agObj.team,
           date: item.date,
+          lastUpdatedDate: lastUpdateFormatted,
+          submittedAt: lastUpdateFormatted,
           leads: finalLeads,
           orders: finalOrders,
           amount: finalAmount,
           ratio: finalLeads > 0 ? Number(((finalOrders / finalLeads) * 100).toFixed(2)) : 0,
-          ajwa: Number(item.ajwa) > 0 ? Number(item.ajwa) : (oldRec ? Number(oldRec.ajwa) || 0 : 0),
-          pinkSalt: Number(item.pinkSalt) > 0 ? Number(item.pinkSalt) : (oldRec ? Number(oldRec.pinkSalt) || 0 : 0),
-          blackGarlic: Number(item.blackGarlic) > 0 ? Number(item.blackGarlic) : (oldRec ? Number(oldRec.blackGarlic) || 0 : 0),
-          sunHoney: Number(item.sunHoney) > 0 ? Number(item.sunHoney) : (oldRec ? Number(oldRec.sunHoney) || 0 : 0),
-          bsHoney: Number(item.bsHoney) > 0 ? Number(item.bsHoney) : (oldRec ? Number(oldRec.bsHoney) || 0 : 0),
-          gawaGhee: Number(item.gawaGhee) > 0 ? Number(item.gawaGhee) : (oldRec ? Number(oldRec.gawaGhee) || 0 : 0)
+          ajwa: isMonthlyProd ? (Number(item.ajwa) || 0) : (Number(item.ajwa) > 0 ? Number(item.ajwa) : (oldRec ? Number(oldRec.ajwa) || 0 : 0)),
+          pinkSalt: isMonthlyProd ? (Number(item.pinkSalt) || 0) : (Number(item.pinkSalt) > 0 ? Number(item.pinkSalt) : (oldRec ? Number(oldRec.pinkSalt) || 0 : 0)),
+          blackGarlic: isMonthlyProd ? (Number(item.blackGarlic) || 0) : (Number(item.blackGarlic) > 0 ? Number(item.blackGarlic) : (oldRec ? Number(oldRec.blackGarlic) || 0 : 0)),
+          sunHoney: isMonthlyProd ? (Number(item.sunHoney) || 0) : (Number(item.sunHoney) > 0 ? Number(item.sunHoney) : (oldRec ? Number(oldRec.sunHoney) || 0 : 0)),
+          bsHoney: isMonthlyProd ? (Number(item.bsHoney) || 0) : (Number(item.bsHoney) > 0 ? Number(item.bsHoney) : (oldRec ? Number(oldRec.bsHoney) || 0 : 0)),
+          gawaGhee: isMonthlyProd ? (Number(item.gawaGhee) || 0) : (Number(item.gawaGhee) > 0 ? Number(item.gawaGhee) : (oldRec ? Number(oldRec.gawaGhee) || 0 : 0))
         };
 
         if (existingIdx !== -1) sales[existingIdx] = entry;
@@ -5787,9 +5838,9 @@
         }
 
         const logMeta = recordActivityLog(
-          isMonthlyProd ? 'AI Monthly Product Import' : (existingIdx !== -1 ? 'AI ERP Updated Report' : 'AI ERP Imported Report'),
+          isMonthlyProd ? 'AI Drive Product Total Import' : (existingIdx !== -1 ? 'AI ERP Updated Report' : 'AI ERP Imported Report'),
           isMonthlyProd
-            ? `AI ERP Monthly Product Summary for ${agObj.name} (${selectedMonthKey}) — Ajwa:${entry.ajwa}kg, Salt:${entry.pinkSalt}kg, Garlic:${entry.blackGarlic}kg, Sun.H:${entry.sunHoney}kg, BS.H:${entry.bsHoney}kg, Ghee:${entry.gawaGhee}kg`
+            ? `AI ERP Drive Product Total for ${agObj.name} (Last Update: ${lastUpdateFormatted}) — Ajwa:${entry.ajwa}kg, Salt:${entry.pinkSalt}kg, Garlic:${entry.blackGarlic}kg, Sun.H:${entry.sunHoney}kg, BS.H:${entry.bsHoney}kg, Ghee:${entry.gawaGhee}kg`
             : `AI ERP Import for ${agObj.name} (${item.date}) — Amt: ৳${entry.amount.toLocaleString()}, Orders: ${entry.orders}`
         );
         syncPayloads.push({ ...entry, ...logMeta });
@@ -5798,9 +5849,8 @@
       setStored('sales_records', sales);
       closeModal('aiImportModal');
       renderAppLayout();
-      showPortalToast('AI Data Approved & Saved', `Successfully updated ${approvedRows.length} report record(s) across Portal & Cloud!`, 'success');
+      showPortalToast('AI Data Approved & Synced!', `Successfully updated ${approvedRows.length} agent record(s) across Portal & Google Sheet!`, 'success');
 
-      // Sync to Google Sheet in background without blocking UI
       (async () => {
         for (const pl of syncPayloads) {
           await postToSheet('DAILY_SALES_SUBMIT', pl).catch(() => {});
@@ -5814,6 +5864,11 @@
       const approvedRows = aiDetectedRecords.filter(r => r.selected);
       if (approvedRows.length === 0) {
         showPortalToast('No Rows Selected', 'Please check at least 1 detected row to approve and save!', 'error');
+        return;
+      }
+      const missingAgentRow = approvedRows.find(r => !r.userId);
+      if (missingAgentRow) {
+        showPortalToast('Select Agent Name First!', 'The uploaded screenshot did not include the Agent Name. Please select the Agent from the highlighted dropdown before clicking Approve!', 'error');
         return;
       }
 
