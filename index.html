@@ -969,7 +969,7 @@
       } : {};
       const fullData = { action, timestamp: new Date().toISOString(), ...pingInfo, ...payload };
 
-      if (action !== 'ATTENDANCE_SYNC') {
+      if (action !== 'ATTENDANCE_SYNC' && action !== 'SEND_CHAT_MESSAGE' && action !== 'MARK_CHAT_READ' && action !== 'SAVE_MONTHLY_CONFIG') {
         const reqSignature = `${action}_${fullData.userId || ''}_${fullData.date || ''}_${fullData.logAction || ''}_${fullData.logDetails || ''}`;
         const nowMs = Date.now();
         if (reqSignature === lastSentRequestKey && (nowMs - lastSentRequestTime) < 2500) {
@@ -1182,7 +1182,7 @@
         fetchFromSheet();
         startRosterDutyNotificationWatcher();
         if (pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(fetchFromSheet, 2200);
+        pollInterval = setInterval(fetchFromSheet, 1600);
       } else {
         document.getElementById('app').innerHTML = renderLogin();
       }
@@ -2700,10 +2700,11 @@
         const rem = Math.max(0, workTgt - rev);
         const achPct = workTgt > 0 ? Math.round((rev / workTgt) * 100) : 0;
 
+        const dpSt = computeAgentDriveProductStats(ag, monthSales, selectedMonthKey);
         const agProdTotals = {};
         Object.keys(activeProdsMp).forEach(k => {
-          agProdTotals[k] = allMonthRecords.reduce((acc, c) => acc + (Number(c[k]) || 0), 0);
-          grandProdTotals[k] += agProdTotals[k];
+          agProdTotals[k] = dpSt.prodKg[k] || 0;
+          grandProdTotals[k] = Number(((grandProdTotals[k] || 0) + agProdTotals[k]).toFixed(2));
         });
 
         totBase += baseTgt;
@@ -2915,7 +2916,6 @@
                       <th class="p-3.5">Sales Amount</th>
                       <th class="p-3.5">Daily Target (÷26)</th>
                       <th class="p-3.5">Daily Achieved %</th>
-                      <th class="p-3.5">Products Sold (KG)</th>
                       ${isAdmin ? `<th class="p-3.5 text-right">Admin Actions</th>` : ''}
                     </tr>
                   </thead>
@@ -2933,9 +2933,6 @@
                           <td class="p-3.5 font-black text-emerald-600">৳${Number(dl.amount).toLocaleString()}</td>
                           <td class="p-3.5 font-bold text-slate-500">৳${dTargetSingle.toLocaleString()}</td>
                           <td class="p-3.5"><span class="px-2.5 py-0.5 rounded ${dAch >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${dAch}%</span></td>
-                          <td class="p-3.5 text-[11px] font-bold text-slate-600">
-                            ${formatDynamicProductsInline(dl, selectedMonthKey, false)}
-                          </td>
                           ${isAdmin ? `
                           <td class="p-3.5 text-right space-x-1">
                             <button onclick="openReportModal('${dl.userId}', '${dl.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
@@ -3683,7 +3680,6 @@
                   <th class="p-3.5">Sales Amount</th>
                   <th class="p-3.5">Daily Target (÷26)</th>
                   <th class="p-3.5">Daily Achieved</th>
-                  <th class="p-3.5">Products Sold (kg)</th>
                   ${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? `<th class="p-3.5 text-right">Actions</th>` : ''}
                 </tr>
               </thead>
@@ -3711,9 +3707,6 @@
                         ${dailyAchPct}%
                       </span>
                     </td>
-                    <td class="p-3.5 text-[11px] font-bold text-slate-600">
-                      ${formatDynamicProductsInline(s, selectedMonthKey, false)}
-                    </td>
                     ${(hasFeatureAccess(u, 'feat_manage_all_sales') || (hasFeatureAccess(u, 'feat_submit_own_sales') && String(s.userId) === String(u.id))) ? `
                     <td class="p-3.5 text-right space-x-1">
                       <button onclick="openReportModal('${s.userId}', '${s.date}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100 transition-colors">
@@ -3739,9 +3732,7 @@
                   <td class="p-4 text-emerald-400 text-sm">৳${sumAmount.toLocaleString()}</td>
                   <td class="p-4 text-slate-300">৳${sumDailyTgt.toLocaleString()}</td>
                   <td class="p-4"><span class="px-2.5 py-1 rounded bg-amber-500 text-white">${sumAchPct}%</span></td>
-                  <td colspan="${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? '2' : '1'}" class="p-4 text-[11px] text-amber-200">
-                    ${formatDynamicProductsFooter(repProdSums, selectedMonthKey)}
-                  </td>
+                  ${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? `<td class="p-4"></td>` : ''}
                 </tr>
               </tfoot>
               ` : ''}
@@ -4360,7 +4351,7 @@
           <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto border border-slate-200">
             <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
               <div>
-                <h3 class="text-base font-black text-slate-900">Daily Sales & Product Entry</h3>
+                <h3 class="text-base font-black text-slate-900">Daily Sales Report Entry (Leads, Orders & Amount)</h3>
                 <p class="text-xs font-bold text-slate-400">Conversion ratio & daily target achievement calculate automatically</p>
               </div>
               <button type="button" onclick="closeModal('submitModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
@@ -4410,23 +4401,15 @@
               </div>
 
               <div class="border-t border-slate-100 pt-3">
-                <h4 class="text-xs font-black text-slate-800 uppercase mb-1"><i class="fa-solid fa-scale-balanced mr-1 text-orange-500"></i> Incentive Products Sold (KG)</h4>
-                <div class="p-2 mb-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-900">
-                  💡 Enter gram weights in decimals: <strong>200gm = 0.2</strong> | <strong>250gm = 0.25</strong> | <strong>400gm = 0.4</strong> | <strong>500gm = 0.5</strong> | <strong>1kg = 1</strong>
-                </div>
-                ${(() => {
-                  const mProds = getActiveProductsForMonth(selectedMonthKey);
-                  return `
-                  <div class="grid grid-cols-2 gap-3">
-                    ${Object.keys(mProds).map(k => `
-                      <div>
-                        <label class="block text-[11px] font-bold text-slate-600 mb-1">${mProds[k].name} (kg)</label>
-                        <input type="number" step="0.01" id="subProd_${k}" min="0" placeholder="e.g. 0.5 or 1" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold">
-                      </div>
-                    `).join('')}
+                <div class="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200 flex items-center justify-between gap-3">
+                  <div>
+                    <span class="text-[11px] font-black uppercase text-amber-900 block"><i class="fa-solid fa-box-open mr-1 text-amber-600"></i>Drive Product Cumulative Entry</span>
+                    <p class="text-[10px] font-bold text-amber-700 mt-0.5">Drive Products are tracked as cumulative totals (not date-by-date).</p>
                   </div>
-                  `;
-                })()}
+                  <button type="button" onclick="closeModal('submitModal'); openDriveProductModal(hasFeatureAccess(currentUser, 'feat_manage_all_sales') ? document.getElementById('subAgentId')?.value : currentUser?.id);" class="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-extrabold shrink-0 shadow-xs">
+                    Update Drive Products →
+                  </button>
+                </div>
               </div>
 
               <div class="flex justify-between items-center pt-4 border-t border-slate-100">
@@ -6925,6 +6908,9 @@
       const textVal = (inputEl?.value || '').trim();
       if (!textVal) return;
 
+      // Clear input BEFORE renderAppLayout() so renderAppLayout's draft-saver doesn't restore the old text!
+      inputEl.value = '';
+
       const hub = getChatAndNoticeHubStore();
       const nowTs = Date.now();
       const newMsg = {
@@ -6945,14 +6931,28 @@
       if (!hub.readReceipts[String(currentUser.id)]) hub.readReceipts[String(currentUser.id)] = {};
       hub.readReceipts[String(currentUser.id)][activeChatChannelId] = nowTs;
 
-      saveChatAndNoticeHubStore(hub);
+      const configs = getStored('monthly_configs', {});
+      configs['CHAT_AND_NOTICES'] = {
+        messages: (hub.messages || []).slice(-220),
+        notices: (hub.notices || []).slice(-40),
+        readReceipts: hub.readReceipts || {}
+      };
+      setStored('monthly_configs', configs);
       markChatChannelRead(activeChatChannelId, false);
-      setTimeout(fetchFromSheet, 700);
 
-      inputEl.value = '';
+      // Render immediately on sender's screen in 0ms
       renderAppLayout();
       const refreshedInput = document.getElementById('chatComposerInput');
       if (refreshedInput) refreshedInput.focus();
+
+      // Send lightweight atomic SEND_CHAT_MESSAGE to Google Sheet + fast sync!
+      postToSheet('SEND_CHAT_MESSAGE', {
+        messageObj: newMsg,
+        monthKey: 'CHAT_AND_NOTICES',
+        configJson: JSON.stringify(configs['CHAT_AND_NOTICES'])
+      }).then(() => {
+        fetchFromSheet();
+      }).catch(() => {});
     }
 
     function handleDeleteChatMessage(msgId) {
