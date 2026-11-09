@@ -83,6 +83,42 @@
     button, select, input {
       transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     }
+    .card-dynamic.overflow-x-auto {
+      overflow-x: auto !important;
+      overflow-y: auto !important;
+      max-height: 67vh;
+      scrollbar-width: auto;
+      scrollbar-color: #2563eb #e2e8f0;
+    }
+    .card-dynamic.overflow-x-auto::-webkit-scrollbar {
+      height: 12px;
+      width: 10px;
+    }
+    .card-dynamic.overflow-x-auto::-webkit-scrollbar-track {
+      background: #e2e8f0;
+      border-radius: 8px;
+    }
+    .card-dynamic.overflow-x-auto::-webkit-scrollbar-thumb {
+      background: linear-gradient(90deg, #2563eb, #4f46e5);
+      border-radius: 8px;
+      border: 2px solid #e2e8f0;
+    }
+    .card-dynamic.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(90deg, #1d4ed8, #3730a3);
+    }
+    .card-dynamic.overflow-x-auto thead th {
+      position: sticky;
+      top: 0;
+      z-index: 15;
+      background-color: #f8fafc;
+      box-shadow: 0 1px 0 #cbd5e1;
+    }
+    .card-dynamic.overflow-x-auto tfoot td,
+    .card-dynamic.overflow-x-auto tfoot th {
+      position: sticky;
+      bottom: 0;
+      z-index: 14;
+    }
   </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col">
@@ -1052,7 +1088,7 @@
       renderAppLayout();
     }
 
-    function ensureAgentAttendanceSession(user) {
+    function ensureAgentAttendanceSession(user, skipImmediatePost = false) {
       if (!user || user.role !== 'agent') return null;
       const today = getTodayFormatted();
       let attList = getStored('attendance_records', []);
@@ -1075,7 +1111,7 @@
         };
         attList.unshift(rec);
         setStored('attendance_records', attList);
-        postToSheet('ATTENDANCE_SYNC', rec);
+        if (!skipImmediatePost) postToSheet('ATTENDANCE_SYNC', rec);
       } else {
         rec.loginTime = sanitizeTimeDisplay(rec.loginTime);
         rec.logoutTime = sanitizeTimeDisplay(rec.logoutTime);
@@ -1298,26 +1334,51 @@
       }
     }
 
-    function fetchFromSheet() {
-      const cbName = 'gb_cb_' + Date.now();
-      window[cbName] = function(res) {
-        delete window[cbName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-        if (res && res.status === 'success') handleCloudData(res);
-      };
+    let isFetchingCloud = false;
+    let lastCloudFetchTime = 0;
+
+    function fetchFromSheet(forceImmediate = false) {
+      const now = Date.now();
+      if (!forceImmediate && isFetchingCloud && (now - lastCloudFetchTime) < 2200) {
+        return;
+      }
+      isFetchingCloud = true;
+      lastCloudFetchTime = now;
+
       let pingQuery = '';
       if (currentUser) {
         const st = getUserOnlineStatus(currentUser.id);
         pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}&monthKey=${encodeURIComponent(selectedMonthKey)}`;
+      } else {
+        pingQuery = `&monthKey=${encodeURIComponent(selectedMonthKey)}`;
       }
+
+      let handled = false;
+      const onSuccess = (res) => {
+        if (handled) return;
+        handled = true;
+        isFetchingCloud = false;
+        if (res && res.status === 'success') handleCloudData(res);
+      };
+
+      // Fast direct fetch (completes in ~300-600ms) + JSONP fallback
+      fetch(`${webhookUrl}?t=${now}${pingQuery}`)
+        .then(r => r.json())
+        .then(onSuccess)
+        .catch(() => { isFetchingCloud = false; });
+
+      const cbName = 'gb_cb_' + now;
       const script = document.createElement('script');
-      script.src = `${webhookUrl}?callback=${cbName}&t=${Date.now()}${pingQuery}`;
-      script.onerror = function() {
+      window[cbName] = function(res) {
+        delete window[cbName];
         if (script.parentNode) script.parentNode.removeChild(script);
-        fetch(`${webhookUrl}?t=${Date.now()}${pingQuery}`)
-          .then(r => r.json())
-          .then(res => { if (res && res.status === 'success') handleCloudData(res); })
-          .catch(() => {});
+        onSuccess(res);
+      };
+      script.src = `${webhookUrl}?callback=${cbName}&t=${now}${pingQuery}`;
+      script.onerror = function() {
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        isFetchingCloud = false;
       };
       document.body.appendChild(script);
     }
@@ -1478,16 +1539,18 @@
         monthlyPerfAgentId = 'ALL';
 
         if (currentUser.role === 'agent') {
-          ensureAgentAttendanceSession(currentUser);
+          ensureAgentAttendanceSession(currentUser, true);
           startLiveDutyClock();
         }
         renderAppLayout();
-        fetchFromSheet();
+        fetchFromSheet(true);
         startRosterDutyNotificationWatcher();
         if (pollInterval) clearInterval(pollInterval);
-        pollInterval = setInterval(fetchFromSheet, 1100);
+        pollInterval = setInterval(() => fetchFromSheet(false), 1600);
       } else {
         document.getElementById('app').innerHTML = renderLogin();
+        // Pre-warm local cache in the background while on the login screen so signing in shows all data in 0ms!
+        fetchFromSheet(true);
       }
     }
 
@@ -1506,13 +1569,17 @@
       logsFilterScope = 'ALL';
       reportsDateFilter = getTodayFormatted();
 
-      recordActivityLog('User Login', `Signed in to the portal (${user.role.toUpperCase()})`, true);
-
-      if (user.role === 'agent') {
-        ensureAgentAttendanceSession(user);
-        startLiveDutyClock();
-      }
+      // Render and fetch cloud data FIRST before sending write POSTs so Apps Script lock never delays initial load!
       init();
+      setTimeout(() => {
+        if (!currentUser) return;
+        recordActivityLog('User Login', `Signed in to the portal (${user.role.toUpperCase()})`, true);
+        if (user.role === 'agent') {
+          const today = getTodayFormatted();
+          const rec = getStored('attendance_records', []).find(a => String(a.userId) === String(user.id) && a.date === today);
+          if (rec) postToSheet('ATTENDANCE_SYNC', rec).catch(() => {});
+        }
+      }, 600);
     }
 
     function renderLogoutConfirmModal() {
@@ -1918,6 +1985,63 @@
         if (newTables[idx]) {
           newTables[idx].scrollTop = pos.top;
           newTables[idx].scrollLeft = pos.left;
+        }
+      });
+      attachTopTableScrollHelpers();
+    }
+
+    function scrollTableContainerBy(btnEl, deltaX) {
+      const bar = btnEl.closest('.top-table-scroll-helper');
+      const tableBox = bar ? bar.nextElementSibling : null;
+      if (tableBox) {
+        tableBox.scrollBy({ left: deltaX, behavior: 'smooth' });
+      }
+    }
+
+    function attachTopTableScrollHelpers() {
+      const tables = document.querySelectorAll('main .card-dynamic.overflow-x-auto');
+      tables.forEach((box) => {
+        if (box.previousElementSibling && box.previousElementSibling.classList.contains('top-table-scroll-helper')) return;
+        const bar = document.createElement('div');
+        bar.className = 'top-table-scroll-helper flex items-center justify-between gap-3 px-3.5 py-1.5 mb-1.5 bg-white/95 border border-slate-200 rounded-xl shadow-2xs';
+        bar.innerHTML = `
+          <div class="flex items-center gap-2 text-[11px] font-extrabold text-slate-600 shrink-0">
+            <i class="fa-solid fa-arrows-left-right text-blue-600"></i>
+            <span>Table Horizontal Scroll</span>
+          </div>
+          <div class="flex-1 max-w-md mx-2">
+            <input type="range" min="0" max="100" value="0" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 table-scroll-slider" title="Drag to scroll table left or right">
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button type="button" onclick="scrollTableContainerBy(this, -380)" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 text-slate-700 hover:text-white text-[10px] font-black transition-colors flex items-center gap-1">
+              <i class="fa-solid fa-chevron-left text-[9px]"></i> Scroll Left
+            </button>
+            <button type="button" onclick="scrollTableContainerBy(this, 380)" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 text-slate-700 hover:text-white text-[10px] font-black transition-colors flex items-center gap-1">
+              Scroll Right <i class="fa-solid fa-chevron-right text-[9px]"></i>
+            </button>
+          </div>
+        `;
+        box.parentNode.insertBefore(bar, box);
+        const slider = bar.querySelector('.table-scroll-slider');
+        if (slider) {
+          const updateSlider = () => {
+            const maxScroll = box.scrollWidth - box.clientWidth;
+            if (maxScroll <= 2) {
+              bar.style.display = 'none';
+            } else {
+              bar.style.display = 'flex';
+              slider.value = Math.round((box.scrollLeft / maxScroll) * 100);
+            }
+          };
+          slider.addEventListener('input', (e) => {
+            const maxScroll = box.scrollWidth - box.clientWidth;
+            box.scrollLeft = (Number(e.target.value) / 100) * maxScroll;
+          });
+          box.addEventListener('scroll', () => {
+            const maxScroll = box.scrollWidth - box.clientWidth;
+            if (maxScroll > 0) slider.value = Math.round((box.scrollLeft / maxScroll) * 100);
+          });
+          setTimeout(updateSlider, 60);
         }
       });
     }
@@ -2442,10 +2566,14 @@
                 <div class="mt-2.5">
                   <div class="flex justify-between text-xs font-extrabold mb-1">
                     <span class="text-slate-600">Current Sprint Goal: <strong class="text-slate-900">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
-                    <span class="text-slate-600">Achieved: <strong class="text-blue-700">৳${sprintSalesAmount.toLocaleString()} (${sprintPct}%)</strong></span>
+                    <span class="text-slate-600">Achieved: <strong class="text-blue-700">৳${sprintSalesAmount.toLocaleString()}</strong></span>
                   </div>
                   <div class="progress-track h-2 bg-white">
                     <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full transition-colors" style="width: ${sprintPct}%"></div>
+                  </div>
+                  <div class="flex justify-between items-center mt-1.5 text-[11px] font-bold text-slate-600">
+                    <span>Remaining: <strong class="text-slate-900">৳${Math.max(0, tInfo.sprintGoal - sprintSalesAmount).toLocaleString()}</strong></span>
+                    <span class="text-blue-700 font-black">${sprintPct}% Completed</span>
                   </div>
                 </div>
                 <div class="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-blue-200/70 text-center">
