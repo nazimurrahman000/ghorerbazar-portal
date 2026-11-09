@@ -347,7 +347,7 @@
       return {
         tab_dashboard: true,
         tab_monthly_perf: true,
-        tab_sprint_target: true,
+        tab_sprint_target: true, // Admin can toggle off in Role & Feature Access if next month has no sprint!
         tab_drive_product: true,
         tab_reports: true,
         tab_ranking: true,
@@ -402,8 +402,68 @@
       return { ...defaults, ...userCustom };
     }
 
+        function isSprintSystemActiveForMonth(mKey) {
+      const mk = mKey || selectedMonthKey;
+      const configs = getStored('monthly_configs', {});
+      const mCfg = configs[mk] || {};
+      return mCfg.sprintEnabled !== false;
+    }
+
+    function toggleSprintSystemForMonth(mKey, forceVal) {
+      if (!isFullAdmin(currentUser)) return;
+      const mk = mKey || selectedMonthKey;
+      const configs = getStored('monthly_configs', {});
+      if (!configs[mk]) configs[mk] = { users: {}, products: {} };
+      const currentState = configs[mk].sprintEnabled !== false;
+      const nextState = (typeof forceVal === 'boolean') ? forceVal : !currentState;
+      configs[mk].sprintEnabled = nextState;
+      setStored('monthly_configs', configs);
+
+      const logMeta = recordActivityLog(
+        nextState ? 'Activated Sprint Target System' : 'Deactivated Sprint Target System',
+        `${nextState ? 'Enabled' : 'Disabled'} 10-Day Sprint Target system for ${mk} across all agent panels`
+      );
+      if (!nextState && activeTab === 'sprint_target' && !isFullAdmin(currentUser)) {
+        activeTab = 'dashboard';
+      }
+      renderAppLayout();
+      showPortalToast(
+        nextState ? `Sprint System Activated (${mk})` : `Sprint System Deactivated (${mk})`,
+        nextState
+          ? `All 3 Sprint slots (Sprint 1, 2 & 3) are now active for ${mk}!`
+          : `Sprint Target tab & agent sprint cards are now hidden for ${mk}.`,
+        nextState ? 'success' : 'warning'
+      );
+      postToSheet('SAVE_MONTHLY_CONFIG', {
+        monthKey: mk,
+        configJson: JSON.stringify(configs[mk]),
+        ...logMeta
+      }).catch(() => {});
+    }
+
+    function toggleBulkFeatureForAllAgents(featureKey, enableVal) {
+      if (!isSuperAdmin(currentUser)) return;
+      const allUsers = getUsersForMonth(selectedMonthKey).filter(u => String(u.id) !== '10122');
+      const store = getRolePermissionsStore();
+      allUsers.forEach(usr => {
+        const uid = String(usr.id);
+        if (!store[uid]) store[uid] = {};
+        store[uid][featureKey] = Boolean(enableVal);
+      });
+      saveRolePermissionsStore(store);
+      renderAppLayout();
+      showPortalToast(
+        enableVal ? 'Activated for All Users!' : 'Deactivated for All Users!',
+        `Updated "${featureKey}" across all ${allUsers.length} accounts.`,
+        enableVal ? 'success' : 'warning'
+      );
+    }
+
     function hasFeatureAccess(u, featureKey) {
       if (!u) return false;
+      if (featureKey === 'tab_sprint_target' && !isSprintSystemActiveForMonth(selectedMonthKey)) {
+        return isFullAdmin(u);
+      }
       if (isSuperAdmin(u)) return true;
       const perms = getEffectivePermissionsForUser(u);
       return Boolean(perms[featureKey]);
@@ -1730,15 +1790,10 @@
               </nav>
             </div>
 
-            <div class="space-y-2">
-              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <div class="text-left">
-                  <p class="text-[11px] font-extrabold text-emerald-600"><i class="fa-solid fa-rotate mr-1 animate-spin"></i> Live Cloud Sync</p>
-                  <p class="text-[10px] font-bold text-slate-500">${activeOnlineUsers.length} User(s) Online Now</p>
-                </div>
-                <button onclick="handleHardRefreshPortal()" title="Hard Refresh (Ctrl + F5) — Clear Cache & Reload" class="px-2.5 py-1.5 rounded-lg bg-white hover:bg-indigo-600 text-slate-700 hover:text-white border border-slate-200 text-[10px] font-black shadow-2xs transition-colors flex items-center gap-1">
-                  <i class="fa-solid fa-bolt-lightning text-[9px] text-amber-500"></i> Hard Refresh
-                </button>
+            <div class="space-y-2.5">
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                <p class="text-[11px] font-extrabold text-emerald-600"><i class="fa-solid fa-rotate mr-1 animate-spin"></i> Live Cloud Sync</p>
+                <p class="text-[10px] text-slate-400">${activeOnlineUsers.length} User(s) Online Now</p>
               </div>
               <button onclick="handleLogout()" class="w-full py-2.5 text-xs font-extrabold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow transition-colors">
                 <i class="fa-solid fa-power-off mr-1"></i> ${u.role === 'agent' ? 'End Duty & Logout' : 'Logout'}
@@ -1782,9 +1837,8 @@
                 <button onclick="fetchFromSheet()" class="px-3.5 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-xl flex items-center gap-2 hover:bg-emerald-100 transition-colors" title="Sync data from Google Sheet">
                   <i class="fa-solid fa-cloud-arrow-down text-xs"></i> Sync Now
                 </button>
-                <button onclick="handleHardRefreshPortal()" title="Hard Refresh Portal & Clear Cache (Ctrl + F5)" class="px-2.5 py-2 bg-slate-100 hover:bg-indigo-600 text-slate-600 hover:text-white border border-slate-200 hover:border-indigo-600 text-[11px] font-extrabold rounded-xl flex items-center gap-1.5 transition-colors shadow-2xs">
+                <button onclick="handleHardRefreshPortal()" title="Hard Refresh" class="w-9 h-9 bg-slate-100 hover:bg-indigo-600 text-slate-600 hover:text-white border border-slate-200 hover:border-indigo-600 rounded-xl flex items-center justify-center transition-colors shadow-2xs shrink-0">
                   <i class="fa-solid fa-rotate-right text-xs"></i>
-                  <span class="hidden xl:inline">Hard Refresh</span>
                 </button>
                 <div onclick="openProfilePicModal('${u.id}')" title="Click to upload or change your Profile Picture" class="flex items-center gap-3 pl-4 border-l border-slate-200 py-1 cursor-pointer group">
                   <div class="relative shrink-0">
@@ -2350,33 +2404,73 @@
                 </div>
               </div>
               `;
+            })() : (isSprintSystemActiveForMonth(selectedMonthKey) ? (() => {
+              const s1Goal = Math.round(tInfo.workingTarget * 0.40);
+              const s2Goal = Math.round(tInfo.workingTarget * 0.35);
+              const s3Goal = Math.round(tInfo.workingTarget * 0.35);
+              let s1Amt = 0, s2Amt = 0, s3Amt = 0;
+              thisMonthSales.forEach(s => {
+                const day = parseInt(String(s.date).split('/')[0], 10) || 0;
+                const val = Number(s.amount) || 0;
+                if (day <= 10) s1Amt += val;
+                else if (day <= 20) s2Amt += val;
+                else s3Amt += val;
+              });
+              const s1Pct = s1Goal > 0 ? Math.min(100, Math.round((s1Amt / s1Goal) * 100)) : 0;
+              const s2Pct = s2Goal > 0 ? Math.min(100, Math.round((s2Amt / s2Goal) * 100)) : 0;
+              const s3Pct = s3Goal > 0 ? Math.min(100, Math.round((s3Amt / s3Goal) * 100)) : 0;
+              return `
+              <div class="sprint-banner p-4 rounded-2xl shadow-sm">
+                <div class="flex justify-between items-start gap-2">
+                  <div>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-blue-600 text-white">Active 10-Day Sprint</span>
+                    <h3 class="text-base font-black text-slate-900 mt-1">${tInfo.sprintName} (${tInfo.sprintPct * 100}% Goal)</h3>
+                  </div>
+                  <button onclick="setTab('sprint_target')" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-bolt text-amber-300"></i> View All 3 Sprints
+                  </button>
+                </div>
+                <div class="mt-2.5">
+                  <div class="flex justify-between text-xs font-extrabold mb-1">
+                    <span class="text-slate-600">Current Sprint Goal: <strong class="text-slate-900">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
+                    <span class="text-slate-600">Achieved: <strong class="text-blue-700">৳${sprintSalesAmount.toLocaleString()} (${sprintPct}%)</strong></span>
+                  </div>
+                  <div class="progress-track h-2 bg-white">
+                    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full transition-colors" style="width: ${sprintPct}%"></div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 mt-3 pt-2.5 border-t border-blue-200/70 text-center">
+                  <div onclick="sprintTabPhase='S1'; setTab('sprint_target');" class="p-1.5 rounded-lg bg-white/80 hover:bg-white cursor-pointer border border-blue-200/60" title="Click to open Sprint 1 (Days 1–10) full leaderboard">
+                    <span class="text-[9px] font-black uppercase text-slate-500 block">Sprint 1 (1–10)</span>
+                    <strong class="text-[11px] font-black text-blue-700">৳${s1Amt.toLocaleString()} (${s1Pct}%)</strong>
+                  </div>
+                  <div onclick="sprintTabPhase='S2'; setTab('sprint_target');" class="p-1.5 rounded-lg bg-white/80 hover:bg-white cursor-pointer border border-blue-200/60" title="Click to open Sprint 2 (Days 11–20) full leaderboard">
+                    <span class="text-[9px] font-black uppercase text-slate-500 block">Sprint 2 (11–20)</span>
+                    <strong class="text-[11px] font-black text-blue-700">৳${s2Amt.toLocaleString()} (${s2Pct}%)</strong>
+                  </div>
+                  <div onclick="sprintTabPhase='S3'; setTab('sprint_target');" class="p-1.5 rounded-lg bg-white/80 hover:bg-white cursor-pointer border border-blue-200/60" title="Click to open Sprint 3 (Days 21–31) full leaderboard">
+                    <span class="text-[9px] font-black uppercase text-slate-500 block">Sprint 3 (21–31)</span>
+                    <strong class="text-[11px] font-black text-blue-700">৳${s3Amt.toLocaleString()} (${s3Pct}%)</strong>
+                  </div>
+                </div>
+              </div>
+              `;
             })() : `
-            <div class="sprint-banner p-4 rounded-2xl shadow-sm">
+            <div class="sprint-banner p-4 rounded-2xl shadow-sm flex flex-col justify-between">
               <div class="flex justify-between items-start">
                 <div>
-                  <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-blue-600 text-white">Current 10-Day Sprint</span>
-                  <h3 class="text-base font-black text-slate-900 mt-1">${tInfo.sprintName} (${tInfo.sprintPct * 100}% Goal)</h3>
+                  <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">Monthly Pace Tracker</span>
+                  <h3 class="text-base font-black text-slate-900 mt-1">Daily Goal (÷26 Days): ৳${tInfo.dailyTarget.toLocaleString()}</h3>
                 </div>
-                <button onclick="setTab('sprint_target')" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
-                  <i class="fa-solid fa-bolt text-amber-300"></i> Sprint Leaderboard
-                </button>
-              </div>
-              <div class="mt-3">
-                <div class="flex justify-between text-xs font-extrabold mb-1">
-                  <span class="text-slate-600">Sprint Target: <strong class="text-slate-900">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
-                  <span class="text-slate-600">Achieved: <strong class="text-blue-700">৳${sprintSalesAmount.toLocaleString()}</strong></span>
-                </div>
-                <div class="progress-track h-2 bg-white">
-                  <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full transition-colors" style="width: ${sprintPct}%"></div>
-                </div>
-                <div class="flex justify-between items-center mt-1.5 text-[11px] font-bold text-slate-600">
-                  <span>Remaining: ৳${Math.max(0, tInfo.sprintGoal - sprintSalesAmount).toLocaleString()}</span>
-                  <span class="text-blue-700 font-black">${sprintPct}% Completed</span>
+                <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm shadow-sm">
+                  <i class="fa-solid fa-calendar-check"></i>
                 </div>
               </div>
+              <p class="text-xs font-bold text-slate-600 mt-2">
+                Full Month Target Mode is active for ${selectedMonthKey}. Focus on hitting your daily target of <strong>৳${tInfo.dailyTarget.toLocaleString()}</strong>!
+              </p>
             </div>
-            `}
-
+            `)}
             <div class="monthly-banner p-4 rounded-2xl shadow-sm">
               <div class="flex justify-between items-start">
                 <div>
@@ -3931,6 +4025,8 @@
 
     function renderSprintTargetView() {
       const u = currentUser;
+      const isAdminOrSup = canViewAll(u);
+      const isSprintActive = isSprintSystemActiveForMonth(selectedMonthKey);
       const allUsers = getUsersForMonth(selectedMonthKey);
       const allAgents = allUsers.filter(usr => usr.role === 'agent');
       const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
@@ -3940,36 +4036,40 @@
       const autoPhase = getAutoCurrentSprintPhase();
       const effPhase = sprintTabPhase === 'AUTO' ? autoPhase : sprintTabPhase;
       const phaseInfo = {
-        S1: { key: 'S1', name: 'Sprint 1 (Days 1–10)', short: 'Sprint 1 (1–10)', pct: 0.40, pctLabel: '40% of Monthly Target' },
-        S2: { key: 'S2', name: 'Sprint 2 (Days 11–20)', short: 'Sprint 2 (11–20)', pct: 0.35, pctLabel: '35% of Monthly Target' },
-        S3: { key: 'S3', name: 'Sprint 3 (Days 21–31)', short: 'Sprint 3 (21–31)', pct: 0.35, pctLabel: '35% of Monthly Target' }
+        S1: { key: 'S1', name: 'Sprint 1 (Days 1–10)', short: 'Sprint 1 (1–10)', dateRange: `01/${selectedMonthKey} – 10/${selectedMonthKey}`, pct: 0.40, pctLabel: '40% of Monthly Target' },
+        S2: { key: 'S2', name: 'Sprint 2 (Days 11–20)', short: 'Sprint 2 (11–20)', dateRange: `11/${selectedMonthKey} – 20/${selectedMonthKey}`, pct: 0.35, pctLabel: '35% of Monthly Target' },
+        S3: { key: 'S3', name: 'Sprint 3 (Days 21–31)', short: 'Sprint 3 (21–31)', dateRange: `21/${selectedMonthKey} – End of Month`, pct: 0.35, pctLabel: '35% of Monthly Target' }
       }[effPhase];
 
-      // Calculate TL (Nazim & Samad) 80% & 100% Total Target Reward Milestones
-      function calcTLMilestone(teamName, tlName) {
-        const tAgents = allAgents.filter(a => a.team === teamName);
-        const tTLs = allUsers.filter(usr => usr.role === 'admin' && usr.team === teamName);
-        const agentsBase = tAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0);
-        const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
-        const totalWorkTgt = Math.round((agentsBase + tlBase) * 1.05);
-        const target80 = Math.round(totalWorkTgt * 0.80);
-        const target100 = totalWorkTgt;
-        const achieved = monthSales.filter(s => s.team === teamName).reduce((s, c) => s + (Number(c.amount) || 0), 0);
-        const pct = target100 > 0 ? Number(((achieved / target100) * 100).toFixed(1)) : 0;
-        const rem80 = Math.max(0, target80 - achieved);
-        const rem100 = Math.max(0, target100 - achieved);
-        return { teamName, tlName, agentCount: tAgents.length, target80, target100, achieved, pct, rem80, rem100 };
+      // Calculate TL (Nazim & Samad) 80% & 100% Total Target Reward Milestones (Visible ONLY to Admin / Supervisor, NEVER to Agents)
+      let nazimTL = null, samadTL = null;
+      if (isAdminOrSup) {
+        function calcTLMilestone(teamName, tlName) {
+          const tAgents = allAgents.filter(a => a.team === teamName);
+          const tTLs = allUsers.filter(usr => usr.role === 'admin' && usr.team === teamName);
+          const agentsBase = tAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0);
+          const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
+          const totalWorkTgt = Math.round((agentsBase + tlBase) * 1.05);
+          const target80 = Math.round(totalWorkTgt * 0.80);
+          const target100 = totalWorkTgt;
+          const achieved = monthSales.filter(s => s.team === teamName).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+          const pct = target100 > 0 ? Number(((achieved / target100) * 100).toFixed(1)) : 0;
+          const rem80 = Math.max(0, target80 - achieved);
+          const rem100 = Math.max(0, target100 - achieved);
+          return { teamName, tlName, agentCount: tAgents.length, target80, target100, achieved, pct, rem80, rem100 };
+        }
+        nazimTL = calcTLMilestone('Team Nazim', 'Md. Nazimur Rahman');
+        samadTL = calcTLMilestone('Team Samad', 'Md Abdus Samad');
       }
-
-      const nazimTL = calcTLMilestone('Team Nazim', 'Md. Nazimur Rahman');
-      const samadTL = calcTLMilestone('Team Samad', 'Md Abdus Samad');
 
       // Filter Agents by Team Scope
       const filteredAgents = sprintTabTeamScope === 'ALL'
         ? allAgents
         : allAgents.filter(a => a.team === sprintTabTeamScope);
 
-      let sumWorkTgt = 0, sumCurGoal = 0, sumCurSales = 0, sumS1 = 0, sumS2 = 0, sumS3 = 0;
+      let sumWorkTgt = 0, sumCurGoal = 0, sumCurSales = 0;
+      let sumS1Goal = 0, sumS2Goal = 0, sumS3Goal = 0;
+      let sumS1 = 0, sumS2 = 0, sumS3 = 0;
 
       const rankedSprintAgents = filteredAgents.map(ag => {
         const baseTgt = Number(ag.baseTarget) || 0;
@@ -4008,6 +4108,9 @@
         sumWorkTgt += workTgt;
         sumCurGoal += curGoal;
         sumCurSales += curSales;
+        sumS1Goal += s1Goal;
+        sumS2Goal += s2Goal;
+        sumS3Goal += s3Goal;
         sumS1 += s1Sales;
         sumS2 += s2Sales;
         sumS3 += s3Sales;
@@ -4024,21 +4127,32 @@
       const mySprintRank = mySprintRankIdx !== -1 ? mySprintRankIdx + 1 : null;
       const overallCurPct = sumCurGoal > 0 ? ((sumCurSales / sumCurGoal) * 100).toFixed(1) : '0.0';
 
+      const slotCards = [
+        { key: 'S1', title: 'Slot 1 • Sprint 1 (Days 1–10)', share: '40% Goal', goal: sumS1Goal, achieved: sumS1, pct: sumS1Goal > 0 ? Math.round((sumS1 / sumS1Goal) * 100) : 0, isAutoNow: autoPhase === 'S1' },
+        { key: 'S2', title: 'Slot 2 • Sprint 2 (Days 11–20)', share: '35% Goal', goal: sumS2Goal, achieved: sumS2, pct: sumS2Goal > 0 ? Math.round((sumS2 / sumS2Goal) * 100) : 0, isAutoNow: autoPhase === 'S2' },
+        { key: 'S3', title: 'Slot 3 • Sprint 3 (Days 21–31)', share: '35% Goal', goal: sumS3Goal, achieved: sumS3, pct: sumS3Goal > 0 ? Math.round((sumS3 / sumS3Goal) * 100) : 0, isAutoNow: autoPhase === 'S3' }
+      ];
+
       return `
-        <div class="space-y-6">
+        <div class="space-y-5">
           <!-- Top Header & Controls -->
           <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
               <div class="flex flex-wrap items-center gap-2">
                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-600 text-white">
-                  <i class="fa-solid fa-bolt text-amber-300 mr-1"></i>Active: ${phaseInfo.name}
+                  <i class="fa-solid fa-bolt text-amber-300 mr-1"></i>Viewing: ${phaseInfo.name}
                 </span>
                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900">
-                  ${phaseInfo.pctLabel}
+                  ${phaseInfo.pctLabel} • ${phaseInfo.dateRange}
                 </span>
                 ${mySprintRank ? `
                   <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white shadow-xs">
-                    ⭐ Your Sprint Rank: #${mySprintRank}
+                    ⭐ Your ${phaseInfo.short} Rank: #${mySprintRank}
+                  </span>
+                ` : ''}
+                ${!isSprintActive ? `
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white">
+                    <i class="fa-solid fa-eye-slash mr-1"></i>Deactivated for Agents (${selectedMonthKey})
                   </span>
                 ` : ''}
               </div>
@@ -4046,23 +4160,23 @@
                 <i class="fa-solid fa-bolt text-blue-600 mr-2"></i>Agent Sprint Target Competition (${monthLabel})
               </h2>
               <p class="text-xs font-bold text-slate-500 mt-0.5">
-                Live 10-day Sprint race across all agents (Sprint 1: 40% • Sprint 2: 35% • Sprint 3: 35%) + Team Leader 80% & 100% Total Target Milestones.
+                Click any of the 3 Sprint Slots below to inspect <strong>Sprint 1 (Days 1–10)</strong>, <strong>Sprint 2 (Days 11–20)</strong>, or <strong>Sprint 3 (Days 21–31)</strong> data anytime!
               </p>
             </div>
 
             <div class="flex flex-wrap items-center gap-2.5">
-              <!-- Sprint Phase Selector -->
+              <!-- Sprint Slot Selector Buttons -->
               <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-                <button onclick="setSprintTabPhase('AUTO')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'AUTO' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
-                  Active Now (${autoPhase})
+                <button onclick="setSprintTabPhase('AUTO')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'AUTO' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}" title="Automatically show current calendar sprint (${autoPhase})">
+                  Running Sprint (${autoPhase})
                 </button>
-                <button onclick="setSprintTabPhase('S1')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'S1' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                <button onclick="setSprintTabPhase('S1')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${effPhase === 'S1' && sprintTabPhase !== 'AUTO' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
                   Sprint 1 (1–10)
                 </button>
-                <button onclick="setSprintTabPhase('S2')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'S2' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                <button onclick="setSprintTabPhase('S2')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${effPhase === 'S2' && sprintTabPhase !== 'AUTO' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
                   Sprint 2 (11–20)
                 </button>
-                <button onclick="setSprintTabPhase('S3')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'S3' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                <button onclick="setSprintTabPhase('S3')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${effPhase === 'S3' && sprintTabPhase !== 'AUTO' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
                   Sprint 3 (21–31)
                 </button>
               </div>
@@ -4077,10 +4191,51 @@
               <button onclick="exportSprintTargetCsv()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
                 <i class="fa-solid fa-file-csv"></i> Download CSV
               </button>
+
+              ${isFullAdmin(u) ? `
+              <button onclick="toggleSprintSystemForMonth('${selectedMonthKey}')" class="px-3.5 py-2 rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors ${isSprintActive ? 'bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}" title="Activate or Deactivate Sprint Target tab for ${selectedMonthKey}">
+                <i class="fa-solid ${isSprintActive ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
+                ${isSprintActive ? `Deactivate Sprint (${selectedMonthKey})` : `Activate Sprint (${selectedMonthKey})`}
+              </button>
+              ` : ''}
             </div>
           </div>
 
-          <!-- Admin / Team Leader Total Target Milestones (80% & 100% Reward) -->
+          <!-- 3 Interactive Sprint Slot Overview Cards (Click any card to switch between Sprint 1, Sprint 2, and Sprint 3 anytime!) -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            ${slotCards.map(sc => {
+              const isSelected = effPhase === sc.key;
+              return `
+                <div onclick="setSprintTabPhase('${sc.key}')" class="card-dynamic p-4 cursor-pointer transition-all ${isSelected ? 'border-2 border-blue-600 bg-blue-50/40 ring-4 ring-blue-500/10' : 'hover:border-blue-300'}">
+                  <div class="flex items-center justify-between gap-2 mb-2">
+                    <div class="flex items-center gap-1.5">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}">${sc.title}</span>
+                      ${sc.isAutoNow ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">Running Now</span>` : ''}
+                    </div>
+                    <span class="text-xs font-black ${isSelected ? 'text-blue-700' : 'text-slate-500'}">${sc.share}</span>
+                  </div>
+                  <div class="flex items-baseline justify-between mt-2">
+                    <div>
+                      <span class="text-[10px] font-bold text-slate-400 uppercase block">Achieved Revenue</span>
+                      <strong class="text-base font-black text-emerald-600">৳${sc.achieved.toLocaleString()}</strong>
+                      <span class="text-[11px] font-bold text-slate-500"> / ৳${sc.goal.toLocaleString()}</span>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-lg text-xs font-black ${sc.pct >= 100 ? 'bg-emerald-600 text-white' : (isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800')}">${sc.pct}%</span>
+                  </div>
+                  <div class="progress-track h-1.5 bg-slate-200/70 mt-2.5">
+                    <div class="${sc.pct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'} h-1.5 rounded-full" style="width:${Math.min(100, sc.pct)}%"></div>
+                  </div>
+                  <div class="flex items-center justify-between mt-2 text-[10px] font-extrabold ${isSelected ? 'text-blue-700' : 'text-slate-400'}">
+                    <span>Remaining: ৳${Math.max(0, sc.goal - sc.achieved).toLocaleString()}</span>
+                    <span>${isSelected ? '● Showing in Table Below' : 'Click to View Leaderboard →'}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Admin / Team Leader Total Target Milestones (80% & 100% Reward) — Visible ONLY to Admins & Supervisors -->
+          ${isAdminOrSup && nazimTL && samadTL ? `
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             ${[
               { data: nazimTL, border: 'border-t-orange-500', pill: 'bg-orange-100 text-orange-800', bar: 'from-orange-500 to-amber-500' },
@@ -4094,9 +4249,9 @@
                   <div class="flex justify-between items-start mb-3">
                     <div>
                       <div class="flex items-center gap-2">
-                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${item.pill}">${st.teamName} • TL Milestone</span>
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${item.pill}">${st.teamName} • TL Milestone (Admin Only View)</span>
                         <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600')}">
-                          ${hit100 ? '🏆 100% Full Reward!' : (hit80 ? '🔥 80% Reward Unlocked!' : 'No Sprint — 80% / 100% Total Target')}
+                          ${hit100 ? '🏆 100% Full Reward!' : (hit80 ? '🔥 80% Reward Unlocked!' : '80% / 100% Total Target')}
                         </span>
                       </div>
                       <h4 class="text-sm font-black text-slate-900 mt-1">TL: ${st.tlName} (${st.agentCount} Agents + TL Target)</h4>
@@ -4130,6 +4285,7 @@
               `;
             }).join('')}
           </div>
+          ` : ''}
 
           <!-- Agent Sprint Competition Leaderboard Table -->
           <div class="card-dynamic overflow-hidden overflow-x-auto">
@@ -4151,9 +4307,9 @@
                   <th class="p-3.5 bg-blue-50/60 text-blue-900">${phaseInfo.short} Achieved</th>
                   <th class="p-3.5 bg-blue-50/60 text-blue-900">Remaining</th>
                   <th class="p-3.5 bg-blue-50/60 text-blue-900 text-center">${phaseInfo.short} Progress</th>
-                  <th class="p-3.5 text-center">Sprint 1 (40%)<br><span class="text-[9px] text-slate-400">Days 1–10</span></th>
-                  <th class="p-3.5 text-center">Sprint 2 (35%)<br><span class="text-[9px] text-slate-400">Days 11–20</span></th>
-                  <th class="p-3.5 text-center">Sprint 3 (35%)<br><span class="text-[9px] text-slate-400">Days 21–31</span></th>
+                  <th onclick="setSprintTabPhase('S1')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S1' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 1">Sprint 1 (40%)<br><span class="text-[9px] text-slate-400">Days 1–10</span></th>
+                  <th onclick="setSprintTabPhase('S2')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S2' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 2">Sprint 2 (35%)<br><span class="text-[9px] text-slate-400">Days 11–20</span></th>
+                  <th onclick="setSprintTabPhase('S3')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S3' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 3">Sprint 3 (35%)<br><span class="text-[9px] text-slate-400">Days 21–31</span></th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
@@ -4194,13 +4350,13 @@
                           </div>
                         </div>
                       </td>
-                      <td class="p-3.5 text-center ${effPhase === 'S1' ? 'font-black text-blue-700' : 'text-slate-500'}">
+                      <td class="p-3.5 text-center ${effPhase === 'S1' ? 'font-black text-blue-700 bg-blue-50/20' : 'text-slate-500'}">
                         ৳${ag.s1Sales.toLocaleString()} <span class="block text-[10px] font-bold">(${ag.s1Pct}% of ৳${ag.s1Goal.toLocaleString()})</span>
                       </td>
-                      <td class="p-3.5 text-center ${effPhase === 'S2' ? 'font-black text-blue-700' : 'text-slate-500'}">
+                      <td class="p-3.5 text-center ${effPhase === 'S2' ? 'font-black text-blue-700 bg-blue-50/20' : 'text-slate-500'}">
                         ৳${ag.s2Sales.toLocaleString()} <span class="block text-[10px] font-bold">(${ag.s2Pct}% of ৳${ag.s2Goal.toLocaleString()})</span>
                       </td>
-                      <td class="p-3.5 text-center ${effPhase === 'S3' ? 'font-black text-blue-700' : 'text-slate-500'}">
+                      <td class="p-3.5 text-center ${effPhase === 'S3' ? 'font-black text-blue-700 bg-blue-50/20' : 'text-slate-500'}">
                         ৳${ag.s3Sales.toLocaleString()} <span class="block text-[10px] font-bold">(${ag.s3Pct}% of ৳${ag.s3Goal.toLocaleString()})</span>
                       </td>
                     </tr>
@@ -8449,7 +8605,17 @@
                 </p>
               </div>
             </div>
-            <div class="flex items-center gap-2.5 shrink-0">
+            <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+              <div class="p-3 rounded-2xl bg-white/10 border border-white/20 flex items-center gap-3">
+                <div>
+                  <span class="text-[9px] font-black uppercase text-amber-300 block">Monthly Sprint Target Tab (${selectedMonthKey})</span>
+                  <strong class="text-xs font-extrabold text-white">${isSprintSystemActiveForMonth(selectedMonthKey) ? '✅ Active for All Agents' : '🚫 Deactivated for Agents'}</strong>
+                </div>
+                <button type="button" onclick="toggleSprintSystemForMonth('${selectedMonthKey}')" class="px-3 py-2 rounded-xl text-xs font-black shadow transition-colors ${isSprintSystemActiveForMonth(selectedMonthKey) ? 'bg-rose-500 hover:bg-rose-600 text-white' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}">
+                  <i class="fa-solid ${isSprintSystemActiveForMonth(selectedMonthKey) ? 'fa-power-off' : 'fa-bolt'} mr-1"></i>
+                  ${isSprintSystemActiveForMonth(selectedMonthKey) ? 'Deactivate Sprint' : 'Activate Sprint'}
+                </button>
+              </div>
               <div class="px-4 py-2.5 rounded-2xl bg-white/10 border border-white/15 text-right">
                 <span class="text-[10px] font-extrabold uppercase text-purple-300 block">Controllable IDs</span>
                 <strong class="text-lg font-black text-white">${controllableUsers.length} Accounts</strong>
