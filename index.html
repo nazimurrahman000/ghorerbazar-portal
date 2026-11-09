@@ -673,7 +673,10 @@
       return 'Offline';
     }
 
+    let isHardRefreshing = false;
+
     async function handleHardRefreshPortal() {
+      isHardRefreshing = true;
       showPortalToast('Hard Refreshing Portal...', 'Clearing browser cache & reloading latest version (Ctrl + F5)...', 'warning');
       try {
         if ('caches' in window) {
@@ -681,12 +684,18 @@
           await Promise.all(names.map(name => caches.delete(name)));
         }
       } catch (e) {}
-      // Clear cached online_users so stale counts are wiped immediately
-      localStorage.removeItem('gb_online_users');
+      // Keep fresh online users (< 35s old) in localStorage so the Online count stays 100% accurate
+      // during the 1-2s reload, while pruning any expired/offline records!
+      try {
+        const now = Date.now();
+        const existingOnline = getStored('online_users', []);
+        const freshOnly = existingOnline.filter(o => o && o.state !== 'Offline' && o.lastSeen && (now - Number(o.lastSeen)) < 35000);
+        setStored('online_users', freshOnly);
+      } catch (e) {}
       setTimeout(() => {
         const cleanUrl = window.location.origin + window.location.pathname + '?_hr=' + Date.now();
         window.location.replace(cleanUrl);
-      }, 250);
+      }, 200);
     }
 
     
@@ -7539,24 +7548,8 @@
       dutyReminderInterval = setInterval(checkRosterDutyEndNotification, 15000);
     }
 
-        window.addEventListener('beforeunload', () => {
-      if (currentUser && webhookUrl) {
-        try {
-          const payload = JSON.stringify({
-            action: 'USER_LOGOUT',
-            pingUserId: String(currentUser.id),
-            pingName: currentUser.name,
-            pingRole: currentUser.role,
-            pingTeam: currentUser.team,
-            pingState: 'Offline'
-          });
-          const params = new URLSearchParams({ action: 'USER_LOGOUT', payload });
-          if (navigator.sendBeacon) {
-            navigator.sendBeacon(webhookUrl, params);
-          }
-        } catch (e) {}
-      }
-    });
+    // Note: Do not send USER_LOGOUT on beforeunload because browser refreshes (F5 / Ctrl+F5 / Hard Refresh)
+    // also trigger beforeunload and would temporarily mark the refreshing user as Offline for other users.
 
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && currentUser) {
