@@ -4200,13 +4200,6 @@
               <button onclick="exportSprintTargetCsv()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
                 <i class="fa-solid fa-file-csv"></i> Download CSV
               </button>
-
-              ${isFullAdmin(u) ? `
-              <button onclick="toggleSprintSystemForMonth('${selectedMonthKey}')" class="px-3.5 py-2 rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors ${isSprintActive ? 'bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}" title="Activate or Deactivate Sprint Target tab for ${selectedMonthKey}">
-                <i class="fa-solid ${isSprintActive ? 'fa-toggle-on' : 'fa-toggle-off'}"></i>
-                ${isSprintActive ? `Deactivate Sprint (${selectedMonthKey})` : `Activate Sprint (${selectedMonthKey})`}
-              </button>
-              ` : ''}
             </div>
           </div>
 
@@ -6378,9 +6371,10 @@
 
       // 1. Check if line contains a known ERP Product Code (e.g. A000010, A000008, etc., even if 'A' is OCR'd as '4' or 'O' as '0')
       let matchedCodeInfo = null;
-      const codeMatch = raw.match(/\b[A4][0O]{2}\d{4}\b/i);
+      const codeMatch = raw.match(/\b[A4][0O]\d{5,6}\b/i) || raw.match(/\b[A4]\d{6}\b/i);
       if (codeMatch) {
-        const normCode = 'A' + codeMatch[0].substring(1).replace(/[Oo]/g, '0');
+        const rawCodeStr = codeMatch[0];
+        const normCode = 'A' + rawCodeStr.substring(1).replace(/[Oo]/g, '0');
         if (ERP_PRODUCT_CODE_MAP[normCode]) {
           matchedCodeInfo = ERP_PRODUCT_CODE_MAP[normCode];
         }
@@ -6390,7 +6384,7 @@
       let cat = matchedCodeInfo ? matchedCodeInfo.cat : null;
       if (!cat) {
         if (/black\s*seed\s*honey|bs\.?\s*h|kalojira/i.test(lower)) cat = 'bsHoney';
-        else if (/sundarban\s*honey|sun\.?\s*h|honeyraj.*(?:00008|00009|00214)/i.test(lower)) cat = 'sunHoney';
+        else if (/sundarban\s*honey|sun\.?\s*h|honeyraj|000008|000009|000214/i.test(lower)) cat = 'sunHoney';
         else if (/gawa\s*ghee|\bghee\b|shosti\s*food/i.test(lower)) cat = 'gawaGhee';
         else if (/pink\s*salt|himalayan|\bsalt\b/i.test(lower)) cat = 'pinkSalt';
         else if (/black\s*garlic|\bgarlic\b/i.test(lower)) cat = 'blackGarlic';
@@ -8735,9 +8729,9 @@
                   <span class="text-[9px] font-black uppercase text-amber-300 block">Monthly Sprint Target Tab (${selectedMonthKey})</span>
                   <strong class="text-xs font-extrabold text-white">${isSprintSystemActiveForMonth(selectedMonthKey) ? '✅ Active for All Agents' : '🚫 Deactivated for Agents'}</strong>
                 </div>
-                <button type="button" onclick="toggleSprintSystemForMonth('${selectedMonthKey}')" class="px-3 py-2 rounded-xl text-xs font-black shadow transition-colors ${isSprintSystemActiveForMonth(selectedMonthKey) ? 'bg-rose-500 hover:bg-rose-600 text-white' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}">
-                  <i class="fa-solid ${isSprintSystemActiveForMonth(selectedMonthKey) ? 'fa-power-off' : 'fa-bolt'} mr-1"></i>
-                  ${isSprintSystemActiveForMonth(selectedMonthKey) ? 'Deactivate Sprint' : 'Activate Sprint'}
+                <button type="button" onclick="toggleSprintSystemForMonth('${selectedMonthKey}')" class="px-3.5 py-2 rounded-xl text-xs font-black shadow transition-colors ${isSprintSystemActiveForMonth(selectedMonthKey) ? 'bg-rose-500 hover:bg-rose-600 text-white' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}">
+                  <i class="fa-solid ${isSprintSystemActiveForMonth(selectedMonthKey) ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1"></i>
+                  ${isSprintSystemActiveForMonth(selectedMonthKey) ? `Deactivate Sprint (${selectedMonthKey})` : `Activate Sprint (${selectedMonthKey})`}
                 </button>
               </div>
               <div class="px-4 py-2.5 rounded-2xl bg-white/10 border border-white/15 text-right">
