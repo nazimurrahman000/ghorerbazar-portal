@@ -206,11 +206,8 @@
 
     function calcWorkingTargetFromBase(baseTargetVal, teamOrChannel) {
       const base = Number(baseTargetVal) || 0;
-      const ch = (teamOrChannel === 'WHATSAPP' || teamOrChannel === 'FACEBOOK')
-        ? teamOrChannel
-        : getChannelForTeam(teamOrChannel || (activeChannel === 'WHATSAPP' ? 'Team Shakib Baksh' : 'Team Nazim'));
-      // WhatsApp targets from sheet (1,696,589 / 1,576,609 / 1,476,810 / 1,377,011 / 1,277,213 / 498,997) are used At Actual (1x)
-      return ch === 'WHATSAPP' ? Math.round(base) : Math.round(base * 1.05);
+      // Both Facebook and WhatsApp include the +5% Working Target return buffer!
+      return Math.round(base * 1.05);
     }
 
     function getGradeTargetsForMonth(mKey) {
@@ -250,7 +247,7 @@
       // WHATSAPP CHANNEL — TEAM SHAKIB BAKSH (TL: Shakib Baksh, ID: 10175)
       // Current Month Grade: A & Personal Target: 1,576,609 (Editable to Grade TL next month!)
       // =====================================================================
-      { id: '10175', name: 'Shakib Baksh', role: 'admin', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10175', name: 'Shakib Baksh', role: 'admin', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: 'admin123', grade: 'A', baseTarget: 1576609 },
       { id: '10335', name: 'Faraj Ahmed', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A+', baseTarget: 1696589 },
       { id: '10478', name: 'Tahmim Islam Tonmoy', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A', baseTarget: 1576609 },
       { id: '10801', name: 'MD. Shakil Mulla', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A-', baseTarget: 1476810 },
@@ -271,7 +268,7 @@
       // =====================================================================
       // WHATSAPP CHANNEL — TEAM PARVAJ (TL: Parvaj Ibna Alam, ID: 10144)
       // =====================================================================
-      { id: '10144', name: 'Parvaj Ibna Alam', role: 'admin', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'TL', baseTarget: 498997 },
+      { id: '10144', name: 'Parvaj Ibna Alam', role: 'admin', channel: 'WHATSAPP', team: 'Team Parvaj', pass: 'admin123', grade: 'TL', baseTarget: 498997 },
       { id: '10771', name: 'Rohim Badsha Robin', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A-', baseTarget: 1476810 },
       { id: '10606', name: 'MD Saikot', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A', baseTarget: 1576609 },
       { id: '10671', name: 'MD Mahin Mia', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A', baseTarget: 1576609 },
@@ -293,7 +290,7 @@
       // =====================================================================
       // WHATSAPP CHANNEL — TEAM SAIKAT (TL: Rakibul Haque Saikat, ID: 10061)
       // =====================================================================
-      { id: '10061', name: 'Rakibul Haque Saikat', role: 'admin', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'TL', baseTarget: 498997 },
+      { id: '10061', name: 'Rakibul Haque Saikat', role: 'admin', channel: 'WHATSAPP', team: 'Team Saikat', pass: 'admin123', grade: 'TL', baseTarget: 498997 },
       { id: '10101', name: 'Majharul Islam Rafi', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A', baseTarget: 1576609 },
       { id: '10324', name: 'MD Shariar Alam', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A+', baseTarget: 1696589 },
       { id: '10579', name: 'Jahidul Islam Sheshir', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A', baseTarget: 1576609 },
@@ -339,26 +336,26 @@
       { id: '10135', name: 'Ranju Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '10:00 AM', tue: '7:00 AM', wed: '3:00 PM', thu: 'Night', fri: 'DO' },
       { id: '10357', name: 'Md. Faruque Hossain', team: 'Floating', sat: '3:00 PM', sun: '3:00 PM', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
 
-      // WhatsApp: Team Shakib Baksh (17 Members)
-      { id: '10175', name: 'Shakib Baksh', team: 'Team Shakib Baksh', isTL: true, sat: '7:00 AM', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '3:00 PM', fri: 'DO' },
-      { id: '10335', name: 'Faraj Ahmed', team: 'Team Shakib Baksh', sat: '3:00 PM', sun: 'Night', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '10:00 AM', fri: '7:00 AM' },
-      { id: '10478', name: 'Tahmim Islam Tonmoy', team: 'Team Shakib Baksh', sat: 'Night', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '10:00 AM' },
-      { id: '10801', name: 'MD. Shakil Mulla', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
-      { id: '10989', name: 'Ariyan Alam Alif', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'Night', fri: 'DO' },
-      { id: '11052', name: 'MD. Istiak Rashid', team: 'Team Shakib Baksh', sat: '3:00 PM', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
-      { id: '10499', name: 'MD Istiaq Ahmed', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
-      { id: '11078', name: 'MD Birhad Uddin', team: 'Team Shakib Baksh', sat: 'DO', sun: '7:00 AM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
-      { id: '10686', name: 'Md. Sazzad Khondoker', team: 'Team Shakib Baksh', sat: 'Night', sun: 'DO', mon: '10:00 AM', tue: '10:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
-      { id: '11640', name: 'MD Rafi', team: 'Team Shakib Baksh', sat: '10:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '7:00 AM', wed: 'DO', thu: '3:00 PM', fri: '10:00 AM' },
-      { id: '10582', name: 'Shahidule Shihab', team: 'Team Shakib Baksh', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
-      { id: '10581', name: 'Araful Islam', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
-      { id: '10756', name: 'MD. Sakibul Islam', team: 'Team Shakib Baksh', sat: 'DO', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: 'Night', fri: 'Night' },
-      { id: '10670', name: 'MD. Jahid Hossain', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '7:00 AM', mon: 'Night', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
-      { id: '10767', name: 'Efrad Hossain', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
-      { id: '11041', name: 'Merja Mahfuj Islam', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '3:00 PM', mon: 'Night', tue: 'DO', wed: '7:00 AM', thu: '3:00 PM', fri: '3:00 PM' },
-      { id: '10287', name: 'Golam Rabbi', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' },
+      // WhatsApp Team 1: Team Saikat (17 Members — Exact Order from Official Sheet)
+      { id: '10061', name: 'Rakibul Haque Saikat', team: 'Team Saikat', isTL: true, sat: '3:00 PM', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10101', name: 'Majharul Islam Rafi', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '7:00 AM', thu: 'Night', fri: 'DO' },
+      { id: '10324', name: 'MD Shariar Alam', team: 'Team Saikat', sat: '7:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' },
+      { id: '10579', name: 'Jahidul Islam Sheshir', team: 'Team Saikat', sat: '7:00 AM', sun: '3:00 PM', mon: '3:00 PM', tue: 'Night', wed: 'Night', thu: 'DO', fri: '7:00 AM' },
+      { id: '10623', name: 'Mazharul Islam', team: 'Team Saikat', sat: '3:00 PM', sun: '7:00 AM', mon: 'Night', tue: 'DO', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
+      { id: '10673', name: 'Tanvir Rahman Kabya', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '10:00 AM' },
+      { id: '10746', name: 'Ankan Kury', team: 'Team Saikat', sat: '3:00 PM', sun: '10:00 AM', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10845', name: 'MD Mahfuzur Rahman', team: 'Team Saikat', sat: '7:00 AM', sun: 'Night', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '11104', name: 'MD.Raihan Ali Sagar', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '7:00 AM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
+      { id: '11116', name: 'Utpol Mitra', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10809', name: 'Deen Mohammad', team: 'Team Saikat', sat: 'Night', sun: 'DO', mon: '7:00 AM', tue: '7:00 AM', wed: '10:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10758', name: 'Hasan Bosri', team: 'Team Saikat', sat: '3:00 PM', sun: '7:00 AM', mon: '7:00 AM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '10:00 AM' },
+      { id: '11073', name: 'MD. Fariaz Rahman', team: 'Team Saikat', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '7:00 AM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
+      { id: '10583', name: 'MD. Sohanur rahman', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10990', name: 'Yasin Arafat Rahi', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
+      { id: '10180', name: 'Abdullah Al Shafin', team: 'Team Saikat', sat: '3:00 PM', sun: 'DO', mon: '10:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10190', name: 'Oliur Rahman', team: 'Team Saikat', sat: 'DO', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
 
-      // WhatsApp: Team Parvaj (17 Members)
+      // WhatsApp Team 2: Team Parvaj (17 Members — Exact Order from Official Sheet)
       { id: '10144', name: 'Parvaj Ibna Alam', team: 'Team Parvaj', isTL: true, sat: '3:00 PM', sun: '7:00 AM', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
       { id: '10771', name: 'Rohim Badsha Robin', team: 'Team Parvaj', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
       { id: '10606', name: 'MD Saikot', team: 'Team Parvaj', sat: '3:00 PM', sun: '7:00 AM', mon: '3:00 PM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
@@ -377,24 +374,24 @@
       { id: '10731', name: 'Razaul Karim Shuvo', team: 'Team Parvaj', sat: '10:00 AM', sun: '3:00 PM', mon: 'DO', tue: '3:00 PM', wed: '10:00 AM', thu: '3:00 PM', fri: '3:00 PM' },
       { id: '11099', name: 'Syed Tujammel Haque', team: 'Team Parvaj', sat: '3:00 PM', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
 
-      // WhatsApp: Team Saikat (17 Members)
-      { id: '10061', name: 'Rakibul Haque Saikat', team: 'Team Saikat', isTL: true, sat: '3:00 PM', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
-      { id: '10101', name: 'Majharul Islam Rafi', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '7:00 AM', thu: 'Night', fri: 'DO' },
-      { id: '10324', name: 'MD Shariar Alam', team: 'Team Saikat', sat: '7:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' },
-      { id: '10579', name: 'Jahidul Islam Sheshir', team: 'Team Saikat', sat: '7:00 AM', sun: '3:00 PM', mon: '3:00 PM', tue: 'Night', wed: 'Night', thu: 'DO', fri: '7:00 AM' },
-      { id: '10623', name: 'Mazharul Islam', team: 'Team Saikat', sat: '3:00 PM', sun: '7:00 AM', mon: 'Night', tue: 'DO', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
-      { id: '10673', name: 'Tanvir Rahman Kabya', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '10:00 AM' },
-      { id: '10746', name: 'Ankan Kury', team: 'Team Saikat', sat: '3:00 PM', sun: '10:00 AM', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
-      { id: '10845', name: 'MD Mahfuzur Rahman', team: 'Team Saikat', sat: '7:00 AM', sun: 'Night', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
-      { id: '11104', name: 'MD.Raihan Ali Sagar', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '7:00 AM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
-      { id: '11116', name: 'Utpol Mitra', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
-      { id: '10809', name: 'Deen Mohammad', team: 'Team Saikat', sat: 'Night', sun: 'DO', mon: '7:00 AM', tue: '7:00 AM', wed: '10:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
-      { id: '10758', name: 'Hasan Bosri', team: 'Team Saikat', sat: '3:00 PM', sun: '7:00 AM', mon: '7:00 AM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '10:00 AM' },
-      { id: '11073', name: 'MD. Fariaz Rahman', team: 'Team Saikat', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '7:00 AM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
-      { id: '10583', name: 'MD. Sohanur rahman', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
-      { id: '10990', name: 'Yasin Arafat Rahi', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
-      { id: '10180', name: 'Abdullah Al Shafin', team: 'Team Saikat', sat: '3:00 PM', sun: 'DO', mon: '10:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
-      { id: '10190', name: 'Oliur Rahman', team: 'Team Saikat', sat: 'DO', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' }
+      // WhatsApp Team 3: Team Shakib Baksh (17 Members — Exact Order from Official Sheet)
+      { id: '10175', name: 'Shakib Baksh', team: 'Team Shakib Baksh', isTL: true, sat: '7:00 AM', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '3:00 PM', fri: 'DO' },
+      { id: '10335', name: 'Faraj Ahmed', team: 'Team Shakib Baksh', sat: '3:00 PM', sun: 'Night', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '10:00 AM', fri: '7:00 AM' },
+      { id: '10478', name: 'Tahmim Islam Tonmoy', team: 'Team Shakib Baksh', sat: 'Night', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '10:00 AM' },
+      { id: '10801', name: 'MD. Shakil Mulla', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
+      { id: '10989', name: 'Ariyan Alam Alif', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'Night', fri: 'DO' },
+      { id: '11052', name: 'MD. Istiak Rashid', team: 'Team Shakib Baksh', sat: '3:00 PM', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
+      { id: '10499', name: 'MD Istiaq Ahmed', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
+      { id: '11078', name: 'MD Birhad Uddin', team: 'Team Shakib Baksh', sat: 'DO', sun: '7:00 AM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
+      { id: '10686', name: 'Md. Sazzad Khondoker', team: 'Team Shakib Baksh', sat: 'Night', sun: 'DO', mon: '10:00 AM', tue: '10:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '11640', name: 'MD Rafi', team: 'Team Shakib Baksh', sat: '10:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '7:00 AM', wed: 'DO', thu: '3:00 PM', fri: '10:00 AM' },
+      { id: '10582', name: 'Shahidule Shihab', team: 'Team Shakib Baksh', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10581', name: 'Araful Islam', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
+      { id: '10756', name: 'MD. Sakibul Islam', team: 'Team Shakib Baksh', sat: 'DO', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: 'Night', fri: 'Night' },
+      { id: '10670', name: 'MD. Jahid Hossain', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '7:00 AM', mon: 'Night', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10767', name: 'Efrad Hossain', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
+      { id: '11041', name: 'Merja Mahfuj Islam', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '3:00 PM', mon: 'Night', tue: 'DO', wed: '7:00 AM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10287', name: 'Golam Rabbi', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' }
     ];
 
     const DEFAULT_PRODUCTS = {
@@ -439,9 +436,9 @@
         icon: 'fa-brands fa-whatsapp',
         colorClass: 'text-emerald-600',
         bgClass: 'bg-emerald-600 text-white',
-        teams: ['Team Shakib Baksh', 'Team Parvaj', 'Team Saikat'],
+        teams: ['Team Saikat', 'Team Parvaj', 'Team Shakib Baksh'],
         floatingTeam: 'WA Floating',
-        allTeams: ['Team Shakib Baksh', 'Team Parvaj', 'Team Saikat', 'WA Floating']
+        allTeams: ['Team Saikat', 'Team Parvaj', 'Team Shakib Baksh', 'WA Floating']
       }
     };
 
@@ -575,6 +572,9 @@
         if (uid === '10122' && (!copy.pass || copy.pass === 'admin123')) {
           copy.pass = '123nazim';
         }
+        if (['10175', '10144', '10061'].includes(uid) && (!copy.pass || copy.pass === '123456' || copy.pass === 'wa1234')) {
+          copy.pass = 'admin123';
+        }
       } else if (copy.role === 'supervisor' || uid === '10001') {
         copy.role = 'supervisor';
         copy.grade = 'Supervisor';
@@ -586,7 +586,7 @@
 
     (function seedDefaultUsers() {
       const existing = localStorage.getItem('gb_users');
-      const waSeededFlag = localStorage.getItem('gb_wa_shakib_teams_v3');
+      const waSeededFlag = localStorage.getItem('gb_wa_shakib_teams_v4');
       const legacyPlaceholderIds = new Set(['20101', '20102', '20103']);
       const map = new Map();
       DEFAULT_USERS.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
@@ -606,7 +606,11 @@
         } catch (e) {}
       }
       localStorage.setItem('gb_users', JSON.stringify(Array.from(map.values())));
-      localStorage.setItem('gb_wa_shakib_teams_v3', '1');
+      if (!localStorage.getItem('gb_wa_roster_clean_v5')) {
+        localStorage.removeItem('gb_roster_records');
+        localStorage.setItem('gb_wa_roster_clean_v5', '1');
+      }
+      localStorage.setItem('gb_wa_shakib_teams_v4', '1');
       localStorage.setItem('gb_faruque_floating_v1', '1');
     })();
 
@@ -861,13 +865,20 @@
       renderAppLayout();
     }
 
+    function isPendingOrFloatingAgent(usr) {
+      if (!usr || usr.role !== 'agent') return false;
+      const t = normalizeTeamNameAlias(usr.team);
+      return t === 'Floating' || t === 'WA Floating' || usr.grade === 'Pending' || Number(usr.baseTarget || 0) === 0;
+    }
+
     function canViewTargetPassword(actor, targetUser) {
       if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
       if (isSuperAdmin(actor)) return true;
       if (String(targetUser.id) === '10122') return false;
-      // Any TL can see their own password, or agents in their own team, NEVER another TL's password!
+      // Any TL can see their own password, or agents in their own team (or Pending/Floating agents in their channel), NEVER another TL's password!
       if (String(actor.id) === String(targetUser.id)) return true;
       if (targetUser.role === 'admin' || targetUser.role === 'supervisor') return false;
+      if (isPendingOrFloatingAgent(targetUser) && getChannelForTeam(actor.team) === getChannelForTeam(targetUser.team)) return true;
       return normalizeTeamNameAlias(actor.team) === normalizeTeamNameAlias(targetUser.team);
     }
 
@@ -875,8 +886,9 @@
       if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
       if (String(targetUser.id) === String(actor.id) || String(targetUser.id) === '10122') return false;
       if (isSuperAdmin(actor)) return true;
-      // Non-SuperAdmin TLs can only delete agents in their own team!
-      return targetUser.role === 'agent' && actor.team === targetUser.team;
+      if (targetUser.role !== 'agent') return false;
+      if (isPendingOrFloatingAgent(targetUser) && getChannelForTeam(actor.team) === getChannelForTeam(targetUser.team)) return true;
+      return normalizeTeamNameAlias(actor.team) === normalizeTeamNameAlias(targetUser.team);
     }
 
     function canEditTargetUser(actor, targetUser) {
@@ -884,8 +896,9 @@
       if (isSuperAdmin(actor)) return true;
       if (String(targetUser.id) === '10122') return false;
       if (String(targetUser.id) === String(actor.id)) return true;
-      // Non-SuperAdmin TLs can only edit agents in their own team!
-      return targetUser.role === 'agent' && actor.team === targetUser.team;
+      if (targetUser.role !== 'agent') return false;
+      if (isPendingOrFloatingAgent(targetUser) && getChannelForTeam(actor.team) === getChannelForTeam(targetUser.team)) return true;
+      return normalizeTeamNameAlias(actor.team) === normalizeTeamNameAlias(targetUser.team);
     }
 
     function openConfirmWarningModal(title, message, badgeText, onConfirmAction, confirmBtnLabel = null, isWarningEdit = false) {
@@ -1460,9 +1473,16 @@
         }
       });
       // 3. Apply saved cloud overrides & custom added rows for this month
+      const defaultRosterLookup = new Map(DEFAULT_ROSTER.map(dr => [String(dr.id), dr]));
       monthRows.forEach(r => {
         const uid = String(r.id);
-        if (['20101', '20102', '20103'].includes(uid)) return;
+        if (['20101', '20102', '20103', '11102'].includes(uid)) return;
+        const defRow = defaultRosterLookup.get(uid);
+        // Ignore stale auto-generated fallback rows (where sat..thu = 3:00 PM & fri = DO) if DEFAULT_ROSTER has official shifts for this user
+        const isGenericFallback = r.sat === '3:00 PM' && r.sun === '3:00 PM' && r.mon === '3:00 PM' && r.tue === '3:00 PM' && r.wed === '3:00 PM' && r.thu === '3:00 PM' && r.fri === 'DO';
+        if (defRow && isGenericFallback && !(defRow.sat === '3:00 PM' && defRow.sun === '3:00 PM' && defRow.mon === '3:00 PM' && defRow.tue === '3:00 PM' && defRow.wed === '3:00 PM' && defRow.thu === '3:00 PM' && defRow.fri === 'DO')) {
+          return;
+        }
         const prev = mergedMap.get(uid) || { id: uid, sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' };
         mergedMap.set(uid, { ...prev, ...r, team: normalizeTeamNameAlias(r.team || prev.team) });
       });
@@ -3701,117 +3721,243 @@
       renderAppLayout();
     }
 
-    function renderDateWiseTeamDailySummaryTable() {
+    function exportDateWiseSummaryCsv(targetScope) {
+      const chMeta = getActiveChannelMeta();
       const allUsers = getUsersForMonth(selectedMonthKey);
-      const teamsList = getActiveChannelMeta().teams;
-      const teamsToShow = (dateWiseTeamFilter === 'ALL' || !teamsList.includes(dateWiseTeamFilter)) ? teamsList : [dateWiseTeamFilter];
       const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
-        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_') && getChannelForTeam(s.team) === activeChannel);
 
       const uniqueDates = Array.from(new Set(monthSales.map(s => s.date))).sort((a, b) => {
         return (parseInt(a.split('/')[0], 10) || 0) - (parseInt(b.split('/')[0], 10) || 0);
       });
 
+      const isChannelTotal = !targetScope || targetScope === 'CHANNEL_TOTAL';
+      const scopeLabel = isChannelTotal ? `${chMeta.fullTitle} Total (${chMeta.teams.length} Teams Combined)` : targetScope;
+
+      const scopeAgents = allUsers.filter(u => u.role === 'agent' && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === targetScope));
+      const scopeTLs = allUsers.filter(u => u.role === 'admin' && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === targetScope));
+      const defaultTlBase = activeChannel === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
+      const baseTargetSum = scopeAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
+                            scopeTLs.reduce((s, t) => s + (Number(t.baseTarget) || defaultTlBase), 0);
+      const workingTarget = calcWorkingTargetFromBase(baseTargetSum, activeChannel);
+      const dailyTarget = Math.round(workingTarget / 26);
+
+      const headers = [
+        'Date',
+        'Team / Channel',
+        'Total Leads',
+        'Total Orders',
+        'Convert Ratio (%)',
+        'Sales Amount (BDT)',
+        'Daily Target (÷26 BDT)',
+        'Daily Target Achievement Ratio (%)',
+        'Monthly Working Target (BDT)'
+      ];
+
+      let sumLeads = 0, sumOrders = 0, sumAmount = 0;
+
+      const rows = uniqueDates.map((dStr, idx) => {
+        const dayLogs = monthSales.filter(s => s.date === dStr && (isChannelTotal ? true : normalizeTeamNameAlias(s.team) === targetScope));
+        const leads = dayLogs.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
+        const orders = dayLogs.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
+        const amount = dayLogs.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+        const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) + '%' : '0.00%';
+        const achPct = dailyTarget > 0 ? ((amount / dailyTarget) * 100).toFixed(1) + '%' : '0.0%';
+
+        sumLeads += leads;
+        sumOrders += orders;
+        sumAmount += amount;
+
+        return [
+          dStr,
+          scopeLabel,
+          leads,
+          orders,
+          conv,
+          amount,
+          dailyTarget,
+          achPct,
+          idx === 0 ? workingTarget : ''
+        ];
+      });
+
+      const totalConv = sumLeads > 0 ? ((sumOrders / sumLeads) * 100).toFixed(2) + '%' : '0.00%';
+      const sumDailyTargetsForActiveDays = dailyTarget * (rows.length || 1);
+      const totalAchPct = workingTarget > 0 ? ((sumAmount / workingTarget) * 100).toFixed(1) + '% of Month' : '0.0%';
+
+      rows.push([
+        `GRAND TOTAL (${rows.length} Days)`,
+        scopeLabel,
+        sumLeads,
+        sumOrders,
+        totalConv,
+        sumAmount,
+        sumDailyTargetsForActiveDays,
+        totalAchPct,
+        workingTarget
+      ]);
+
+      const safeMonth = selectedMonthKey.replace('/', '-');
+      const fileSlug = isChannelTotal ? `${chMeta.name}_Channel_Combined_Total` : targetScope.replace(/\s+/g, '_');
+      downloadPortalCsvFile(`Date_Wise_${fileSlug}_${safeMonth}.csv`, headers, rows);
+    }
+
+    function renderDateWiseTeamDailySummaryTable() {
+      const chMeta = getActiveChannelMeta();
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const teamsList = chMeta.teams;
+      const showIndividualTeams = dateWiseTeamFilter === 'ALL'
+        ? teamsList
+        : (teamsList.includes(dateWiseTeamFilter) ? [dateWiseTeamFilter] : []);
+      const showChannelCombined = dateWiseTeamFilter === 'ALL' || dateWiseTeamFilter === 'CHANNEL_TOTAL';
+
+      const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_') && getChannelForTeam(s.team) === activeChannel);
+
+      const uniqueDates = Array.from(new Set(monthSales.map(s => s.date))).sort((a, b) => {
+        return (parseInt(a.split('/')[0], 10) || 0) - (parseInt(b.split('/')[0], 10) || 0);
+      });
+
+      const defaultTlBase = activeChannel === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
+      const targetNote = activeChannel === 'WHATSAPP' ? 'At Actual' : '+5% Buffer';
+
+      function buildDateWiseTableCard(scopeKey, titleText, badgeText, headerClass, badgePillClass) {
+        const isChannelTotal = scopeKey === 'CHANNEL_TOTAL';
+        const scopeAgents = allUsers.filter(u => u.role === 'agent' && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === scopeKey));
+        const scopeTLs = allUsers.filter(u => u.role === 'admin' && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === scopeKey));
+        const baseTarget = scopeAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
+                           scopeTLs.reduce((s, t) => s + (Number(t.baseTarget) || defaultTlBase), 0);
+        const workingTarget = calcWorkingTargetFromBase(baseTarget, activeChannel);
+        const dailyTarget = Math.round(workingTarget / 26);
+
+        let sumLeads = 0, sumOrders = 0, sumAmount = 0;
+
+        const dayRows = uniqueDates.map(dStr => {
+          const dayLogs = monthSales.filter(s => s.date === dStr && (isChannelTotal ? true : normalizeTeamNameAlias(s.team) === scopeKey));
+          const leads = dayLogs.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
+          const orders = dayLogs.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
+          const amount = dayLogs.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+          const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+          const achPct = dailyTarget > 0 ? ((amount / dailyTarget) * 100).toFixed(1) : '0.0';
+
+          sumLeads += leads;
+          sumOrders += orders;
+          sumAmount += amount;
+
+          return { dStr, leads, orders, conv, amount, dailyTarget, achPct };
+        });
+
+        const totalConv = sumLeads > 0 ? ((sumOrders / sumLeads) * 100).toFixed(2) : '0.00';
+        const sumDailyTargetsForActiveDays = dailyTarget * (dayRows.length || 1);
+        const totalAchPct = workingTarget > 0 ? ((sumAmount / workingTarget) * 100).toFixed(1) : '0.0';
+
+        return `
+          <div class="card-dynamic overflow-hidden overflow-x-auto ${isChannelTotal ? 'border-2 border-indigo-400 shadow-md' : ''}">
+            <div class="px-5 py-3 ${headerClass} text-white flex flex-wrap items-center justify-between gap-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs font-black uppercase tracking-wider">
+                  <i class="fa-solid ${isChannelTotal ? 'fa-globe text-amber-300' : 'fa-layer-group'} mr-1.5"></i>${titleText}
+                </span>
+                <span class="px-2 py-0.5 rounded bg-white/20 text-[10px] font-black">
+                  ${scopeAgents.length} Agents${scopeTLs.length > 0 ? ` + ${scopeTLs.length} TL` : ''}
+                </span>
+              </div>
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="text-[11px] font-extrabold">
+                  Monthly Target (${targetNote}): ৳${workingTarget.toLocaleString()} • Daily Target (÷26): ৳${dailyTarget.toLocaleString()}
+                </span>
+                <button
+                  type="button"
+                  onclick="exportDateWiseSummaryCsv('${scopeKey}')"
+                  class="px-3 py-1.5 rounded-xl bg-white text-slate-900 hover:bg-emerald-50 hover:text-emerald-700 text-[11px] font-black shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Download only this table as a CSV spreadsheet"
+                >
+                  <i class="fa-solid fa-file-csv text-emerald-600 text-xs"></i> Download CSV
+                </button>
+              </div>
+            </div>
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Date</th>
+                  <th class="p-3.5">${isChannelTotal ? 'Channel Scope' : 'Team'}</th>
+                  <th class="p-3.5 text-center">Total Leads</th>
+                  <th class="p-3.5 text-center">Total Orders</th>
+                  <th class="p-3.5 text-center">Convert Ratio</th>
+                  <th class="p-3.5">Sales Amount</th>
+                  <th class="p-3.5">Daily Target (÷26)</th>
+                  <th class="p-3.5 text-center">Target Achievement Ratio</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${dayRows.length === 0 ? `<tr><td colspan="8" class="p-6 text-center text-slate-400 font-bold">No daily entries recorded for ${badgeText} in ${selectedMonthKey} yet.</td></tr>` : ''}
+                ${dayRows.map(r => `
+                  <tr class="hover:bg-slate-50">
+                    <td class="p-3.5 font-extrabold text-slate-900">${cleanDisplayDate(r.dStr)}</td>
+                    <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${badgePillClass}">${badgeText}</span></td>
+                    <td class="p-3.5 text-center font-bold text-slate-700">${r.leads.toLocaleString()}</td>
+                    <td class="p-3.5 text-center font-black text-blue-600">${r.orders.toLocaleString()}</td>
+                    <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${r.conv}%</span></td>
+                    <td class="p-3.5 font-black text-emerald-600 text-sm">৳${r.amount.toLocaleString()}</td>
+                    <td class="p-3.5 font-bold text-slate-500">৳${r.dailyTarget.toLocaleString()}</td>
+                    <td class="p-3.5 text-center">
+                      <span class="px-2.5 py-1 rounded-md ${Number(r.achPct) >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${r.achPct}%</span>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot class="bg-slate-900 text-white font-black text-xs">
+                <tr>
+                  <td colspan="2" class="p-4 uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> ${badgeText} Grand Total (${dayRows.length} Days)
+                  </td>
+                  <td class="p-4 text-center">${sumLeads.toLocaleString()}</td>
+                  <td class="p-4 text-center text-blue-300">${sumOrders.toLocaleString()}</td>
+                  <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${totalConv}%</span></td>
+                  <td class="p-4 text-emerald-400 text-sm">৳${sumAmount.toLocaleString()}</td>
+                  <td class="p-4 text-slate-300">৳${sumDailyTargetsForActiveDays.toLocaleString()} <span class="text-[10px] text-slate-400">(Month: ৳${workingTarget.toLocaleString()})</span></td>
+                  <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black">${totalAchPct}% of Month</span></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        `;
+      }
+
       return `
         <div class="space-y-4 mt-6">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200">
             <div>
-              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-800">Date-by-Date Team Summary</span>
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-800">Date-by-Date Team & Channel Summary</span>
               <h3 class="text-base font-black text-slate-900 mt-1">
-                <i class="fa-solid fa-calendar-check text-indigo-600 mr-1.5"></i>Date-Wise Team Total Sales Report (${selectedMonthKey})
+                <i class="fa-solid fa-calendar-check text-indigo-600 mr-1.5"></i>Date-Wise Team & Total ${chMeta.name} Channel Sales Reports (${selectedMonthKey})
               </h3>
-              <p class="text-xs font-bold text-slate-500">Day 1, Day 2, Day 3... chronological team totals (Leads, Orders, Conv. Ratio, Amount, Daily Target & Achievement %)</p>
+              <p class="text-xs font-bold text-slate-500">Chronological day-by-day sales breakdown for each individual team AND the combined ${chMeta.fullTitle} total, with individual CSV download on every table.</p>
             </div>
             <div class="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
-              <button type="button" onclick="setDateWiseTeamFilter('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All ${getActiveChannelMeta().name} Teams</button>
+              <button type="button" onclick="setDateWiseTeamFilter('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All Tables (${teamsList.length + 1})</button>
+              <button type="button" onclick="setDateWiseTeamFilter('CHANNEL_TOTAL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === 'CHANNEL_TOTAL' ? 'bg-indigo-700 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Total ${chMeta.name} Channel</button>
               ${teamsList.map(tn => `
-                <button type="button" onclick="setDateWiseTeamFilter('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === tn ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>
+                <button type="button" onclick="setDateWiseTeamFilter('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>
               `).join('')}
             </div>
           </div>
 
-          ${teamsToShow.map(teamName => {
-            const teamAgents = allUsers.filter(u => u.role === 'agent' && u.team === teamName);
-            const teamTLs = allUsers.filter(u => u.role === 'admin' && u.team === teamName);
-            const teamBaseTarget = teamAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
-                                   teamTLs.reduce((s, t) => s + (Number(t.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
-            const teamWorkingTarget = calcWorkingTargetFromBase(teamBaseTarget, activeChannel);
-            const teamDailyTarget = Math.round(teamWorkingTarget / 26);
+          ${showIndividualTeams.map(teamName => buildDateWiseTableCard(
+            teamName,
+            `${teamName} — Date-Wise Total Sales Report (${selectedMonthKey})`,
+            teamName,
+            getTeamBannerHeaderColor(teamName),
+            getTeamBadgeClasses(teamName)
+          )).join('')}
 
-            let sumLeads = 0, sumOrders = 0, sumAmount = 0;
-
-            const dayRows = uniqueDates.map(dStr => {
-              const dayLogs = monthSales.filter(s => s.date === dStr && s.team === teamName);
-              const leads = dayLogs.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
-              const orders = dayLogs.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
-              const amount = dayLogs.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
-              const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
-              const achPct = teamDailyTarget > 0 ? ((amount / teamDailyTarget) * 100).toFixed(1) : '0.0';
-
-              sumLeads += leads;
-              sumOrders += orders;
-              sumAmount += amount;
-
-              return { dStr, leads, orders, conv, amount, teamDailyTarget, achPct };
-            });
-
-            const totalConv = sumLeads > 0 ? ((sumOrders / sumLeads) * 100).toFixed(2) : '0.00';
-            const sumDailyTargetsForActiveDays = teamDailyTarget * (dayRows.length || 1);
-            const totalAchPct = teamWorkingTarget > 0 ? ((sumAmount / teamWorkingTarget) * 100).toFixed(1) : '0.0';
-
-            return `
-              <div class="card-dynamic overflow-hidden overflow-x-auto">
-                <div class="px-5 py-3 ${teamName === 'Team Nazim' ? 'bg-orange-500' : 'bg-blue-600'} text-white flex flex-wrap items-center justify-between gap-2">
-                  <span class="text-xs font-black uppercase tracking-wider"><i class="fa-solid fa-layer-group mr-1.5"></i>${teamName} — Date-Wise Total Sales Report (${selectedMonthKey})</span>
-                  <span class="text-[11px] font-extrabold">Team Working Target (+5%): ৳${teamWorkingTarget.toLocaleString()} • Daily Target (÷26): ৳${teamDailyTarget.toLocaleString()}</span>
-                </div>
-                <table class="w-full text-left text-xs whitespace-nowrap">
-                  <thead class="table-header-light uppercase font-extrabold">
-                    <tr>
-                      <th class="p-3.5">Date</th>
-                      <th class="p-3.5">Team</th>
-                      <th class="p-3.5 text-center">Total Leads</th>
-                      <th class="p-3.5 text-center">Total Orders</th>
-                      <th class="p-3.5 text-center">Convert Ratio</th>
-                      <th class="p-3.5">Sales Amount</th>
-                      <th class="p-3.5">Daily Target (÷26)</th>
-                      <th class="p-3.5 text-center">Target Achievement Ratio</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-slate-100 font-semibold">
-                    ${dayRows.length === 0 ? `<tr><td colspan="8" class="p-6 text-center text-slate-400 font-bold">No daily entries recorded for ${teamName} in ${selectedMonthKey} yet.</td></tr>` : ''}
-                    ${dayRows.map(r => `
-                      <tr class="hover:bg-slate-50">
-                        <td class="p-3.5 font-extrabold text-slate-900">${cleanDisplayDate(r.dStr)}</td>
-                        <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${teamName === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${teamName}</span></td>
-                        <td class="p-3.5 text-center font-bold text-slate-700">${r.leads.toLocaleString()}</td>
-                        <td class="p-3.5 text-center font-black text-blue-600">${r.orders.toLocaleString()}</td>
-                        <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${r.conv}%</span></td>
-                        <td class="p-3.5 font-black text-emerald-600 text-sm">৳${r.amount.toLocaleString()}</td>
-                        <td class="p-3.5 font-bold text-slate-500">৳${r.teamDailyTarget.toLocaleString()}</td>
-                        <td class="p-3.5 text-center">
-                          <span class="px-2.5 py-1 rounded-md ${Number(r.achPct) >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${r.achPct}%</span>
-                        </td>
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                  <tfoot class="bg-slate-900 text-white font-black text-xs">
-                    <tr>
-                      <td colspan="2" class="p-4 uppercase tracking-wider text-amber-400">
-                        <i class="fa-solid fa-calculator mr-1.5"></i> ${teamName} Grand Total (${dayRows.length} Days)
-                      </td>
-                      <td class="p-4 text-center">${sumLeads.toLocaleString()}</td>
-                      <td class="p-4 text-center text-blue-300">${sumOrders.toLocaleString()}</td>
-                      <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${totalConv}%</span></td>
-                      <td class="p-4 text-emerald-400 text-sm">৳${sumAmount.toLocaleString()}</td>
-                      <td class="p-4 text-slate-300">৳${sumDailyTargetsForActiveDays.toLocaleString()} <span class="text-[10px] text-slate-400">(Month: ৳${teamWorkingTarget.toLocaleString()})</span></td>
-                      <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black">${totalAchPct}% of Month</span></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            `;
-          }).join('')}
+          ${showChannelCombined ? buildDateWiseTableCard(
+            'CHANNEL_TOTAL',
+            `Total ${chMeta.fullTitle} (${teamsList.join(' + ')}) — Combined Date-Wise Sales Report (${selectedMonthKey})`,
+            `All ${chMeta.name} Teams`,
+            activeChannel === 'WHATSAPP' ? 'bg-gradient-to-r from-slate-900 via-emerald-900 to-teal-900' : 'bg-gradient-to-r from-slate-900 via-indigo-900 to-blue-900',
+            activeChannel === 'WHATSAPP' ? 'bg-emerald-100 text-emerald-900' : 'bg-indigo-100 text-indigo-900'
+          ) : ''}
         </div>
       `;
     }
@@ -4172,7 +4318,7 @@
 
     function renderActivityLogsView() {
       const u = currentUser;
-      const allLogs = deduplicateActivityLogsList(getStored('activity_logs', []));
+      const allLogs = deduplicateActivityLogsList(getStored('activity_logs', [])).filter(l => l.team === 'All Teams' || getChannelForTeam(l.team) === activeChannel);
 
       let visibleLogs = [];
       if (canViewAll(u)) {
@@ -4293,7 +4439,8 @@
       function renderShiftCell(row, dKey) {
         const val = row[dKey] || '3:00 PM';
         const cellClass = val === 'DO' ? 'roster-do' : (val === 'Night' ? 'roster-night' : 'text-slate-700 font-semibold');
-        if (!isEditable || !canEditTeamData(u, row.team)) {
+        const canModifyRoster = isEditable && !isCurrentChannelReadOnlyForUser(u);
+        if (!canModifyRoster) {
           return `<td class="px-1.5 py-2 border border-slate-200 text-center text-[11px] whitespace-nowrap ${cellClass}">${val}</td>`;
         }
         return `
@@ -4349,7 +4496,7 @@
 
       function renderRosterTeamBlock(teamName, bannerTitle, headerBgClass) {
         const teamRows = roster.filter(r => normalizeTeamNameAlias(r.team) === teamName);
-        const canEditThisTeam = isEditable && canEditTeamData(u, teamName);
+        const canEditThisTeam = isEditable && !isCurrentChannelReadOnlyForUser(u);
         const teamSumAll = computeRosterSummary(teamRows, false);
         const teamSumAgents = computeRosterSummary(teamRows, true);
 
@@ -4405,7 +4552,11 @@
       }
 
       const monthTitle = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
-      const floatingRows = roster.filter(r => !chMeta.teams.includes(normalizeTeamNameAlias(r.team)));
+      const monthUsersMapForRoster = new Map(getUsersForMonth(selectedMonthKey).map(u => [String(u.id), u]));
+      const floatingRows = roster.filter(r => {
+        const uObj = monthUsersMapForRoster.get(String(r.id));
+        return !chMeta.teams.includes(normalizeTeamNameAlias(r.team)) || (uObj && isPendingOrFloatingAgent(uObj));
+      });
 
       return `
         <div class="space-y-5">
@@ -4420,7 +4571,7 @@
                 </p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
-                ${isEditable ? chMeta.teams.filter(tn => canEditTeamData(u, tn)).map(tn => `
+                ${(isEditable && !isCurrentChannelReadOnlyForUser(u)) ? chMeta.teams.map(tn => `
                   <button type="button" onclick="handleAddCustomRosterRowPrompt('${tn}')" class="px-3 py-1.5 ${getTeamBannerHeaderColor(tn)} hover:opacity-95 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1">
                     <i class="fa-solid fa-user-plus"></i> + Add (${tn})
                   </button>
@@ -4447,11 +4598,11 @@
 
           ${activeChannel === 'WHATSAPP' ? `
             <div class="space-y-6">
-              ${renderRosterTeamBlock('Team Shakib Baksh', '🟢 Team: Shakib Baksh (WhatsApp)', 'bg-emerald-600')}
               <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                ${renderRosterTeamBlock('Team Parvaj', '🟢 Team: Parvaj (WhatsApp)', 'bg-teal-600')}
-                ${renderRosterTeamBlock('Team Saikat', '🟢 Team: Saikat (WhatsApp)', 'bg-cyan-700')}
+                ${renderRosterTeamBlock('Team Saikat', '🟢 Team 1: Saikat (WhatsApp)', 'bg-cyan-700')}
+                ${renderRosterTeamBlock('Team Parvaj', '🟢 Team 2: Parvaj (WhatsApp)', 'bg-teal-600')}
               </div>
+              ${renderRosterTeamBlock('Team Shakib Baksh', '🟢 Team 3: Shakib Baksh (WhatsApp)', 'bg-emerald-600')}
             </div>
           ` : `
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -4463,7 +4614,7 @@
           ${floatingRows.length > 0 ? `
           <div class="card-dynamic overflow-hidden border-2 border-purple-200">
             <div class="bg-gradient-to-r from-purple-700 to-indigo-700 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-              <span class="font-black text-xs uppercase tracking-wider"><i class="fa-solid fa-user-astronaut mr-1.5"></i>${chMeta.name} Floating Agents Pool</span>
+              <span class="font-black text-xs uppercase tracking-wider"><i class="fa-solid fa-user-astronaut mr-1.5"></i>${chMeta.name} Pending & Floating Agents Pool (Quick Team Assignment)</span>
               <span class="text-[10px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full">Assign to a team anytime using buttons on the right</span>
             </div>
             <table class="w-full text-[11px] border-collapse">
@@ -4479,7 +4630,7 @@
                 ${floatingRows.map(r => `
                   <tr class="hover:bg-purple-50/40">
                     <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold text-purple-700">${r.id}</td>
-                    <td class="px-2 py-2 border border-slate-200 font-extrabold text-slate-900 whitespace-nowrap">${r.name} <span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-[9px] font-black ml-1">Floating</span></td>
+                    <td class="px-2 py-2 border border-slate-200 font-extrabold text-slate-900 whitespace-nowrap">${r.name} <span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-[9px] font-black ml-1">${r.team} • Pending/Floating</span></td>
                     ${days.map(d => renderShiftCell(r, d)).join('')}
                     ${hasFeatureAccess(u, 'feat_manage_users') ? `
                     <td class="px-2 py-1.5 border border-slate-200 text-center space-x-1 whitespace-nowrap">
@@ -4492,6 +4643,49 @@
             </table>
           </div>
           ` : ''}
+
+          <!-- Duty Roster Modification Audit Log (Visible to All TLs & Supervisors in Active Channel) -->
+          ${canViewAll(u) ? (() => {
+            const allActLogs = deduplicateActivityLogsList(getStored('activity_logs', []));
+            const rosterLogs = allActLogs.filter(l => {
+              const actStr = String(l.action || '').toUpperCase();
+              const isRosterAct = actStr.includes('ROSTER') || String(l.details || '').toLowerCase().includes('roster');
+              return isRosterAct && (l.team === 'All Teams' || getChannelForTeam(l.team) === activeChannel);
+            }).slice(0, 25);
+            return `
+              <div class="card-dynamic overflow-hidden border border-slate-200">
+                <div class="bg-slate-800 text-white px-4 py-2.5 flex items-center justify-between">
+                  <span class="font-black text-xs uppercase tracking-wider"><i class="fa-solid fa-clock-rotate-left text-amber-400 mr-1.5"></i>${chMeta.name} Duty Roster Modification History Log (Visible to All TLs)</span>
+                  <span class="text-[10px] font-bold text-slate-300">Tracks which TL modified which member's shift & when</span>
+                </div>
+                <div class="max-h-56 overflow-y-auto">
+                  <table class="w-full text-left text-[11px] whitespace-nowrap">
+                    <thead class="bg-slate-50 font-extrabold text-slate-600 border-b border-slate-200">
+                      <tr>
+                        <th class="p-2.5">Date & Time</th>
+                        <th class="p-2.5">Modified By (TL / Admin)</th>
+                        <th class="p-2.5">TL Team</th>
+                        <th class="p-2.5">Action</th>
+                        <th class="p-2.5">Modification Details</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 font-semibold">
+                      ${rosterLogs.length === 0 ? `<tr><td colspan="5" class="p-4 text-center text-slate-400 font-bold">No Duty Roster modifications logged for ${chMeta.fullTitle} yet. Any shift change saved by a TL will appear here with their name & timestamp.</td></tr>` : ''}
+                      ${rosterLogs.map(rl => `
+                        <tr class="hover:bg-slate-50">
+                          <td class="p-2.5 font-mono text-slate-600">${cleanDisplayDate(rl.date)} • <strong class="text-blue-600">${sanitizeTimeDisplay(rl.time)}</strong></td>
+                          <td class="p-2.5 font-extrabold text-slate-900">${rl.userName} <span class="text-slate-400 text-[10px]">(${rl.userId})</span></td>
+                          <td class="p-2.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(rl.team)}">${rl.team}</span></td>
+                          <td class="p-2.5"><span class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-black text-[10px]">${rl.action}</span></td>
+                          <td class="p-2.5 font-bold text-slate-700 whitespace-normal">${rl.details}</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+          })() : ''}
 
           <!-- Combined Department Roster Summary Table (Matches WhatsApp 51-person table & Facebook Combined table) -->
           <div class="card-dynamic overflow-hidden max-w-4xl mx-auto border-2 border-slate-300">
@@ -4643,7 +4837,8 @@
           }
           setStored('roster_records', savedList);
 
-          const logMeta = recordActivityLog('Updated Duty Roster', `Saved Duty Roster updates for ${namesList} (${selectedMonthKey})`);
+          const detailedChanges = changedRows.map(r => r.isDeleted ? `Deleted ${r.name} (${r.id})` : `${r.name} (${r.id}): Sat=${r.sat}, Sun=${r.sun}, Mon=${r.mon}, Tue=${r.tue}, Wed=${r.wed}, Thu=${r.thu}, Fri=${r.fri}`).join(' | ');
+          const logMeta = recordActivityLog('Updated Duty Roster', `[${ getActiveChannelMeta().name }] Modified by ${currentUser.name}: ${detailedChanges} (${selectedMonthKey})`);
           renderAppLayout();
           showPortalToast('Duty Roster Saved & Synced!', `Updated schedule for ${changedRows.length} member(s).`, 'success');
 
@@ -4956,7 +5151,7 @@
 
     function renderAttendanceView() {
       const u = currentUser;
-      const allAtt = getStored('attendance_records', []).filter(a => a.date.endsWith(selectedMonthKey));
+      const allAtt = getStored('attendance_records', []).filter(a => a.date.endsWith(selectedMonthKey) && getChannelForTeam(a.team) === activeChannel);
       let records = [];
       if (canViewAll(u)) {
         records = logsFilterScope === 'ALL' ? allAtt : allAtt.filter(a => a.team === logsFilterScope);
@@ -5338,14 +5533,18 @@
               const item = st.theme;
               const hit80 = st.achieved >= st.target80 && st.target80 > 0;
               const hit100 = st.achieved >= st.target100 && st.target100 > 0;
+              const isTeamSelected = sprintTabTeamScope === st.teamName;
               return `
-                <div class="card-dynamic p-4 border-t-4 ${item.border}">
+                <div onclick="setSprintTabTeam('${isTeamSelected ? 'ALL' : st.teamName}')" title="Click to filter leaderboard by ${st.teamName} (click again for All Teams)" class="card-dynamic p-4 border-t-4 ${item.border} cursor-pointer transition-all ${isTeamSelected ? 'ring-4 ring-blue-500/25 bg-blue-50/30 border-blue-500' : 'hover:shadow-md'}">
                   <div class="flex justify-between items-start mb-3">
                     <div>
-                      <div class="flex items-center gap-2">
-                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${item.pill}">${st.teamName} • TL Milestone (Admin Only View)</span>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${item.pill}">${st.teamName} • TL Milestone</span>
                         <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600')}">
                           ${hit100 ? '🏆 100% Full Reward!' : (hit80 ? '🔥 80% Reward Unlocked!' : '80% / 100% Total Target')}
+                        </span>
+                        <span class="px-2 py-0.5 rounded text-[9px] font-black ${isTeamSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-blue-700'}">
+                          ${isTeamSelected ? '● Filtering Table (Click for All)' : 'Click to Filter Team →'}
                         </span>
                       </div>
                       <h4 class="text-sm font-black text-slate-900 mt-1">TL: ${st.tlName} (${st.agentCount} Agents + TL Target)</h4>
@@ -5651,7 +5850,7 @@
     function renderReports() {
       const u = currentUser;
       const allUsers = getUsersForMonth(selectedMonthKey);
-      const rawSales = getStored('sales_records', []);
+      const rawSales = getStored('sales_records', []).filter(s => getChannelForTeam(s.team) === activeChannel);
       
       let dateFilteredSales = [];
       if (reportsDateFilter === 'ALL') {
@@ -5893,7 +6092,7 @@
       // and sort all other users (Agents) with Online / On Break first, followed by Offline users.
       const topPinnedRoleRank = (usr) => {
         if (usr.role === 'supervisor' || String(usr.id) === '10001') return 1;
-        if (usr.role === 'admin' || String(usr.id) === '10122' || String(usr.id) === '10107') return 2;
+        if (usr.role === 'admin' || ALL_TL_IDS_SET.has(String(usr.id))) return 2;
         return 3;
       };
       const onlineStatusRank = (usr) => {
@@ -6007,10 +6206,9 @@
                     <td class="p-3.5 font-extrabold text-emerald-600">৳${calcWorkingTargetFromBase(usr.baseTarget, usr.team).toLocaleString()}</td>
                     ${hasFeatureAccess(u, 'feat_manage_users') ? `
                     <td class="p-3.5 text-right space-x-1">
-                      ${usr.role === 'agent' && usr.team === 'Floating' ? `
-                        <button onclick="quickAssignAgentToTeam('${usr.id}', 'Team Nazim')" class="px-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-extrabold text-[10px] shadow-xs" title="Assign ${usr.name} to Team Nazim">+ Team Nazim</button>
-                        <button onclick="quickAssignAgentToTeam('${usr.id}', 'Team Samad')" class="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-extrabold text-[10px] shadow-xs" title="Assign ${usr.name} to Team Samad">+ Team Samad</button>
-                      ` : ''}
+                      ${isPendingOrFloatingAgent(usr) ? getActiveChannelMeta().teams.map(tn => `
+                        <button onclick="quickAssignAgentToTeam('${usr.id}', '${tn}')" class="px-2.5 py-1.5 ${getTeamBannerHeaderColor(tn)} hover:opacity-90 text-white rounded-lg font-extrabold text-[10px] shadow-xs" title="Assign ${usr.name} to ${tn}">+ ${tn.replace('Team ', '')}</button>
+                      `).join('') : ''}
                       ${isSuperAdmin(u) ? `<button onclick="openUserRoleControlForId('${usr.id}')" class="px-2.5 py-1.5 bg-purple-50 text-purple-700 rounded-lg font-extrabold hover:bg-purple-100" title="Manage Features & Permissions for ${usr.name}"><i class="fa-solid fa-user-shield mr-1"></i>Roles</button>` : ''}
                       ${canEdit ? `<button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100">Edit</button>` : `<span class="px-2.5 py-1 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-lg"><i class="fa-solid fa-lock mr-1"></i>Protected</span>`}
                       ${canDel ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100">Delete</button>` : ''}
