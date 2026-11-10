@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ghorerbazar Facebook - Dynamic Sales & Incentive Portal</title>
+  <title>Ghorerbazar Portal - Dynamic Sales & Incentive Portal</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
@@ -136,6 +136,7 @@
 
   <script>
     const DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzSU2lVaPwCtDJM3mvmpDSx2HQxm96nPYSkHOEpKSKGrxRPS_8A8b0v25TkT2WVHO8Fug/exec";
+    const GB_BRAND_LOGO = "data:image/webp;base64,UklGRjQLAABXRUJQVlA4ICgLAAAwMwCdASp4AHgAPj0YikOiIaEVCTdEIAPEtACQDsJVK36r+QHfebL8X50lO/ln3s/nH/b/xPSCIK6hv5f9f9vn+O/QD3JeYB+gn+o/qn4v9wrzAfzj+3ful7z/ov/wvqAfz3/Gf//sJ/QA8sv9svg//a/9p/gQ/Yj///vrsIXk3+9dvv996DPvl7Pcwx5/7SfcPyj5LeAF6z/xf5Y/k7x6AAPzX+v/6PwFtVDIA/LDjYaAH5g/1Xpv/7f+X/HP2xfnv+E/4v+P+Av+X/1n/X/3n95u7X+5nsm/rQqEO5gvrtV3+uj35/4724bAm8k/S+yv9Iy345XLRT//mTFABVkTDgA31SzkI1IzO3xeaGcGb/T/YUewXCoL2+h7APm6VBJhOuuisDx4j8Y946cuy6diaRvbhs6Izp4pIiI13luhGR/VBO5oc7Ps3Cn8HCi186UhNZxYbSs6amWNmP5a+Vf3h2bQCuol/P83TBrddNyVpl9AtpPbuKGzRwZx20sBA13YuMGwJATrzPiTnw3NHl8CMYRdUA5n0WbttXt5WjGQGisQAP7+ryD/iVHc4fHaKE4AIsgrfYuUl7QJpgcTuNIIAPj2Wjv/9HO4nX4hdjcV6M/1A1qeRhMy7RF4kQIHmxo9/jjs33MqLQUT3BXis5r7ke7HIYmWbf0m5HCf3UClfMNWkd/4webEd5NrYvkSjr0DLKeXB28orlTOrYEGDtbdeKnhNh1c/aG/fT79LGzEWsgbaYTtGIDEa/dBymiQMx2O0Qp2cneBMBK995YAgd3j4FwMKL6fZVtY9cpmeVNmu+xGZ+QrHFqdvU5PhmzO7XwN/rUq2ne1vHGX8ROEZXPt/aDCPY1rdO2XukkWk1zYIU7iDCnahDMDmyojdjTl716zNsnJw1sYvZrUU0GETlWEWBujMtjIFBAO1lFqc0m/baeu6lz3o7PKoDCdeKeuc3ojIXdl1th2hm8fwX+SGUUrgWCcLA2ZmkwweVOrQZfnBV0Uc7+ZiTRsPEr3hv5uGf9crFY0g/Xw6Gmy5GvV6R/Mv0Sh/aJE5XaNHuiHdKhNlx1J50FiH+uvchq46c6foYmmxoeX9qt8rtXfU4DixG+1pMgOJzzq9g2WM8FdK+bQ7zVwSfTRpFP8UTQrIhnzZIDMSfz0QNvUfNqEtCYWa+HFNLpPRtVOhmcahopP8E64w9FwN2kuHwydHEoSZEezm4lPJyGXEDyZHH8wI3QDg8O9t1voa0JtZm71x5EjLxWsm08lKt2peoJ8W0DISA//w/DJgUAMVRwvm+gwr/JDDRDNEj5Hlx+115VLJyjHwvn0YA11rbYbOzlZUnHTi4Ua2O/czetABHlXGjv6UzKMqCM9dnRVmPFqzcXK2Y2lAooDeUJGv+2Xbxc5W9O6WjsBW+BLaFhS4rVN8IH2GM5a6erAAH6UBRRQPB9B77r8XrT2dFEbs3FmfypeY5FCoi2KMprOS24Z6JNKUJLUL7z5isyf7e65ZzNReP8q79R4WboIIzfrUuTEeqqV/9UBNt1u2wxC0WM5m5G9vaiV/v42IBvWa5RHs2r8hx2OqyqQzHO5GGzT2cDER6rQJycN8gWbZwl+fPobTHF++d/5/ztV8qV/G70JPvvDRBd0YX7tCgIBAS5itiMEYf3ejTkoPvK3eouVFZvvIc1Bu/md0MWyd8lXMcxZeMXkr9ZIacwNgQunKUBGrUhrGx+6xPpt1Xm8CJ54H8twme2KFOIsrm1LPJWtpI57PmMuos60yEjxrnVYm9A/Mbcjv7jEeOYlhy49DMkWGSn1bcIgwwhqRlWo5W/W/oc5UzEpYKfhn0Bx8dM1Ymit2tNT8KQr+lygBvcAv68Udy+PY3/nKa4nx7eD9vHGO/8kwwxEjNc9FbzFMP27aXdkWjAAKKR+fCo2CjCieAM8Z5fmlDQF9aPod6JHNQ4G5+8MePtbpCr2XnEBhbWZGW/XMlCC+jqvBXXfmcN594XZqS6poCZhVZ4ppaIS5zXw45MjJJmhgPIYifkm9MKhGWKP33pMR+cnpCRGW+dQPRQMdzsXdQYFyxbe+vdyrn9hcT5gIKOpiO4Kjfi49D+U0cvaTU7A7LE7gTANNLD1QDranEvuJIxij5uwS4Ti9/keK3eEJdZ4vu8WZ/JOBFQROWSlClaFNPK8i6JBSuayp6/0/+RSzvZD8PKrUMK7bGiFdTsy42cdJ7gCwYcnj3pVOgfD0fwS4lMlFS1zZh3uNSLu2vQTPN7qncyma//U9cC4K8PhFacxYNirm3lHCZs2TNv7RIKTjMHefGnzoxRTQeHpT+z7c9jAF61dZgvHUDIwtoJBHHxqzSnurI/7+uUZL/1n8dvF+f7x7cyZzfusdQkOXo8ey0tqOzesBu8n8sgJgG94nB9uQZLLCbBbznLKt7lmfRAUkKfRSFhRWdCnjrrG/sF4qtgxXOrbqgh2+7XQzHWuEUj+18BkvDfFBfgZaToHsSZ3LJTKdukps4jTwGwpGbgYE3nl9WPCTTa5hf9+j2rA/FJxcesAcrbn74EXYH+4Vs/36N68iSVhTrTDvF6B1BbawptRe3qqQgbqLzVjT5eOmr1svOe0NHZ+Wm7ryoNcYSikm0PxHb48/c9/axlfFlQhTZ8uveZUmkX+/7iHLTAWE7+ZffE/x6/fi2UvkRTsehK+yD/w1lOxYGcNrGhdesgL/Tcxo1xRVkiEWqVasc9f58k69PXSuV+kGlkMu9xIykG91tLQqZZ3bkj6cJxSFJ/cKB/H56EQqqkKRBYJJZPcwoHt9rjWon2bBU1oSX1XZibXbLakgETCT5J2KyS8/j5Ezd1VfbzOLTlsEprgynNzrN1I7MYfkayCf310P6fiNDytmdPNy/Esfd5/FjTqFdyzeXCK7DI/RF8Hrfbtf3P/49s/TCqf5UUPB/5ZxgNFGv4d7PhoNVpigLEJZ5BNCLULfTyFGzet0fExsoiDuYobk5mxadkj+z18xtJOHGrBZLEEMAFcJTZf2lKbIB1CSEiZIP+UvLEYiw9EY6UmMPcHXOMlMk6HhS2Wp5HaVj6l3UmUIzEAId6O4F8vMaso0JvxzJk2Owi74DgHAknv2D3REnW8ulU7XXId8jYQPgV5Py89oaOV1kzWLOqJ5tnKUBE8FDGh2nCmvVpWsFWsbIZu/qxkKlaPWWaGYBObrZJP4ZZdFlZOqyQjrbwmABcOZOOWsuzzjh9SnDdLKaf+wgQOGYDZQ43BOdSPVHfKS0cLrosoZz28EZJcCMhFR2zer6BUu9/5FYgsi0knO3HsJR6ynf+qxNUi1dVAdrrrvOltVkYdEvyD97n3m/uZaq43nEmTjIAivS+5/cahs67TNmqt13fZP+/yvpxSQ1t4Q4+BVUhssgqaJBb2wQv29iwEK1tw3pRfWZKU1DWCQPYmSaZ1XmOir92VEGJLNh9gHduyBNdVJctnGn29ozhHq7KMDMuF4460CQwuyz0jxo221uqrM8Wk0s8U53fHnEYHzWZwl4T14uxZf+E3LkK7ymG0qfvh/dTwhAw12v7pMX9TY5twzaFp/7XGYGUa1ZPKEMWOeUEqekVy+niY925IlpvQU9I6usrKW1Nc13p/qhEidDepygX4NoPbEf/loKqnnq+cafNNTSC0sgfwryr9fgQjGCpsWeYehsP0LdAOw5m00RzaWq8aYzDeHg/3aCjo60Vd1+wjEGCbsBGu/cHyeqjv4V2Pihh2qxAA2yFp/EthD+oNIqINZx0gw/RDj361eG2M1QqI+YYpFlnBvQs/Dr/eU5N2dG370R/2vgySCMm0P0eCUtQAAAA=";
 
     localStorage.setItem('gb_webhook_url', DEFAULT_WEBHOOK_URL);
     let webhookUrl = DEFAULT_WEBHOOK_URL;
@@ -826,8 +827,10 @@
     }
 
     const WRITE_ACTION_FEATURES = new Set([
+      'feat_submit_own_sales',
       'feat_manage_all_sales',
       'feat_ai_erp_import',
+      'feat_post_notice',
       'feat_edit_roster',
       'feat_manage_attendance',
       'feat_edit_grades_targets',
@@ -2161,25 +2164,25 @@
 
     function renderLogin() {
       return `
-        <div class="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-          <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-slate-800 border border-slate-200">
+        <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 via-slate-100 to-amber-50 p-4">
+          <div class="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-slate-800 border border-orange-200/80">
             <div class="text-center mb-8">
-              <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl tab-active text-white shadow-lg mb-4">
-                <i class="fa-brands fa-facebook-f text-3xl"></i>
+              <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white border-2 border-orange-200 shadow-lg mb-4 p-1.5 overflow-hidden">
+                <img src="${GB_BRAND_LOGO}" alt="Ghorerbazar Logo" class="w-full h-full object-contain">
               </div>
-              <h1 class="text-2xl font-black text-slate-900">Ghorerbazar <span class="text-blue-600">Facebook</span></h1>
+              <h1 class="text-2xl font-black text-slate-900">Ghorerbazar <span class="text-orange-500">Portal</span></h1>
               <p class="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Sales & Incentive Dynamic Portal</p>
             </div>
             <form onsubmit="handleLogin(event)" class="space-y-4">
               <div>
                 <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Employee ID</label>
-                <input type="text" id="loginId" required placeholder="e.g. 10122, 10001 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
+                <input type="text" id="loginId" required placeholder="e.g. 10122, 10001 or 10191" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-500">
               </div>
               <div>
                 <label class="block text-xs font-extrabold uppercase text-slate-600 mb-1.5">Password</label>
-                <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600">
+                <input type="password" id="loginPass" required placeholder="••••••••" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-500">
               </div>
-              <button type="submit" class="w-full py-3.5 tab-active text-white font-extrabold rounded-xl shadow-lg transition-colors">Sign In to Portal</button>
+              <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-extrabold rounded-xl shadow-lg shadow-orange-500/25 transition-all cursor-pointer">Sign In to Portal</button>
             </form>
           </div>
         </div>
@@ -2224,12 +2227,12 @@
           <aside class="w-60 sidebar-light p-4 flex flex-col justify-between shrink-0 shadow-sm">
             <div>
               <div class="flex items-center gap-3 px-2 mb-6">
-                <div class="w-9 h-9 rounded-xl ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600' : 'tab-active'} text-white flex items-center justify-center font-bold shadow-md">
-                  <i class="${getActiveChannelMeta().icon} text-base"></i>
+                <div class="w-10 h-10 rounded-xl bg-white border border-orange-200 flex items-center justify-center shadow-sm p-1 shrink-0 overflow-hidden">
+                  <img src="${GB_BRAND_LOGO}" alt="GB" class="w-full h-full object-contain">
                 </div>
                 <div>
-                  <h1 class="text-sm font-black text-slate-900 leading-tight">Ghorerbazar</h1>
-                  <p class="text-[11px] font-extrabold ${getActiveChannelMeta().colorClass}">${getActiveChannelMeta().fullTitle}</p>
+                  <h1 class="text-sm font-black text-slate-900 leading-tight">Ghorerbazar <span class="text-orange-500">Portal</span></h1>
+                  <p class="text-[11px] font-extrabold ${getActiveChannelMeta().colorClass}"><i class="${getActiveChannelMeta().icon} mr-1"></i>${getActiveChannelMeta().fullTitle}</p>
                 </div>
               </div>
 
@@ -2414,6 +2417,7 @@
         ${renderNoticeBoardModal()}
         ${renderProfilePicModal()}
         ${renderChatDeleteModal()}
+        ${renderRosterAddModal()}
         ${renderLogoutConfirmModal()}
       `;
       document.getElementById('app').innerHTML = html;
@@ -2778,6 +2782,145 @@
       `;
     }
 
+    
+    function renderOmniChannelTotalSalesBanner() {
+      const u = currentUser;
+      if (!canViewAll(u)) return '';
+      const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
+      const allSalesMonth = deduplicateSalesRecordsList(getStored('sales_records', []))
+        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+      // Dynamically discover all teams (3 WhatsApp teams + 2 Facebook teams + any future teams automatically!)
+      const knownTeamsOrdered = [
+        ...CHANNEL_META.FACEBOOK.teams,
+        ...CHANNEL_META.WHATSAPP.teams
+      ];
+      const dynamicExtraTeams = new Set();
+      allUsersOmni.forEach(usr => {
+        if (usr.role !== 'supervisor' && usr.team) {
+          const t = normalizeTeamNameAlias(usr.team);
+          if (!knownTeamsOrdered.includes(t) && t !== 'Floating' && t !== 'WA Floating' && t !== 'All Teams') {
+            dynamicExtraTeams.add(t);
+          }
+        }
+      });
+      allSalesMonth.forEach(s => {
+        if (s.team) {
+          const t = normalizeTeamNameAlias(s.team);
+          if (!knownTeamsOrdered.includes(t) && t !== 'Floating' && t !== 'WA Floating' && t !== 'All Teams') {
+            dynamicExtraTeams.add(t);
+          }
+        }
+      });
+      const allTeamsList = [...knownTeamsOrdered, ...Array.from(dynamicExtraTeams)];
+
+      let grandBaseTarget = 0;
+      let grandWorkingTarget = 0;
+      let grandLeads = 0;
+      let grandOrders = 0;
+      let grandRevenue = 0;
+
+      let fbRevenue = 0, fbWorkingTarget = 0, fbOrders = 0;
+      let waRevenue = 0, waWorkingTarget = 0, waOrders = 0;
+
+      const teamBreakdowns = allTeamsList.map(tName => {
+        const ch = getChannelForTeam(tName);
+        const tMembers = allUsersOmni.filter(usr => usr.role !== 'supervisor' && normalizeTeamNameAlias(usr.team) === tName);
+        const tBase = tMembers.reduce((sum, m) => sum + (Number(m.baseTarget) || 0), 0);
+        const tWork = calcWorkingTargetFromBase(tBase, ch);
+        const tSales = allSalesMonth.filter(s => normalizeTeamNameAlias(s.team) === tName);
+        const tLeads = tSales.reduce((sum, s) => sum + (Number(s.leads) || 0), 0);
+        const tOrders = tSales.reduce((sum, s) => sum + (Number(s.orders) || 0), 0);
+        const tRev = tSales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+        const tPct = tWork > 0 ? ((tRev / tWork) * 100).toFixed(1) : '0.0';
+
+        grandBaseTarget += tBase;
+        grandWorkingTarget += tWork;
+        grandLeads += tLeads;
+        grandOrders += tOrders;
+        grandRevenue += tRev;
+
+        if (ch === 'WHATSAPP') {
+          waRevenue += tRev; waWorkingTarget += tWork; waOrders += tOrders;
+        } else {
+          fbRevenue += tRev; fbWorkingTarget += tWork; fbOrders += tOrders;
+        }
+
+        return { tName, ch, memberCount: tMembers.length, tWork, tLeads, tOrders, tRev, tPct };
+      });
+
+      // Also include any sales from Floating / WA Floating in grand totals so not a single Taka is missed
+      allSalesMonth.forEach(s => {
+        const t = normalizeTeamNameAlias(s.team);
+        if (!allTeamsList.includes(t)) {
+          const amt = Number(s.amount) || 0;
+          const ord = Number(s.orders) || 0;
+          const lds = Number(s.leads) || 0;
+          grandRevenue += amt;
+          grandOrders += ord;
+          grandLeads += lds;
+          if (getChannelForTeam(t) === 'WHATSAPP') { waRevenue += amt; waOrders += ord; }
+          else { fbRevenue += amt; fbOrders += ord; }
+        }
+      });
+
+      const grandPct = grandWorkingTarget > 0 ? ((grandRevenue / grandWorkingTarget) * 100).toFixed(1) : '0.0';
+      const grandConv = grandLeads > 0 ? ((grandOrders / grandLeads) * 100).toFixed(2) : '0.00';
+      const fbPct = fbWorkingTarget > 0 ? ((fbRevenue / fbWorkingTarget) * 100).toFixed(1) : '0.0';
+      const waPct = waWorkingTarget > 0 ? ((waRevenue / waWorkingTarget) * 100).toFixed(1) : '0.0';
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      return `
+        <div class="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white shadow-lg border border-orange-500/30">
+          <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 pb-3 border-b border-slate-700/80">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs">
+                  <i class="fa-solid fa-earth-asia mr-1"></i>Ghorerbazar All-Channel Combined Sales Update
+                </span>
+                <span class="text-[11px] font-bold text-slate-300">
+                  ${allTeamsList.length} Active Teams (Facebook + WhatsApp) • ${monthLabel}
+                </span>
+              </div>
+              <h3 class="text-base font-black text-white mt-1">
+                Grand Total Revenue: <span class="text-emerald-400">৳${grandRevenue.toLocaleString()}</span>
+                <span class="text-xs font-bold text-slate-300 ml-1">/ Target (+5%): ৳${grandWorkingTarget.toLocaleString()} (${grandPct}% Achieved)</span>
+              </h3>
+            </div>
+            <div class="flex flex-wrap items-center gap-2.5 text-xs">
+              <div class="px-3 py-1.5 rounded-xl bg-blue-600/20 border border-blue-400/30">
+                <span class="text-[10px] font-extrabold uppercase text-blue-300 block"><i class="fa-brands fa-facebook-f mr-1"></i>Facebook (2 Teams)</span>
+                <strong class="text-white font-black">৳${fbRevenue.toLocaleString()}</strong> <span class="text-[10px] text-blue-200">(${fbPct}% • ${fbOrders} Ord)</span>
+              </div>
+              <div class="px-3 py-1.5 rounded-xl bg-emerald-600/20 border border-emerald-400/30">
+                <span class="text-[10px] font-extrabold uppercase text-emerald-300 block"><i class="fa-brands fa-whatsapp mr-1"></i>WhatsApp (3 Teams)</span>
+                <strong class="text-white font-black">৳${waRevenue.toLocaleString()}</strong> <span class="text-[10px] text-emerald-200">(${waPct}% • ${waOrders} Ord)</span>
+              </div>
+              <div class="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-400/30">
+                <span class="text-[10px] font-extrabold uppercase text-amber-300 block">Total Orders / Conv.</span>
+                <strong class="text-amber-300 font-black">${grandOrders.toLocaleString()} Orders</strong> <span class="text-[10px] text-slate-300">(${grandConv}%)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mt-3">
+            ${teamBreakdowns.map(tb => `
+              <div class="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                <div class="flex items-center justify-between gap-1">
+                  <span class="text-[10px] font-black uppercase ${tb.ch === 'WHATSAPP' ? 'text-emerald-300' : 'text-orange-300'} truncate">
+                    <i class="${tb.ch === 'WHATSAPP' ? 'fa-brands fa-whatsapp' : 'fa-brands fa-facebook-f'} mr-1"></i>${tb.tName}
+                  </span>
+                  <span class="px-1.5 py-0.5 rounded bg-white/10 text-[9px] font-black text-white">${tb.tPct}%</span>
+                </div>
+                <strong class="text-xs font-black text-white block mt-1">৳${tb.tRev.toLocaleString()}</strong>
+                <span class="text-[9px] font-bold text-slate-400 block">Goal: ৳${tb.tWork.toLocaleString()} • ${tb.tOrders} Ord</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     function renderDashboard() {
       const u = currentUser;
       const allSales = getStored('sales_records', []);
@@ -2886,6 +3029,7 @@
             </div>
           </div>
 
+          ${renderOmniChannelTotalSalesBanner()}
           ${renderCompactTopWidgets(incentiveSummary)}
 
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
@@ -3262,6 +3406,35 @@
       downloadPortalCsvFile(`Drive_Product_${driveProdTeamScope.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, csvRows);
     }
 
+    
+    // =========================================================================
+    // LIVE AGENT SEARCH FILTER FOR MODALS & DROPDOWNS
+    // =========================================================================
+    function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
+      const q = (document.getElementById(searchInputId)?.value || '').trim().toLowerCase();
+      const sel = document.getElementById(selectElId);
+      if (!sel) return;
+      const allAgents = getUsersForMonth(selectedMonthKey, false).filter(u => u.role === 'agent');
+      const prevVal = sel.value;
+      const matched = !q
+        ? allAgents
+        : allAgents.filter(a => String(a.name || '').toLowerCase().includes(q) || String(a.id || '').toLowerCase().includes(q) || String(a.team || '').toLowerCase().includes(q));
+
+      if (matched.length === 0) {
+        sel.innerHTML = `<option value="">No agent found matching "${q}"</option>`;
+        return;
+      }
+      sel.innerHTML = matched.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${a.team})</option>`).join('');
+      if (matched.some(a => String(a.id) === String(prevVal))) {
+        sel.value = prevVal;
+      } else {
+        sel.value = matched[0].id;
+        if (onChangeFnName && typeof window[onChangeFnName] === 'function') {
+          window[onChangeFnName]();
+        }
+      }
+    }
+
     function renderDriveProductModal() {
       const u = currentUser;
       const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
@@ -3281,8 +3454,15 @@
             </div>
 
             <form onsubmit="handleSaveDriveProductTotal(event)" class="space-y-4">
-              <div class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'}">
-                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent</label>
+              <div class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'} space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase">Select Agent (${allAgents.length} Agents)</label>
+                  <span class="text-[10px] font-bold text-amber-600"><i class="fa-solid fa-magnifying-glass mr-1"></i>Search by Name or ID</span>
+                </div>
+                <div class="relative">
+                  <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                  <input type="text" id="dpAgentSearchInput" oninput="filterAgentSelectBySearch('dpAgentSearchInput', 'dpModalAgentId', 'onDriveProdModalAgentChange')" placeholder="Search agent by name or ID..." class="w-full pl-9 pr-3.5 py-2 bg-amber-50/50 border border-amber-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                </div>
                 <select id="dpModalAgentId" onchange="onDriveProdModalAgentChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900">
                   ${allAgents.map(ag => `<option value="${ag.id}">${ag.name} (${ag.id} • ${ag.team})</option>`).join('')}
                 </select>
@@ -3333,7 +3513,7 @@
     }
 
     function openDriveProductModal(agentId) {
-      if (!currentUser) return;
+      if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
       const selEl = document.getElementById('dpModalAgentId');
       const targetId = (hasFeatureAccess(currentUser, 'feat_manage_all_sales') && agentId) ? agentId : currentUser.id;
       if (selEl && targetId) selEl.value = targetId;
@@ -3364,6 +3544,7 @@
     function handleSaveDriveProductTotal(e) {
       e.preventDefault();
       const u = currentUser;
+      if (isCurrentChannelReadOnlyForUser(u)) return;
       const agId = hasFeatureAccess(u, 'feat_manage_all_sales') ? (document.getElementById('dpModalAgentId')?.value || u.id) : u.id;
       const allUsers = getUsersForMonth(selectedMonthKey);
       const targetAgent = allUsers.find(a => String(a.id) === String(agId)) || u;
@@ -3381,40 +3562,49 @@
       const lastUpdateFormatted = formatFullMonthDateDisplay(toDateStr || getTodayFormatted());
       const monthlyKeyDate = `MONTHLY_PROD_${selectedMonthKey}`;
 
-      let sales = getStored('sales_records', []);
-      sales = sales.map(s => {
-        if (String(s.userId) === String(targetAgent.id) && String(s.date || '').endsWith(selectedMonthKey) && !String(s.date).startsWith('MONTHLY_PROD_')) {
-          const copy = { ...s };
-          Object.keys(activeProds).forEach(k => { copy[k] = 0; });
-          return copy;
-        }
-        return s;
-      });
+      openConfirmWarningModal(
+        `Confirm Drive Product Update for ${targetAgent.name}?`,
+        `Are you sure you want to save and sync the Drive Product cumulative total for <strong>${targetAgent.name} (${targetAgent.id})</strong> covering <strong>${rangeLabel}</strong>?`,
+        'Confirm Drive Product Save',
+        async () => {
+          let sales = getStored('sales_records', []);
+          sales = sales.map(s => {
+            if (String(s.userId) === String(targetAgent.id) && String(s.date || '').endsWith(selectedMonthKey) && !String(s.date).startsWith('MONTHLY_PROD_')) {
+              const copy = { ...s };
+              Object.keys(activeProds).forEach(k => { copy[k] = 0; });
+              return copy;
+            }
+            return s;
+          });
 
-      sales = sales.filter(s => !(String(s.userId) === String(targetAgent.id) && s.date === monthlyKeyDate));
-      const entry = {
-        userId: String(targetAgent.id),
-        userName: targetAgent.name,
-        team: targetAgent.team,
-        date: monthlyKeyDate,
-        coveredDateRange: rangeLabel,
-        lastUpdatedDate: `${lastUpdateFormatted} (${rangeLabel})`,
-        submittedAt: `${lastUpdateFormatted} (${rangeLabel})`,
-        leads: 0, orders: 0, amount: 0, ratio: 0,
-        ...prodValuesObj
-      };
-      sales.unshift(entry);
-      setStored('sales_records', sales);
+          sales = sales.filter(s => !(String(s.userId) === String(targetAgent.id) && s.date === monthlyKeyDate));
+          const entry = {
+            userId: String(targetAgent.id),
+            userName: targetAgent.name,
+            team: targetAgent.team,
+            date: monthlyKeyDate,
+            coveredDateRange: rangeLabel,
+            lastUpdatedDate: `${lastUpdateFormatted} (${rangeLabel})`,
+            submittedAt: `${lastUpdateFormatted} (${rangeLabel})`,
+            leads: 0, orders: 0, amount: 0, ratio: 0,
+            ...prodValuesObj
+          };
+          sales.unshift(entry);
+          setStored('sales_records', sales);
 
-      const logMeta = recordActivityLog(
-        'Updated Drive Product Total',
-        `Updated Drive Product total for ${targetAgent.name} (${rangeLabel}) — Last Update: ${lastUpdateFormatted}`
+          const logMeta = recordActivityLog(
+            'Updated Drive Product Total',
+            `Updated Drive Product total for ${targetAgent.name} (${rangeLabel}) — Last Update: ${lastUpdateFormatted}`
+          );
+
+          closeModal('driveProdModal');
+          renderAppLayout();
+          showPortalToast('Drive Product Total Synced!', `Updated ${targetAgent.name}'s total (${rangeLabel}).`, 'success');
+          postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta }).catch(() => {});
+        },
+        'Yes, Save & Sync',
+        true
       );
-
-      closeModal('driveProdModal');
-      renderAppLayout();
-      showPortalToast('Drive Product Total Synced!', `Updated ${targetAgent.name}'s total (${rangeLabel}).`, 'success');
-      postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta }).catch(() => {});
     }
 
     function renderDriveProductView() {
@@ -3454,6 +3644,7 @@
 
       return `
         <div class="space-y-6">
+          ${renderOmniChannelTotalSalesBanner()}
           <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
               <div class="flex items-center gap-2">
@@ -3491,9 +3682,11 @@
                 <i class="fa-solid fa-sliders mr-1"></i> Edit Product Targets
               </button>
               ` : ''}
+              ${!isCurrentChannelReadOnlyForUser(u) ? `
               <button onclick="openDriveProductModal('${u.role === 'agent' ? u.id : (driveProdAgentId !== 'ALL' ? driveProdAgentId : '')}')" class="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-1.5">
                 <i class="fa-solid fa-calendar-plus"></i> Add / Update Drive Product (Date Range)
               </button>
+              ` : ''}
             </div>
           </div>
 
@@ -3516,7 +3709,7 @@
               <tbody class="divide-y divide-slate-100 font-semibold">
                 ${rowsData.map((st, idx) => {
                   const isMe = String(st.agent.id) === String(u.id);
-                  const canUpdateThisRow = isAdmin || isMe;
+                  const canUpdateThisRow = !isCurrentChannelReadOnlyForUser(u) && (isAdmin || isMe);
                   return `
                     <tr class="${isMe ? 'bg-blue-50/70 font-extrabold' : 'hover:bg-slate-50'}">
                       <td class="p-3.5 font-black text-slate-500">#${idx + 1}</td>
@@ -4318,13 +4511,14 @@
 
     function renderActivityLogsView() {
       const u = currentUser;
-      const allLogs = deduplicateActivityLogsList(getStored('activity_logs', [])).filter(l => l.team === 'All Teams' || getChannelForTeam(l.team) === activeChannel);
+      const rawAllowedLogs = deduplicateActivityLogsList(getStored('activity_logs', [])).filter(l => canActorSeeActivityLog(u, l));
+      const allLogs = rawAllowedLogs.filter(l => l.team === 'All Teams' || getChannelForTeam(l.team) === activeChannel);
 
       let visibleLogs = [];
       if (canViewAll(u)) {
         visibleLogs = activityTeamFilter === 'ALL' ? allLogs : allLogs.filter(l => l.team === activityTeamFilter);
       } else {
-        visibleLogs = allLogs.filter(l => String(l.userId) === String(u.id));
+        visibleLogs = rawAllowedLogs.filter(l => String(l.userId) === String(u.id));
       }
 
       function getActionBadgeStyle(act) {
@@ -4514,7 +4708,7 @@
                     <th class="px-1.5 py-2 border border-slate-200">ID</th>
                     <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
                     ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
-                    ${canEditThisTeam ? `<th class="px-1.5 py-2 border border-slate-200">Team / Del</th>` : ''}
+                    ${canEditThisTeam ? `<th class="px-1.5 py-2 border border-slate-200">Team / Action</th>` : ''}
                   </tr>
                 </thead>
                 <tbody>
@@ -4775,38 +4969,219 @@
       renderAppLayout();
     }
 
+            let rosterAddModalTargetTeam = 'Team Nazim';
+
+    function applyQuickShiftPresetToRosterModal(shiftVal) {
+      ['sat', 'sun', 'mon', 'tue', 'wed', 'thu'].forEach(d => {
+        const el = document.getElementById('rosterAddShift_' + d);
+        if (el) el.value = shiftVal;
+      });
+      const friEl = document.getElementById('rosterAddShift_fri');
+      if (friEl) friEl.value = 'DO';
+    }
+
+    function onRosterAddExistingAgentSelect(empId) {
+      if (!empId) return;
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
+      const usr = allUsers.find(u => String(u.id) === String(empId));
+      if (usr) {
+        const idInp = document.getElementById('rosterAddEmpId');
+        const nameInp = document.getElementById('rosterAddEmpName');
+        const teamSel = document.getElementById('rosterAddTeamSelect');
+        const roleSel = document.getElementById('rosterAddRoleSelect');
+        if (idInp) idInp.value = usr.id;
+        if (nameInp) nameInp.value = usr.name;
+        if (teamSel && usr.team) teamSel.value = normalizeTeamNameAlias(usr.team);
+        if (roleSel) roleSel.value = usr.role === 'admin' ? 'admin' : 'agent';
+      }
+    }
+
+    function renderRosterAddModal() {
+      const chMeta = getActiveChannelMeta();
+      const channelUsers = getUsersForMonth(selectedMonthKey, false).filter(u => u.role !== 'supervisor');
+      const daysSpec = [
+        { key: 'sat', label: 'Saturday' },
+        { key: 'sun', label: 'Sunday' },
+        { key: 'mon', label: 'Monday' },
+        { key: 'tue', label: 'Tuesday' },
+        { key: 'wed', label: 'Wednesday' },
+        { key: 'thu', label: 'Thursday' },
+        { key: 'fri', label: 'Friday' }
+      ];
+      return `
+        <div id="rosterAddModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+              <div>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-orange-100 text-orange-800">${chMeta.fullTitle} • Duty Roster</span>
+                <h3 class="text-base font-black text-slate-900 mt-0.5">Add / Assign Member to Duty Roster</h3>
+                <p class="text-xs font-bold text-slate-400">Enter Employee ID & Name, select Team (or Floating) and 7-day shifts, then click Done.</p>
+              </div>
+              <button type="button" onclick="closeModal('rosterAddModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form onsubmit="handleSaveRosterModalAdd(event)" class="space-y-4">
+              <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1"><i class="fa-solid fa-bolt text-amber-500 mr-1"></i>Quick Auto-Fill from Registered ${chMeta.name} Members (Optional)</label>
+                <select onchange="onRosterAddExistingAgentSelect(this.value)" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-800">
+                  <option value="">-- Or type a new / custom Employee ID & Name below --</option>
+                  ${channelUsers.map(u => `<option value="${u.id}">${u.name} (${u.id} • ${u.team})</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Employee ID</label>
+                  <input type="text" id="rosterAddEmpId" required placeholder="e.g. 10357 or 11250" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-500">
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Agent / Member Name</label>
+                  <input type="text" id="rosterAddEmpName" required placeholder="e.g. Md. Faruque Hossain" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-500">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Assign Under Team / Floating Pool</label>
+                  <select id="rosterAddTeamSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                    ${chMeta.teams.map(tn => `<option value="${tn}">${tn} (${chMeta.name})</option>`).join('')}
+                    <option value="${chMeta.floatingTeam}">${chMeta.floatingTeam} (Floating Pool)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Member Role</label>
+                  <select id="rosterAddRoleSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                    <option value="agent">Sales Agent</option>
+                    <option value="admin">Team Leader (TL)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200/80 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span class="text-xs font-black text-indigo-950 uppercase"><i class="fa-solid fa-calendar-week text-indigo-600 mr-1.5"></i>Select 7-Day Weekly Duty Shifts</span>
+                  <div class="flex flex-wrap items-center gap-1">
+                    <span class="text-[10px] font-bold text-slate-500 mr-1">Quick Fill:</span>
+                    ${['7:00 AM', '9:00 AM', '10:00 AM', '3:00 PM', 'Night'].map(sh => `
+                      <button type="button" onclick="applyQuickShiftPresetToRosterModal('${sh}')" class="px-2 py-0.5 rounded bg-white hover:bg-indigo-600 text-slate-700 hover:text-white border border-slate-200 text-[10px] font-extrabold transition-colors">${sh}</button>
+                    `).join('')}
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  ${daysSpec.map(d => `
+                    <div class="bg-white p-2 rounded-xl border border-slate-200">
+                      <label class="block text-[10px] font-black uppercase text-slate-500 mb-1">${d.label}</label>
+                      <select id="rosterAddShift_${d.key}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-extrabold text-slate-900">
+                        ${SHIFT_OPTIONS.map(opt => `<option value="${opt}" ${(d.key === 'fri' ? opt === 'DO' : opt === '3:00 PM') ? 'selected' : ''}>${opt}</option>`).join('')}
+                      </select>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeModal('rosterAddModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
+                <button type="submit" class="px-6 py-2.5 text-xs font-black text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-check-double"></i> Done — Add & Sync to Roster
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
     function handleAddCustomRosterRowPrompt(defaultTeam) {
-      if (!hasFeatureAccess(currentUser, 'feat_edit_roster')) return;
-      const empId = prompt('Enter Employee ID for the new Roster Row (e.g. 11250):');
-      if (!empId || !empId.trim()) return;
-      const empName = prompt('Enter Full Name for the Roster Row:');
-      if (!empName || !empName.trim()) return;
-      const isTlRole = confirm('Is this member a Team Leader (TL)? Click OK for TL, or Cancel for Agent.');
+      if (!hasFeatureAccess(currentUser, 'feat_edit_roster') || isCurrentChannelReadOnlyForUser(currentUser)) return;
+      rosterAddModalTargetTeam = defaultTeam || getActiveChannelMeta().teams[0];
+      const sel = document.getElementById('rosterAddTeamSelect');
+      if (sel) sel.value = rosterAddModalTargetTeam;
+      const idInp = document.getElementById('rosterAddEmpId');
+      if (idInp) idInp.value = '';
+      const nameInp = document.getElementById('rosterAddEmpName');
+      if (nameInp) nameInp.value = '';
+      applyQuickShiftPresetToRosterModal('3:00 PM');
+      openModal('rosterAddModal');
+    }
+
+    function handleSaveRosterModalAdd(e) {
+      e.preventDefault();
+      if (!hasFeatureAccess(currentUser, 'feat_edit_roster') || isCurrentChannelReadOnlyForUser(currentUser)) return;
+      const empId = document.getElementById('rosterAddEmpId')?.value.trim();
+      const empName = document.getElementById('rosterAddEmpName')?.value.trim();
+      const targetTeam = document.getElementById('rosterAddTeamSelect')?.value || getActiveChannelMeta().teams[0];
+      const roleVal = document.getElementById('rosterAddRoleSelect')?.value || 'agent';
+      if (!empId || !empName) return;
 
       const newRow = {
-        id: empId.trim(),
-        name: empName.trim(),
-        team: defaultTeam || 'Team Nazim',
-        isTL: isTlRole,
-        sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO',
+        id: empId,
+        name: empName,
+        team: targetTeam,
+        isTL: roleVal === 'admin',
+        sat: document.getElementById('rosterAddShift_sat')?.value || '3:00 PM',
+        sun: document.getElementById('rosterAddShift_sun')?.value || '3:00 PM',
+        mon: document.getElementById('rosterAddShift_mon')?.value || '3:00 PM',
+        tue: document.getElementById('rosterAddShift_tue')?.value || '3:00 PM',
+        wed: document.getElementById('rosterAddShift_wed')?.value || '3:00 PM',
+        thu: document.getElementById('rosterAddShift_thu')?.value || '3:00 PM',
+        fri: document.getElementById('rosterAddShift_fri')?.value || 'DO',
         monthKey: selectedMonthKey
       };
-      pendingRosterEditsMap[`${selectedMonthKey}_${newRow.id}`] = newRow;
-      renderAppLayout();
-      showPortalToast('Roster Row Added (Draft)', `Added ${newRow.name} (${newRow.id}). Click "Save Roster Changes" to save all edits!`, 'warning');
+
+      openConfirmWarningModal(
+        `Add ${newRow.name} (${newRow.id}) to ${targetTeam} Roster?`,
+        `<strong>Member:</strong> ${newRow.name} (ID: ${newRow.id})<br><strong>Assigned Team:</strong> ${targetTeam}<br><strong>Weekly Shifts:</strong> Sat: ${newRow.sat}, Sun: ${newRow.sun}, Mon: ${newRow.mon}, Tue: ${newRow.tue}, Wed: ${newRow.wed}, Thu: ${newRow.thu}, Fri: ${newRow.fri}<br><br>Confirm to add this member to the Duty Roster and sync with Google Sheet.`,
+        'Confirm Roster Addition',
+        async () => {
+          let savedList = getStored('roster_records', []);
+          const idx = savedList.findIndex(r => r.monthKey === selectedMonthKey && String(r.id) === String(newRow.id));
+          if (idx !== -1) savedList[idx] = newRow;
+          else savedList.push(newRow);
+          delete pendingRosterEditsMap[`${selectedMonthKey}_${newRow.id}`];
+          setStored('roster_records', savedList);
+
+          let users = getStored('users', DEFAULT_USERS);
+          const uIdx = users.findIndex(u => String(u.id) === String(newRow.id));
+          if (uIdx !== -1 && users[uIdx].team !== targetTeam) {
+            users[uIdx].team = targetTeam;
+            setStored('users', users);
+            postToSheet('SAVE_USER', users[uIdx]).catch(() => {});
+          }
+
+          const logMeta = recordActivityLog(
+            'Added Member to Duty Roster',
+            `[${getActiveChannelMeta().name}] ${currentUser.name} added/updated ${newRow.name} (${newRow.id}) under ${targetTeam}: Sat=${newRow.sat}, Sun=${newRow.sun}, Mon=${newRow.mon}, Tue=${newRow.tue}, Wed=${newRow.wed}, Thu=${newRow.thu}, Fri=${newRow.fri} (${selectedMonthKey})`
+          );
+
+          closeModal('rosterAddModal');
+          renderAppLayout();
+          showPortalToast('Member Added & Synced to Roster!', `${newRow.name} (${newRow.id}) is now live under ${targetTeam}.`, 'success');
+          await postToSheet('SAVE_ROSTER_ROW', { ...newRow, ...logMeta }).catch(() => {});
+        },
+        'Yes, Add & Sync Now',
+        true
+      );
     }
 
     function handleDeleteRosterRowDraft(empId) {
-      if (!hasFeatureAccess(currentUser, 'feat_edit_roster')) return;
+      if (!hasFeatureAccess(currentUser, 'feat_edit_roster') || isCurrentChannelReadOnlyForUser(currentUser)) return;
       const roster = getRosterForMonth(selectedMonthKey);
       const targetRow = roster.find(r => String(r.id) === String(empId));
       if (!targetRow) return;
 
-      pendingRosterEditsMap[`${selectedMonthKey}_${empId}`] = { ...targetRow, isDeleted: true, monthKey: selectedMonthKey };
-      renderAppLayout();
-      showPortalToast('Row Removed in Preview', `Removed ${targetRow.name} from preview. Click "Save Roster Changes" to save.`, 'warning');
+      openConfirmWarningModal(
+        `Remove ${targetRow.name} from Duty Roster?`,
+        `Warning: Are you sure you want to remove <strong>${targetRow.name} (ID: ${empId})</strong> from the <strong>${targetRow.team}</strong> Duty Roster? Nothing will be removed unless you confirm.`,
+        'Roster Removal Confirmation',
+        () => {
+          pendingRosterEditsMap[`${selectedMonthKey}_${empId}`] = { ...targetRow, isDeleted: true, monthKey: selectedMonthKey };
+          renderAppLayout();
+          showPortalToast('Row Marked for Removal', `Removed ${targetRow.name} in preview. Click "Save Roster Changes" to permanently sync.`, 'warning');
+        },
+        'Yes, Remove from Roster',
+        false
+      );
     }
-
     function discardPendingRosterChanges() {
       Object.keys(pendingRosterEditsMap).forEach(k => {
         if (k.startsWith(selectedMonthKey + '_')) delete pendingRosterEditsMap[k];
@@ -5849,25 +6224,38 @@
 
     function renderReports() {
       const u = currentUser;
-      const allUsers = getUsersForMonth(selectedMonthKey);
-      const rawSales = getStored('sales_records', []).filter(s => getChannelForTeam(s.team) === activeChannel);
-      
-      let dateFilteredSales = [];
-      if (reportsDateFilter === 'ALL') {
-        dateFilteredSales = rawSales.filter(s => s.date.endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+      const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
+      const allUsersActiveCh = getUsersForMonth(selectedMonthKey, false);
+      const allRawSalesOmni = getStored('sales_records', []);
+
+      let scopeChannelSales = [];
+      if (logsFilterScope === 'ALL_OMNI') {
+        scopeChannelSales = allRawSalesOmni;
+      } else if (logsFilterScope === 'ALL_FB') {
+        scopeChannelSales = allRawSalesOmni.filter(s => getChannelForTeam(s.team) === 'FACEBOOK');
+      } else if (logsFilterScope === 'ALL_WA') {
+        scopeChannelSales = allRawSalesOmni.filter(s => getChannelForTeam(s.team) === 'WHATSAPP');
+      } else if (logsFilterScope !== 'ALL' && logsFilterScope !== 'MINE') {
+        scopeChannelSales = allRawSalesOmni.filter(s => normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(logsFilterScope));
       } else {
-        dateFilteredSales = rawSales.filter(s => s.date === reportsDateFilter && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+        // Default 'ALL' or 'MINE' uses activeChannel (All Facebook Agents in FB, All WhatsApp Agents in WA)
+        scopeChannelSales = allRawSalesOmni.filter(s => getChannelForTeam(s.team) === activeChannel);
       }
 
-      // Everyone (including Agents) can see all agents' daily sales reports on the selected date for healthy floor competition!
+      let dateFilteredSales = [];
+      if (reportsDateFilter === 'ALL') {
+        dateFilteredSales = scopeChannelSales.filter(s => s.date.endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+      } else {
+        dateFilteredSales = scopeChannelSales.filter(s => s.date === reportsDateFilter && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+      }
+
       let sales = [];
-      if (logsFilterScope === 'ALL') {
-        sales = dateFilteredSales;
-      } else if (logsFilterScope === 'MINE') {
+      if (logsFilterScope === 'MINE') {
         sales = dateFilteredSales.filter(s => String(s.userId) === String(u.id));
       } else {
-        sales = dateFilteredSales.filter(s => s.team === logsFilterScope);
+        sales = dateFilteredSales;
       }
+      const allUsers = allUsersOmni;
 
       const uniqueMap = new Map();
       sales.forEach(s => {
@@ -5926,8 +6314,20 @@
               </button>
 
               <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold cursor-pointer">
-                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Agents (${totalAgentsCount})</option>
-                ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Agents (${allUsersActiveCh.filter(usr => usr.role === 'agent').length})</option>
+                ${canViewAll(u) ? `
+                  <optgroup label="Facebook Channel">
+                    <option value="ALL_FB" ${logsFilterScope === 'ALL_FB' ? 'selected' : ''}>All Facebook Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'FACEBOOK').length})</option>
+                    ${CHANNEL_META.FACEBOOK.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                  </optgroup>
+                  <optgroup label="WhatsApp Channel">
+                    <option value="ALL_WA" ${logsFilterScope === 'ALL_WA' ? 'selected' : ''}>All WhatsApp Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'WHATSAPP').length})</option>
+                    ${CHANNEL_META.WHATSAPP.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                  </optgroup>
+                  <optgroup label="All Channels Combined">
+                    <option value="ALL_OMNI" ${logsFilterScope === 'ALL_OMNI' ? 'selected' : ''}>🌐 All Facebook + WhatsApp Teams (${allUsersOmni.filter(usr => usr.role === 'agent').length})</option>
+                  </optgroup>
+                ` : getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
                 ${u.role === 'agent' ? `<option value="MINE" ${logsFilterScope === 'MINE' ? 'selected' : ''}>Only My Reports</option>` : ''}
               </select>
 
@@ -6513,8 +6913,15 @@
               <button type="button" onclick="closeModal('editAttModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <form onsubmit="handleAdminSaveAttendance(event)" class="space-y-3.5">
-              <div>
-                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent</label>
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase">Select Agent</label>
+                  <span class="text-[10px] font-bold text-blue-600"><i class="fa-solid fa-magnifying-glass mr-1"></i>Search Name / ID</span>
+                </div>
+                <div class="relative">
+                  <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                  <input type="text" id="attAgentSearchInput" oninput="filterAgentSelectBySearch('attAgentSearchInput', 'attAgentId', 'onAttModalChange')" placeholder="Search agent by name or ID..." class="w-full pl-9 pr-3.5 py-2 bg-blue-50/50 border border-blue-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
                 <select id="attAgentId" onchange="onAttModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs font-extrabold">
                   ${allAgents.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${a.team})</option>`).join('')}
                 </select>
@@ -6623,13 +7030,22 @@
         lastTick: Date.now()
       };
 
-      if (idx !== -1) attList[idx] = rec; else attList.unshift(rec);
-      setStored('attendance_records', attList);
-      const logMeta = recordActivityLog('Edited Attendance', `Updated attendance record for ${ag.name} (${ag.id}) on ${dateStr}`);
-      closeModal('editAttModal');
-      renderAppLayout();
-      showPortalToast('Attendance Saved', `Attendance record for ${ag.name} (${dateStr}) updated & synced!`, 'success');
-      postToSheet('ATTENDANCE_SYNC', { ...rec, ...logMeta }).catch(() => {});
+      openConfirmWarningModal(
+        `Confirm Attendance Update for ${ag.name}?`,
+        `Are you sure you want to save this attendance record for <strong>${ag.name} (${ag.id})</strong> on <strong>${dateStr}</strong>?`,
+        'Confirm Attendance Edit',
+        async () => {
+          if (idx !== -1) attList[idx] = rec; else attList.unshift(rec);
+          setStored('attendance_records', attList);
+          const logMeta = recordActivityLog('Edited Attendance', `Updated attendance record for ${ag.name} (${ag.id}) on ${dateStr}`);
+          closeModal('editAttModal');
+          renderAppLayout();
+          showPortalToast('Attendance Saved', `Attendance record for ${ag.name} (${dateStr}) updated & synced!`, 'success');
+          postToSheet('ATTENDANCE_SYNC', { ...rec, ...logMeta }).catch(() => {});
+        },
+        'Yes, Save Attendance',
+        true
+      );
     }
 
     function handleDeleteAttendance(userId, dateStr) {
@@ -6670,8 +7086,15 @@
             </div>
 
             <form onsubmit="handleSalesSubmit(event)" class="space-y-4">
-              <div id="agentSelectContainer" class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'}">
-                <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Select Agent (Both Teams Available)</label>
+              <div id="agentSelectContainer" class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'} space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase">Select Agent (${allAgents.length} Agents)</label>
+                  <span class="text-[10px] font-bold text-orange-600"><i class="fa-solid fa-magnifying-glass mr-1"></i>Search by Name or ID</span>
+                </div>
+                <div class="relative">
+                  <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                  <input type="text" id="subAgentSearchInput" oninput="filterAgentSelectBySearch('subAgentSearchInput', 'subAgentId', 'onModalChange')" placeholder="Type agent name or ID (e.g. 10191, Shagor, Rafi)..." class="w-full pl-9 pr-3.5 py-2 bg-orange-50/50 border border-orange-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                </div>
                 <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
                   ${allAgents.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id} • ${usr.team})</option>`).join('')}
                 </select>
@@ -6918,25 +7341,36 @@
       let users = getStored('users', DEFAULT_USERS);
       const idx = users.findIndex(u => String(u.id) === String(newUser.id));
       const isNewAccount = idx === -1;
-      if (idx !== -1) users[idx] = newUser; else users.push(newUser);
-      setStored('users', users);
 
-      let configs = getStored('monthly_configs', {});
-      if (!configs[selectedMonthKey]) configs[selectedMonthKey] = { users: {}, products: {} };
-      if (!configs[selectedMonthKey].users) configs[selectedMonthKey].users = {};
-      configs[selectedMonthKey].users[newUser.id] = { grade: newUser.grade, baseTarget: newUser.baseTarget };
-      setStored('monthly_configs', configs);
+      openConfirmWarningModal(
+        `${isNewAccount ? 'Create New' : 'Update'} User ID (${newUser.id})?`,
+        `<strong>Name:</strong> ${newUser.name} (ID: ${newUser.id})<br><strong>Team:</strong> ${newUser.team} • <strong>Grade:</strong> ${newUser.grade}<br><strong>Base Target:</strong> ৳${newUser.baseTarget.toLocaleString()}<br><br>Confirm to save and sync this account across the portal and Google Sheet.`,
+        'Confirm User Account Save',
+        async () => {
+          if (idx !== -1) users[idx] = newUser; else users.push(newUser);
+          setStored('users', users);
 
-      const logMeta = recordActivityLog(
-        isNewAccount ? 'Created User ID' : 'Updated User ID',
-        `${isNewAccount ? 'Created' : 'Updated'} ${newUser.role.toUpperCase()} ID: ${newUser.name} (${newUser.id}), Grade: ${newUser.grade}, Target: ৳${newUser.baseTarget.toLocaleString()}`
+          let configs = getStored('monthly_configs', {});
+          const effKey = getEffectiveMonthConfigKey(selectedMonthKey);
+          if (!configs[effKey]) configs[effKey] = { users: {}, products: {} };
+          if (!configs[effKey].users) configs[effKey].users = {};
+          configs[effKey].users[newUser.id] = { grade: newUser.grade, baseTarget: newUser.baseTarget };
+          setStored('monthly_configs', configs);
+
+          const logMeta = recordActivityLog(
+            isNewAccount ? 'Created User ID' : 'Updated User ID',
+            `${isNewAccount ? 'Created' : 'Updated'} ${newUser.role.toUpperCase()} ID: ${newUser.name} (${newUser.id}), Team: ${newUser.team}, Grade: ${newUser.grade}, Target: ৳${newUser.baseTarget.toLocaleString()}`
+          );
+
+          closeModal('userModal');
+          renderAppLayout();
+          showPortalToast('User ID Saved', `${newUser.name} (${newUser.id}) with Grade "${newUser.grade}" saved & synced!`, 'success');
+          postToSheet('SAVE_USER', { ...newUser, ...logMeta }).catch(() => {});
+          postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(configs[effKey]) }).catch(() => {});
+        },
+        'Yes, Confirm & Save',
+        true
       );
-
-      closeModal('userModal');
-      renderAppLayout();
-      showPortalToast('User ID Saved', `${newUser.name} (${newUser.id}) with Grade "${newUser.grade}" saved & synced!`, 'success');
-      postToSheet('SAVE_USER', { ...newUser, ...logMeta }).catch(() => {});
-      postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: selectedMonthKey, configJson: JSON.stringify(configs[selectedMonthKey]) }).catch(() => {});
     }
 
     function handleDeleteUser(delId) {
@@ -8362,7 +8796,15 @@
     function getNotificationsForCurrentUser() {
       if (!currentUser) return [];
       const allNotifs = getStored('portal_notifications', []);
-      return allNotifs.filter(n => String(n.userId) === String(currentUser.id));
+      return allNotifs.filter(n => {
+        if (String(n.userId) !== String(currentUser.id)) return false;
+        if (n.type === 'admin_activity' && !isSuperAdmin(currentUser) && currentUser.role !== 'supervisor') {
+          if (currentUser.role === 'admin' && getChannelForTeam(n.actorTeam) !== getChannelForTeam(currentUser.team)) {
+            return false;
+          }
+        }
+        return true;
+      });
     }
 
     function saveNotificationsForCurrentUser(userNotifs) {
@@ -8496,6 +8938,15 @@
       return { bg: 'bg-purple-600 text-white', icon: 'fa-bell', badgeBg: 'bg-purple-100 text-purple-800', badgeText: 'Activity' };
     }
 
+        function canActorSeeActivityLog(actor, logItem) {
+      if (!actor || !logItem) return false;
+      if (isSuperAdmin(actor) || actor.role === 'supervisor') return true;
+      if (actor.role === 'admin') {
+        return getChannelForTeam(logItem.team) === getChannelForTeam(actor.team);
+      }
+      return String(logItem.userId) === String(actor.id);
+    }
+
     function syncAdminBellNotificationsFromActivityLogs(logsList, triggerLivePopup = false) {
       if (!currentUser || !hasFeatureAccess(currentUser, 'feat_bell_floor_alerts') || !Array.isArray(logsList)) return;
 
@@ -8520,6 +8971,7 @@
       for (let i = recentLogs.length - 1; i >= 0; i--) {
         const log = recentLogs[i];
         if (!log || !log.userId) continue;
+        if (!canActorSeeActivityLog(currentUser, log)) continue;
         const sig = `${log.date}|${log.time}|${log.userId}|${log.action}|${log.details}`;
         if (clearedSet.has(sig)) continue;
 
@@ -9991,10 +10443,84 @@
     }
 
 
+    
+    // =========================================================================
+    // SECONDARY MIRROR GOOGLE SHEET CONFIGURATION (FOR SHARING WITH TLs)
+    // =========================================================================
+    function getMirrorSheetConfig() {
+      const configs = getStored('monthly_configs', {});
+      return (configs['MIRROR_SHEET_CONFIG'] && typeof configs['MIRROR_SHEET_CONFIG'] === 'object')
+        ? configs['MIRROR_SHEET_CONFIG']
+        : { url: '', id: '' };
+    }
+
+    function extractGoogleSheetIdFromUrl(urlOrId) {
+      const s = String(urlOrId || '').trim();
+      if (!s) return '';
+      const m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      if (m && m[1]) return m[1];
+      return s;
+    }
+
+    function handleSaveMirrorSheetUrl(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (!isSuperAdmin(currentUser)) return;
+      const rawUrl = document.getElementById('mirrorSheetUrlInput')?.value.trim() || '';
+      const extractedId = extractGoogleSheetIdFromUrl(rawUrl);
+      if (rawUrl && !extractedId) {
+        showPortalToast('Invalid Sheet URL', 'Please paste a valid Google Sheet link or Spreadsheet ID.', 'error');
+        return;
+      }
+
+      openConfirmWarningModal(
+        rawUrl ? 'Link & Sync 2nd Mirror Google Sheet?' : 'Remove 2nd Mirror Google Sheet?',
+        rawUrl
+          ? `<strong>2nd Sheet ID:</strong> <code>${extractedId}</code><br><br>Once confirmed, all organized Team Sales, Drive Product, and Duty Roster tabs will automatically sync to both your Main Sheet and this 2nd TL Mirror Sheet (even if someone renames the 2nd sheet or its tabs)!`
+          : `Are you sure you want to disconnect the 2nd Mirror Google Sheet?`,
+        'Secondary Mirror Sheet Setup',
+        async () => {
+          const configs = getStored('monthly_configs', {});
+          configs['MIRROR_SHEET_CONFIG'] = {
+            url: rawUrl,
+            id: extractedId,
+            updatedAt: getTodayFormatted() + ' ' + getNowTimeStr()
+          };
+          setStored('monthly_configs', configs);
+
+          const logMeta = recordActivityLog(
+            'Configured 2nd Mirror Sheet',
+            rawUrl ? `Linked 2nd TL Mirror Google Sheet (ID: ${extractedId}) and triggered full sync` : 'Disconnected 2nd Mirror Google Sheet'
+          );
+          renderAppLayout();
+          showPortalToast(
+            rawUrl ? '2nd Mirror Sheet Linked & Syncing!' : 'Mirror Sheet Disconnected',
+            rawUrl ? 'All Sales, Product & Roster tabs are now syncing to the 2nd Google Sheet!' : 'Removed 2nd sheet link.',
+            'success'
+          );
+          await postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: 'MIRROR_SHEET_CONFIG',
+            configJson: JSON.stringify(configs['MIRROR_SHEET_CONFIG']),
+            ...logMeta
+          }).catch(() => {});
+          if (rawUrl) {
+            await postToSheet('REBUILD_SHEETS', { monthKey: selectedMonthKey }).catch(() => {});
+          }
+        },
+        rawUrl ? 'Yes, Link & Sync 2nd Sheet' : 'Yes, Disconnect',
+        true
+      );
+    }
+
+    function handleForceSyncBothSheetsNow() {
+      if (!isSuperAdmin(currentUser)) return;
+      showPortalToast('Syncing Main & 2nd Mirror Sheet...', 'Rebuilding and syncing all organized Sales, Product & Roster tabs now...', 'success');
+      postToSheet('REBUILD_SHEETS', { monthKey: selectedMonthKey }).catch(() => {});
+    }
+
     function renderNazimRoleManagementView() {
       if (!isSuperAdmin(currentUser)) return renderDashboard();
 
-      const allUsers = getUsersForMonth(selectedMonthKey);
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
       const controllableUsers = allUsers.filter(u => String(u.id) !== '10122');
 
       if (!controllableUsers.some(u => String(u.id) === String(selectedRoleMgmtUserId)) && controllableUsers.length > 0) {
@@ -10061,7 +10587,52 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          <!-- 2nd Mirror Google Sheet Setup Card (For Sharing Organized Sales, Product & Roster Tabs with TLs) -->
+          ${(() => {
+            const mCfg = getMirrorSheetConfig();
+            return `
+              <div class="card-dynamic p-5 border-2 border-emerald-200 bg-gradient-to-r from-emerald-50/50 via-white to-teal-50/40">
+                <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                  <div class="flex items-start gap-3.5">
+                    <div class="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-lg shadow-md shrink-0">
+                      <i class="fa-solid fa-file-excel"></i>
+                    </div>
+                    <div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white">2nd Google Sheet Live Mirror</span>
+                        <span class="text-[11px] font-extrabold ${mCfg.id ? 'text-emerald-700' : 'text-amber-700'}">
+                          ${mCfg.id ? `✅ Connected (ID: ${mCfg.id.slice(0, 12)}...)` : '⚡ Paste 2nd Google Sheet Link Below to Activate'}
+                        </span>
+                      </div>
+                      <h3 class="text-sm font-black text-slate-900 mt-1">Secondary Mirror Sheet for Team Leaders (Sales, Product & Roster Only)</h3>
+                      <p class="text-xs font-bold text-slate-500 mt-0.5">
+                        Create a new blank Google Sheet, paste its link below, and click <strong>Link & Sync</strong>. It will automatically mirror only the organized <strong>FB_Sales, FB_Product, FB_Roster, WA_Sales, WA_Product & WA_Roster</strong> tabs (no raw logs or Apps Script). Even if someone renames the 2nd sheet or its tabs, data will still sync automatically!
+                      </p>
+                    </div>
+                  </div>
+                  <form onsubmit="handleSaveMirrorSheetUrl(event)" class="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                    <input
+                      type="text"
+                      id="mirrorSheetUrlInput"
+                      value="${mCfg.url || ''}"
+                      placeholder="Paste 2nd Google Sheet URL or ID here..."
+                      class="w-full sm:w-80 px-3.5 py-2.5 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                    >
+                    <button type="submit" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+                      <i class="fa-solid fa-link"></i> Link & Sync 2nd Sheet
+                    </button>
+                    ${mCfg.id ? `
+                      <button type="button" onclick="handleForceSyncBothSheetsNow()" class="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 cursor-pointer" title="Force rebuild & sync both Main Sheet and 2nd Mirror Sheet right now">
+                        <i class="fa-solid fa-rotate"></i> Sync Both Now
+                      </button>
+                    ` : ''}
+                  </form>
+                </div>
+              </div>
+            `;
+          })()}
+
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
             <!-- Left Column: Select Any Employee ID -->
             <div class="lg:col-span-4 card-dynamic overflow-hidden flex flex-col max-h-[760px]">
               <div class="p-4 bg-white border-b border-slate-200 space-y-3">
