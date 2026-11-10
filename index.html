@@ -221,7 +221,7 @@
 
     const DEFAULT_USERS = [
       // Supervisor & Facebook Channel (Team Nazim & Team Samad)
-      { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
+      { id: '10001', name: 'Floor Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
       { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: '123nazim', grade: 'TL', baseTarget: 522328 },
       { id: '10107', name: 'Md Abdus Samad', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 522328 },
       
@@ -3086,8 +3086,66 @@
       `;
     }
 
+    function selectSupervisorChannelAndTeam(chKey, teamScope) {
+      if (chKey && CHANNEL_META[chKey] && activeChannel !== chKey) {
+        activeChannel = chKey;
+        localStorage.setItem('gb_active_channel', chKey);
+      }
+      dashboardScope = teamScope || 'ALL';
+      monthlyPerfTeamScope = teamScope || 'ALL';
+      monthlyPerfAgentId = 'ALL';
+      driveProdTeamScope = teamScope || 'ALL';
+      driveProdAgentId = 'ALL';
+      sprintTabTeamScope = teamScope || 'ALL';
+      logsFilterScope = teamScope || 'ALL';
+      renderAppLayout();
+    }
+
+    function renderSupervisorQuickChannelTeamBar(activeTeamVal, onSelectFnName) {
+      const u = currentUser;
+      if (!canViewAll(u)) return '';
+      const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
+      const fbAgentsCount = allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'FACEBOOK').length;
+      const waAgentsCount = allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'WHATSAPP').length;
+      const chMeta = getActiveChannelMeta();
+      const chAgentsCount = chMeta.key === 'WHATSAPP' ? waAgentsCount : fbAgentsCount;
+
+      return `
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+          <!-- Channel Switcher Pills -->
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">
+              <i class="fa-solid fa-layer-group text-orange-500 mr-1"></i>Channel View:
+            </span>
+            <button type="button" onclick="switchPortalChannel('FACEBOOK')" class="px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${activeChannel === 'FACEBOOK' ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-600/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+              <i class="fa-brands fa-facebook-f"></i> Facebook Channel (2 Teams • ${fbAgentsCount} Agents)
+            </button>
+            <button type="button" onclick="switchPortalChannel('WHATSAPP')" class="px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-600/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+              <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp Channel (3 Teams • ${waAgentsCount} Agents)
+            </button>
+          </div>
+
+          <!-- Team Filter Pills for Active Channel -->
+          <div class="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button type="button" onclick="${onSelectFnName}('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${activeTeamVal === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+              All ${chMeta.name} Teams (${chAgentsCount})
+            </button>
+            ${chMeta.teams.map(tn => {
+              const tCount = allUsersOmni.filter(usr => usr.role === 'agent' && normalizeTeamNameAlias(usr.team) === tn).length;
+              return `
+                <button type="button" onclick="${onSelectFnName}('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${activeTeamVal === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                  ${tn} (${tCount})
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     function renderDashboard() {
       const u = currentUser;
+      const isSup = isSupervisor(u);
       const allSales = getStored('sales_records', []);
       const monthUsers = getUsersForMonth(selectedMonthKey);
       const myMonthUser = monthUsers.find(usr => String(usr.id) === String(u.id)) || u;
@@ -3095,7 +3153,7 @@
       const channelSalesAll = allSales.filter(s => getChannelForTeam(s.team) === activeChannel);
       let mySales = [];
       if (canViewAll(u)) {
-        mySales = dashboardScope === 'ALL' ? channelSalesAll : channelSalesAll.filter(s => s.team === dashboardScope);
+        mySales = dashboardScope === 'ALL' ? channelSalesAll : channelSalesAll.filter(s => normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(dashboardScope));
       } else {
         mySales = channelSalesAll.filter(s => String(s.userId) === String(u.id));
       }
@@ -3124,10 +3182,9 @@
       const pTotals = {};
       Object.keys(activeProds).forEach(k => { pTotals[k] = 0; });
 
-      // Calculate exact deduplicated product totals across the selected scope so Dashboard matches Drive Product tab 100%!
       const allAgentsInScope = monthUsers.filter(usr => {
         if (usr.role !== 'agent') return false;
-        if (canViewAll(u)) return dashboardScope === 'ALL' ? true : usr.team === dashboardScope;
+        if (canViewAll(u)) return dashboardScope === 'ALL' ? true : normalizeTeamNameAlias(usr.team) === normalizeTeamNameAlias(dashboardScope);
         return String(usr.id) === String(u.id);
       });
       const allMonthSales = deduplicateSalesRecordsList(allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey)));
@@ -3139,6 +3196,160 @@
         });
       });
       const incentiveSummary = calculateEarnedIncentives(pTotals, tInfo.agentCount, selectedMonthKey);
+      const periodLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      // =====================================================================
+      // CLEAN, CLUTTER-FREE EXECUTIVE DASHBOARD FOR SUPERVISOR
+      // (No personal targets or edit buttons — pure At-a-Glance All-Team & Channel Control)
+      // =====================================================================
+      if (isSup) {
+        return `
+          <div class="space-y-4">
+            <!-- Supervisor Clean Header Banner -->
+            <div class="banner-hero-light px-5 py-4 rounded-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 border-l-4 border-l-purple-600">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-purple-600 text-white">
+                    <i class="fa-solid fa-eye mr-1"></i>Supervisor Executive Overview (All Channels & Teams)
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
+                    Active Period: ${periodLabel}
+                  </span>
+                </div>
+                <h2 class="text-lg font-black text-slate-900 mt-1">Welcome, ${u.name}! 👋</h2>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">
+                  At-a-glance monitoring across all <strong>2 Facebook Teams</strong> and <strong>3 WhatsApp Teams</strong>. Select any channel or team below to inspect detailed metrics.
+                </p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <button onclick="setTab('monthly_perf')" class="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-extrabold transition-colors">
+                  <i class="fa-solid fa-chart-column mr-1"></i> Monthly Performance
+                </button>
+                <button onclick="setTab('reports')" class="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-extrabold transition-colors">
+                  <i class="fa-solid fa-file-invoice mr-1"></i> Daily Reports
+                </button>
+                <button onclick="setTab('ranking')" class="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-extrabold transition-colors">
+                  <i class="fa-solid fa-trophy mr-1"></i> Floor Ranking
+                </button>
+              </div>
+            </div>
+
+            <!-- 1. All-Channel Combined 5-Team At-a-Glance Summary -->
+            ${renderOmniChannelTotalSalesBanner()}
+
+            <!-- 2. Unified Channel & Team Selector Bar for Inspecting Specific Channel / Team KPIs Below -->
+            ${renderSupervisorQuickChannelTeamBar(dashboardScope, 'setDashboardScope')}
+
+            <!-- 3. Selected Channel / Team KPI Cards (${dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope}) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              <div class="kpi-card-1 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-blue-100">${dashboardScope === 'ALL' ? getActiveChannelMeta().name : dashboardScope} Leads</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-users"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-2xl font-black text-white">${monthTotalLeads.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-blue-100 mt-0.5">${tInfo.agentCount} Active Agents</p>
+                </div>
+              </div>
+
+              <div class="kpi-card-2 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-emerald-100">Total Orders</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bag-shopping"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-2xl font-black text-white">${monthTotalOrders.toLocaleString()}</p>
+                  <div class="flex justify-between text-[10px] font-bold text-emerald-100 mt-0.5 pt-1 border-t border-white/20">
+                    <span>Conv. Ratio:</span>
+                    <span class="text-white font-black">${monthConvRatio}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="kpi-card-3 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-purple-100">Sales Revenue</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bangladeshi-taka-sign"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-xl font-black text-white">৳${monthTotalAmount.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-purple-100 mt-0.5">Achieved (${selectedMonthKey})</p>
+                </div>
+              </div>
+
+              <div class="kpi-card-4 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-indigo-100">Working Target (+5%)</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bullseye"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-xl font-black text-white">৳${tInfo.workingTarget.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-indigo-100 mt-0.5">Remaining: ৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div class="kpi-card-5 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-amber-100">Target Achieved</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-trophy"></i></div>
+                </div>
+                <div class="mt-3">
+                  <div class="flex items-baseline justify-between">
+                    <p class="text-2xl font-black text-white">${monthPct}%</p>
+                    <span class="text-[10px] font-bold text-amber-100">Daily: ৳${tInfo.dailyTarget.toLocaleString()}</span>
+                  </div>
+                  <div class="w-full bg-black/20 rounded-full h-1.5 mt-1.5">
+                    <div class="bg-white h-1.5 rounded-full" style="width: ${monthPct}%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Selected Scope Drive Product Summary Cards -->
+            <div>
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                <h3 class="text-xs font-black text-slate-800 uppercase tracking-wide">
+                  <i class="fa-solid fa-box-open text-amber-500 mr-1.5"></i> 
+                  ${getActiveChannelMeta().name} Drive Product Achievement (${dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams • ${tInfo.agentCount} Agents` : `${dashboardScope} • ${tInfo.agentCount} Agents`})
+                </h3>
+                <button onclick="setTab('drive_product')" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
+                  <i class="fa-solid fa-table-list"></i> Open Full Agent-Wise Product Table
+                </button>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                ${Object.keys(activeProds).map(k => {
+                  const p = activeProds[k];
+                  const achieved = pTotals[k];
+                  const target = p.targetKg * tInfo.agentCount; 
+                  const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
+                  const isUnlocked = pct >= 90;
+                  return `
+                    <div onclick="setTab('drive_product')" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
+                      <div class="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 class="font-black text-sm text-slate-900">${p.name} ${isUnlocked ? '🔥' : ''}</h4>
+                          <p class="text-[11px] text-slate-500 font-bold">Target: <strong class="text-slate-800">${target.toFixed(2)} kg</strong></p>
+                        </div>
+                        <div class="w-8 h-8 rounded-xl ${p.badge} flex items-center justify-center shadow-sm text-xs">
+                          <i class="fa-solid ${p.icon}"></i>
+                        </div>
+                      </div>
+                      <div class="flex justify-between items-baseline mb-1.5">
+                        <span class="text-lg font-black text-slate-900">${achieved.toFixed(2)} <span class="text-[11px] font-bold text-slate-500">kg sold</span></span>
+                        <span class="px-2 py-0.5 rounded-md ${p.badge} text-[11px] font-black">${pct}%</span>
+                      </div>
+                      <div class="progress-track h-1.5 bg-white border border-slate-200/60">
+                        <div class="${p.bar} h-1.5 rounded-full" style="width: ${pct}%"></div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      }
 
       return `
         <div class="space-y-4">
@@ -3152,7 +3363,7 @@
                   ${canViewAll(u) ? `${tInfo.agentCount} Agents` : `Grade: ${myMonthUser.grade}`}
                 </span>
                 <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
-                  Period: ${(AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label}
+                  Period: ${periodLabel}
                 </span>
               </div>
               <h2 class="text-lg font-black text-slate-900 mt-1">Welcome, ${u.name}! 👋</h2>
@@ -3418,7 +3629,7 @@
             <div class="flex items-center justify-between mb-2.5">
               <h3 class="text-xs font-black text-slate-800 uppercase tracking-wide">
                 <i class="fa-solid fa-gift text-blue-600 mr-1.5"></i> 
-                Facebook Product Incentive Targets (${canViewAll(u) ? `${dashboardScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
+                ${getActiveChannelMeta().name} Product Incentive Targets (${canViewAll(u) ? `${dashboardScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
               </h3>
               <div class="flex flex-wrap items-center gap-2">
                 <button onclick="setTab('drive_product')" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
@@ -3464,7 +3675,6 @@
       `;
     }
 
-    
     function getMonthStartDateInputVal(mKey) {
       const mk = mKey || selectedMonthKey;
       const parts = mk.split('/');
@@ -3808,7 +4018,8 @@
       const grandPct = grandTargetKg > 0 ? Math.round((grandTotalKg / grandTargetKg) * 100) : 0;
 
       return `
-        <div class="space-y-6">
+        <div class="space-y-5">
+          ${isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(driveProdTeamScope, "setDriveProdTeam") : ""}
           <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
               <div class="flex items-center gap-2">
@@ -4330,6 +4541,7 @@
 
     function renderMonthlyPerformanceView() {
       const u = currentUser;
+      const supBar = isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(monthlyPerfTeamScope, "setMonthlyPerfTeam") : "";
       const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
       const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
       const monthSales = getStored('sales_records', []).filter(s => s.date.endsWith(selectedMonthKey));
@@ -4403,12 +4615,13 @@
       const singleAgentObj = displayedAgents.length === 1 ? agentRows[0] : null;
 
       return `
-        <div class="space-y-6">
+        <div class="space-y-5">
+          ${supBar}
           <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div class="flex flex-wrap items-center justify-between gap-3 w-full lg:w-auto">
               <div>
                 <h2 class="text-xl font-black text-slate-900">
-                  <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>Monthly Performance Report (${monthLabel})
+                  <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>${getActiveChannelMeta().fullTitle} — Monthly Performance Report (${monthLabel})
                 </h2>
                 <p class="text-xs font-bold text-slate-500 mt-0.5">
                   ${canViewAll(u) ? `Sorted by Sales Amount. Filter by Team/Agent and click Download CSV anytime.` : `View your complete monthly summary and date-wise performance table with CSV download.`}
@@ -4706,7 +4919,8 @@
       }
 
       return `
-        <div class="space-y-6">
+        <div class="space-y-5">
+          ${isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(activityTeamFilter, "setActivityTeamFilter") : ""}
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
               <h2 class="text-xl font-black text-slate-900">
@@ -5708,7 +5922,8 @@
       }
 
       return `
-        <div class="space-y-6">
+        <div class="space-y-5">
+          ${isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(logsFilterScope, "setLogsScope") : ""}
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h2 class="text-xl font-black text-slate-900"><i class="fa-regular fa-clock text-emerald-600 mr-2"></i>Attendance & Duty Logs (${selectedMonthKey})</h2>
@@ -5983,6 +6198,7 @@
 
       return `
         <div class="space-y-5">
+          ${isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(sprintTabTeamScope, "setSprintTabTeam") : ""}
           <!-- Top Header & Controls -->
           <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
@@ -9794,6 +10010,29 @@
       }).length;
     }
 
+    
+    function formatNoticeTargetLabel(targetVal) {
+      const t = String(targetVal || 'ALL_CHANNELS').trim();
+      if (t === 'ALL' || t === 'ALL_CHANNELS') return '🌐 All Channels (Facebook + WhatsApp)';
+      if (t === 'ALL_FACEBOOK') return '🔵 All Facebook Teams (Combined)';
+      if (t === 'ALL_WHATSAPP') return '🟢 All WhatsApp Teams (Combined)';
+      return t;
+    }
+
+    function isNoticeVisibleToUser(nt, user) {
+      if (!nt || !user) return false;
+      if (isSuperAdmin(user) || isSupervisor(user)) return true;
+      if (String(nt.senderId) === String(user.id)) return true;
+      const target = String(nt.targetTeam || 'ALL_CHANNELS').trim();
+      const uCh = getChannelForTeam(user.team);
+      const uTeam = normalizeTeamNameAlias(user.team);
+      if (target === 'ALL' || target === 'ALL_CHANNELS') return true;
+      if (target === 'ALL_FACEBOOK') return uCh === 'FACEBOOK';
+      if (target === 'ALL_WHATSAPP') return uCh === 'WHATSAPP';
+      // Specific team notice: visible to members of that team or TLs in that same channel
+      return uTeam === normalizeTeamNameAlias(target);
+    }
+
     function syncIncomingChatAndNoticesFromConfigs(allConfigs, triggerPopup = false) {
       if (!currentUser || !allConfigs || typeof allConfigs !== 'object') return;
       const hub = allConfigs['CHAT_AND_NOTICES'];
@@ -9813,7 +10052,7 @@
 
       notices.forEach(nt => {
         if (!nt || !nt.id) return;
-        if (nt.targetTeam && nt.targetTeam !== 'ALL' && !canViewAll(currentUser) && currentUser.team !== nt.targetTeam) {
+        if (!isNoticeVisibleToUser(nt, currentUser)) {
           return;
         }
         const notifId = `notice_${nt.id}`;
@@ -9893,7 +10132,15 @@
     // ADMIN OFFICIAL NOTICE / ANNOUNCEMENT BROADCAST MODAL
     // =========================================================================
     function renderAnnouncementModal() {
+      const u = currentUser;
+      const isMaster = isSuperAdmin(u) || isSupervisor(u);
+      const uCh = u ? getChannelForTeam(u.team) : activeChannel;
+      const showFbOptions = isMaster || uCh === 'FACEBOOK';
+      const showWaOptions = isMaster || uCh === 'WHATSAPP';
+
       const { notices } = getChatAndNoticeHubStore();
+      const visibleRecentNotices = notices.filter(nt => isNoticeVisibleToUser(nt, u));
+
       return `
         <div id="announceModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
           <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
@@ -9904,7 +10151,7 @@
                 </div>
                 <div>
                   <h3 class="text-base font-black text-slate-900">Broadcast Official Notice / Announcement</h3>
-                  <p class="text-xs font-bold text-slate-400">Instantly sends to everyone's Bell Icon with unread red badge & popup alert!</p>
+                  <p class="text-xs font-bold text-slate-400">Select your team, combined channel, or All Channels to broadcast instantly!</p>
                 </div>
               </div>
               <button type="button" onclick="closeModal('announceModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
@@ -9919,9 +10166,33 @@
                 <div>
                   <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Target Audience</label>
                   <select id="annTargetSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-800">
-                    <option value="ALL">All Floor Members (Both Teams)</option>
-                    <option value="Team Nazim">Team Nazim Only</option>
-                    <option value="Team Samad">Team Samad Only</option>
+                    ${showWaOptions && !isMaster ? `
+                      <option value="ALL_WHATSAPP">🟢 All WhatsApp Teams (3 Teams Combined)</option>
+                      <option value="Team Saikat">🟢 Team Saikat Only</option>
+                      <option value="Team Parvaj">🟢 Team Parvaj Only</option>
+                      <option value="Team Shakib Baksh">🟢 Team Shakib Baksh Only</option>
+                      <option value="ALL_CHANNELS">🌐 All Channels (Facebook + WhatsApp Everyone)</option>
+                    ` : ''}
+                    ${showFbOptions && !isMaster ? `
+                      <option value="ALL_FACEBOOK">🔵 All Facebook Teams (2 Teams Combined)</option>
+                      <option value="Team Nazim">🟠 Team Nazim Only</option>
+                      <option value="Team Samad">🔵 Team Samad Only</option>
+                      <option value="ALL_CHANNELS">🌐 All Channels (Facebook + WhatsApp Everyone)</option>
+                    ` : ''}
+                    ${isMaster ? `
+                      <option value="ALL_CHANNELS">🌐 All Channels (Facebook + WhatsApp Everyone)</option>
+                      <optgroup label="Facebook Channel">
+                        <option value="ALL_FACEBOOK" ${activeChannel === 'FACEBOOK' ? 'selected' : ''}>🔵 All Facebook Teams (2 Teams Combined)</option>
+                        <option value="Team Nazim">🟠 Team Nazim Only</option>
+                        <option value="Team Samad">🔵 Team Samad Only</option>
+                      </optgroup>
+                      <optgroup label="WhatsApp Channel">
+                        <option value="ALL_WHATSAPP" ${activeChannel === 'WHATSAPP' ? 'selected' : ''}>🟢 All WhatsApp Teams (3 Teams Combined)</option>
+                        <option value="Team Saikat">🟢 Team Saikat Only</option>
+                        <option value="Team Parvaj">🟢 Team Parvaj Only</option>
+                        <option value="Team Shakib Baksh">🟢 Team Shakib Baksh Only</option>
+                      </optgroup>
+                    ` : ''}
                   </select>
                 </div>
               </div>
@@ -9934,7 +10205,7 @@
               <div class="flex items-center justify-between pt-3 border-t border-slate-100">
                 <label class="flex items-center gap-2 text-xs font-extrabold text-slate-600 cursor-pointer">
                   <input type="checkbox" id="annAlsoPostInGroupChat" checked class="w-4 h-4 accent-amber-600 rounded">
-                  <span>Also pin in Global Group Chat</span>
+                  <span>Also pin in Target Group Chat</span>
                 </label>
                 <div class="flex gap-2">
                   <button type="button" onclick="closeModal('announceModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
@@ -9945,15 +10216,15 @@
               </div>
             </form>
 
-            ${notices.length > 0 ? `
+            ${visibleRecentNotices.length > 0 ? `
             <div class="mt-5 pt-4 border-t border-slate-200">
-              <h4 class="text-[11px] font-black uppercase text-slate-500 mb-2.5">Recent Broadcasted Notices (${notices.length})</h4>
+              <h4 class="text-[11px] font-black uppercase text-slate-500 mb-2.5">Recent Broadcasted Notices (${visibleRecentNotices.length})</h4>
               <div class="space-y-2 max-h-44 overflow-y-auto pr-1">
-                ${notices.slice().reverse().slice(0, 8).map(nt => `
+                ${visibleRecentNotices.slice().reverse().slice(0, 8).map(nt => `
                   <div class="p-3 rounded-xl bg-amber-50/70 border border-amber-200 flex items-start justify-between gap-2">
                     <div class="min-w-0">
-                      <div class="flex items-center gap-1.5">
-                        <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[9px] font-black uppercase">${nt.targetTeam || 'ALL'}</span>
+                      <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[9px] font-black uppercase">${formatNoticeTargetLabel(nt.targetTeam)}</span>
                         <strong class="text-xs font-black text-slate-900 truncate">${nt.title}</strong>
                         <span class="text-[10px] font-bold text-slate-400">• ${nt.date} ${nt.time}</span>
                       </div>
@@ -9974,7 +10245,19 @@
 
     function openAnnouncementModal() {
       if (!hasFeatureAccess(currentUser, 'feat_post_notice')) return;
+      renderAppLayout();
       openModal('announceModal');
+    }
+
+    function resolveChatRoomForNoticeTarget(targetVal) {
+      if (targetVal === 'ALL_FACEBOOK') return 'FB_ALL_GROUP';
+      if (targetVal === 'ALL_WHATSAPP') return 'WA_ALL_GROUP';
+      if (targetVal === 'Team Nazim') return 'TEAM_NAZIM';
+      if (targetVal === 'Team Samad') return 'TEAM_SAMAD';
+      if (targetVal === 'Team Saikat') return 'TEAM_SAIKAT';
+      if (targetVal === 'Team Parvaj') return 'TEAM_PARVAJ';
+      if (targetVal === 'Team Shakib Baksh') return 'TEAM_SHAKIB';
+      return 'GLOBAL_GROUP';
     }
 
     function handleSendOfficialAnnouncement(e) {
@@ -9982,7 +10265,7 @@
       if (!hasFeatureAccess(currentUser, 'feat_post_notice')) return;
 
       const titleVal = (document.getElementById('annTitleInput')?.value || '').trim() || 'Official Notice';
-      const targetVal = document.getElementById('annTargetSelect')?.value || 'ALL';
+      const targetVal = document.getElementById('annTargetSelect')?.value || 'ALL_CHANNELS';
       const msgVal = (document.getElementById('annMessageInput')?.value || '').trim();
       const postInChat = document.getElementById('annAlsoPostInGroupChat')?.checked;
       if (!msgVal) return;
@@ -10002,7 +10285,7 @@
       hub.notices.push(newNotice);
 
       if (postInChat) {
-        const roomTarget = targetVal === 'Team Nazim' ? 'TEAM_NAZIM' : (targetVal === 'Team Samad' ? 'TEAM_SAMAD' : 'GLOBAL_GROUP');
+        const roomTarget = resolveChatRoomForNoticeTarget(targetVal);
         hub.messages.push({
           id: 'msg_' + Date.now() + '_ann',
           roomId: roomTarget,
@@ -10010,7 +10293,7 @@
           senderName: currentUser.name,
           senderRole: currentUser.role,
           senderTeam: currentUser.team,
-          text: `📢 [OFFICIAL NOTICE: ${titleVal}] — ${msgVal}`,
+          text: `📢 [OFFICIAL NOTICE • ${formatNoticeTargetLabel(targetVal)}: ${titleVal}] — ${msgVal}`,
           isNotice: true,
           date: newNotice.date,
           time: newNotice.time,
@@ -10018,7 +10301,6 @@
         });
       }
 
-      // Mark notice as seen by sender before syncing so it never fires a duplicate toast
       const seenNoticeKey = `gb_seen_notices_${currentUser.id}`;
       let seenNotices = [];
       try { seenNotices = JSON.parse(localStorage.getItem(seenNoticeKey) || '[]'); } catch (err) {}
@@ -10028,11 +10310,11 @@
       saveChatAndNoticeHubStore(hub);
       syncIncomingChatAndNoticesFromConfigs(getStored('monthly_configs', {}), false);
 
-      recordActivityLog('Broadcasted Official Notice', `Sent Notice "${titleVal}" (${targetVal}): ${msgVal}`, false);
+      recordActivityLog('Broadcasted Official Notice', `Sent Notice "${titleVal}" (${formatNoticeTargetLabel(targetVal)}): ${msgVal}`, false);
       document.getElementById('annMessageInput').value = '';
       closeModal('announceModal');
       renderAppLayout();
-      showPortalToast('Official Notice Broadcasted!', `Sent "${titleVal}" to ${targetVal} Bell Notifications.`, 'success');
+      showPortalToast('Official Notice Broadcasted!', `Sent "${titleVal}" to ${formatNoticeTargetLabel(targetVal)}.`, 'success');
     }
 
     function handleDeleteOfficialNotice(noticeId) {
@@ -10047,11 +10329,7 @@
 
     function renderNoticeBoardModal() {
       const { notices } = getChatAndNoticeHubStore();
-      const visibleNotices = notices.filter(nt => {
-        if (!nt) return false;
-        if (nt.targetTeam && nt.targetTeam !== 'ALL' && !canViewAll(currentUser) && currentUser.team !== nt.targetTeam) return false;
-        return true;
-      }).slice().reverse();
+      const visibleNotices = notices.filter(nt => isNoticeVisibleToUser(nt, currentUser)).slice().reverse();
 
       return `
         <div id="noticeBoardModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
@@ -10063,7 +10341,7 @@
                 </div>
                 <div>
                   <h3 class="text-base font-black text-slate-900">Official Floor Notice Board</h3>
-                  <p class="text-xs font-bold text-slate-400">All official announcements and instructions broadcasted by Admin / TL</p>
+                  <p class="text-xs font-bold text-slate-400">All official announcements and instructions broadcasted for your team & channel</p>
                 </div>
               </div>
               <div class="flex items-center gap-2">
@@ -10078,12 +10356,12 @@
 
             <div class="flex-1 overflow-y-auto py-4 space-y-3 pr-1">
               ${visibleNotices.length === 0 ? `
-                <div class="p-10 text-center text-slate-400 font-bold text-xs">No official notices have been posted yet.</div>
+                <div class="p-10 text-center text-slate-400 font-bold text-xs">No official notices have been posted for your channel/team yet.</div>
               ` : visibleNotices.map(nt => `
                 <div class="p-4 rounded-2xl bg-gradient-to-r from-amber-50/90 to-orange-50/60 border border-amber-200 shadow-2xs">
                   <div class="flex items-center justify-between gap-2 mb-1.5">
-                    <div class="flex items-center gap-2">
-                      <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-[9px] font-black uppercase">${nt.targetTeam || 'ALL TEAMS'}</span>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="px-2 py-0.5 rounded bg-amber-500 text-white text-[9px] font-black uppercase">${formatNoticeTargetLabel(nt.targetTeam)}</span>
                       <h4 class="text-sm font-black text-slate-900">${nt.title}</h4>
                     </div>
                     <span class="text-[10px] font-bold text-slate-500"><i class="fa-regular fa-clock mr-1"></i>${nt.date} • ${nt.time}</span>
@@ -10421,7 +10699,8 @@
 
       const hiddenSet = getHiddenChatMessagesForCurrentUser();
       const channelMessages = messages.filter(m => m.roomId === activeChatChannelId && !hiddenSet.has(m.id));
-      const latestNotice = notices.length > 0 ? notices[notices.length - 1] : null;
+      const visibleNoticesForChat = notices.filter(nt => isNoticeVisibleToUser(nt, u));
+      const latestNotice = visibleNoticesForChat.length > 0 ? visibleNoticesForChat[visibleNoticesForChat.length - 1] : null;
       const canCreateCustomGroup = u.role === 'admin' || isSuperAdmin(u) || isSupervisor(u);
 
       const filterPills = [
@@ -10442,7 +10721,7 @@
               </div>
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
-                  <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[9px] font-black uppercase">Latest Official Notice (${latestNotice.targetTeam || 'ALL'})</span>
+                  <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-900 text-[9px] font-black uppercase">Latest Official Notice (${formatNoticeTargetLabel(latestNotice.targetTeam)})</span>
                   <span class="text-[10px] font-bold text-slate-400">By ${latestNotice.senderName} • ${latestNotice.date} ${latestNotice.time}</span>
                 </div>
                 <p class="text-xs font-extrabold text-slate-900 truncate mt-0.5">${latestNotice.title}: <span class="font-bold text-slate-700">${latestNotice.message}</span></p>
