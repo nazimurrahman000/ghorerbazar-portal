@@ -106,12 +106,21 @@
     .card-dynamic.overflow-x-auto::-webkit-scrollbar-thumb:hover {
       background: linear-gradient(90deg, #1d4ed8, #3730a3);
     }
-    .card-dynamic.overflow-x-auto thead th {
+    .card-dynamic.overflow-x-auto thead.table-header-light th {
       position: sticky;
       top: 0;
       z-index: 15;
       background-color: #f8fafc;
+      color: #334155;
       box-shadow: 0 1px 0 #cbd5e1;
+    }
+    .card-dynamic.overflow-x-auto thead.bg-slate-900 th {
+      position: sticky;
+      top: 0;
+      z-index: 15;
+      background-color: #0f172a;
+      color: #ffffff;
+      box-shadow: 0 1px 0 #334155;
     }
     .card-dynamic.overflow-x-auto tfoot td,
     .card-dynamic.overflow-x-auto tfoot th {
@@ -165,7 +174,8 @@
 
     function getGradeTargetsForMonth(mKey) {
       const configs = getStored('monthly_configs', {});
-      const mCfg = configs[mKey || selectedMonthKey] || {};
+      const effKey = getEffectiveMonthConfigKey(mKey);
+      const mCfg = configs[effKey] || configs[mKey || selectedMonthKey] || {};
       return { ...DEFAULT_GRADE_TARGETS, ...(mCfg.gradeTargets || {}) };
     }
 
@@ -191,7 +201,12 @@
       { id: '11120', name: 'Abu Sayed', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'C', baseTarget: 1032175 },
       { id: '11130', name: 'Rabbir Hossain Molla', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'B', baseTarget: 1132174 },
       { id: '10806', name: 'Abdullah Al Soad', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 },
-      { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 }
+      { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 },
+
+      // WhatsApp Channel — 3 Team Leaders (Each manages 16-20 Agents in their own WA Team)
+      { id: '20101', name: 'WhatsApp TL 1', role: 'admin', channel: 'WHATSAPP', team: 'WA Team 1', pass: 'wa1234', grade: 'TL', baseTarget: 522328 },
+      { id: '20102', name: 'WhatsApp TL 2', role: 'admin', channel: 'WHATSAPP', team: 'WA Team 2', pass: 'wa1234', grade: 'TL', baseTarget: 522328 },
+      { id: '20103', name: 'WhatsApp TL 3', role: 'admin', channel: 'WHATSAPP', team: 'WA Team 3', pass: 'wa1234', grade: 'TL', baseTarget: 522328 }
     ];
 
     const DEFAULT_ROSTER = [
@@ -237,10 +252,112 @@
 
     const SHIFT_OPTIONS = ["7:00 AM", "10:00 AM", "3:00 PM", "Night", "DO"];
 
+    // =========================================================================
+    // PROJECT MULTI-CHANNEL EXPANSION (GB OMNI-PORTAL: FACEBOOK + WHATSAPP)
+    // =========================================================================
+    const CHANNEL_META = {
+      FACEBOOK: {
+        key: 'FACEBOOK',
+        name: 'Facebook',
+        fullTitle: 'Facebook Channel',
+        icon: 'fa-brands fa-facebook-f',
+        colorClass: 'text-blue-600',
+        bgClass: 'bg-blue-600 text-white',
+        teams: ['Team Nazim', 'Team Samad'],
+        floatingTeam: 'Floating',
+        allTeams: ['Team Nazim', 'Team Samad', 'Floating']
+      },
+      WHATSAPP: {
+        key: 'WHATSAPP',
+        name: 'WhatsApp',
+        fullTitle: 'WhatsApp Channel',
+        icon: 'fa-brands fa-whatsapp',
+        colorClass: 'text-emerald-600',
+        bgClass: 'bg-emerald-600 text-white',
+        teams: ['WA Team 1', 'WA Team 2', 'WA Team 3'],
+        floatingTeam: 'WA Floating',
+        allTeams: ['WA Team 1', 'WA Team 2', 'WA Team 3', 'WA Floating']
+      }
+    };
+
+    let activeChannel = localStorage.getItem('gb_active_channel') || 'FACEBOOK';
+
+    function getChannelForTeam(teamName) {
+      const t = String(teamName || '').trim();
+      if (t.startsWith('WA ') || t.toLowerCase().includes('whatsapp')) return 'WHATSAPP';
+      return 'FACEBOOK';
+    }
+
+    function getActiveChannelMeta() {
+      return CHANNEL_META[activeChannel] || CHANNEL_META.FACEBOOK;
+    }
+
+    function getEffectiveMonthConfigKey(mKey) {
+      const mk = mKey || selectedMonthKey;
+      return activeChannel === 'WHATSAPP' ? `WA_${mk}` : mk;
+    }
+
+    function isTeamInActiveChannel(teamName) {
+      if (!teamName || teamName === 'All Teams') return true;
+      return getChannelForTeam(teamName) === activeChannel;
+    }
+
+    // Strict Cross-Channel & Cross-Team Permission Check:
+    // - Super Admin Nazim (10122): Full edit/delete across ALL channels and ALL teams.
+    // - Facebook TLs (Samad) & WhatsApp TLs (1, 2, 3): Can ONLY edit their own team in their own channel!
+    //   When viewing another channel or another TL's team, they are strictly in View-Only Mode.
+    function canEditTeamData(actor, targetTeamName) {
+      if (!actor) return false;
+      if (isSuperAdmin(actor)) return true;
+      if (actor.role !== 'admin') return false;
+      const actorCh = getChannelForTeam(actor.team);
+      if (activeChannel !== actorCh) return false;
+      if (!targetTeamName || targetTeamName === 'ALL') return true;
+      return actor.team === targetTeamName;
+    }
+
+    function isCurrentChannelReadOnlyForUser(actor) {
+      if (!actor) return true;
+      if (isSuperAdmin(actor)) return false;
+      if (actor.role === 'supervisor') return true;
+      return getChannelForTeam(actor.team) !== activeChannel;
+    }
+
+    function switchPortalChannel(chKey) {
+      if (!CHANNEL_META[chKey]) return;
+      if (currentUser && currentUser.role === 'agent') {
+        activeChannel = getChannelForTeam(currentUser.team);
+        return;
+      }
+      activeChannel = chKey;
+      localStorage.setItem('gb_active_channel', chKey);
+      const chTeams = CHANNEL_META[chKey].teams;
+      if (currentUser && currentUser.role === 'admin' && chTeams.includes(currentUser.team)) {
+        dashboardScope = currentUser.team;
+      } else {
+        dashboardScope = 'ALL';
+      }
+      monthlyPerfTeamScope = 'ALL';
+      monthlyPerfAgentId = 'ALL';
+      driveProdTeamScope = 'ALL';
+      driveProdAgentId = 'ALL';
+      sprintTabTeamScope = 'ALL';
+      logsFilterScope = 'ALL';
+      if (typeof dateWiseTeamFilter !== 'undefined') dateWiseTeamFilter = 'ALL';
+      renderAppLayout();
+      showPortalToast(
+        `Switched to ${CHANNEL_META[chKey].fullTitle}`,
+        isCurrentChannelReadOnlyForUser(currentUser)
+          ? `Viewing ${CHANNEL_META[chKey].fullTitle} in View-Only Mode.`
+          : `Full Management Mode active for ${CHANNEL_META[chKey].fullTitle}.`,
+        'success'
+      );
+    }
+
     function normalizeUserRecord(u) {
       if (!u) return u;
       const copy = { ...u };
-      if (copy.role === 'admin' || String(copy.id) === '10122' || String(copy.id) === '10107') {
+      if (copy.role === 'admin' || ['10122', '10107', '20101', '20102', '20103'].includes(String(copy.id))) {
         copy.role = 'admin';
         copy.name = String(copy.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
         copy.grade = 'TL';
@@ -352,6 +469,7 @@
       { key: 'tab_ranking', category: 'Sidebar Tabs', label: 'Ranking Tab', desc: 'View floor leaderboard & team head-to-head comparison', icon: 'fa-trophy', color: 'text-amber-500' },
       { key: 'tab_roster', category: 'Sidebar Tabs', label: 'Duty Roster Tab', desc: 'View weekly shift schedule and Day Off (DO) table', icon: 'fa-calendar-week', color: 'text-indigo-600' },
       { key: 'tab_attendance', category: 'Sidebar Tabs', label: 'Attendance & Duty Logs Tab', desc: 'View login/logout times, working hours & break history', icon: 'fa-clock', color: 'text-emerald-600' },
+      { key: 'tab_fraud_checker', category: 'Sidebar Tabs', label: 'Fraud & Courier Checker Tab', desc: 'Unlimited free Bangladeshi mobile number courier delivery & return ratio checker + internal fraud blacklist', icon: 'fa-shield-halved', color: 'text-teal-600' },
       { key: 'tab_chat', category: 'Sidebar Tabs', label: 'Chat Tab', desc: 'Access group channels & 1-on-1 personal inbox', icon: 'fa-comments', color: 'text-blue-600' },
       { key: 'tab_activity_logs', category: 'Sidebar Tabs', label: 'Activity Logs Tab', desc: 'View system activity timeline & audit logs', icon: 'fa-list-check', color: 'text-rose-500' },
       { key: 'tab_agents', category: 'Sidebar Tabs', label: 'Target Setup & IDs Tab', desc: 'View registered user accounts, grades & target setup page', icon: 'fa-sliders', color: 'text-blue-600' },
@@ -389,6 +507,7 @@
         tab_ranking: true,
         tab_roster: true,
         tab_attendance: true,
+        tab_fraud_checker: true,
         tab_chat: true,
         tab_activity_logs: true,
         tab_agents: isAdm || isSup,
@@ -495,12 +614,26 @@
       );
     }
 
+    const WRITE_ACTION_FEATURES = new Set([
+      'feat_manage_all_sales',
+      'feat_ai_erp_import',
+      'feat_edit_roster',
+      'feat_manage_attendance',
+      'feat_edit_grades_targets',
+      'feat_edit_products',
+      'feat_manage_users'
+    ]);
+
     function hasFeatureAccess(u, featureKey) {
       if (!u) return false;
       if (featureKey === 'tab_sprint_target' && !isSprintSystemActiveForMonth(selectedMonthKey)) {
         return isFullAdmin(u);
       }
       if (isSuperAdmin(u)) return true;
+      // Enforce Cross-Channel Read-Only Mode for TLs viewing a different channel (FB TL viewing WA, or WA TL viewing FB)
+      if (WRITE_ACTION_FEATURES.has(featureKey) && isCurrentChannelReadOnlyForUser(u)) {
+        return false;
+      }
       const perms = getEffectivePermissionsForUser(u);
       return Boolean(perms[featureKey]);
     }
@@ -513,14 +646,15 @@
       if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
       if (isSuperAdmin(actor)) return true;
       if (String(targetUser.id) === '10122') return false;
-      return true;
+      return actor.team === targetUser.team;
     }
 
     function canDeleteTargetUser(actor, targetUser) {
       if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
       if (String(targetUser.id) === String(actor.id) || String(targetUser.id) === '10122') return false;
       if (isSuperAdmin(actor)) return true;
-      return targetUser.role === 'agent';
+      // Non-SuperAdmin TLs can only delete agents in their own team!
+      return targetUser.role === 'agent' && actor.team === targetUser.team;
     }
 
     function canEditTargetUser(actor, targetUser) {
@@ -528,7 +662,8 @@
       if (isSuperAdmin(actor)) return true;
       if (String(targetUser.id) === '10122') return false;
       if (String(targetUser.id) === String(actor.id)) return true;
-      return targetUser.role === 'agent';
+      // Non-SuperAdmin TLs can only edit agents in their own team!
+      return targetUser.role === 'agent' && actor.team === targetUser.team;
     }
 
     function openConfirmWarningModal(title, message, badgeText, onConfirmAction, confirmBtnLabel = null, isWarningEdit = false) {
@@ -971,7 +1106,8 @@
     // Returns ALL products configured for a month (including disabled ones) for the Admin Config Modal
     function getAllConfiguredProductsForMonth(mKey) {
       const configs = getStored('monthly_configs', {});
-      const mCfg = configs[mKey || selectedMonthKey] || {};
+      const effKey = getEffectiveMonthConfigKey(mKey);
+      const mCfg = configs[effKey] || configs[mKey || selectedMonthKey] || {};
       const prodOverrides = mCfg.products || {};
       const result = {};
       Object.keys(DEFAULT_PRODUCTS).forEach(k => {
@@ -1033,15 +1169,17 @@
       }).join(' | ') + ' kg';
     }
 
-    function getUsersForMonth(mKey) {
+    function getUsersForMonth(mKey, includeAllChannels = false) {
       const mk = mKey || selectedMonthKey;
+      const effKey = getEffectiveMonthConfigKey(mk);
       const baseUsers = getStored('users', DEFAULT_USERS).map(normalizeUserRecord);
       const configs = getStored('monthly_configs', {});
-      const mCfg = configs[mk] || {};
-      const userOverrides = mCfg.users || {};
+      const mCfg = configs[effKey] || configs[mk] || {};
+      const fallbackUserOv = (configs[mk] && configs[mk].users) ? configs[mk].users : {};
+      const userOverrides = { ...fallbackUserOv, ...(mCfg.users || {}) };
       const gradeMap = getGradeTargetsForMonth(mk);
 
-      return baseUsers.map(u => {
+      const mapped = baseUsers.map(u => {
         let updated = { ...u };
         if (userOverrides[u.id]) {
           updated.grade = userOverrides[u.id].grade || u.grade;
@@ -1058,6 +1196,9 @@
         }
         return normalizeUserRecord(updated);
       });
+
+      if (includeAllChannels) return mapped;
+      return mapped.filter(u => u.role === 'supervisor' || getChannelForTeam(u.team) === activeChannel);
     }
 
     let pendingRosterEditsMap = {}; // { [monthKey_empId]: { sat, sun, ... } }
@@ -1065,21 +1206,53 @@
     function getRosterForMonth(mKey) {
       const mk = mKey || selectedMonthKey;
       const savedList = getStored('roster_records', []);
-      const monthRows = savedList.filter(r => r.monthKey === mk);
+      const monthRows = savedList.filter(r => r.monthKey === mk && !r.isDeleted);
+      const deletedIds = new Set(savedList.filter(r => r.monthKey === mk && r.isDeleted).map(r => String(r.id)));
       const allUsers = getStored('users', DEFAULT_USERS).map(normalizeUserRecord);
 
-      return DEFAULT_ROSTER.map(defRow => {
-        const override = monthRows.find(r => String(r.id) === String(defRow.id));
-        const pendingOv = pendingRosterEditsMap[`${mk}_${defRow.id}`];
-        const usr = allUsers.find(u => String(u.id) === String(defRow.id));
-        return {
-          ...defRow,
-          ...(override || {}),
-          ...(pendingOv || {}),
-          name: usr ? usr.name : defRow.name,
-          team: usr ? usr.team : (override && override.team ? override.team : defRow.team)
-        };
+      const mergedMap = new Map();
+      // 1. Default Roster Rows
+      DEFAULT_ROSTER.forEach(defRow => {
+        const uid = String(defRow.id);
+        if (!deletedIds.has(uid)) {
+          const usr = allUsers.find(u => String(u.id) === uid);
+          mergedMap.set(uid, {
+            ...defRow,
+            name: usr ? usr.name : defRow.name,
+            team: usr ? usr.team : defRow.team
+          });
+        }
       });
+      // 2. Auto-include any newly created Agents/TLs from Users List
+      allUsers.filter(u => u.role !== 'supervisor').forEach(u => {
+        const uid = String(u.id);
+        if (!deletedIds.has(uid) && !mergedMap.has(uid)) {
+          mergedMap.set(uid, {
+            id: uid, name: u.name, team: u.team, isTL: u.role === 'admin',
+            sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO'
+          });
+        }
+      });
+      // 3. Apply saved cloud overrides & custom added rows for this month
+      monthRows.forEach(r => {
+        const uid = String(r.id);
+        const prev = mergedMap.get(uid) || { id: uid, sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' };
+        mergedMap.set(uid, { ...prev, ...r });
+      });
+      // 4. Apply unsaved pending edits in memory (so all summary formulas recalculate live!)
+      Object.keys(pendingRosterEditsMap).forEach(k => {
+        if (k.startsWith(mk + '_')) {
+          const pRow = pendingRosterEditsMap[k];
+          if (pRow.isDeleted) {
+            mergedMap.delete(String(pRow.id));
+          } else {
+            const prev = mergedMap.get(String(pRow.id)) || {};
+            mergedMap.set(String(pRow.id), { ...prev, ...pRow });
+          }
+        }
+      });
+
+      return Array.from(mergedMap.values());
     }
 
     function changeSelectedMonth(newMonthKey) {
@@ -1238,26 +1411,38 @@
 
     function calculateEarnedIncentives(pTotals, agentCount, mKey) {
       let totalMoney = 0;
-      let earnedRewards = [];
+      let earnedCashBadges = [];
+      let earnedGiftItems = [];
       const activeProds = getActiveProductsForMonth(mKey || selectedMonthKey);
 
       Object.keys(activeProds).forEach(k => {
         const p = activeProds[k];
-        const achieved = pTotals[k];
-        const target = p.targetKg * agentCount;
+        const achieved = Number(pTotals[k]) || 0;
+        const target = (Number(p.targetKg) || 0) * agentCount;
         const pct = target > 0 ? (achieved / target) * 100 : 0;
 
         if (pct >= 100) {
-          if (p.bonus100) totalMoney += Number(p.bonus100);
-          if (p.item100) earnedRewards.push(`${p.name}: ${p.item100}`);
-          else earnedRewards.push(`${p.name} (100%)`);
+          if (p.bonus100) {
+            totalMoney += Number(p.bonus100);
+            earnedCashBadges.push(`${p.name} (100%: ৳${p.bonus100})`);
+          }
+          if (p.item100) {
+            earnedGiftItems.push(`🎁 ${p.item100} (${p.name} 100%)`);
+          }
         } else if (pct >= 90) {
-          if (p.bonus90) totalMoney += Number(p.bonus90);
-          earnedRewards.push(`${p.name} (90%)`);
+          if (p.bonus90) {
+            totalMoney += Number(p.bonus90);
+            earnedCashBadges.push(`${p.name} (90%: ৳${p.bonus90})`);
+          }
         }
       });
 
-      return { totalMoney, earnedRewards };
+      return {
+        totalMoney,
+        earnedCashBadges,
+        earnedGiftItems,
+        earnedRewards: [...earnedCashBadges, ...earnedGiftItems]
+      };
     }
 
     let lastSentRequestKey = '';
@@ -1392,10 +1577,14 @@
     }
 
     function hasOnlineStateChanged(cloudList, localList) {
-      if (!Array.isArray(cloudList) || !Array.isArray(localList)) return true;
-      if (cloudList.length !== localList.length) return true;
-      const norm = arr => arr.map(u => `${u.id}_${u.state}_${getUserOnlineStatus(u.id)}`).sort().join('|');
-      return norm(cloudList) !== norm(localList);
+      if (!Array.isArray(cloudList) || !Array.isArray(localList)) return false;
+      const now = Date.now();
+      const getActiveSet = (arr) => arr
+        .filter(o => o && o.state !== 'Offline' && o.lastSeen && (now - Number(o.lastSeen)) < 35000)
+        .map(o => `${o.id}_${o.state === 'On Break' ? 'On Break' : 'Online'}`)
+        .sort()
+        .join('|');
+      return getActiveSet(cloudList) !== getActiveSet(localList);
     }
 
     function hasAttendanceChanged(cloudAtt, localAtt) {
@@ -1527,6 +1716,13 @@
     function init() {
       if (currentUser) {
         currentUser = normalizeUserRecord(currentUser);
+        if (currentUser.role === 'agent') {
+          activeChannel = getChannelForTeam(currentUser.team);
+          localStorage.setItem('gb_active_channel', activeChannel);
+        } else if (!localStorage.getItem('gb_active_channel')) {
+          activeChannel = getChannelForTeam(currentUser.team);
+          localStorage.setItem('gb_active_channel', activeChannel);
+        }
         if (currentUser.role === 'admin') {
           dashboardScope = currentUser.team;
           monthlyPerfTeamScope = 'ALL';
@@ -1563,6 +1759,8 @@
       const user = normalizeUserRecord(rawUser);
       currentUser = user;
       setStored('session_user', user);
+      activeChannel = getChannelForTeam(user.team);
+      localStorage.setItem('gb_active_channel', activeChannel);
       dashboardScope = user.role === 'admin' ? user.team : 'ALL';
       monthlyPerfTeamScope = 'ALL';
       monthlyPerfAgentId = 'ALL';
@@ -1778,12 +1976,12 @@
           <aside class="w-60 sidebar-light p-4 flex flex-col justify-between shrink-0 shadow-sm">
             <div>
               <div class="flex items-center gap-3 px-2 mb-6">
-                <div class="w-9 h-9 rounded-xl tab-active text-white flex items-center justify-center font-bold shadow-md">
-                  <i class="fa-brands fa-facebook-f text-base"></i>
+                <div class="w-9 h-9 rounded-xl ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600' : 'tab-active'} text-white flex items-center justify-center font-bold shadow-md">
+                  <i class="${getActiveChannelMeta().icon} text-base"></i>
                 </div>
                 <div>
                   <h1 class="text-sm font-black text-slate-900 leading-tight">Ghorerbazar</h1>
-                  <p class="text-[11px] font-extrabold text-blue-600">Facebook Team</p>
+                  <p class="text-[11px] font-extrabold ${getActiveChannelMeta().colorClass}">${getActiveChannelMeta().fullTitle}</p>
                 </div>
               </div>
 
@@ -1829,6 +2027,14 @@
                 ${hasFeatureAccess(u, 'tab_attendance') ? `
                 <button onclick="setTab('attendance')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'attendance' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-regular fa-clock text-sm text-emerald-600"></i> Attendance & Duty Logs
+                </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_fraud_checker') ? `
+                <button onclick="setTab('fraud_checker')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'fraud_checker' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <span class="flex items-center gap-3">
+                    <i class="fa-solid fa-shield-halved text-sm ${activeTab === 'fraud_checker' ? 'text-amber-300' : 'text-teal-600'}"></i> Fraud Checker
+                  </span>
+                  <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${activeTab === 'fraud_checker' ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-800'}">FREE</span>
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_chat') ? `
@@ -1880,9 +2086,22 @@
           <div id="mainScrollContainer" class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
             <header class="min-h-[72px] py-3 px-8 flex items-center justify-between bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm shrink-0">
               <div class="flex items-center gap-3 flex-wrap">
-                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Ghorerbazar FB</span>
+                ${u.role !== 'agent' ? `
+                <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs" title="Switch between Facebook Channel and WhatsApp Channel">
+                  <button type="button" onclick="switchPortalChannel('FACEBOOK')" class="px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition-colors ${activeChannel === 'FACEBOOK' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                    <i class="fa-brands fa-facebook-f"></i> Facebook
+                  </button>
+                  <button type="button" onclick="switchPortalChannel('WHATSAPP')" class="px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition-colors ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                    <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp
+                  </button>
+                </div>
+                ` : `
+                <span class="px-3 py-1.5 rounded-xl text-xs font-black ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'}">
+                  <i class="${getActiveChannelMeta().icon} mr-1"></i>${getActiveChannelMeta().fullTitle}
+                </span>
+                `}
                 <span class="text-slate-300">/</span>
-                <h2 class="text-xs font-black uppercase text-blue-600 tracking-wide">${activeTab === 'agents' ? 'Target Setup & IDs' : (activeTab === 'chat' ? 'Chat' : (activeTab === 'ranking' ? 'Ranking' : (activeTab === 'role_management' ? 'Role & Feature Access Control (Nazim Exclusive)' : activeTab.replace('_', ' '))))}</h2>
+                <h2 class="text-xs font-black uppercase ${getActiveChannelMeta().colorClass} tracking-wide">${activeTab === 'agents' ? 'Target Setup & IDs' : (activeTab === 'chat' ? 'Chat' : (activeTab === 'ranking' ? 'Ranking' : (activeTab === 'role_management' ? 'Role & Feature Access Control (Nazim Exclusive)' : activeTab.replace('_', ' '))))}</h2>
                 <span class="text-slate-300">•</span>
                 <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
                   <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
@@ -1891,7 +2110,7 @@
                     ${AVAILABLE_MONTHS.map(m => `<option value="${m.key}" ${m.key === selectedMonthKey ? 'selected' : ''}>${m.label}</option>`).join('')}
                   </select>
                 </div>
-                ${isSupervisor(u) ? `<span class="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-800 text-[10px] font-black uppercase"><i class="fa-solid fa-eye mr-1"></i>Supervisor Mode</span>` : ''}
+                ${isCurrentChannelReadOnlyForUser(u) ? `<span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black uppercase"><i class="fa-solid fa-eye mr-1"></i>View-Only Mode</span>` : ''}
               </div>
 
               <div class="flex items-center gap-3 shrink-0">
@@ -2003,7 +2222,7 @@
       tables.forEach((box) => {
         if (box.previousElementSibling && box.previousElementSibling.classList.contains('top-table-scroll-helper')) return;
         const bar = document.createElement('div');
-        bar.className = 'top-table-scroll-helper flex items-center justify-between gap-3 px-3.5 py-1.5 mb-1.5 bg-white/95 border border-slate-200 rounded-xl shadow-2xs';
+        bar.className = 'top-table-scroll-helper h-9 flex items-center justify-between gap-3 px-3.5 mb-1.5 bg-white border border-slate-200 rounded-xl shadow-2xs';
         bar.innerHTML = `
           <div class="flex items-center gap-2 text-[11px] font-extrabold text-slate-600 shrink-0">
             <i class="fa-solid fa-arrows-left-right text-blue-600"></i>
@@ -2024,24 +2243,16 @@
         box.parentNode.insertBefore(bar, box);
         const slider = bar.querySelector('.table-scroll-slider');
         if (slider) {
-          const updateSlider = () => {
-            const maxScroll = box.scrollWidth - box.clientWidth;
-            if (maxScroll <= 2) {
-              bar.style.display = 'none';
-            } else {
-              bar.style.display = 'flex';
-              slider.value = Math.round((box.scrollLeft / maxScroll) * 100);
-            }
-          };
+          const maxScrollInit = Math.max(0, box.scrollWidth - box.clientWidth);
+          if (maxScrollInit > 0) slider.value = Math.round((box.scrollLeft / maxScrollInit) * 100);
           slider.addEventListener('input', (e) => {
-            const maxScroll = box.scrollWidth - box.clientWidth;
+            const maxScroll = Math.max(1, box.scrollWidth - box.clientWidth);
             box.scrollLeft = (Number(e.target.value) / 100) * maxScroll;
           });
           box.addEventListener('scroll', () => {
             const maxScroll = box.scrollWidth - box.clientWidth;
             if (maxScroll > 0) slider.value = Math.round((box.scrollLeft / maxScroll) * 100);
           });
-          setTimeout(updateSlider, 60);
         }
       });
     }
@@ -2056,6 +2267,7 @@
       if (activeTab === 'drive_product' && hasFeatureAccess(currentUser, 'tab_drive_product')) return renderDriveProductView();
       if (activeTab === 'roster' && hasFeatureAccess(currentUser, 'tab_roster')) return renderDutyRosterView();
       if (activeTab === 'attendance' && hasFeatureAccess(currentUser, 'tab_attendance')) return renderAttendanceView();
+      if (activeTab === 'fraud_checker' && hasFeatureAccess(currentUser, 'tab_fraud_checker')) return renderFraudCheckerView();
       if (activeTab === 'activity_logs' && hasFeatureAccess(currentUser, 'tab_activity_logs')) return renderActivityLogsView();
       if (activeTab === 'ranking' && hasFeatureAccess(currentUser, 'tab_ranking')) return renderRankingAndComparison();
       if (activeTab === 'chat' && hasFeatureAccess(currentUser, 'tab_chat')) return renderChatHubView();
@@ -2286,25 +2498,33 @@
           </div>
           `}
 
-          <div class="incentive-banner px-4 py-3 rounded-2xl shadow-sm flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3 min-w-0">
-              <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm shadow-sm shrink-0">
-                <i class="fa-solid fa-award"></i>
+          <div class="incentive-banner px-4 py-3 rounded-2xl shadow-sm flex flex-col justify-between gap-2">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm shadow-sm shrink-0">
+                  <i class="fa-solid fa-award"></i>
+                </div>
+                <div class="min-w-0">
+                  <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block">Earned Incentive & Product Gifts (${selectedMonthKey})</span>
+                  <div class="flex flex-wrap items-center gap-2 mt-0.5">
+                    <span class="text-sm font-black text-slate-900">💵 ৳${incentiveSummary.totalMoney.toLocaleString()} Cash Bonus</span>
+                    <span class="px-2 py-0.5 rounded-md bg-rose-500 text-white text-[10px] font-black shadow-2xs">
+                      🎁 ${(incentiveSummary.earnedGiftItems || []).length} Product Gift(s)
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div class="min-w-0">
-                <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block">Earned Incentive (${selectedMonthKey})</span>
-                <h3 class="text-sm font-black text-slate-900 truncate">
-                  ৳${incentiveSummary.totalMoney.toLocaleString()} Cash Bonus 
-                  ${incentiveSummary.earnedRewards.length > 0 ? `+ ${incentiveSummary.earnedRewards.length} Rewards` : ''}
-                </h3>
-                <p class="text-[11px] font-bold text-slate-600 truncate">
-                  ${incentiveSummary.earnedRewards.length > 0 ? `Unlocked: ${incentiveSummary.earnedRewards.join(', ')}` : 'Hit 90% or 100% product target to unlock bonus'}
-                </p>
-              </div>
+              <span class="px-2.5 py-1 bg-amber-500 text-white rounded-lg text-[10px] font-black shrink-0">
+                🔥 Live Bonus
+              </span>
             </div>
-            <span class="px-2.5 py-1 bg-amber-500 text-white rounded-lg text-[10px] font-black shrink-0">
-              🔥 Bonus
-            </span>
+            <div class="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-amber-200/70">
+              ${(incentiveSummary.earnedGiftItems && incentiveSummary.earnedGiftItems.length > 0)
+                ? incentiveSummary.earnedGiftItems.map(g => `<span class="px-2 py-0.5 rounded-md bg-white border border-rose-300 text-rose-700 text-[10px] font-extrabold shadow-2xs">${g}</span>`).join('')
+                : `<span class="text-[10px] font-bold text-amber-800">🎁 Product Gifts: Pink Salt 100% = <strong>2L Mustard Oil</strong> • Black Garlic 100% = <strong>400gm Gawa Ghee</strong></span>`
+              }
+              ${(incentiveSummary.earnedCashBadges || []).map(c => `<span class="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-extrabold">💰 ${c}</span>`).join('')}
+            </div>
           </div>
         </div>
       `;
@@ -2316,11 +2536,12 @@
       const monthUsers = getUsersForMonth(selectedMonthKey);
       const myMonthUser = monthUsers.find(usr => String(usr.id) === String(u.id)) || u;
       
+      const channelSalesAll = allSales.filter(s => getChannelForTeam(s.team) === activeChannel);
       let mySales = [];
       if (canViewAll(u)) {
-        mySales = dashboardScope === 'ALL' ? allSales : allSales.filter(s => s.team === dashboardScope);
+        mySales = dashboardScope === 'ALL' ? channelSalesAll : channelSalesAll.filter(s => s.team === dashboardScope);
       } else {
-        mySales = allSales.filter(s => String(s.userId) === String(u.id));
+        mySales = channelSalesAll.filter(s => String(s.userId) === String(u.id));
       }
 
       const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
@@ -2368,8 +2589,8 @@
           <div class="banner-hero-light px-5 py-4 rounded-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
             <div>
               <div class="flex flex-wrap items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${dashboardScope === 'Team Nazim' ? 'bg-orange-500' : (dashboardScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800')} text-white">
-                  ${canViewAll(u) ? `${dashboardScope === 'ALL' ? 'Full Facebook Team (17)' : dashboardScope}` : u.team}
+                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600' : (dashboardScope === 'Team Nazim' ? 'bg-orange-500' : (dashboardScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800'))} text-white">
+                  ${canViewAll(u) ? `${dashboardScope === 'ALL' ? `Full ${getActiveChannelMeta().name} Floor (${tInfo.agentCount})` : dashboardScope}` : u.team}
                 </span>
                 <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
                   ${canViewAll(u) ? `${tInfo.agentCount} Agents` : `Grade: ${myMonthUser.grade}`}
@@ -2395,10 +2616,12 @@
 
             <div class="flex flex-wrap items-center gap-2.5">
               ${canViewAll(u) ? `
-              <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-                <button onclick="setDashboardScope('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
-                <button onclick="setDashboardScope('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
-                <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (17)</button>
+              <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap items-center gap-1 border border-slate-200">
+                ${getActiveChannelMeta().teams.map((tn, tIdx) => {
+                  const activeColors = ['bg-orange-500 text-white shadow', 'bg-blue-600 text-white shadow', 'bg-emerald-600 text-white shadow'];
+                  return `<button onclick="setDashboardScope('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === tn ? activeColors[tIdx % activeColors.length] : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>`;
+                }).join('')}
+                <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (${monthUsers.filter(usr => usr.role === 'agent').length})</button>
               </div>
               ` : ''}
               ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
@@ -3243,6 +3466,129 @@
       downloadPortalCsvFile(`Monthly_Performance_${monthlyPerfTeamScope.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, csvRows);
     }
 
+
+    let dateWiseTeamFilter = 'ALL';
+
+    function setDateWiseTeamFilter(teamName) {
+      dateWiseTeamFilter = teamName;
+      renderAppLayout();
+    }
+
+    function renderDateWiseTeamDailySummaryTable() {
+      const allUsers = getUsersForMonth(selectedMonthKey);
+      const teamsList = getActiveChannelMeta().teams;
+      const teamsToShow = (dateWiseTeamFilter === 'ALL' || !teamsList.includes(dateWiseTeamFilter)) ? teamsList : [dateWiseTeamFilter];
+      const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+      const uniqueDates = Array.from(new Set(monthSales.map(s => s.date))).sort((a, b) => {
+        return (parseInt(a.split('/')[0], 10) || 0) - (parseInt(b.split('/')[0], 10) || 0);
+      });
+
+      return `
+        <div class="space-y-4 mt-6">
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200">
+            <div>
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-800">Date-by-Date Team Summary</span>
+              <h3 class="text-base font-black text-slate-900 mt-1">
+                <i class="fa-solid fa-calendar-check text-indigo-600 mr-1.5"></i>Date-Wise Team Total Sales Report (${selectedMonthKey})
+              </h3>
+              <p class="text-xs font-bold text-slate-500">Day 1, Day 2, Day 3... chronological team totals (Leads, Orders, Conv. Ratio, Amount, Daily Target & Achievement %)</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button type="button" onclick="setDateWiseTeamFilter('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All ${getActiveChannelMeta().name} Teams</button>
+              ${teamsList.map(tn => `
+                <button type="button" onclick="setDateWiseTeamFilter('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === tn ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>
+              `).join('')}
+            </div>
+          </div>
+
+          ${teamsToShow.map(teamName => {
+            const teamAgents = allUsers.filter(u => u.role === 'agent' && u.team === teamName);
+            const teamTLs = allUsers.filter(u => u.role === 'admin' && u.team === teamName);
+            const teamBaseTarget = teamAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
+                                   teamTLs.reduce((s, t) => s + (Number(t.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
+            const teamWorkingTarget = Math.round(teamBaseTarget * 1.05);
+            const teamDailyTarget = Math.round(teamWorkingTarget / 26);
+
+            let sumLeads = 0, sumOrders = 0, sumAmount = 0;
+
+            const dayRows = uniqueDates.map(dStr => {
+              const dayLogs = monthSales.filter(s => s.date === dStr && s.team === teamName);
+              const leads = dayLogs.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
+              const orders = dayLogs.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
+              const amount = dayLogs.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+              const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+              const achPct = teamDailyTarget > 0 ? ((amount / teamDailyTarget) * 100).toFixed(1) : '0.0';
+
+              sumLeads += leads;
+              sumOrders += orders;
+              sumAmount += amount;
+
+              return { dStr, leads, orders, conv, amount, teamDailyTarget, achPct };
+            });
+
+            const totalConv = sumLeads > 0 ? ((sumOrders / sumLeads) * 100).toFixed(2) : '0.00';
+            const sumDailyTargetsForActiveDays = teamDailyTarget * (dayRows.length || 1);
+            const totalAchPct = teamWorkingTarget > 0 ? ((sumAmount / teamWorkingTarget) * 100).toFixed(1) : '0.0';
+
+            return `
+              <div class="card-dynamic overflow-hidden overflow-x-auto">
+                <div class="px-5 py-3 ${teamName === 'Team Nazim' ? 'bg-orange-500' : 'bg-blue-600'} text-white flex flex-wrap items-center justify-between gap-2">
+                  <span class="text-xs font-black uppercase tracking-wider"><i class="fa-solid fa-layer-group mr-1.5"></i>${teamName} — Date-Wise Total Sales Report (${selectedMonthKey})</span>
+                  <span class="text-[11px] font-extrabold">Team Working Target (+5%): ৳${teamWorkingTarget.toLocaleString()} • Daily Target (÷26): ৳${teamDailyTarget.toLocaleString()}</span>
+                </div>
+                <table class="w-full text-left text-xs whitespace-nowrap">
+                  <thead class="table-header-light uppercase font-extrabold">
+                    <tr>
+                      <th class="p-3.5">Date</th>
+                      <th class="p-3.5">Team</th>
+                      <th class="p-3.5 text-center">Total Leads</th>
+                      <th class="p-3.5 text-center">Total Orders</th>
+                      <th class="p-3.5 text-center">Convert Ratio</th>
+                      <th class="p-3.5">Sales Amount</th>
+                      <th class="p-3.5">Daily Target (÷26)</th>
+                      <th class="p-3.5 text-center">Target Achievement Ratio</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 font-semibold">
+                    ${dayRows.length === 0 ? `<tr><td colspan="8" class="p-6 text-center text-slate-400 font-bold">No daily entries recorded for ${teamName} in ${selectedMonthKey} yet.</td></tr>` : ''}
+                    ${dayRows.map(r => `
+                      <tr class="hover:bg-slate-50">
+                        <td class="p-3.5 font-extrabold text-slate-900">${cleanDisplayDate(r.dStr)}</td>
+                        <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${teamName === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${teamName}</span></td>
+                        <td class="p-3.5 text-center font-bold text-slate-700">${r.leads.toLocaleString()}</td>
+                        <td class="p-3.5 text-center font-black text-blue-600">${r.orders.toLocaleString()}</td>
+                        <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${r.conv}%</span></td>
+                        <td class="p-3.5 font-black text-emerald-600 text-sm">৳${r.amount.toLocaleString()}</td>
+                        <td class="p-3.5 font-bold text-slate-500">৳${r.teamDailyTarget.toLocaleString()}</td>
+                        <td class="p-3.5 text-center">
+                          <span class="px-2.5 py-1 rounded-md ${Number(r.achPct) >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'} font-black">${r.achPct}%</span>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                  <tfoot class="bg-slate-900 text-white font-black text-xs">
+                    <tr>
+                      <td colspan="2" class="p-4 uppercase tracking-wider text-amber-400">
+                        <i class="fa-solid fa-calculator mr-1.5"></i> ${teamName} Grand Total (${dayRows.length} Days)
+                      </td>
+                      <td class="p-4 text-center">${sumLeads.toLocaleString()}</td>
+                      <td class="p-4 text-center text-blue-300">${sumOrders.toLocaleString()}</td>
+                      <td class="p-4 text-center"><span class="px-2 py-0.5 rounded bg-white/15 text-white">${totalConv}%</span></td>
+                      <td class="p-4 text-emerald-400 text-sm">৳${sumAmount.toLocaleString()}</td>
+                      <td class="p-4 text-slate-300">৳${sumDailyTargetsForActiveDays.toLocaleString()} <span class="text-[10px] text-slate-400">(Month: ৳${teamWorkingTarget.toLocaleString()})</span></td>
+                      <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black">${totalAchPct}% of Month</span></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
     function renderMonthlyPerformanceView() {
       const u = currentUser;
       const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
@@ -3309,7 +3655,7 @@
           ...ag, baseTgt, workTgt, leads, orders, rev, conv, rem, achPct,
           ...agProdTotals, daysCount: uniqueDailyLogs.length, dailyLogs: uniqueDailyLogs
         };
-      }).sort((a, b) => b.rev - a.rev || b.orders - a.orders);
+      }).sort((a, b) => b.achPct - a.achPct || b.rev - a.rev);
 
       const totConv = totLeads > 0 ? ((totOrders / totLeads) * 100).toFixed(2) : '0.00';
       const totRem = Math.max(0, totWork - totRev);
@@ -3593,6 +3939,7 @@
             </div>
             `;
           })() : ''}
+          ${renderDateWiseTeamDailySummaryTable()}
         </div>
       `;
     }
@@ -3787,9 +4134,20 @@
                 </p>
               </div>
               <div class="flex flex-wrap items-center gap-2.5">
+                ${isEditable ? `
+                  <button type="button" onclick="handleAddCustomRosterRowPrompt('Team Nazim')" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1">
+                    <i class="fa-solid fa-user-plus"></i> + Add Row (Team Nazim)
+                  </button>
+                  <button type="button" onclick="handleAddCustomRosterRowPrompt('Team Samad')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1">
+                    <i class="fa-solid fa-user-plus"></i> + Add Row (Team Samad)
+                  </button>
+                  <button type="button" onclick="handleAddCustomRosterRowPrompt('Floating')" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1">
+                    <i class="fa-solid fa-user-plus"></i> + Add Floating
+                  </button>
+                ` : ''}
                 ${pendingCount > 0 ? `
                   <span class="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-900 text-xs font-black animate-pulse">
-                    <i class="fa-solid fa-pen-to-square mr-1"></i>${pendingCount} Unsaved Roster Change(s)
+                    <i class="fa-solid fa-pen-to-square mr-1"></i>${pendingCount} Unsaved Change(s)
                   </span>
                   <button type="button" onclick="discardPendingRosterChanges()" class="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-extrabold transition-colors">
                     Discard
@@ -3817,14 +4175,29 @@
                       <th class="px-1.5 py-2 border border-slate-200">ID</th>
                       <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
                       ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
+                      ${isEditable ? `<th class="px-1.5 py-2 border border-slate-200">Team / Del</th>` : ''}
                     </tr>
                   </thead>
                   <tbody>
                     ${samadRows.map(r => `
                       <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
                         <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
-                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name} ${r.isTL ? '<span class="text-[10px] text-blue-600 font-black">(TL)</span>' : ''}</td>
+                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">
+                          ${isEditable
+                            ? `<input type="text" value="${r.name}" onchange="handleRosterFieldEdit('${r.id}', 'name', this.value)" class="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none text-[11px] font-bold w-32">`
+                            : r.name}
+                          ${r.isTL ? '<span class="text-[10px] text-blue-600 font-black">(TL)</span>' : ''}
+                        </td>
                         ${days.map(d => renderShiftCell(r, d)).join('')}
+                        ${isEditable ? `
+                        <td class="p-1 border border-slate-200 text-center whitespace-nowrap">
+                          <select onchange="handleRosterFieldEdit('${r.id}', 'team', this.value)" class="bg-slate-100 rounded px-1 py-0.5 text-[10px] font-bold">
+                            <option value="Team Samad" ${r.team === 'Team Samad' ? 'selected' : ''}>Samad</option>
+                            <option value="Team Nazim" ${r.team === 'Team Nazim' ? 'selected' : ''}>Nazim</option>
+                            <option value="Floating" ${r.team === 'Floating' ? 'selected' : ''}>Float</option>
+                          </select>
+                          <button type="button" onclick="handleDeleteRosterRowDraft('${r.id}')" title="Remove Row" class="ml-1 text-red-500 hover:text-red-700"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                        </td>` : ''}
                       </tr>
                     `).join('')}
                   </tbody>
@@ -3842,14 +4215,29 @@
                       <th class="px-1.5 py-2 border border-slate-200">ID</th>
                       <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
                       ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
+                      ${isEditable ? `<th class="px-1.5 py-2 border border-slate-200">Team / Del</th>` : ''}
                     </tr>
                   </thead>
                   <tbody>
                     ${nazimRows.map(r => `
                       <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
                         <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
-                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">${r.name} ${r.isTL ? '<span class="text-[10px] text-orange-600 font-black">(TL)</span>' : ''}</td>
+                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">
+                          ${isEditable
+                            ? `<input type="text" value="${r.name}" onchange="handleRosterFieldEdit('${r.id}', 'name', this.value)" class="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-orange-500 focus:outline-none text-[11px] font-bold w-32">`
+                            : r.name}
+                          ${r.isTL ? '<span class="text-[10px] text-orange-600 font-black">(TL)</span>' : ''}
+                        </td>
                         ${days.map(d => renderShiftCell(r, d)).join('')}
+                        ${isEditable ? `
+                        <td class="p-1 border border-slate-200 text-center whitespace-nowrap">
+                          <select onchange="handleRosterFieldEdit('${r.id}', 'team', this.value)" class="bg-slate-100 rounded px-1 py-0.5 text-[10px] font-bold">
+                            <option value="Team Nazim" ${r.team === 'Team Nazim' ? 'selected' : ''}>Nazim</option>
+                            <option value="Team Samad" ${r.team === 'Team Samad' ? 'selected' : ''}>Samad</option>
+                            <option value="Floating" ${r.team === 'Floating' ? 'selected' : ''}>Float</option>
+                          </select>
+                          <button type="button" onclick="handleDeleteRosterRowDraft('${r.id}')" title="Remove Row" class="ml-1 text-red-500 hover:text-red-700"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                        </td>` : ''}
                       </tr>
                     `).join('')}
                   </tbody>
@@ -3939,6 +4327,49 @@
       renderAppLayout();
     }
 
+    function handleRosterFieldEdit(empId, fieldName, newValue) {
+      if (!hasFeatureAccess(currentUser, 'feat_edit_roster')) return;
+      const roster = getRosterForMonth(selectedMonthKey);
+      const targetRow = roster.find(r => String(r.id) === String(empId));
+      if (!targetRow) return;
+
+      const updatedRow = { ...targetRow, [fieldName]: newValue, monthKey: selectedMonthKey };
+      pendingRosterEditsMap[`${selectedMonthKey}_${empId}`] = updatedRow;
+      renderAppLayout();
+    }
+
+    function handleAddCustomRosterRowPrompt(defaultTeam) {
+      if (!hasFeatureAccess(currentUser, 'feat_edit_roster')) return;
+      const empId = prompt('Enter Employee ID for the new Roster Row (e.g. 11250):');
+      if (!empId || !empId.trim()) return;
+      const empName = prompt('Enter Full Name for the Roster Row:');
+      if (!empName || !empName.trim()) return;
+      const isTlRole = confirm('Is this member a Team Leader (TL)? Click OK for TL, or Cancel for Agent.');
+
+      const newRow = {
+        id: empId.trim(),
+        name: empName.trim(),
+        team: defaultTeam || 'Team Nazim',
+        isTL: isTlRole,
+        sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO',
+        monthKey: selectedMonthKey
+      };
+      pendingRosterEditsMap[`${selectedMonthKey}_${newRow.id}`] = newRow;
+      renderAppLayout();
+      showPortalToast('Roster Row Added (Draft)', `Added ${newRow.name} (${newRow.id}). Click "Save Roster Changes" to save all edits!`, 'warning');
+    }
+
+    function handleDeleteRosterRowDraft(empId) {
+      if (!hasFeatureAccess(currentUser, 'feat_edit_roster')) return;
+      const roster = getRosterForMonth(selectedMonthKey);
+      const targetRow = roster.find(r => String(r.id) === String(empId));
+      if (!targetRow) return;
+
+      pendingRosterEditsMap[`${selectedMonthKey}_${empId}`] = { ...targetRow, isDeleted: true, monthKey: selectedMonthKey };
+      renderAppLayout();
+      showPortalToast('Row Removed in Preview', `Removed ${targetRow.name} from preview. Click "Save Roster Changes" to save.`, 'warning');
+    }
+
     function discardPendingRosterChanges() {
       Object.keys(pendingRosterEditsMap).forEach(k => {
         if (k.startsWith(selectedMonthKey + '_')) delete pendingRosterEditsMap[k];
@@ -3980,6 +4411,304 @@
         'Yes, Save & Sync Roster',
         true
       );
+    }
+
+
+    // =========================================================================
+    // SIMPLE 1-CLICK REAL-TIME CUSTOMER DELIVERY & FRAUD RATIO CHECKER
+    // =========================================================================
+    let fraudCheckCurrentPhone = '';
+    let fraudCheckLoading = false;
+    let fraudCheckResultData = null;
+
+    function normalizeBdPhoneNumber(rawInput) {
+      let digits = String(rawInput || '').replace(/\D/g, '');
+      if (digits.startsWith('8801') && digits.length === 13) {
+        digits = '0' + digits.substring(3);
+      } else if (digits.startsWith('1') && digits.length === 10) {
+        digits = '0' + digits;
+      }
+      return digits;
+    }
+
+    function isValidBdPhoneNumber(phone) {
+      return /^01[3-9]\d{8}$/.test(String(phone || ''));
+    }
+
+    async function fetchFreeCourierHistoryForPhone(phone) {
+      // 1. Try Apps Script Backend Free Proxy first (bypasses browser CORS)
+      const proxyPromise = new Promise((resolve) => {
+        const cbName = 'gb_fraud_cb_' + Date.now();
+        const script = document.createElement('script');
+        const timer = setTimeout(() => {
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+          resolve(null);
+        }, 5500);
+
+        window[cbName] = function(res) {
+          clearTimeout(timer);
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+          if (res && res.status === 'success' && res.courierData) {
+            resolve(res.courierData);
+          } else {
+            resolve(null);
+          }
+        };
+        script.src = `${webhookUrl}?action=CHECK_CUSTOMER_FRAUD&phone=${encodeURIComponent(phone)}&callback=${cbName}&t=${Date.now()}`;
+        script.onerror = function() {
+          clearTimeout(timer);
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+          resolve(null);
+        };
+        document.body.appendChild(script);
+      });
+
+      const proxyResult = await proxyPromise;
+      if (proxyResult && proxyResult.totalParcels !== undefined) {
+        return proxyResult;
+      }
+      return null;
+    }
+
+    async function handleRunFraudCheck(e, phoneOverride = null) {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      const inpEl = document.getElementById('fraudPhoneInput');
+      const rawVal = phoneOverride !== null ? phoneOverride : (inpEl ? inpEl.value : fraudCheckCurrentPhone);
+      const cleanPhone = normalizeBdPhoneNumber(rawVal);
+
+      if (!isValidBdPhoneNumber(cleanPhone)) {
+        showPortalToast('Invalid Mobile Number', 'Please enter a valid 11-digit Bangladeshi mobile number (e.g. 017XXXXXXXX).', 'error');
+        return;
+      }
+
+      fraudCheckCurrentPhone = cleanPhone;
+      fraudCheckLoading = true;
+      renderAppLayout();
+
+      const liveData = await fetchFreeCourierHistoryForPhone(cleanPhone);
+      fraudCheckLoading = false;
+
+      if (liveData) {
+        fraudCheckResultData = { ...liveData, phone: cleanPhone, checkedAt: getNowTimeStr() };
+      } else {
+        fraudCheckResultData = {
+          phone: cleanPhone,
+          checkedAt: getNowTimeStr(),
+          couriers: {
+            steadfast: { name: 'Steadfast Courier', total: 0, delivered: 0, cancelled: 0 },
+            pathao: { name: 'Pathao Courier', total: 0, delivered: 0, cancelled: 0 },
+            redx: { name: 'RedX Courier', total: 0, delivered: 0, cancelled: 0 },
+            paperfly: { name: 'Paperfly Courier', total: 0, delivered: 0, cancelled: 0 }
+          },
+          totalParcels: 0,
+          totalDelivered: 0,
+          totalCancelled: 0
+        };
+      }
+      renderAppLayout();
+    }
+
+    function openExternalFreeCheckerPopup(serviceName, phone) {
+      const cleanPhone = normalizeBdPhoneNumber(phone || fraudCheckCurrentPhone || document.getElementById('fraudPhoneInput')?.value);
+      if (!isValidBdPhoneNumber(cleanPhone)) {
+        showPortalToast('Enter Mobile Number First', 'Please type a valid 11-digit BD number first!', 'warning');
+        return;
+      }
+      fraudCheckCurrentPhone = cleanPhone;
+      try { navigator.clipboard.writeText(cleanPhone); } catch (err) {}
+      showPortalToast('Number Copied & Opening!', `Copied ${cleanPhone} to clipboard. Opening ${serviceName} live check...`, 'success');
+
+      let targetUrl = `https://bdcourier.com/?phone=${cleanPhone}`;
+      if (serviceName === 'Steadfast') targetUrl = `https://steadfast.com.bd/`;
+      else if (serviceName === 'Pathao') targetUrl = `https://merchant.pathao.com/`;
+      else if (serviceName === 'RedX') targetUrl = `https://redx.com.bd/`;
+
+      window.open(targetUrl, 'gb_courier_checker_popup', 'width=980,height=740,left=180,top=80,scrollbars=yes,resizable=yes');
+    }
+
+    function renderFraudCheckerView() {
+      const activePhone = normalizeBdPhoneNumber(fraudCheckCurrentPhone);
+      const res = (fraudCheckResultData && fraudCheckResultData.phone === activePhone) ? fraudCheckResultData : null;
+
+      const totP = res ? (Number(res.totalParcels) || 0) : 0;
+      const totD = res ? (Number(res.totalDelivered) || 0) : 0;
+      const totC = res ? (Number(res.totalCancelled) || 0) : 0;
+      const successPct = totP > 0 ? Number(((totD / totP) * 100).toFixed(1)) : 0;
+      const cancelPct = totP > 0 ? Number(((totC / totP) * 100).toFixed(1)) : 0;
+
+      let riskBadgeHtml = `<span class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-black">Ready to Check</span>`;
+      let decisionBannerClass = 'bg-white border-slate-200 text-slate-800';
+      let decisionTitle = 'No Direct API Record Returned — Use 1-Click Live Check on the Right';
+      let decisionAdvice = 'Click "1-Click Live BD Courier Check" to view real-time courier history with the number automatically copied.';
+
+      if (totP > 0) {
+        if (successPct >= 80) {
+          riskBadgeHtml = `<span class="px-3 py-1 rounded-full bg-emerald-600 text-white text-xs font-black">✅ SAFE CUSTOMER (${successPct}% Delivered)</span>`;
+          decisionBannerClass = 'bg-emerald-50 border-emerald-300 text-emerald-950';
+          decisionTitle = `🟢 High Delivery Success Ratio (${successPct}% Delivered • ${totD} of ${totP} Parcels)`;
+          decisionAdvice = `Customer has received ${totD} parcels and cancelled ${totC}. Safe for Cash on Delivery (COD)!`;
+        } else if (successPct >= 50) {
+          riskBadgeHtml = `<span class="px-3 py-1 rounded-full bg-amber-500 text-white text-xs font-black">⚠️ MODERATE RISK (${successPct}% Delivered)</span>`;
+          decisionBannerClass = 'bg-amber-50 border-amber-300 text-amber-950';
+          decisionTitle = `🟡 Moderate Return Risk (${successPct}% Delivered • ${cancelPct}% Cancelled)`;
+          decisionAdvice = `Customer cancelled ${totC} out of ${totP} parcels. Please verify order & address over phone call before booking.`;
+        } else {
+          riskBadgeHtml = `<span class="px-3 py-1 rounded-full bg-red-600 text-white text-xs font-black animate-pulse">🚨 HIGH RETURN RISK (${cancelPct}% Cancelled!)</span>`;
+          decisionBannerClass = 'bg-red-50 border-red-300 text-red-950';
+          decisionTitle = `🔴 High Cancellation History (${totC} Cancelled out of ${totP} Parcels!)`;
+          decisionAdvice = `Only ${successPct}% delivery success ratio! Collect Advance Delivery Charge before shipping.`;
+        }
+      }
+
+      const couriersMap = (res && res.couriers) ? res.couriers : {
+        steadfast: { name: 'Steadfast Courier', total: 0, delivered: 0, cancelled: 0 },
+        pathao: { name: 'Pathao Courier', total: 0, delivered: 0, cancelled: 0 },
+        redx: { name: 'RedX Courier', total: 0, delivered: 0, cancelled: 0 },
+        paperfly: { name: 'Paperfly Courier', total: 0, delivered: 0, cancelled: 0 }
+      };
+
+      const courierCardsSpec = [
+        { key: 'steadfast', name: 'Steadfast Courier', icon: 'fa-truck-fast', color: 'border-emerald-200', badge: 'bg-emerald-600 text-white' },
+        { key: 'pathao', name: 'Pathao Courier', icon: 'fa-motorcycle', color: 'border-rose-200', badge: 'bg-rose-600 text-white' },
+        { key: 'redx', name: 'RedX Courier', icon: 'fa-box-open', color: 'border-red-200', badge: 'bg-red-700 text-white' },
+        { key: 'paperfly', name: 'Paperfly Courier', icon: 'fa-paper-plane', color: 'border-blue-200', badge: 'bg-blue-600 text-white' }
+      ];
+
+      return `
+        <div class="max-w-5xl mx-auto space-y-5">
+          <!-- Clean 1-Click Search Card -->
+          <div class="p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white shadow-xl border border-teal-500/30">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5">
+              <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center text-xl shadow-lg shrink-0">
+                  <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <div>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-teal-400 text-slate-950">
+                    Real-Time 1-Click Ratio Checker
+                  </span>
+                  <h2 class="text-xl font-black text-white mt-1">Customer Delivery & Cancel Ratio Checker</h2>
+                  <p class="text-xs font-bold text-slate-300 mt-0.5">
+                    Enter customer's 11-digit mobile number and click <strong>Check Ratio</strong> to see real-time delivery success vs cancel history.
+                  </p>
+                </div>
+              </div>
+
+              <form onsubmit="handleRunFraudCheck(event)" class="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                <div class="relative flex-1 sm:w-72">
+                  <i class="fa-solid fa-phone text-teal-500 absolute left-4 top-1/2 -translate-y-1/2 text-sm"></i>
+                  <input
+                    type="text"
+                    id="fraudPhoneInput"
+                    value="${activePhone || ''}"
+                    placeholder="Enter 01XXXXXXXXX..."
+                    maxlength="14"
+                    required
+                    class="w-full pl-10 pr-4 py-3.5 rounded-2xl bg-white text-slate-900 font-black text-sm tracking-wider placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-teal-500/40"
+                  >
+                </div>
+                <button type="submit" class="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer">
+                  ${fraudCheckLoading
+                    ? `<i class="fa-solid fa-circle-notch animate-spin text-sm"></i> Checking...`
+                    : `<i class="fa-solid fa-magnifying-glass text-sm"></i> Check Ratio`
+                  }
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Real-Time Result Section -->
+          ${activePhone ? `
+          <div class="p-6 rounded-3xl border-2 ${decisionBannerClass} shadow-sm space-y-5">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-200/80">
+              <div>
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <span class="px-3.5 py-1 rounded-xl bg-slate-900 text-white font-mono text-sm font-black tracking-wider">
+                    <i class="fa-solid fa-mobile-screen-button text-teal-400 mr-1.5"></i>${activePhone}
+                  </span>
+                  ${riskBadgeHtml}
+                </div>
+                <h3 class="text-base font-black mt-2">${decisionTitle}</h3>
+                <p class="text-xs font-bold opacity-80 mt-0.5">${decisionAdvice}</p>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2 shrink-0">
+                <button type="button" onclick="openExternalFreeCheckerPopup('BD Courier', '${activePhone}')" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow flex items-center gap-1.5 transition-colors">
+                  <i class="fa-solid fa-bolt text-amber-300"></i> 1-Click Live BD Courier
+                </button>
+                <button type="button" onclick="openExternalFreeCheckerPopup('Steadfast', '${activePhone}')" class="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow flex items-center gap-1.5 transition-colors">
+                  <i class="fa-solid fa-truck-fast"></i> Steadfast
+                </button>
+                <button type="button" onclick="openExternalFreeCheckerPopup('Pathao', '${activePhone}')" class="px-3.5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold shadow flex items-center gap-1.5 transition-colors">
+                  <i class="fa-solid fa-motorcycle"></i> Pathao
+                </button>
+              </div>
+            </div>
+
+            <!-- Overall Summary KPIs & Ratio Bar -->
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
+              <div class="p-4 rounded-2xl bg-white border border-slate-200 text-center shadow-2xs">
+                <span class="text-[10px] font-extrabold uppercase text-slate-400 block">Total Parcels</span>
+                <strong class="text-2xl font-black text-slate-900">${totP}</strong>
+              </div>
+              <div class="p-4 rounded-2xl bg-white border border-emerald-200 text-center shadow-2xs">
+                <span class="text-[10px] font-extrabold uppercase text-emerald-700 block">Delivered</span>
+                <strong class="text-2xl font-black text-emerald-600">${totD}</strong>
+              </div>
+              <div class="p-4 rounded-2xl bg-white border border-rose-200 text-center shadow-2xs">
+                <span class="text-[10px] font-extrabold uppercase text-rose-700 block">Cancelled / Returned</span>
+                <strong class="text-2xl font-black text-rose-600">${totC}</strong>
+              </div>
+              <div class="p-4 rounded-2xl bg-white border border-indigo-200 flex flex-col justify-center shadow-2xs">
+                <div class="flex justify-between text-xs font-black mb-1.5">
+                  <span class="text-emerald-700">Success: ${successPct}%</span>
+                  <span class="text-rose-600">Cancel: ${cancelPct}%</span>
+                </div>
+                <div class="w-full h-3 bg-rose-100 rounded-full overflow-hidden flex">
+                  <div class="bg-emerald-500 h-3 transition-all" style="width: ${totP > 0 ? successPct : 0}%"></div>
+                  <div class="bg-rose-500 h-3 transition-all" style="width: ${totP > 0 ? cancelPct : 0}%"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4 Courier Cards (Steadfast, Pathao, RedX, Paperfly) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              ${courierCardsSpec.map(c => {
+                const cObj = couriersMap[c.key] || { total: 0, delivered: 0, cancelled: 0 };
+                const cTot = (Number(cObj.delivered) || 0) + (Number(cObj.cancelled) || 0);
+                const cPct = cTot > 0 ? Math.round(((Number(cObj.delivered) || 0) / cTot) * 100) : 0;
+                return `
+                  <div class="p-4 rounded-2xl border ${c.color} bg-white shadow-2xs">
+                    <div class="flex items-center justify-between mb-2.5">
+                      <span class="text-xs font-black text-slate-900"><i class="fa-solid ${c.icon} mr-1.5 text-slate-600"></i>${c.name}</span>
+                      <span class="px-2 py-0.5 rounded-md text-[10px] font-black ${c.badge}">${cPct}%</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-1 text-center text-[11px] font-bold bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <div><span class="text-[9px] text-slate-400 block">Total</span><strong class="text-slate-800">${cTot}</strong></div>
+                      <div class="border-x border-slate-200"><span class="text-[9px] text-emerald-600 block">Delivered</span><strong class="text-emerald-600">${cObj.delivered || 0}</strong></div>
+                      <div><span class="text-[9px] text-rose-600 block">Cancel</span><strong class="text-rose-600">${cObj.cancelled || 0}</strong></div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+          ` : `
+          <div class="card-dynamic p-10 text-center space-y-2">
+            <div class="w-14 h-14 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center text-2xl mx-auto">
+              <i class="fa-solid fa-magnifying-glass-chart"></i>
+            </div>
+            <h3 class="text-base font-black text-slate-900">Enter a Customer Mobile Number Above</h3>
+            <p class="text-xs font-bold text-slate-400 max-w-md mx-auto">
+              Type any 11-digit Bangladeshi phone number and click <strong>Check Ratio</strong> to view their real-time courier delivery success rate in 1 click.
+            </p>
+          </div>
+          `}
+        </div>
+      `;
     }
 
     function renderAttendanceView() {
@@ -4111,53 +4840,47 @@
       const rows = filteredAgents.map(ag => {
         const baseTgt = Number(ag.baseTarget) || 0;
         const workTgt = Math.round(baseTgt * 1.05);
-        const s1Goal = Math.round(workTgt * 0.40);
-        const s2Goal = Math.round(workTgt * 0.35);
-        const s3Goal = Math.round(workTgt * 0.35);
+        const curGoal = Math.round(workTgt * phaseMeta.pct);
 
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
-        let s1Sales = 0, s2Sales = 0, s3Sales = 0, activeSprintOrders = 0, activeSprintLeads = 0;
+        let curSales = 0, activeSprintOrders = 0, activeSprintLeads = 0;
 
         agSales.forEach(s => {
           const day = parseInt(String(s.date).split('/')[0], 10) || 0;
           const amt = Number(s.amount) || 0;
-          if (day <= 10) {
-            s1Sales += amt;
-            if (effPhase === 'S1') { activeSprintOrders += Number(s.orders) || 0; activeSprintLeads += Number(s.leads) || 0; }
-          } else if (day <= 20) {
-            s2Sales += amt;
-            if (effPhase === 'S2') { activeSprintOrders += Number(s.orders) || 0; activeSprintLeads += Number(s.leads) || 0; }
-          } else {
-            s3Sales += amt;
-            if (effPhase === 'S3') { activeSprintOrders += Number(s.orders) || 0; activeSprintLeads += Number(s.leads) || 0; }
+          const isMatch = (effPhase === 'S1' && day <= 10) || (effPhase === 'S2' && day > 10 && day <= 20) || (effPhase === 'S3' && day > 20);
+          if (isMatch) {
+            curSales += amt;
+            activeSprintOrders += Number(s.orders) || 0;
+            activeSprintLeads += Number(s.leads) || 0;
           }
         });
 
-        const curGoal = effPhase === 'S1' ? s1Goal : (effPhase === 'S2' ? s2Goal : s3Goal);
-        const curSales = effPhase === 'S1' ? s1Sales : (effPhase === 'S2' ? s2Sales : s3Sales);
         const curRem = Math.max(0, curGoal - curSales);
         const curPct = curGoal > 0 ? Number(((curSales / curGoal) * 100).toFixed(2)) : 0;
+        const convRatio = activeSprintLeads > 0 ? ((activeSprintOrders / activeSprintLeads) * 100).toFixed(2) + '%' : '0.00%';
 
         return {
-          ag, workTgt, s1Goal, s1Sales, s2Goal, s2Sales, s3Goal, s3Sales,
-          curGoal, curSales, curRem, curPct, activeSprintOrders, activeSprintLeads
+          ag, workTgt, curGoal, curSales, curRem, curPct, activeSprintOrders, activeSprintLeads, convRatio
         };
-      }).sort((a, b) => b.curSales - a.curSales || b.curPct - a.curPct);
+      // Sort strictly by Achievement % (Highest to Lowest), then by Sales Amount
+      }).sort((a, b) => b.curPct - a.curPct || b.curSales - a.curSales);
 
+      // Export ONLY the selected Sprint's columns (no other sprints mixed in!)
       const headers = [
         'Rank', 'Emp ID', 'Agent Name', 'Team', 'Grade', 'Monthly Working Target (+5%)',
-        `${phaseMeta.label} Goal`, `${phaseMeta.label} Achieved`, `${phaseMeta.label} Remaining`, `${phaseMeta.label} Achieved (%)`,
-        'Sprint 1 (1-10) Achieved', 'Sprint 2 (11-20) Achieved', 'Sprint 3 (21-31) Achieved'
+        `${phaseMeta.label} Leads`, `${phaseMeta.label} Orders`, `${phaseMeta.label} Conv. Ratio`,
+        `${phaseMeta.label} Goal (BDT)`, `${phaseMeta.label} Achieved (BDT)`, `${phaseMeta.label} Remaining (BDT)`, `${phaseMeta.label} Achieved (%)`
       ];
 
       const csvRows = rows.map((r, i) => [
         i + 1, r.ag.id, r.ag.name, r.ag.team, r.ag.grade, r.workTgt,
-        r.curGoal, r.curSales, r.curRem, `${r.curPct}%`,
-        r.s1Sales, r.s2Sales, r.s3Sales
+        r.activeSprintLeads, r.activeSprintOrders, r.convRatio,
+        r.curGoal, r.curSales, r.curRem, `${r.curPct}%`
       ]);
 
       const safeMonth = selectedMonthKey.replace('/', '-');
-      downloadPortalCsvFile(`Sprint_Target_${effPhase}_${sprintTabTeamScope.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, csvRows);
+      downloadPortalCsvFile(`Sprint_${effPhase}_Only_${sprintTabTeamScope.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, csvRows);
     }
 
     function renderSprintTargetView() {
@@ -4256,7 +4979,7 @@
           ...ag, workTgt, s1Goal, s1Sales, s1Pct, s2Goal, s2Sales, s2Pct, s3Goal, s3Sales, s3Pct,
           curGoal, curSales, curRem, curPct, sprintOrders, sprintLeads, conv
         };
-      }).sort((a, b) => b.curSales - a.curSales || b.curPct - a.curPct);
+      }).sort((a, b) => b.curPct - a.curPct || b.curSales - a.curSales);
 
       const mySprintRankIdx = u.role === 'agent'
         ? rankedSprintAgents.findIndex(a => String(a.id) === String(u.id))
@@ -4535,8 +5258,12 @@
         return { teamName, agentCount: tAgents.length, workTgt, leads, orders, revenue, conv, pct };
       }
 
-      const nazimStats = calcTeamStats('Team Nazim');
-      const samadStats = calcTeamStats('Team Samad');
+      const chTeams = getActiveChannelMeta().teams;
+      const teamStatsList = chTeams.map(tn => {
+        const st = calcTeamStats(tn);
+        const tlObj = monthUsersAll.find(u => u.role === 'admin' && u.team === tn);
+        return { ...st, tlName: tlObj ? tlObj.name : 'Team Leader' };
+      }).sort((a, b) => b.pct - a.pct || b.revenue - a.revenue);
 
       const rankedAgents = allUsers.map(ag => {
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
@@ -4547,7 +5274,7 @@
         const workTgt = Math.round(((ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174) * 1.05);
         const pct = workTgt > 0 ? Math.round((revenue / workTgt) * 100) : 0;
         return { ...ag, leads, orders, revenue, conv, workTgt, pct };
-      }).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders);
+      }).sort((a, b) => b.pct - a.pct || b.revenue - a.revenue);
 
       const myRankIdx = (currentUser && currentUser.role === 'agent')
         ? rankedAgents.findIndex(ag => String(ag.id) === String(currentUser.id))
@@ -4558,62 +5285,50 @@
         return n + (s[(v - 20) % 10] || s[v] || s[0]);
       };
 
+      const cardThemes = [
+        { border: 'border-t-orange-500', pill: 'bg-orange-100 text-orange-800', txt: 'text-orange-600', bar: 'from-orange-500 to-amber-500' },
+        { border: 'border-t-blue-600', pill: 'bg-blue-100 text-blue-800', txt: 'text-blue-600', bar: 'from-blue-600 to-indigo-600' },
+        { border: 'border-t-emerald-600', pill: 'bg-emerald-100 text-emerald-800', txt: 'text-emerald-600', bar: 'from-emerald-600 to-teal-500' }
+      ];
+
       return `
         <div class="space-y-6">
           <div>
             <div class="flex items-center justify-between mb-4">
               <div>
-                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>Team vs Team Comparison (${selectedMonthKey})</h2>
-                <p class="text-xs font-bold text-slate-500">Team Nazim vs Team Samad — Monthly performance head-to-head</p>
+                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>${getActiveChannelMeta().fullTitle} — Team Comparison (${selectedMonthKey})</h2>
+                <p class="text-xs font-bold text-slate-500">${chTeams.join(' vs ')} — Monthly performance head-to-head sorted by Achievement %</p>
               </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div class="card-dynamic p-5 border-t-4 border-t-orange-500">
-                <div class="flex justify-between items-center mb-4">
-                  <div>
-                    <span class="px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-black uppercase">Team Nazim</span>
-                    <p class="text-xs font-bold text-slate-400 mt-1">TL: Md. Nazimur Rahman • ${nazimStats.agentCount} Agents</p>
+            <div class="grid grid-cols-1 md:grid-cols-${chTeams.length} gap-5">
+              ${teamStatsList.map((st, idx) => {
+                const th = cardThemes[idx % cardThemes.length];
+                return `
+                  <div class="card-dynamic p-5 border-t-4 ${th.border}">
+                    <div class="flex justify-between items-center mb-4">
+                      <div>
+                        <span class="px-3 py-1 rounded-full ${th.pill} text-xs font-black uppercase">#${idx + 1} • ${st.teamName}</span>
+                        <p class="text-xs font-bold text-slate-400 mt-1">TL: ${st.tlName} • ${st.agentCount} Agents</p>
+                      </div>
+                      <div class="text-right">
+                        <span class="text-3xl font-black ${th.txt}">${st.pct}%</span>
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Achieved</p>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl mb-4 text-center">
+                      <div><span class="text-[10px] font-bold text-slate-400 block">Revenue</span><strong class="text-sm font-black text-emerald-600">৳${st.revenue.toLocaleString()}</strong></div>
+                      <div class="border-x"><span class="text-[10px] font-bold text-slate-400 block">Orders / Leads</span><strong class="text-sm font-black text-slate-800">${st.orders} / ${st.leads}</strong></div>
+                      <div><span class="text-[10px] font-bold text-slate-400 block">Conv. Ratio</span><strong class="text-sm font-black text-blue-600">${st.conv}%</strong></div>
+                    </div>
+                    <div class="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
+                      <span>Target (+5%): ৳${st.workTgt.toLocaleString()}</span>
+                      <span>Remaining: ৳${Math.max(0, st.workTgt - st.revenue).toLocaleString()}</span>
+                    </div>
+                    <div class="progress-track h-2.5"><div class="bg-gradient-to-r ${th.bar} h-2.5 rounded-full" style="width:${st.pct}%"></div></div>
                   </div>
-                  <div class="text-right">
-                    <span class="text-3xl font-black text-orange-600">${nazimStats.pct}%</span>
-                    <p class="text-[10px] font-bold uppercase text-slate-400">Achieved</p>
-                  </div>
-                </div>
-                <div class="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl mb-4 text-center">
-                  <div><span class="text-[10px] font-bold text-slate-400 block">Revenue</span><strong class="text-sm font-black text-emerald-600">৳${nazimStats.revenue.toLocaleString()}</strong></div>
-                  <div class="border-x"><span class="text-[10px] font-bold text-slate-400 block">Orders / Leads</span><strong class="text-sm font-black text-slate-800">${nazimStats.orders} / ${nazimStats.leads}</strong></div>
-                  <div><span class="text-[10px] font-bold text-slate-400 block">Conv. Ratio</span><strong class="text-sm font-black text-blue-600">${nazimStats.conv}%</strong></div>
-                </div>
-                <div class="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
-                  <span>Target (+5%): ৳${nazimStats.workTgt.toLocaleString()}</span>
-                  <span>Remaining: ৳${Math.max(0, nazimStats.workTgt - nazimStats.revenue).toLocaleString()}</span>
-                </div>
-                <div class="progress-track h-2.5"><div class="bg-gradient-to-r from-orange-500 to-amber-500 h-2.5 rounded-full" style="width:${nazimStats.pct}%"></div></div>
-              </div>
-
-              <div class="card-dynamic p-5 border-t-4 border-t-blue-600">
-                <div class="flex justify-between items-center mb-4">
-                  <div>
-                    <span class="px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-black uppercase">Team Samad</span>
-                    <p class="text-xs font-bold text-slate-400 mt-1">TL: Md Abdus Samad • ${samadStats.agentCount} Agents</p>
-                  </div>
-                  <div class="text-right">
-                    <span class="text-3xl font-black text-blue-600">${samadStats.pct}%</span>
-                    <p class="text-[10px] font-bold uppercase text-slate-400">Achieved</p>
-                  </div>
-                </div>
-                <div class="grid grid-cols-3 gap-2 p-3 bg-slate-50 rounded-2xl mb-4 text-center">
-                  <div><span class="text-[10px] font-bold text-slate-400 block">Revenue</span><strong class="text-sm font-black text-emerald-600">৳${samadStats.revenue.toLocaleString()}</strong></div>
-                  <div class="border-x"><span class="text-[10px] font-bold text-slate-400 block">Orders / Leads</span><strong class="text-sm font-black text-slate-800">${samadStats.orders} / ${samadStats.leads}</strong></div>
-                  <div><span class="text-[10px] font-bold text-slate-400 block">Conv. Ratio</span><strong class="text-sm font-black text-blue-600">${samadStats.conv}%</strong></div>
-                </div>
-                <div class="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
-                  <span>Target (+5%): ৳${samadStats.workTgt.toLocaleString()}</span>
-                  <span>Remaining: ৳${Math.max(0, samadStats.workTgt - samadStats.revenue).toLocaleString()}</span>
-                </div>
-                <div class="progress-track h-2.5"><div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2.5 rounded-full" style="width:${samadStats.pct}%"></div></div>
-              </div>
+                `;
+              }).join('')}
             </div>
           </div>
 
@@ -4880,6 +5595,7 @@
               ` : ''}
             </table>
           </div>
+          ${renderDateWiseTeamDailySummaryTable()}
         </div>
       `;
     }
@@ -5608,12 +6324,26 @@
                   </select>
                 </div>
                 <div>
-                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Team</label>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Channel & Team</label>
                   <select id="usrTeam" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
-                    <option value="Team Nazim">Team Nazim</option>
-                    <option value="Team Samad">Team Samad</option>
-                    <option value="Floating">Floating (Unassigned Pool)</option>
-                    <option value="All Teams">All Teams (Supervisor)</option>
+                    ${isNazim ? `
+                      <optgroup label="Facebook Channel">
+                        <option value="Team Nazim">Team Nazim (Facebook)</option>
+                        <option value="Team Samad">Team Samad (Facebook)</option>
+                        <option value="Floating">Floating Pool (Facebook)</option>
+                      </optgroup>
+                      <optgroup label="WhatsApp Channel (3 Teams)">
+                        <option value="WA Team 1">WA Team 1 (WhatsApp)</option>
+                        <option value="WA Team 2">WA Team 2 (WhatsApp)</option>
+                        <option value="WA Team 3">WA Team 3 (WhatsApp)</option>
+                        <option value="WA Floating">WA Floating Pool (WhatsApp)</option>
+                      </optgroup>
+                      <optgroup label="Supervisors">
+                        <option value="All Teams">All Teams (Supervisor)</option>
+                      </optgroup>
+                    ` : `
+                      <option value="${currentUser.team}" selected>${currentUser.team} (Your Team Only)</option>
+                    `}
                   </select>
                 </div>
               </div>
@@ -5698,7 +6428,7 @@
         document.getElementById('usrId').value = '';
         document.getElementById('usrName').value = '';
         document.getElementById('usrRole').value = 'agent';
-        document.getElementById('usrTeam').value = 'Team Nazim';
+        document.getElementById('usrTeam').value = isSuperAdmin(currentUser) ? getActiveChannelMeta().teams[0] : currentUser.team;
         document.getElementById('usrGrade').value = 'A-';
         document.getElementById('usrPass').value = '123456';
         document.getElementById('usrTarget').value = 1232174;
@@ -5728,7 +6458,7 @@
       const newUser = normalizeUserRecord({
         id: targetId,
         name: rawName,
-        team: document.getElementById('usrTeam').value,
+        team: isSuperAdmin(currentUser) ? document.getElementById('usrTeam').value : currentUser.team,
         grade: gradeVal,
         role: roleVal,
         pass: document.getElementById('usrPass').value.trim(),
@@ -6499,33 +7229,32 @@
 
       // 1. Check if line contains a known ERP Product Code (e.g. A000010, A000008, etc., even if 'A' is OCR'd as '4' or 'O' as '0')
       let matchedCodeInfo = null;
-      const codeMatch = raw.match(/\b[A4][0O]\d{5,6}\b/i) || raw.match(/\b[A4]\d{6}\b/i);
+      const codeMatch = raw.match(/\b[A4][0O]{1,5}\d{1,6}\b/i) || raw.match(/\b00[02]\d{3}\b/);
       if (codeMatch) {
-        const rawCodeStr = codeMatch[0];
-        const normCode = 'A' + rawCodeStr.substring(1).replace(/[Oo]/g, '0');
+        const digitsOnly = codeMatch[0].replace(/^[^0O\d]/i, '').replace(/[Oo]/g, '0');
+        const normCode = 'A' + digitsOnly.padStart(6, '0');
         if (ERP_PRODUCT_CODE_MAP[normCode]) {
           matchedCodeInfo = ERP_PRODUCT_CODE_MAP[normCode];
         }
       }
 
-      // 2. Detect Product Category by Name or Product Code
+      // 2. Detect Product Category by Product Code first, then by Product Name / Barcode
       let cat = matchedCodeInfo ? matchedCodeInfo.cat : null;
       if (!cat) {
-        if (/black\s*seed\s*honey|bs\.?\s*h|kalojira/i.test(lower)) cat = 'bsHoney';
-        else if (/sundarban\s*honey|sun\.?\s*h|honeyraj|000008|000009|000214/i.test(lower)) cat = 'sunHoney';
-        else if (/gawa\s*ghee|\bghee\b|shosti\s*food/i.test(lower)) cat = 'gawaGhee';
-        else if (/pink\s*salt|himalayan|\bsalt\b/i.test(lower)) cat = 'pinkSalt';
-        else if (/black\s*garlic|\bgarlic\b/i.test(lower)) cat = 'blackGarlic';
-        else if (/ajwa|khejuri|dates/i.test(lower)) cat = 'ajwa';
+        if (/black\s*seed\s*honey|bs\.?\s*h|kalojira|150052|150205|150133/i.test(lower)) cat = 'bsHoney';
+        else if (/sundarban|sundorban|shunderban|sun\.?\s*h|000008|000009|000214|150229|150199|150236/i.test(lower)) cat = 'sunHoney';
+        else if (/gawa\s*ghee|\bghee\b|shosti\s*food|120048|120055|120068/i.test(lower)) cat = 'gawaGhee';
+        else if (/pink\s*salt|himalayan|\bsalt\b|180024/i.test(lower)) cat = 'pinkSalt';
+        else if (/black\s*garlic|\bgarlic\b|200054/i.test(lower)) cat = 'blackGarlic';
+        else if (/ajwa|khejuri|dates|130210/i.test(lower)) cat = 'ajwa';
       }
       if (!cat) return null;
 
-      // 3. Detect Variant Weight (e.g., 500gm, 500 g, 1kg, 250gm, 200gm, 400gm, 100gm)
+      // 3. Detect Variant Weight (e.g., 500gm, 500 gm, 1kg, 250gm, 200gm, 400gm, 100gm)
       let unitKg = matchedCodeInfo ? matchedCodeInfo.unitKg : 1.0;
       let sizeLabel = matchedCodeInfo ? matchedCodeInfo.label : '1kg';
       let sizeEndIdx = 0;
 
-      // Support OCR variations like "500gm", "500 gm", "500g", "5009", "500qm", "1kg", "1 kg", "1kq", "250gm", "200gm", "100gm", "400gm"
       const weightRegex = /\b(500|250|200|400|100|1|2|0\.5|0\.25)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i;
       const wMatch = lower.match(weightRegex);
       if (wMatch) {
@@ -6540,35 +7269,47 @@
         }
         sizeEndIdx = wMatch.index + wMatch[0].length;
       } else {
-        // Check if OCR merged 'g' into '9' (e.g. "5009m", "5009", "2509m", "2509", "2009m", "1009m", "4009m")
         const mergedGMatch = lower.match(/\b(500|250|200|400|100)[9qgo0]m?\b/i);
         if (mergedGMatch) {
           const wNum = parseFloat(mergedGMatch[1]);
           unitKg = wNum / 1000;
           sizeLabel = `${wNum}gm`;
           sizeEndIdx = mergedGMatch.index + mergedGMatch[0].length;
+        } else if (matchedCodeInfo) {
+          unitKg = matchedCodeInfo.unitKg;
+          sizeLabel = matchedCodeInfo.label;
         }
       }
 
-      // 4. Extract Quantity Sold (Always the rightmost integer in the row, after Store Name / Cost Price)
+      // 4. Extract Quantity Sold (Rightmost token after Store Name / Cost Price)
       let tail = sizeEndIdx > 0 ? raw.substring(sizeEndIdx) : raw;
 
-      // If "Ghorerbazar" is in the row, Quantity Sold is always to the right of "Ghorerbazar"!
       const storeMatch = tail.match(/ghorer\s*bazar/i);
       if (storeMatch) {
         tail = tail.substring(storeMatch.index + storeMatch[0].length);
       } else {
-        // Strip Product Codes (A000010) and 13-digit Barcodes (8941140120048)
+        // Strip Product Codes (A000010) and 13-digit Barcodes (8941140150229)
         tail = tail
           .replace(/\b[A-Za-z0-9]*\d{5,16}\b/g, ' ')
           .replace(/\b[A-Za-z]+\d{3,8}\b/g, ' ');
       }
 
-      // Strip Cost Price / Total Price tokens like "৳0.00", "b0.00", "60.00", "80.00", "0.00", "৳12,450.00"
+      // Strip Cost Price / Total Price tokens like "৳0.00", "b0.00", "60.00", "80.00", "t0.00", "0.00", "0,00"
       tail = tail
-        .replace(/(?:[৳b68t€$]?\s*)?\d[\d,]*\.\d{2}\b/gi, ' ')
-        .replace(/\b0[.,]00\b/g, ' ')
+        .replace(/(?:[৳b68t€$]?\s*)?\d[\d,]*[.,]\d{2}\b/gi, ' ')
+        .replace(/\b[b68t]?0[.,]00\b/gi, ' ')
+        .replace(/\b00\b/g, ' ')
         .replace(/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g, ' ');
+
+      // CRITICAL OCR FIX FOR "11" AND "1":
+      // In sans-serif ERP fonts, Tesseract frequently reads "11" at the end of a row as "II", "ll", "Il", "lI", "1l", "l1", "|1", "1|", or "||",
+      // and "1" as "I", "l", or "|"!
+      // Normalize isolated vertical-stroke tokens at the end of `tail` into digits `11` or `1`:
+      tail = tail
+        .replace(/(?:^|\s)[Il|1]{2}(?=\s*$)/g, ' 11')
+        .replace(/(?:^|\s)[Il|](?=\s*$)/g, ' 1')
+        .replace(/\b([1-9])[Il|]\b/g, '$11')
+        .replace(/\b[Il|]([0-9])\b/g, '1$1');
 
       const intTokens = (tail.match(/\b(\d{1,4})\b/g) || [])
         .map(t => parseInt(t, 10))
@@ -6576,7 +7317,6 @@
 
       let qty = 0;
       if (intTokens.length > 0) {
-        // The rightmost integer on the line is Quantity Sold!
         qty = intTokens[intTokens.length - 1];
       }
 
@@ -6612,10 +7352,12 @@
       for (let i = 0; i < rawLines.length; i++) {
         const cur = rawLines[i].trim();
         if (!cur) continue;
-        // If current line has a product name/code but no quantity at the end, and next line is just numbers/price, join them
         if (i + 1 < rawLines.length) {
           const nxt = rawLines[i + 1].trim();
-          if (/(?:ghee|honey|salt|garlic|ajwa|dates)/i.test(cur) && !/\b\d{1,4}\s*$/.test(cur) && /^[৳b680.,\s\d]+$/.test(nxt)) {
+          const curHasProduct = /(?:ghee|honey|salt|garlic|ajwa|dates|A000|A002)/i.test(cur);
+          const nxtHasNewProduct = /(?:ghee|honey|salt|garlic|ajwa|dates|product\s*name)/i.test(nxt);
+          const curMissingEndQty = !/(?:0\.00|ghorerbazar).*?(?:\d{1,4}|[Il|]{1,2})\s*$/i.test(cur);
+          if (curHasProduct && !nxtHasNewProduct && curMissingEndQty) {
             lines.push(cur + ' ' + nxt);
             i++;
             continue;
