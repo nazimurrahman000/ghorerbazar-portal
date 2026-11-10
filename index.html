@@ -161,6 +161,8 @@
 
     const AVAILABLE_MONTHS = buildAvailableMonthsList();
     const TL_DEFAULT_BASE_TARGET = 522328;
+    const WA_TL_DEFAULT_BASE_TARGET = 498997;
+
     const DEFAULT_GRADE_TARGETS = {
       'A+': 1619218,
       'A': 1332174,
@@ -172,14 +174,55 @@
       'Pending': 0
     };
 
+    const WA_DEFAULT_GRADE_TARGETS = {
+      'A+': 1696589,
+      'A': 1576609,
+      'A-': 1476810,
+      'B': 1377011,
+      'C': 1277213,
+      'TL': 498997,
+      'Supervisor': 0,
+      'Pending': 0
+    };
+
+    const SPRINT_REWARD_PROGRAM = {
+      WHATSAPP: {
+        'A+': { s1: 3000, s2: 2100, s3: 4000, totalReward: 9100, total100: 8273, all3: 10000, any2Extra: 500 },
+        'A':  { s1: 2750, s2: 2000, s3: 4000, totalReward: 8750, total100: 7955, all3: 9500,  any2Extra: 500 },
+        'A-': { s1: 2500, s2: 1800, s3: 3500, totalReward: 8300, total100: 7545, all3: 9000,  any2Extra: 500 },
+        'B':  { s1: 2300, s2: 1700, s3: 3500, totalReward: 8000, total100: 7273, all3: 8500,  any2Extra: 500 },
+        'C':  { s1: 2200, s2: 1600, s3: 3000, totalReward: 7800, total100: 7091, all3: 8250,  any2Extra: 500 },
+        'TL': { s1: 4000, s2: 3500, s3: 4500, totalReward: 12000, total100: 12000, all3: 14000, any2Extra: 1000 }
+      },
+      FACEBOOK: {
+        'A+': { s1: 3000, s2: 2100, s3: 4000, totalReward: 9100, total100: 8273, all3: 10000, any2Extra: 500 },
+        'A':  { s1: 2750, s2: 2000, s3: 4000, totalReward: 8750, total100: 7955, all3: 9500,  any2Extra: 500 },
+        'A-': { s1: 2500, s2: 1800, s3: 3500, totalReward: 7800, total100: 7091, all3: 9000,  any2Extra: 500 },
+        'B':  { s1: 2300, s2: 1700, s3: 3500, totalReward: 7500, total100: 6818, all3: 8500,  any2Extra: 500 },
+        'C':  { s1: 2200, s2: 1600, s3: 3000, totalReward: 6800, total100: 6182, all3: 8250,  any2Extra: 500 },
+        'TL': { s1: 4000, s2: 3500, s3: 4500, totalReward: 12000, total100: 12000, all3: 14000, any2Extra: 1000 }
+      }
+    };
+
+    function calcWorkingTargetFromBase(baseTargetVal, teamOrChannel) {
+      const base = Number(baseTargetVal) || 0;
+      const ch = (teamOrChannel === 'WHATSAPP' || teamOrChannel === 'FACEBOOK')
+        ? teamOrChannel
+        : getChannelForTeam(teamOrChannel || (activeChannel === 'WHATSAPP' ? 'Team Shakib Baksh' : 'Team Nazim'));
+      // WhatsApp targets from sheet (1,696,589 / 1,576,609 / 1,476,810 / 1,377,011 / 1,277,213 / 498,997) are used At Actual (1x)
+      return ch === 'WHATSAPP' ? Math.round(base) : Math.round(base * 1.05);
+    }
+
     function getGradeTargetsForMonth(mKey) {
       const configs = getStored('monthly_configs', {});
       const effKey = getEffectiveMonthConfigKey(mKey);
-      const mCfg = configs[effKey] || configs[mKey || selectedMonthKey] || {};
-      return { ...DEFAULT_GRADE_TARGETS, ...(mCfg.gradeTargets || {}) };
+      const mCfg = configs[effKey] || {};
+      const baseDefaults = activeChannel === 'WHATSAPP' ? WA_DEFAULT_GRADE_TARGETS : DEFAULT_GRADE_TARGETS;
+      return { ...baseDefaults, ...(mCfg.gradeTargets || {}) };
     }
 
     const DEFAULT_USERS = [
+      // Supervisor & Facebook Channel (Team Nazim & Team Samad)
       { id: '10001', name: 'Facebook Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
       { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: '123nazim', grade: 'TL', baseTarget: 522328 },
       { id: '10107', name: 'Md Abdus Samad', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 522328 },
@@ -203,13 +246,77 @@
       { id: '10806', name: 'Abdullah Al Soad', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 },
       { id: '10128', name: 'Al-Amin', role: 'agent', team: 'Team Samad', pass: '123456', grade: 'A', baseTarget: 1332174 },
 
-      // WhatsApp Channel — 3 Team Leaders (Each manages 16-20 Agents in their own WA Team)
-      { id: '20101', name: 'WhatsApp TL 1', role: 'admin', channel: 'WHATSAPP', team: 'WA Team 1', pass: 'wa1234', grade: 'TL', baseTarget: 522328 },
-      { id: '20102', name: 'WhatsApp TL 2', role: 'admin', channel: 'WHATSAPP', team: 'WA Team 2', pass: 'wa1234', grade: 'TL', baseTarget: 522328 },
-      { id: '20103', name: 'WhatsApp TL 3', role: 'admin', channel: 'WHATSAPP', team: 'WA Team 3', pass: 'wa1234', grade: 'TL', baseTarget: 522328 }
+      // =====================================================================
+      // WHATSAPP CHANNEL — TEAM SHAKIB BAKSH (TL: Shakib Baksh, ID: 10175)
+      // Current Month Grade: A & Personal Target: 1,576,609 (Editable to Grade TL next month!)
+      // =====================================================================
+      { id: '10175', name: 'Shakib Baksh', role: 'admin', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10335', name: 'Faraj Ahmed', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A+', baseTarget: 1696589 },
+      { id: '10478', name: 'Tahmim Islam Tonmoy', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10801', name: 'MD. Shakil Mulla', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '10989', name: 'Ariyan Alam Alif', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '11052', name: 'MD. Istiak Rashid', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '10499', name: 'MD Istiaq Ahmed', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '11078', name: 'MD Birhad Uddin', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '10686', name: 'Md. Sazzad Khondoker', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '11640', name: 'MD Rafi', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '10582', name: 'Shahidule Shihab', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '10581', name: 'Araful Islam', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '10756', name: 'MD. Sakibul Islam', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10670', name: 'MD. Jahid Hossain', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '10767', name: 'Efrad Hossain', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '11041', name: 'Merja Mahfuj Islam', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '10287', name: 'Golam Rabbi', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'Pending', baseTarget: 0 },
+
+      // =====================================================================
+      // WHATSAPP CHANNEL — TEAM PARVAJ (TL: Parvaj Ibna Alam, ID: 10144)
+      // =====================================================================
+      { id: '10144', name: 'Parvaj Ibna Alam', role: 'admin', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'TL', baseTarget: 498997 },
+      { id: '10771', name: 'Rohim Badsha Robin', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '10606', name: 'MD Saikot', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10671', name: 'MD Mahin Mia', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10987', name: 'MD Sojib Bapari', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '11004', name: 'Mahmudul Hasan', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '11108', name: 'Mir Jubaer', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '10146', name: 'Jonayet Hasan', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '11079', name: 'MD Tanbir Hossain', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '10689', name: 'Shohan Asrafi', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '10842', name: 'Syed Mazahar Habib Robin', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '11102', name: 'MD Mujammel Haque', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '10286', name: 'Zobayer Hossain', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'Pending', baseTarget: 0 },
+      { id: '10750', name: 'Rafi Chowdhury', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10993', name: 'Nur Mohammod Tareq', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '11069', name: 'MD Nayem Islam', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '11099', name: 'Syed Tujammel Haque', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '10731', name: 'Razaul Karim Shuvo', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A', baseTarget: 1576609 },
+
+      // =====================================================================
+      // WHATSAPP CHANNEL — TEAM SAIKAT (TL: Rakibul Haque Saikat, ID: 10061)
+      // =====================================================================
+      { id: '10061', name: 'Rakibul Haque Saikat', role: 'admin', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'TL', baseTarget: 498997 },
+      { id: '10101', name: 'Majharul Islam Rafi', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10324', name: 'MD Shariar Alam', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A+', baseTarget: 1696589 },
+      { id: '10579', name: 'Jahidul Islam Sheshir', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10623', name: 'Mazharul Islam', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '10673', name: 'Tanvir Rahman Kabya', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A+', baseTarget: 1696589 },
+      { id: '10746', name: 'Ankan Kury', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '10845', name: 'MD Mahfuzur Rahman', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'B', baseTarget: 1377011 },
+      { id: '11104', name: 'MD.Raihan Ali Sagar', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '11116', name: 'Utpol Mitra', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '10809', name: 'Deen Mohammad', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10758', name: 'Hasan Bosri', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '11073', name: 'MD. Fariaz Rahman', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '10583', name: 'MD. Sohanur rahman', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A-', baseTarget: 1476810 },
+      { id: '10990', name: 'Yasin Arafat Rahi', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '10180', name: 'Abdullah Al Shafin', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A', baseTarget: 1576609 },
+      { id: '10190', name: 'Oliur Rahman', role: 'agent', channel: 'WHATSAPP', team: 'Team Saikat', pass: '123456', grade: 'A+', baseTarget: 1696589 }
     ];
 
+    const DEFAULT_USER_IDS_SET = new Set(DEFAULT_USERS.map(u => String(u.id)));
+    const ALL_TL_IDS_SET = new Set(['10122', '10107', '10175', '10144', '10061']);
+
     const DEFAULT_ROSTER = [
+      // Facebook: Team Samad
       { id: '10107', name: 'Md Abdus Samad', team: 'Team Samad', isTL: true, sat: '10:00 AM', sun: 'DO', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
       { id: '10098', name: 'Habibur Rahman Shuvo', team: 'Team Samad', sat: '3:00 PM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
       { id: '10136', name: 'Al-Amin Kazi', team: 'Team Samad', sat: '10:00 AM', sun: '10:00 AM', mon: '10:00 AM', tue: '10:00 AM', wed: '10:00 AM', thu: '10:00 AM', fri: 'DO' },
@@ -220,6 +327,7 @@
       { id: '10806', name: 'Abdullah Al Soad', team: 'Team Samad', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
       { id: '10128', name: 'Al-Amin', team: 'Team Samad', sat: '7:00 AM', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
 
+      // Facebook: Team Nazim & Floating
       { id: '10122', name: 'Md. Nazimur Rahman', team: 'Team Nazim', isTL: true, sat: 'DO', sun: '10:00 AM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
       { id: '10191', name: 'Shagor Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
       { id: '10289', name: 'Abdullah Dipu', team: 'Team Nazim', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
@@ -229,7 +337,64 @@
       { id: '11042', name: 'Md. Ashiqur Rahman', team: 'Team Nazim', sat: 'DO', sun: '3:00 PM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
       { id: '10328', name: 'Sheikh MD Rayhan', team: 'Team Nazim', sat: '7:00 AM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
       { id: '10135', name: 'Ranju Ahmed', team: 'Team Nazim', sat: '3:00 PM', sun: '3:00 PM', mon: '10:00 AM', tue: '7:00 AM', wed: '3:00 PM', thu: 'Night', fri: 'DO' },
-      { id: '10357', name: 'Md. Faruque Hossain', team: 'Floating', sat: '3:00 PM', sun: '3:00 PM', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' }
+      { id: '10357', name: 'Md. Faruque Hossain', team: 'Floating', sat: '3:00 PM', sun: '3:00 PM', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+
+      // WhatsApp: Team Shakib Baksh (17 Members)
+      { id: '10175', name: 'Shakib Baksh', team: 'Team Shakib Baksh', isTL: true, sat: '7:00 AM', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '3:00 PM', fri: 'DO' },
+      { id: '10335', name: 'Faraj Ahmed', team: 'Team Shakib Baksh', sat: '3:00 PM', sun: 'Night', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '10:00 AM', fri: '7:00 AM' },
+      { id: '10478', name: 'Tahmim Islam Tonmoy', team: 'Team Shakib Baksh', sat: 'Night', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '10:00 AM' },
+      { id: '10801', name: 'MD. Shakil Mulla', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
+      { id: '10989', name: 'Ariyan Alam Alif', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'Night', fri: 'DO' },
+      { id: '11052', name: 'MD. Istiak Rashid', team: 'Team Shakib Baksh', sat: '3:00 PM', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
+      { id: '10499', name: 'MD Istiaq Ahmed', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
+      { id: '11078', name: 'MD Birhad Uddin', team: 'Team Shakib Baksh', sat: 'DO', sun: '7:00 AM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
+      { id: '10686', name: 'Md. Sazzad Khondoker', team: 'Team Shakib Baksh', sat: 'Night', sun: 'DO', mon: '10:00 AM', tue: '10:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '11640', name: 'MD Rafi', team: 'Team Shakib Baksh', sat: '10:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '7:00 AM', wed: 'DO', thu: '3:00 PM', fri: '10:00 AM' },
+      { id: '10582', name: 'Shahidule Shihab', team: 'Team Shakib Baksh', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10581', name: 'Araful Islam', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
+      { id: '10756', name: 'MD. Sakibul Islam', team: 'Team Shakib Baksh', sat: 'DO', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: 'Night', fri: 'Night' },
+      { id: '10670', name: 'MD. Jahid Hossain', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '7:00 AM', mon: 'Night', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10767', name: 'Efrad Hossain', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
+      { id: '11041', name: 'Merja Mahfuj Islam', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '3:00 PM', mon: 'Night', tue: 'DO', wed: '7:00 AM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10287', name: 'Golam Rabbi', team: 'Team Shakib Baksh', sat: '7:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' },
+
+      // WhatsApp: Team Parvaj (17 Members)
+      { id: '10144', name: 'Parvaj Ibna Alam', team: 'Team Parvaj', isTL: true, sat: '3:00 PM', sun: '7:00 AM', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10771', name: 'Rohim Badsha Robin', team: 'Team Parvaj', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
+      { id: '10606', name: 'MD Saikot', team: 'Team Parvaj', sat: '3:00 PM', sun: '7:00 AM', mon: '3:00 PM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10671', name: 'MD Mahin Mia', team: 'Team Parvaj', sat: 'Night', sun: 'Night', mon: 'DO', tue: '7:00 AM', wed: '7:00 AM', thu: '3:00 PM', fri: '7:00 AM' },
+      { id: '10987', name: 'MD Sojib Bapari', team: 'Team Parvaj', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'Night', fri: 'DO' },
+      { id: '11004', name: 'Mahmudul Hasan', team: 'Team Parvaj', sat: '7:00 AM', sun: '7:00 AM', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '7:00 AM', fri: '3:00 PM' },
+      { id: '11108', name: 'Mir Jubaer', team: 'Team Parvaj', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '7:00 AM', thu: '7:00 AM', fri: 'Night' },
+      { id: '10146', name: 'Jonayet Hasan', team: 'Team Parvaj', sat: '3:00 PM', sun: '3:00 PM', mon: '10:00 AM', tue: '10:00 AM', wed: '3:00 PM', thu: 'DO', fri: '3:00 PM' },
+      { id: '11079', name: 'MD Tanbir Hossain', team: 'Team Parvaj', sat: '3:00 PM', sun: '7:00 AM', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
+      { id: '10689', name: 'Shohan Asrafi', team: 'Team Parvaj', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '7:00 AM', thu: '7:00 AM', fri: 'Night' },
+      { id: '10842', name: 'Syed Mazahar Habib Robin', team: 'Team Parvaj', sat: '7:00 AM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10286', name: 'Zobayer Hossain', team: 'Team Parvaj', sat: '7:00 AM', sun: 'Night', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '7:00 AM' },
+      { id: '10750', name: 'Rafi Chowdhury', team: 'Team Parvaj', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: 'Night', fri: 'DO' },
+      { id: '10993', name: 'Nur Mohammod Tareq', team: 'Team Parvaj', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '10:00 AM', thu: 'Night', fri: 'DO' },
+      { id: '11069', name: 'MD Nayem Islam', team: 'Team Parvaj', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: 'Night', wed: 'DO', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10731', name: 'Razaul Karim Shuvo', team: 'Team Parvaj', sat: '10:00 AM', sun: '3:00 PM', mon: 'DO', tue: '3:00 PM', wed: '10:00 AM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '11099', name: 'Syed Tujammel Haque', team: 'Team Parvaj', sat: '3:00 PM', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+
+      // WhatsApp: Team Saikat (17 Members)
+      { id: '10061', name: 'Rakibul Haque Saikat', team: 'Team Saikat', isTL: true, sat: '3:00 PM', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10101', name: 'Majharul Islam Rafi', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '7:00 AM', thu: 'Night', fri: 'DO' },
+      { id: '10324', name: 'MD Shariar Alam', team: 'Team Saikat', sat: '7:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' },
+      { id: '10579', name: 'Jahidul Islam Sheshir', team: 'Team Saikat', sat: '7:00 AM', sun: '3:00 PM', mon: '3:00 PM', tue: 'Night', wed: 'Night', thu: 'DO', fri: '7:00 AM' },
+      { id: '10623', name: 'Mazharul Islam', team: 'Team Saikat', sat: '3:00 PM', sun: '7:00 AM', mon: 'Night', tue: 'DO', wed: '7:00 AM', thu: '7:00 AM', fri: '3:00 PM' },
+      { id: '10673', name: 'Tanvir Rahman Kabya', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '10:00 AM' },
+      { id: '10746', name: 'Ankan Kury', team: 'Team Saikat', sat: '3:00 PM', sun: '10:00 AM', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10845', name: 'MD Mahfuzur Rahman', team: 'Team Saikat', sat: '7:00 AM', sun: 'Night', mon: 'Night', tue: 'DO', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '11104', name: 'MD.Raihan Ali Sagar', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '7:00 AM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
+      { id: '11116', name: 'Utpol Mitra', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10809', name: 'Deen Mohammad', team: 'Team Saikat', sat: 'Night', sun: 'DO', mon: '7:00 AM', tue: '7:00 AM', wed: '10:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10758', name: 'Hasan Bosri', team: 'Team Saikat', sat: '3:00 PM', sun: '7:00 AM', mon: '7:00 AM', tue: 'Night', wed: 'DO', thu: '3:00 PM', fri: '10:00 AM' },
+      { id: '11073', name: 'MD. Fariaz Rahman', team: 'Team Saikat', sat: 'DO', sun: '3:00 PM', mon: '3:00 PM', tue: '7:00 AM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
+      { id: '10583', name: 'MD. Sohanur rahman', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: 'DO', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: '3:00 PM' },
+      { id: '10990', name: 'Yasin Arafat Rahi', team: 'Team Saikat', sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: 'Night', thu: 'DO', fri: '3:00 PM' },
+      { id: '10180', name: 'Abdullah Al Shafin', team: 'Team Saikat', sat: '3:00 PM', sun: 'DO', mon: '10:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
+      { id: '10190', name: 'Oliur Rahman', team: 'Team Saikat', sat: 'DO', sun: '3:00 PM', mon: '7:00 AM', tue: '7:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' }
     ];
 
     const DEFAULT_PRODUCTS = {
@@ -250,7 +415,7 @@
       "Personal / Emergency Break"
     ];
 
-    const SHIFT_OPTIONS = ["7:00 AM", "10:00 AM", "3:00 PM", "Night", "DO"];
+    const SHIFT_OPTIONS = ["7:00 AM", "9:00 AM", "10:00 AM", "3:00 PM", "Night", "DO"];
 
     // =========================================================================
     // PROJECT MULTI-CHANNEL EXPANSION (GB OMNI-PORTAL: FACEBOOK + WHATSAPP)
@@ -274,18 +439,48 @@
         icon: 'fa-brands fa-whatsapp',
         colorClass: 'text-emerald-600',
         bgClass: 'bg-emerald-600 text-white',
-        teams: ['WA Team 1', 'WA Team 2', 'WA Team 3'],
+        teams: ['Team Shakib Baksh', 'Team Parvaj', 'Team Saikat'],
         floatingTeam: 'WA Floating',
-        allTeams: ['WA Team 1', 'WA Team 2', 'WA Team 3', 'WA Floating']
+        allTeams: ['Team Shakib Baksh', 'Team Parvaj', 'Team Saikat', 'WA Floating']
       }
     };
 
     let activeChannel = localStorage.getItem('gb_active_channel') || 'FACEBOOK';
 
-    function getChannelForTeam(teamName) {
+    function normalizeTeamNameAlias(teamName) {
       const t = String(teamName || '').trim();
-      if (t.startsWith('WA ') || t.toLowerCase().includes('whatsapp')) return 'WHATSAPP';
+      if (t === 'Team Ashraf' || t === 'WA Team 1' || t === 'Team Shakib') return 'Team Shakib Baksh';
+      if (t === 'WA Team 2') return 'Team Parvaj';
+      if (t === 'WA Team 3') return 'Team Saikat';
+      return t;
+    }
+
+    function getChannelForTeam(teamName) {
+      const t = normalizeTeamNameAlias(teamName);
+      if (['Team Shakib Baksh', 'Team Parvaj', 'Team Saikat', 'WA Floating'].includes(t) || t.startsWith('WA ') || t.toLowerCase().includes('whatsapp')) {
+        return 'WHATSAPP';
+      }
       return 'FACEBOOK';
+    }
+
+    function getTeamBadgeClasses(teamName) {
+      const t = normalizeTeamNameAlias(teamName);
+      if (t === 'Team Nazim') return 'bg-orange-100 text-orange-800';
+      if (t === 'Team Samad') return 'bg-blue-100 text-blue-800';
+      if (t === 'Team Shakib Baksh') return 'bg-emerald-100 text-emerald-800';
+      if (t === 'Team Parvaj') return 'bg-teal-100 text-teal-800';
+      if (t === 'Team Saikat') return 'bg-cyan-100 text-cyan-800';
+      return 'bg-purple-100 text-purple-800';
+    }
+
+    function getTeamBannerHeaderColor(teamName) {
+      const t = normalizeTeamNameAlias(teamName);
+      if (t === 'Team Nazim') return 'bg-orange-500';
+      if (t === 'Team Samad') return 'bg-blue-600';
+      if (t === 'Team Shakib Baksh') return 'bg-emerald-600';
+      if (t === 'Team Parvaj') return 'bg-teal-600';
+      if (t === 'Team Saikat') return 'bg-cyan-700';
+      return 'bg-purple-600';
     }
 
     function getActiveChannelMeta() {
@@ -302,10 +497,6 @@
       return getChannelForTeam(teamName) === activeChannel;
     }
 
-    // Strict Cross-Channel & Cross-Team Permission Check:
-    // - Super Admin Nazim (10122): Full edit/delete across ALL channels and ALL teams.
-    // - Facebook TLs (Samad) & WhatsApp TLs (1, 2, 3): Can ONLY edit their own team in their own channel!
-    //   When viewing another channel or another TL's team, they are strictly in View-Only Mode.
     function canEditTeamData(actor, targetTeamName) {
       if (!actor) return false;
       if (isSuperAdmin(actor)) return true;
@@ -313,7 +504,7 @@
       const actorCh = getChannelForTeam(actor.team);
       if (activeChannel !== actorCh) return false;
       if (!targetTeamName || targetTeamName === 'ALL') return true;
-      return actor.team === targetTeamName;
+      return normalizeTeamNameAlias(actor.team) === normalizeTeamNameAlias(targetTeamName);
     }
 
     function isCurrentChannelReadOnlyForUser(actor) {
@@ -357,18 +548,34 @@
     function normalizeUserRecord(u) {
       if (!u) return u;
       const copy = { ...u };
-      if (copy.role === 'admin' || ['10122', '10107', '20101', '20102', '20103'].includes(String(copy.id))) {
+      const uid = String(copy.id || '').trim();
+      copy.team = normalizeTeamNameAlias(copy.team);
+
+      if (copy.role === 'admin' || ALL_TL_IDS_SET.has(uid)) {
         copy.role = 'admin';
         copy.name = String(copy.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
-        copy.grade = 'TL';
-        if (!copy.baseTarget || Number(copy.baseTarget) === 0) {
-          copy.baseTarget = TL_DEFAULT_BASE_TARGET;
+        // Shakib Baksh (10175) is TL of Team Shakib Baksh with Grade A & Personal Target 1,576,609 (can be changed to Grade TL in future months!)
+        if (uid === '10175') {
+          copy.team = 'Team Shakib Baksh';
+          if (!copy.grade) copy.grade = 'A';
+          if (!copy.baseTarget || Number(copy.baseTarget) === 0 || Number(copy.baseTarget) === 522328) {
+            copy.baseTarget = copy.grade === 'TL' ? WA_TL_DEFAULT_BASE_TARGET : 1576609;
+          }
+        } else if (uid === '10144' || uid === '10061') {
+          copy.grade = copy.grade || 'TL';
+          if (!copy.baseTarget || Number(copy.baseTarget) === 0 || Number(copy.baseTarget) === 522328) {
+            copy.baseTarget = WA_TL_DEFAULT_BASE_TARGET;
+          }
+        } else {
+          copy.grade = copy.grade || 'TL';
+          if (!copy.baseTarget || Number(copy.baseTarget) === 0) {
+            copy.baseTarget = getChannelForTeam(copy.team) === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
+          }
         }
-        // Ensure Nazim's password upgrades from old default 'admin123' to '123nazim'
-        if (String(copy.id) === '10122' && (!copy.pass || copy.pass === 'admin123')) {
+        if (uid === '10122' && (!copy.pass || copy.pass === 'admin123')) {
           copy.pass = '123nazim';
         }
-      } else if (copy.role === 'supervisor' || String(copy.id) === '10001') {
+      } else if (copy.role === 'supervisor' || uid === '10001') {
         copy.role = 'supervisor';
         copy.grade = 'Supervisor';
       } else if (!copy.grade || copy.grade === 'SUP' || copy.grade === 'TL') {
@@ -379,28 +586,28 @@
 
     (function seedDefaultUsers() {
       const existing = localStorage.getItem('gb_users');
-      const migFlag = localStorage.getItem('gb_faruque_floating_v1');
-      if (!existing) {
-        localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS.map(normalizeUserRecord)));
-        localStorage.setItem('gb_faruque_floating_v1', '1');
-      } else {
+      const waSeededFlag = localStorage.getItem('gb_wa_shakib_teams_v3');
+      const legacyPlaceholderIds = new Set(['20101', '20102', '20103']);
+      const map = new Map();
+      DEFAULT_USERS.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
+      if (existing) {
         try {
           const parsed = JSON.parse(existing);
-          const map = new Map();
-          DEFAULT_USERS.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
           parsed.forEach(u => {
-            const norm = normalizeUserRecord(u);
-            if (!migFlag && String(norm.id) === '10357' && norm.grade === 'Pending') {
-              norm.team = 'Floating';
+            const uid = String(u.id || '').trim();
+            if (legacyPlaceholderIds.has(uid)) return;
+            if (!waSeededFlag && map.has(uid)) {
+              const defU = map.get(uid);
+              map.set(uid, normalizeUserRecord({ ...defU, pass: u.pass || defU.pass }));
+            } else {
+              map.set(uid, normalizeUserRecord(u));
             }
-            map.set(String(norm.id), norm);
           });
-          localStorage.setItem('gb_users', JSON.stringify(Array.from(map.values())));
-          localStorage.setItem('gb_faruque_floating_v1', '1');
-        } catch (e) {
-          localStorage.setItem('gb_users', JSON.stringify(DEFAULT_USERS.map(normalizeUserRecord)));
-        }
+        } catch (e) {}
       }
+      localStorage.setItem('gb_users', JSON.stringify(Array.from(map.values())));
+      localStorage.setItem('gb_wa_shakib_teams_v3', '1');
+      localStorage.setItem('gb_faruque_floating_v1', '1');
     })();
 
     function getTodayFormatted() {
@@ -642,11 +849,26 @@
       return hasFeatureAccess(u, 'feat_view_all_teams');
     }
 
+    let revealedPasswordUserIds = new Set();
+
+    function toggleRevealUserPassword(userId) {
+      const uid = String(userId || '');
+      if (revealedPasswordUserIds.has(uid)) {
+        revealedPasswordUserIds.delete(uid);
+      } else {
+        revealedPasswordUserIds.add(uid);
+      }
+      renderAppLayout();
+    }
+
     function canViewTargetPassword(actor, targetUser) {
       if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
       if (isSuperAdmin(actor)) return true;
       if (String(targetUser.id) === '10122') return false;
-      return actor.team === targetUser.team;
+      // Any TL can see their own password, or agents in their own team, NEVER another TL's password!
+      if (String(actor.id) === String(targetUser.id)) return true;
+      if (targetUser.role === 'admin' || targetUser.role === 'supervisor') return false;
+      return normalizeTeamNameAlias(actor.team) === normalizeTeamNameAlias(targetUser.team);
     }
 
     function canDeleteTargetUser(actor, targetUser) {
@@ -1180,7 +1402,7 @@
       const gradeMap = getGradeTargetsForMonth(mk);
 
       const mapped = baseUsers.map(u => {
-        let updated = { ...u };
+        let updated = { ...u, team: normalizeTeamNameAlias(u.team) };
         if (userOverrides[u.id]) {
           updated.grade = userOverrides[u.id].grade || u.grade;
           if (userOverrides[u.id].baseTarget !== undefined && userOverrides[u.id].baseTarget !== null) {
@@ -1191,8 +1413,12 @@
         } else if (mCfg.gradeTargets && gradeMap[updated.grade] !== undefined) {
           updated.baseTarget = Number(gradeMap[updated.grade]);
         }
-        if (updated.role === 'admin' && (!updated.baseTarget || Number(updated.baseTarget) === 0)) {
-          updated.baseTarget = Number(gradeMap['TL'] || TL_DEFAULT_BASE_TARGET);
+        // Shakib Baksh (10175) defaults to Grade A (1,576,609), unless overridden in a future month (e.g. to Grade TL)
+        if (updated.role === 'admin' && String(updated.id) === '10175' && !userOverrides['10175']) {
+          updated.grade = 'A';
+          updated.baseTarget = Number(gradeMap['A'] || 1576609);
+        } else if (updated.role === 'admin' && (!updated.baseTarget || Number(updated.baseTarget) === 0)) {
+          updated.baseTarget = Number(gradeMap['TL'] || (getChannelForTeam(updated.team) === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET));
         }
         return normalizeUserRecord(updated);
       });
@@ -1223,10 +1449,10 @@
           });
         }
       });
-      // 2. Auto-include any newly created Agents/TLs from Users List
+      // 2. Auto-include any newly created custom Agents/TLs from Users List
       allUsers.filter(u => u.role !== 'supervisor').forEach(u => {
         const uid = String(u.id);
-        if (!deletedIds.has(uid) && !mergedMap.has(uid)) {
+        if (!deletedIds.has(uid) && !mergedMap.has(uid) && !DEFAULT_USER_IDS_SET.has(uid)) {
           mergedMap.set(uid, {
             id: uid, name: u.name, team: u.team, isTL: u.role === 'admin',
             sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO'
@@ -1236,8 +1462,9 @@
       // 3. Apply saved cloud overrides & custom added rows for this month
       monthRows.forEach(r => {
         const uid = String(r.id);
+        if (['20101', '20102', '20103'].includes(uid)) return;
         const prev = mergedMap.get(uid) || { id: uid, sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' };
-        mergedMap.set(uid, { ...prev, ...r });
+        mergedMap.set(uid, { ...prev, ...r, team: normalizeTeamNameAlias(r.team || prev.team) });
       });
       // 4. Apply unsaved pending edits in memory (so all summary formulas recalculate live!)
       Object.keys(pendingRosterEditsMap).forEach(k => {
@@ -1396,7 +1623,7 @@
         baseTarget = (freshUser.baseTarget !== undefined && freshUser.baseTarget !== null) ? Number(freshUser.baseTarget) : 1232174;
       }
 
-      const workingTarget = Math.round(baseTarget * 1.05);
+      const workingTarget = calcWorkingTargetFromBase(baseTarget, activeChannel);
       const dailyTarget = Math.round(workingTarget / 26);
 
       const d = new Date().getDate();
@@ -1752,7 +1979,8 @@
 
     function handleLogin(e) {
       e.preventDefault();
-      const id = document.getElementById('loginId').value.trim();
+      let id = document.getElementById('loginId').value.trim();
+      if (id === '10160') id = '10175';
       const pass = document.getElementById('loginPass').value.trim();
       const rawUser = getStored('users', DEFAULT_USERS).map(normalizeUserRecord).find(u => String(u.id) === id && u.pass === pass);
       if (!rawUser) { showPortalToast('Login Failed', 'Invalid Employee ID or Password! Please check and try again.', 'error'); return; }
@@ -3221,10 +3449,9 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-2.5">
-              <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+              <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap items-center gap-1 border border-slate-200">
                 <button onclick="setDriveProdTeam('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (${allAgents.length})</button>
-                <button onclick="setDriveProdTeam('Team Nazim')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
-                <button onclick="setDriveProdTeam('Team Samad')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
+                ${getActiveChannelMeta().teams.map(tn => `<button onclick="setDriveProdTeam('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>`).join('')}
               </div>
 
               <div class="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
@@ -3377,7 +3604,7 @@
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id) && !String(s.date || '').startsWith('MONTHLY_PROD_'))
           .sort((a, b) => (parseInt(a.date.split('/')[0], 10) || 0) - (parseInt(b.date.split('/')[0], 10) || 0));
         const baseTgt = Number(ag.baseTarget) || 0;
-        const workTgt = Math.round(baseTgt * 1.05);
+        const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
         const dailyTgt = Math.round(workTgt / 26);
 
         const headers = [
@@ -3431,7 +3658,7 @@
       const agentRows = displayedAgents.map(ag => {
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
         const baseTgt = Number(ag.baseTarget) || 0;
-        const workTgt = Math.round(baseTgt * 1.05);
+        const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
         const leads = agSales.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
         const orders = agSales.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
         const rev = agSales.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
@@ -3508,7 +3735,7 @@
             const teamTLs = allUsers.filter(u => u.role === 'admin' && u.team === teamName);
             const teamBaseTarget = teamAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
                                    teamTLs.reduce((s, t) => s + (Number(t.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
-            const teamWorkingTarget = Math.round(teamBaseTarget * 1.05);
+            const teamWorkingTarget = calcWorkingTargetFromBase(teamBaseTarget, activeChannel);
             const teamDailyTarget = Math.round(teamWorkingTarget / 26);
 
             let sumLeads = 0, sumOrders = 0, sumAmount = 0;
@@ -3630,7 +3857,7 @@
           });
 
         const baseTgt = (ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174;
-        const workTgt = Math.round(baseTgt * 1.05);
+        const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
         const leads = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.leads) || 0), 0);
         const orders = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.orders) || 0), 0);
         const rev = uniqueDailyLogs.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
@@ -3700,9 +3927,8 @@
               <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
                 <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
                 <select onchange="setMonthlyPerfTeam(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
-                  <option value="Team Nazim" ${monthlyPerfTeamScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim (9 Agents)</option>
-                  <option value="Team Samad" ${monthlyPerfTeamScope === 'Team Samad' ? 'selected' : ''}>Team Samad (8 Agents)</option>
-                  <option value="ALL" ${monthlyPerfTeamScope === 'ALL' ? 'selected' : ''}>Overall All Teams (17 Agents)</option>
+                  <option value="ALL" ${monthlyPerfTeamScope === 'ALL' ? 'selected' : ''}>Overall All Teams (${allAgents.length} Agents)</option>
+                  ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${monthlyPerfTeamScope === tn ? 'selected' : ''}>${tn} (${allAgents.filter(a => a.team === tn).length} Agents)</option>`).join('')}
                 </select>
               </div>
 
@@ -3785,7 +4011,7 @@
                     ? allMonthUsers.filter(usr => usr.role === 'admin' && (monthlyPerfTeamScope === 'ALL' ? true : usr.team === monthlyPerfTeamScope))
                     : [];
                   const tlBaseSum = relevantTLs.reduce((sum, tl) => sum + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
-                  const tlWorkSum = Math.round(tlBaseSum * 1.05);
+                  const tlWorkSum = calcWorkingTargetFromBase(tlBaseSum, activeChannel);
                   const grandBase = totBase + tlBaseSum;
                   const grandWork = totWork + tlWorkSum;
                   const grandRem = Math.max(0, grandWork - totRev);
@@ -3983,8 +4209,7 @@
               <span class="text-xs font-extrabold text-slate-400 uppercase">Filter Team:</span>
               <select onchange="setActivityTeamFilter(this.value)" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold">
                 <option value="ALL" ${activityTeamFilter === 'ALL' ? 'selected' : ''}>All Users & Teams</option>
-                <option value="Team Nazim" ${activityTeamFilter === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
-                <option value="Team Samad" ${activityTeamFilter === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+                ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${activityTeamFilter === tn ? 'selected' : ''}>${tn}</option>`).join('')}
                 <option value="All Teams" ${activityTeamFilter === 'All Teams' ? 'selected' : ''}>Supervisors</option>
               </select>
             </div>
@@ -4032,27 +4257,27 @@
     function renderDutyRosterView() {
       const u = currentUser;
       const isEditable = hasFeatureAccess(u, 'feat_edit_roster');
-      const roster = getRosterForMonth(selectedMonthKey);
+      const allRoster = getRosterForMonth(selectedMonthKey);
+      const roster = allRoster.filter(r => getChannelForTeam(r.team) === activeChannel);
       const days = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
       const dayLabels = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-
-      const samadRows = roster.filter(r => r.team === 'Team Samad');
-      const nazimRows = roster.filter(r => r.team === 'Team Nazim');
-      const floatingRows = roster.filter(r => r.team !== 'Team Samad' && r.team !== 'Team Nazim');
+      const chMeta = getActiveChannelMeta();
 
       function computeRosterSummary(rows, excludeTL) {
-        const filtered = excludeTL ? rows.filter(r => !r.isTL && r.id !== '10107' && r.id !== '10122') : rows;
+        const filtered = excludeTL ? rows.filter(r => !r.isTL && !ALL_TL_IDS_SET.has(String(r.id))) : rows;
         const counts = {
           morning: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          nineAm:  { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
           general: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
           evening: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
-          night: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
+          night:   { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 },
           doCount: { sat: 0, sun: 0, mon: 0, tue: 0, wed: 0, thu: 0, fri: 0 }
         };
         filtered.forEach(r => {
           days.forEach(d => {
             const val = String(r[d] || '').toUpperCase();
             if (val.includes('7:00')) counts.morning[d]++;
+            else if (val.includes('9:00')) counts.nineAm[d]++;
             else if (val.includes('10:00')) counts.general[d]++;
             else if (val.includes('3:00')) counts.evening[d]++;
             else if (val.includes('NIGHT') || val.includes('11:00')) counts.night[d]++;
@@ -4062,15 +4287,13 @@
         return counts;
       }
 
-      const samadSum = computeRosterSummary(samadRows, true);
-      const nazimSum = computeRosterSummary(nazimRows, true);
       const combinedAll = computeRosterSummary(roster, false);
       const combinedNoTL = computeRosterSummary(roster, true);
 
       function renderShiftCell(row, dKey) {
         const val = row[dKey] || '3:00 PM';
         const cellClass = val === 'DO' ? 'roster-do' : (val === 'Night' ? 'roster-night' : 'text-slate-700 font-semibold');
-        if (!isEditable) {
+        if (!isEditable || !canEditTeamData(u, row.team)) {
           return `<td class="px-1.5 py-2 border border-slate-200 text-center text-[11px] whitespace-nowrap ${cellClass}">${val}</td>`;
         }
         return `
@@ -4082,16 +4305,17 @@
         `;
       }
 
-      function renderTeamSummaryTable(title, sumObj) {
+      function renderTeamSummaryTable(title, sumObj, includeNineAm) {
         const rowsSpec = [
           { time: '7:00 AM', shift: 'Morning', key: 'morning' },
+          ...(includeNineAm ? [{ time: '9:00 AM', shift: 'Morning (9 AM)', key: 'nineAm' }] : []),
           { time: '10:00 AM', shift: 'General Time', key: 'general' },
           { time: '3:00 PM', shift: 'Evening', key: 'evening' },
           { time: '11:00 PM', shift: 'Night', key: 'night' },
           { time: 'Day Off', shift: 'Day Off', key: 'doCount' }
         ];
         return `
-          <div class="card-dynamic overflow-hidden mt-4">
+          <div class="card-dynamic overflow-hidden mt-3">
             <div class="bg-slate-100 px-4 py-2 border-b border-slate-200 font-black text-xs text-slate-800 text-center uppercase">${title}</div>
             <table class="w-full text-[11px] text-center border-collapse">
               <thead class="bg-slate-50 font-extrabold text-slate-600">
@@ -4109,9 +4333,13 @@
                     ${days.map(d => `<td class="p-1.5 border border-slate-200">${sumObj[rs.key][d]}</td>`).join('')}
                   </tr>
                 `).join('')}
+                <tr class="bg-emerald-50 font-black text-emerald-800">
+                  <td colspan="2" class="p-1.5 border border-slate-200">Active Work Force (Excl. DO)</td>
+                  ${days.map(d => `<td class="p-1.5 border border-slate-200">${sumObj.morning[d] + sumObj.nineAm[d] + sumObj.general[d] + sumObj.evening[d] + sumObj.night[d]}</td>`).join('')}
+                </tr>
                 <tr class="bg-slate-100 font-black text-slate-900">
-                  <td colspan="2" class="p-1.5 border border-slate-200">In Total (Agents)</td>
-                  ${days.map(d => `<td class="p-1.5 border border-slate-200">${sumObj.morning[d] + sumObj.general[d] + sumObj.evening[d] + sumObj.night[d] + sumObj.doCount[d]}</td>`).join('')}
+                  <td colspan="2" class="p-1.5 border border-slate-200">In Total</td>
+                  ${days.map(d => `<td class="p-1.5 border border-slate-200">${sumObj.morning[d] + sumObj.nineAm[d] + sumObj.general[d] + sumObj.evening[d] + sumObj.night[d] + sumObj.doCount[d]}</td>`).join('')}
                 </tr>
               </tbody>
             </table>
@@ -4119,7 +4347,65 @@
         `;
       }
 
+      function renderRosterTeamBlock(teamName, bannerTitle, headerBgClass) {
+        const teamRows = roster.filter(r => normalizeTeamNameAlias(r.team) === teamName);
+        const canEditThisTeam = isEditable && canEditTeamData(u, teamName);
+        const teamSumAll = computeRosterSummary(teamRows, false);
+        const teamSumAgents = computeRosterSummary(teamRows, true);
+
+        return `
+          <div>
+            <div class="card-dynamic overflow-hidden overflow-x-auto">
+              <div class="${headerBgClass} text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider flex items-center justify-between">
+                <span>${bannerTitle}</span>
+                <span class="px-2 py-0.5 rounded bg-white/20 text-[10px]">${teamRows.length} Members</span>
+              </div>
+              <table class="w-full text-[11px] border-collapse">
+                <thead class="bg-slate-50 font-extrabold text-slate-600">
+                  <tr>
+                    <th class="px-1.5 py-2 border border-slate-200">Sl.</th>
+                    <th class="px-1.5 py-2 border border-slate-200">ID</th>
+                    <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
+                    ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
+                    ${canEditThisTeam ? `<th class="px-1.5 py-2 border border-slate-200">Team / Del</th>` : ''}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${teamRows.map((r, idx) => `
+                    <tr class="${r.isTL ? 'bg-amber-50/80 font-extrabold' : 'hover:bg-slate-50/60'}">
+                      <td class="px-1.5 py-2 border border-slate-200 text-center font-bold text-slate-400">${idx + 1}</td>
+                      <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
+                      <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">
+                        ${canEditThisTeam
+                          ? `<input type="text" value="${r.name}" onchange="handleRosterFieldEdit('${r.id}', 'name', this.value)" class="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none text-[11px] font-bold w-32">`
+                          : r.name}
+                        ${r.isTL ? '<span class="text-[10px] text-emerald-700 font-black ml-1">(TL)</span>' : ''}
+                      </td>
+                      ${days.map(d => renderShiftCell(r, d)).join('')}
+                      ${canEditThisTeam ? `
+                      <td class="p-1 border border-slate-200 text-center whitespace-nowrap">
+                        <select onchange="handleRosterFieldEdit('${r.id}', 'team', this.value)" class="bg-slate-100 rounded px-1 py-0.5 text-[10px] font-bold">
+                          ${chMeta.allTeams.map(tn => `<option value="${tn}" ${normalizeTeamNameAlias(r.team) === tn ? 'selected' : ''}>${tn.replace('Team ', '')}</option>`).join('')}
+                        </select>
+                        <button type="button" onclick="handleDeleteRosterRowDraft('${r.id}')" title="Remove Row" class="ml-1 text-red-500 hover:text-red-700"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
+                      </td>` : ''}
+                    </tr>
+                  `).join('')}
+                  <tr class="bg-slate-900 text-white font-black text-[11px]">
+                    <td colspan="3" class="px-3 py-2 border border-slate-700 text-amber-300 uppercase">${teamName} Active Work Force</td>
+                    ${days.map(d => `<td class="px-1.5 py-2 border border-slate-700 text-center text-emerald-300">${teamSumAll.morning[d] + teamSumAll.nineAm[d] + teamSumAll.general[d] + teamSumAll.evening[d] + teamSumAll.night[d]}</td>`).join('')}
+                    ${canEditThisTeam ? `<td class="border border-slate-700"></td>` : ''}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            ${activeChannel === 'FACEBOOK' ? renderTeamSummaryTable(`${teamName} — Roster Summary`, teamSumAgents, false) : ''}
+          </div>
+        `;
+      }
+
       const monthTitle = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+      const floatingRows = roster.filter(r => !chMeta.teams.includes(normalizeTeamNameAlias(r.team)));
 
       return `
         <div class="space-y-5">
@@ -4128,23 +4414,17 @@
             return `
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border ${pendingCount > 0 ? 'border-2 border-amber-400 bg-amber-50/40' : 'border-slate-200'}">
               <div>
-                <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-calendar-week text-blue-600 mr-2"></i>Duty Roster (${monthTitle})</h2>
+                <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-calendar-week ${chMeta.colorClass} mr-2"></i>${chMeta.fullTitle} — Duty Roster (${monthTitle})</h2>
                 <p class="text-xs font-bold text-slate-500">
-                  ${isEditable ? 'Admin Mode: Change any shift dropdowns below, then click "Save Roster Changes" to confirm & sync.' : 'View weekly shift schedule and Day Off (DO) assignments.'}
+                  ${isEditable ? 'Admin Mode: Change any shift dropdowns below, then click "Save Roster Changes" to confirm & sync to Google Sheet.' : 'View weekly shift schedule, active work force, and combined shift summary below.'}
                 </p>
               </div>
-              <div class="flex flex-wrap items-center gap-2.5">
-                ${isEditable ? `
-                  <button type="button" onclick="handleAddCustomRosterRowPrompt('Team Nazim')" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1">
-                    <i class="fa-solid fa-user-plus"></i> + Add Row (Team Nazim)
+              <div class="flex flex-wrap items-center gap-2">
+                ${isEditable ? chMeta.teams.filter(tn => canEditTeamData(u, tn)).map(tn => `
+                  <button type="button" onclick="handleAddCustomRosterRowPrompt('${tn}')" class="px-3 py-1.5 ${getTeamBannerHeaderColor(tn)} hover:opacity-95 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1">
+                    <i class="fa-solid fa-user-plus"></i> + Add (${tn})
                   </button>
-                  <button type="button" onclick="handleAddCustomRosterRowPrompt('Team Samad')" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1">
-                    <i class="fa-solid fa-user-plus"></i> + Add Row (Team Samad)
-                  </button>
-                  <button type="button" onclick="handleAddCustomRosterRowPrompt('Floating')" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1">
-                    <i class="fa-solid fa-user-plus"></i> + Add Floating
-                  </button>
-                ` : ''}
+                `).join('') : ''}
                 ${pendingCount > 0 ? `
                   <span class="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-900 text-xs font-black animate-pulse">
                     <i class="fa-solid fa-pen-to-square mr-1"></i>${pendingCount} Unsaved Change(s)
@@ -4165,92 +4445,25 @@
             `;
           })()}
 
-          <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div>
-              <div class="card-dynamic overflow-hidden">
-                <div class="bg-blue-600 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Team: Facebook (Abdus Samad)</div>
-                <table class="w-full text-[11px] border-collapse">
-                  <thead class="bg-slate-50 font-extrabold text-slate-600">
-                    <tr>
-                      <th class="px-1.5 py-2 border border-slate-200">ID</th>
-                      <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
-                      ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
-                      ${isEditable ? `<th class="px-1.5 py-2 border border-slate-200">Team / Del</th>` : ''}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${samadRows.map(r => `
-                      <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
-                        <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
-                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">
-                          ${isEditable
-                            ? `<input type="text" value="${r.name}" onchange="handleRosterFieldEdit('${r.id}', 'name', this.value)" class="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none text-[11px] font-bold w-32">`
-                            : r.name}
-                          ${r.isTL ? '<span class="text-[10px] text-blue-600 font-black">(TL)</span>' : ''}
-                        </td>
-                        ${days.map(d => renderShiftCell(r, d)).join('')}
-                        ${isEditable ? `
-                        <td class="p-1 border border-slate-200 text-center whitespace-nowrap">
-                          <select onchange="handleRosterFieldEdit('${r.id}', 'team', this.value)" class="bg-slate-100 rounded px-1 py-0.5 text-[10px] font-bold">
-                            <option value="Team Samad" ${r.team === 'Team Samad' ? 'selected' : ''}>Samad</option>
-                            <option value="Team Nazim" ${r.team === 'Team Nazim' ? 'selected' : ''}>Nazim</option>
-                            <option value="Floating" ${r.team === 'Floating' ? 'selected' : ''}>Float</option>
-                          </select>
-                          <button type="button" onclick="handleDeleteRosterRowDraft('${r.id}')" title="Remove Row" class="ml-1 text-red-500 hover:text-red-700"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
-                        </td>` : ''}
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
+          ${activeChannel === 'WHATSAPP' ? `
+            <div class="space-y-6">
+              ${renderRosterTeamBlock('Team Shakib Baksh', '🟢 Team: Shakib Baksh (WhatsApp)', 'bg-emerald-600')}
+              <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                ${renderRosterTeamBlock('Team Parvaj', '🟢 Team: Parvaj (WhatsApp)', 'bg-teal-600')}
+                ${renderRosterTeamBlock('Team Saikat', '🟢 Team: Saikat (WhatsApp)', 'bg-cyan-700')}
               </div>
-              ${renderTeamSummaryTable('Team Samad — Roster Summary', samadSum)}
             </div>
-
-            <div>
-              <div class="card-dynamic overflow-hidden">
-                <div class="bg-orange-500 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Team: Facebook (Nazim)</div>
-                <table class="w-full text-[11px] border-collapse">
-                  <thead class="bg-slate-50 font-extrabold text-slate-600">
-                    <tr>
-                      <th class="px-1.5 py-2 border border-slate-200">ID</th>
-                      <th class="px-2 py-2 border border-slate-200 text-left">Name</th>
-                      ${dayLabels.map(dl => `<th class="px-1.5 py-2 border border-slate-200">${dl}</th>`).join('')}
-                      ${isEditable ? `<th class="px-1.5 py-2 border border-slate-200">Team / Del</th>` : ''}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${nazimRows.map(r => `
-                      <tr class="${r.isTL ? 'bg-slate-50 font-extrabold' : 'hover:bg-slate-50/60'}">
-                        <td class="px-1.5 py-2 border border-slate-200 text-center font-mono font-bold">${r.id}</td>
-                        <td class="px-2 py-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">
-                          ${isEditable
-                            ? `<input type="text" value="${r.name}" onchange="handleRosterFieldEdit('${r.id}', 'name', this.value)" class="bg-transparent border-b border-transparent hover:border-slate-300 focus:border-orange-500 focus:outline-none text-[11px] font-bold w-32">`
-                            : r.name}
-                          ${r.isTL ? '<span class="text-[10px] text-orange-600 font-black">(TL)</span>' : ''}
-                        </td>
-                        ${days.map(d => renderShiftCell(r, d)).join('')}
-                        ${isEditable ? `
-                        <td class="p-1 border border-slate-200 text-center whitespace-nowrap">
-                          <select onchange="handleRosterFieldEdit('${r.id}', 'team', this.value)" class="bg-slate-100 rounded px-1 py-0.5 text-[10px] font-bold">
-                            <option value="Team Nazim" ${r.team === 'Team Nazim' ? 'selected' : ''}>Nazim</option>
-                            <option value="Team Samad" ${r.team === 'Team Samad' ? 'selected' : ''}>Samad</option>
-                            <option value="Floating" ${r.team === 'Floating' ? 'selected' : ''}>Float</option>
-                          </select>
-                          <button type="button" onclick="handleDeleteRosterRowDraft('${r.id}')" title="Remove Row" class="ml-1 text-red-500 hover:text-red-700"><i class="fa-solid fa-trash-can text-[10px]"></i></button>
-                        </td>` : ''}
-                      </tr>
-                    `).join('')}
-                  </tbody>
-                </table>
-              </div>
-              ${renderTeamSummaryTable('Team Nazim — Roster Summary', nazimSum)}
+          ` : `
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              ${renderRosterTeamBlock('Team Samad', '🔵 Team: Facebook (Abdus Samad)', 'bg-blue-600')}
+              ${renderRosterTeamBlock('Team Nazim', '🟠 Team: Facebook (Nazim)', 'bg-orange-500')}
             </div>
-          </div>
+          `}
 
           ${floatingRows.length > 0 ? `
           <div class="card-dynamic overflow-hidden border-2 border-purple-200">
             <div class="bg-gradient-to-r from-purple-700 to-indigo-700 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-              <span class="font-black text-xs uppercase tracking-wider"><i class="fa-solid fa-user-astronaut mr-1.5"></i>Facebook Floating Agents Pool (Unassigned to Nazim/Samad — Included in Overall Facebook Combined)</span>
+              <span class="font-black text-xs uppercase tracking-wider"><i class="fa-solid fa-user-astronaut mr-1.5"></i>${chMeta.name} Floating Agents Pool</span>
               <span class="text-[10px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full">Assign to a team anytime using buttons on the right</span>
             </div>
             <table class="w-full text-[11px] border-collapse">
@@ -4270,8 +4483,7 @@
                     ${days.map(d => renderShiftCell(r, d)).join('')}
                     ${hasFeatureAccess(u, 'feat_manage_users') ? `
                     <td class="px-2 py-1.5 border border-slate-200 text-center space-x-1 whitespace-nowrap">
-                      <button onclick="quickAssignAgentToTeam('${r.id}', 'Team Nazim')" class="px-2 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-md font-extrabold text-[10px]">+ Team Nazim</button>
-                      <button onclick="quickAssignAgentToTeam('${r.id}', 'Team Samad')" class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-extrabold text-[10px]">+ Team Samad</button>
+                      ${chMeta.teams.map(tn => `<button onclick="quickAssignAgentToTeam('${r.id}', '${tn}')" class="px-2 py-1 ${getTeamBannerHeaderColor(tn)} hover:opacity-90 text-white rounded-md font-extrabold text-[10px]">+ ${tn}</button>`).join('')}
                     </td>
                     ` : ''}
                   </tr>
@@ -4281,8 +4493,38 @@
           </div>
           ` : ''}
 
-          <div class="card-dynamic overflow-hidden max-w-4xl mx-auto">
-            <div class="bg-slate-900 text-white px-4 py-2.5 font-black text-xs text-center uppercase tracking-wider">Facebook Team Roster Summary (Combined)</div>
+          <!-- Combined Department Roster Summary Table (Matches WhatsApp 51-person table & Facebook Combined table) -->
+          <div class="card-dynamic overflow-hidden max-w-4xl mx-auto border-2 border-slate-300">
+            <div class="bg-slate-900 text-white px-4 py-3 font-black text-xs text-center uppercase tracking-wider flex items-center justify-between">
+              <span><i class="fa-solid fa-layer-group text-amber-400 mr-1.5"></i>${chMeta.name} Department Total Roster Summary (All ${chMeta.teams.length} Teams Combined)</span>
+              <span class="px-2.5 py-0.5 rounded bg-emerald-500 text-slate-950 text-[10px] font-black">Total: ${roster.length} Members</span>
+            </div>
+            ${activeChannel === 'WHATSAPP' ? `
+            <table class="w-full text-xs text-center border-collapse">
+              <thead class="bg-slate-100 font-extrabold text-slate-800">
+                <tr>
+                  <th class="p-2.5 border border-slate-300 text-left">Shift</th>
+                  ${dayLabels.map(dl => `<th class="p-2.5 border border-slate-300">${dl.slice(0, 3)}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody class="font-bold text-slate-800">
+                <tr><td class="p-2 border border-slate-200 text-left font-black">7:00 AM</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedAll.morning[d]}</td>`).join('')}</tr>
+                <tr><td class="p-2 border border-slate-200 text-left font-black">3:00 PM</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedAll.evening[d]}</td>`).join('')}</tr>
+                <tr><td class="p-2 border border-slate-200 text-left font-black">10:00 AM</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedAll.general[d]}</td>`).join('')}</tr>
+                <tr><td class="p-2 border border-slate-200 text-left font-black">9:00 AM</td>${days.map(d => `<td class="p-2 border border-slate-200">${combinedAll.nineAm[d]}</td>`).join('')}</tr>
+                <tr class="bg-indigo-50/50"><td class="p-2 border border-slate-200 text-left font-black text-indigo-900">Night</td>${days.map(d => `<td class="p-2 border border-slate-200 font-black text-indigo-900">${combinedAll.night[d]}</td>`).join('')}</tr>
+                <tr class="bg-orange-50/60"><td class="p-2 border border-slate-200 text-left font-black text-orange-900">DO</td>${days.map(d => `<td class="p-2 border border-slate-200 font-black text-orange-900">${combinedAll.doCount[d]}</td>`).join('')}</tr>
+                <tr class="bg-emerald-50 font-black text-emerald-900">
+                  <td class="p-2.5 border border-slate-300 text-left">Active Work Force (Excl. DO)</td>
+                  ${days.map(d => `<td class="p-2.5 border border-slate-300">${combinedAll.morning[d] + combinedAll.evening[d] + combinedAll.general[d] + combinedAll.nineAm[d] + combinedAll.night[d]}</td>`).join('')}
+                </tr>
+                <tr class="bg-slate-900 text-white font-black text-sm">
+                  <td class="p-2.5 border border-slate-700 text-left text-amber-300">Total</td>
+                  ${days.map(d => `<td class="p-2.5 border border-slate-700">${combinedAll.morning[d] + combinedAll.evening[d] + combinedAll.general[d] + combinedAll.nineAm[d] + combinedAll.night[d] + combinedAll.doCount[d]}</td>`).join('')}
+                </tr>
+              </tbody>
+            </table>
+            ` : `
             <table class="w-full text-xs text-center border-collapse">
               <thead class="bg-slate-100 font-extrabold text-slate-700">
                 <tr>
@@ -4311,6 +4553,7 @@
                 </tr>
               </tbody>
             </table>
+            `}
           </div>
         </div>
       `;
@@ -4731,9 +4974,8 @@
             <div class="flex items-center gap-2">
               ${canViewAll(u) ? `
               <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
-                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Team (17)</option>
-                <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
-                <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Teams</option>
+                ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
               </select>
               ` : ''}
               ${hasFeatureAccess(u, 'feat_manage_attendance') ? `
@@ -4839,7 +5081,7 @@
 
       const rows = filteredAgents.map(ag => {
         const baseTgt = Number(ag.baseTarget) || 0;
-        const workTgt = Math.round(baseTgt * 1.05);
+        const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
         const curGoal = Math.round(workTgt * phaseMeta.pct);
 
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
@@ -4901,25 +5143,28 @@
         S3: { key: 'S3', name: 'Sprint 3 (Days 21–31)', short: 'Sprint 3 (21–31)', dateRange: `21/${selectedMonthKey} – End of Month`, pct: 0.35, pctLabel: '35% of Monthly Target' }
       }[effPhase];
 
-      // Calculate TL (Nazim & Samad) 80% & 100% Total Target Reward Milestones (Visible ONLY to Admin / Supervisor, NEVER to Agents)
-      let nazimTL = null, samadTL = null;
+      let channelTLMilestones = [];
       if (isAdminOrSup) {
-        function calcTLMilestone(teamName, tlName) {
+        channelTLMilestones = getActiveChannelMeta().teams.map((teamName, idx) => {
           const tAgents = allAgents.filter(a => a.team === teamName);
           const tTLs = allUsers.filter(usr => usr.role === 'admin' && usr.team === teamName);
+          const tlName = tTLs.length > 0 ? tTLs.map(t => t.name).join(', ') : 'Team Leader';
           const agentsBase = tAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0);
-          const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
-          const totalWorkTgt = Math.round((agentsBase + tlBase) * 1.05);
+          const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || (activeChannel === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET)), 0);
+          const totalWorkTgt = calcWorkingTargetFromBase(agentsBase + tlBase, activeChannel);
           const target80 = Math.round(totalWorkTgt * 0.80);
           const target100 = totalWorkTgt;
-          const achieved = monthSales.filter(s => s.team === teamName).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+          const achieved = monthSales.filter(s => normalizeTeamNameAlias(s.team) === teamName).reduce((s, c) => s + (Number(c.amount) || 0), 0);
           const pct = target100 > 0 ? Number(((achieved / target100) * 100).toFixed(1)) : 0;
           const rem80 = Math.max(0, target80 - achieved);
           const rem100 = Math.max(0, target100 - achieved);
-          return { teamName, tlName, agentCount: tAgents.length, target80, target100, achieved, pct, rem80, rem100 };
-        }
-        nazimTL = calcTLMilestone('Team Nazim', 'Md. Nazimur Rahman');
-        samadTL = calcTLMilestone('Team Samad', 'Md Abdus Samad');
+          const themes = [
+            { border: 'border-t-orange-500', pill: 'bg-orange-100 text-orange-800', bar: 'from-orange-500 to-amber-500' },
+            { border: 'border-t-blue-600', pill: 'bg-blue-100 text-blue-800', bar: 'from-blue-600 to-indigo-600' },
+            { border: 'border-t-emerald-600', pill: 'bg-emerald-100 text-emerald-800', bar: 'from-emerald-600 to-teal-500' }
+          ];
+          return { teamName, tlName, agentCount: tAgents.length, target80, target100, achieved, pct, rem80, rem100, theme: themes[idx % themes.length] };
+        });
       }
 
       // Filter Agents by Team Scope
@@ -4933,7 +5178,7 @@
 
       const rankedSprintAgents = filteredAgents.map(ag => {
         const baseTgt = Number(ag.baseTarget) || 0;
-        const workTgt = Math.round(baseTgt * 1.05);
+        const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
         const s1Goal = Math.round(workTgt * 0.40);
         const s2Goal = Math.round(workTgt * 0.35);
         const s3Goal = Math.round(workTgt * 0.35);
@@ -5042,10 +5287,9 @@
               </div>
 
               <!-- Team Filter -->
-              <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+              <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap items-center gap-1 border border-slate-200">
                 <button onclick="setSprintTabTeam('ALL')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (${allAgents.length})</button>
-                <button onclick="setSprintTabTeam('Team Nazim')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === 'Team Nazim' ? 'bg-orange-500 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Nazim</button>
-                <button onclick="setSprintTabTeam('Team Samad')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === 'Team Samad' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Team Samad</button>
+                ${getActiveChannelMeta().teams.map(tn => `<button onclick="setSprintTabTeam('${tn}')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>`).join('')}
               </div>
 
               <button onclick="exportSprintTargetCsv()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
@@ -5088,13 +5332,10 @@
           </div>
 
           <!-- Admin / Team Leader Total Target Milestones (80% & 100% Reward) — Visible ONLY to Admins & Supervisors -->
-          ${isAdminOrSup && nazimTL && samadTL ? `
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            ${[
-              { data: nazimTL, border: 'border-t-orange-500', pill: 'bg-orange-100 text-orange-800', bar: 'from-orange-500 to-amber-500' },
-              { data: samadTL, border: 'border-t-blue-600', pill: 'bg-blue-100 text-blue-800', bar: 'from-blue-600 to-indigo-600' }
-            ].map(item => {
-              const st = item.data;
+          ${isAdminOrSup && channelTLMilestones.length > 0 ? `
+          <div class="grid grid-cols-1 md:grid-cols-${channelTLMilestones.length} gap-4">
+            ${channelTLMilestones.map(st => {
+              const item = st.theme;
               const hit80 = st.achieved >= st.target80 && st.target80 > 0;
               const hit100 = st.achieved >= st.target100 && st.target100 > 0;
               return `
@@ -5248,7 +5489,7 @@
         const agentsBase = tAgents.reduce((s, a) => s + Number(a.baseTarget || 0), 0);
         const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
         const baseTgt = agentsBase + tlBase;
-        const workTgt = Math.round(baseTgt * 1.05);
+        const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
         const tSales = monthSales.filter(s => s.team === teamName);
         const leads = tSales.reduce((s, c) => s + Number(c.leads || 0), 0);
         const orders = tSales.reduce((s, c) => s + Number(c.orders || 0), 0);
@@ -5271,7 +5512,7 @@
         const orders = agSales.reduce((s, c) => s + Number(c.orders || 0), 0);
         const revenue = agSales.reduce((s, c) => s + Number(c.amount || 0), 0);
         const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
-        const workTgt = Math.round(((ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174) * 1.05);
+        const workTgt = calcWorkingTargetFromBase((ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174, ag.team);
         const pct = workTgt > 0 ? Math.round((revenue / workTgt) * 100) : 0;
         return { ...ag, leads, orders, revenue, conv, workTgt, pct };
       }).sort((a, b) => b.pct - a.pct || b.revenue - a.revenue);
@@ -5440,7 +5681,7 @@
 
       sales.forEach(s => {
         const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
-        const agWorkTarget = Math.round(((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174) * 1.05);
+        const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
         const agDailyTarget = Math.round(agWorkTarget / 26);
 
         sumLeads += Number(s.leads) || 0;
@@ -5486,9 +5727,8 @@
               </button>
 
               <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold cursor-pointer">
-                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All Floor Agents (${totalAgentsCount})</option>
-                <option value="Team Nazim" ${logsFilterScope === 'Team Nazim' ? 'selected' : ''}>Team Nazim</option>
-                <option value="Team Samad" ${logsFilterScope === 'Team Samad' ? 'selected' : ''}>Team Samad</option>
+                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Agents (${totalAgentsCount})</option>
+                ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
                 ${u.role === 'agent' ? `<option value="MINE" ${logsFilterScope === 'MINE' ? 'selected' : ''}>Only My Reports</option>` : ''}
               </select>
 
@@ -5526,7 +5766,7 @@
                 ${sales.length === 0 ? `<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted for ${reportsDateFilter === 'ALL' ? selectedMonthKey : cleanDisplayDate(reportsDateFilter)} yet. Be the first to submit today!</td></tr>` : ''}
                 ${sales.map((s, idx) => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
-                  const agWorkTarget = Math.round(((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174) * 1.05);
+                  const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
                   const agDailyTarget = Math.round(agWorkTarget / 26);
                   const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
                   const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
@@ -5732,10 +5972,13 @@
                   const roleBadge = usr.role === 'admin'
                     ? 'bg-purple-100 text-purple-800'
                     : (usr.role === 'supervisor' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-100 text-slate-700');
-                  const displayGrade = usr.role === 'admin' ? 'TL' : (usr.role === 'supervisor' ? 'Supervisor' : (usr.grade || 'A'));
+                  const displayGrade = usr.role === 'admin'
+                    ? (usr.grade && usr.grade !== 'TL' ? `TL (${usr.grade})` : 'TL')
+                    : (usr.role === 'supervisor' ? 'Supervisor' : (usr.grade || 'A'));
                   const canEdit = canEditTargetUser(u, usr);
                   const canDel = canDeleteTargetUser(u, usr);
                   const canSeePass = canViewTargetPassword(u, usr);
+                  const isPassRevealed = revealedPasswordUserIds.has(String(usr.id));
 
                   return `
                   <tr class="hover:bg-slate-50">
@@ -5748,11 +5991,20 @@
                     </td>
                     <td class="p-3.5">${renderOnlineStatusBadge(usr.id)}</td>
                     <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
-                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${usr.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (usr.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700')}">${usr.team}</span></td>
+                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${getTeamBadgeClasses(usr.team)}">${usr.team}</span></td>
                     <td class="p-3.5 font-black ${usr.role === 'admin' ? 'text-purple-700' : (usr.role === 'supervisor' ? 'text-indigo-700' : 'text-slate-900')}">${displayGrade}</td>
-                    ${hasFeatureAccess(u, 'feat_manage_users') ? `<td class="p-3.5 font-mono text-slate-500">${canSeePass ? usr.pass : '<span class="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-sans font-bold"><i class="fa-solid fa-eye-slash mr-1"></i>Protected</span>'}</td>` : ''}
+                    ${hasFeatureAccess(u, 'feat_manage_users') ? `<td class="p-3.5 font-mono text-slate-600">
+                      ${canSeePass ? `
+                        <div class="inline-flex items-center gap-2">
+                          <span class="font-bold tracking-wider ${isPassRevealed ? 'text-slate-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200' : 'text-slate-400'}">${isPassRevealed ? usr.pass : '••••••'}</span>
+                          <button type="button" onclick="toggleRevealUserPassword('${usr.id}')" class="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-blue-600 text-slate-600 hover:text-white text-[10px] font-sans font-extrabold transition-colors">
+                            <i class="fa-regular ${isPassRevealed ? 'fa-eye-slash' : 'fa-eye'} mr-1"></i>${isPassRevealed ? 'Hide' : 'Show'}
+                          </button>
+                        </div>
+                      ` : '<span class="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-sans font-bold"><i class="fa-solid fa-lock mr-1"></i>Protected</span>'}
+                    </td>` : ''}
                     <td class="p-3.5 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}</td>
-                    <td class="p-3.5 font-extrabold text-emerald-600">৳${Math.round(Number(usr.baseTarget || 0) * 1.05).toLocaleString()}</td>
+                    <td class="p-3.5 font-extrabold text-emerald-600">৳${calcWorkingTargetFromBase(usr.baseTarget, usr.team).toLocaleString()}</td>
                     ${hasFeatureAccess(u, 'feat_manage_users') ? `
                     <td class="p-3.5 text-right space-x-1">
                       ${usr.role === 'agent' && usr.team === 'Floating' ? `
@@ -6333,9 +6585,9 @@
                         <option value="Floating">Floating Pool (Facebook)</option>
                       </optgroup>
                       <optgroup label="WhatsApp Channel (3 Teams)">
-                        <option value="WA Team 1">WA Team 1 (WhatsApp)</option>
-                        <option value="WA Team 2">WA Team 2 (WhatsApp)</option>
-                        <option value="WA Team 3">WA Team 3 (WhatsApp)</option>
+                        <option value="Team Shakib Baksh">Team Shakib Baksh (WhatsApp)</option>
+                        <option value="Team Parvaj">Team Parvaj (WhatsApp)</option>
+                        <option value="Team Saikat">Team Saikat (WhatsApp)</option>
                         <option value="WA Floating">WA Floating Pool (WhatsApp)</option>
                       </optgroup>
                       <optgroup label="Supervisors">
@@ -6421,7 +6673,7 @@
         document.getElementById('usrName').value = existing.name;
         document.getElementById('usrRole').value = existing.role || 'agent';
         document.getElementById('usrTeam').value = existing.team;
-        document.getElementById('usrGrade').value = existing.role === 'admin' ? 'TL' : (existing.role === 'supervisor' ? 'Supervisor' : (existing.grade || 'A'));
+        document.getElementById('usrGrade').value = existing.role === 'supervisor' ? 'Supervisor' : (existing.grade || (existing.role === 'admin' ? 'TL' : 'A'));
         document.getElementById('usrPass').value = existing.pass || '123456';
         document.getElementById('usrTarget').value = existing.baseTarget ?? 1232174;
       } else {
@@ -6452,7 +6704,7 @@
         return;
       }
 
-      const gradeVal = roleVal === 'admin' ? 'TL' : (roleVal === 'supervisor' ? 'Supervisor' : document.getElementById('usrGrade').value);
+      const gradeVal = roleVal === 'supervisor' ? 'Supervisor' : (document.getElementById('usrGrade').value || (roleVal === 'admin' ? 'TL' : 'A'));
       const rawName = document.getElementById('usrName').value.trim();
 
       const newUser = normalizeUserRecord({
@@ -6522,7 +6774,7 @@
       const agentId = hasFeatureAccess(u, 'feat_manage_all_sales') ? document.getElementById('subAgentId')?.value : u.id;
       const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
 
-      const workingTarget = Math.round(((targetAgent.baseTarget !== undefined && targetAgent.baseTarget !== null) ? Number(targetAgent.baseTarget) : 1232174) * 1.05);
+      const workingTarget = calcWorkingTargetFromBase((targetAgent.baseTarget !== undefined && targetAgent.baseTarget !== null) ? Number(targetAgent.baseTarget) : 1232174, targetAgent.team);
       const dailyTarget = Math.round(workingTarget / 26);
 
       const leads = Number(document.getElementById('subLeads')?.value) || 0;
