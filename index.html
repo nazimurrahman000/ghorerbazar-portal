@@ -661,7 +661,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen) return true;
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal'];
+      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -1073,11 +1073,12 @@
       const now = Date.now();
       const onlineList = getStored('online_users', []);
       const oRec = onlineList.find(o => String(o.id) === uid);
-      // Strict 35-second live heartbeat window: since every open tab pings every ~1.5s,
-      // anyone who closed their browser or logged out is marked Offline within 35 seconds!
-      // Never fall back to attendance_records.lastTick because historical attendance rows stay in the sheet all day.
-      if (oRec && oRec.state !== 'Offline' && oRec.lastSeen && (now - Number(oRec.lastSeen)) < 35000) {
-        return oRec.state === 'On Break' ? 'On Break' : 'Online';
+      // Use clientReceivedAt (stamped when cloud response arrives) to avoid PC clock vs Google Server clock skew!
+      if (oRec && oRec.state !== 'Offline' && Number(oRec.lastSeen) > 0) {
+        const refTs = Number(oRec.clientReceivedAt || oRec.lastSeen || 0);
+        if ((now - refTs) < 75000) {
+          return oRec.state === 'On Break' ? 'On Break' : 'Online';
+        }
       }
       return 'Offline';
     }
@@ -1828,9 +1829,8 @@
 
     function hasOnlineStateChanged(cloudList, localList) {
       if (!Array.isArray(cloudList) || !Array.isArray(localList)) return false;
-      const now = Date.now();
       const getActiveSet = (arr) => arr
-        .filter(o => o && o.state !== 'Offline' && o.lastSeen && (now - Number(o.lastSeen)) < 35000)
+        .filter(o => o && o.state !== 'Offline' && Number(o.lastSeen) > 0)
         .map(o => `${o.id}_${o.state === 'On Break' ? 'On Break' : 'Online'}`)
         .sort()
         .join('|');
@@ -1844,13 +1844,22 @@
       return JSON.stringify(stripTick(cloudAtt)) !== JSON.stringify(stripTick(localAtt));
     }
 
+    let lastLocalSalesMutationMs = 0;
+
+    function markLocalSalesMutatedNow() {
+      lastLocalSalesMutationMs = Date.now();
+    }
+
     function handleCloudData(res) {
       let changed = false;
       if (Array.isArray(res.salesRecords)) {
         const local = getStored('sales_records', []);
-        if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
-          setStored('sales_records', res.salesRecords);
-          changed = true;
+        // Protect fresh local optimistic sales/product edits for 10 seconds so an in-flight stale GET poll never reverts the UI!
+        if ((Date.now() - lastLocalSalesMutationMs) >= 10000) {
+          if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
+            setStored('sales_records', res.salesRecords);
+            changed = true;
+          }
         }
       }
       if (Array.isArray(res.attendanceRecords)) {
@@ -1872,9 +1881,14 @@
         if (stateChanged) changed = true;
       }
       if (Array.isArray(res.onlineUsers)) {
+        const nowClient = Date.now();
+        const stampedOnline = res.onlineUsers.map(o => ({
+          ...o,
+          clientReceivedAt: (o && o.state !== 'Offline' && Number(o.lastSeen) > 0) ? nowClient : 0
+        }));
         const localOnline = getStored('online_users', []);
-        const onlineStateDiff = hasOnlineStateChanged(res.onlineUsers, localOnline);
-        setStored('online_users', res.onlineUsers);
+        const onlineStateDiff = hasOnlineStateChanged(stampedOnline, localOnline);
+        setStored('online_users', stampedOnline);
         if (onlineStateDiff) changed = true;
       }
       if (Array.isArray(res.activityLogs) && res.activityLogs.length > 0) {
@@ -1934,7 +1948,13 @@
             });
           });
 
-          mergedConfigs['CHAT_AND_NOTICES'] = { messages: mergedMsgs, notices: mergedNotices, readReceipts: mergedReads };
+          const grpMap = new Map();
+          (Array.isArray(cldHub.customGroups) ? cldHub.customGroups : []).forEach(g => { if (g && g.id) grpMap.set(g.id, g); });
+          (Array.isArray(locHub.customGroups) ? locHub.customGroups : []).forEach(g => {
+            if (g && g.id && !grpMap.has(g.id)) grpMap.set(g.id, g);
+          });
+          const mergedCustomGroups = Array.from(grpMap.values());
+          mergedConfigs['CHAT_AND_NOTICES'] = { messages: mergedMsgs, notices: mergedNotices, readReceipts: mergedReads, customGroups: mergedCustomGroups };
         }
 
         if (JSON.stringify(mergedConfigs) !== JSON.stringify(localCfg)) {
@@ -2365,11 +2385,7 @@
               </div>
 
               <div class="flex items-center gap-3 shrink-0">
-                ${hasFeatureAccess(u, 'feat_post_notice') ? `
-                <button onclick="openAnnouncementModal()" title="Broadcast Official Notice / Announcement to All Agents' Bell Icons" class="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-extrabold rounded-xl shadow-md flex items-center gap-2 transition-colors">
-                  <i class="fa-solid fa-bullhorn text-xs"></i> Post Notice
-                </button>
-                ` : ''}
+
                 <button onclick="openModal('noticeBoardModal')" title="Open Official Floor Notice Board" class="px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-colors">
                   <i class="fa-solid fa-clipboard-list text-amber-600 text-xs"></i>
                   <span class="hidden sm:inline">Notice Board</span>
@@ -2417,6 +2433,7 @@
         ${renderNoticeBoardModal()}
         ${renderProfilePicModal()}
         ${renderChatDeleteModal()}
+        ${renderCustomChatGroupModal()}
         ${renderRosterAddModal()}
         ${renderLogoutConfirmModal()}
       `;
@@ -3738,7 +3755,7 @@
             ...prodValuesObj
           };
           sales.unshift(entry);
-          setStored('sales_records', sales);
+          setStored('sales_records', sales); markLocalSalesMutatedNow();
 
           const logMeta = recordActivityLog(
             'Updated Drive Product Total',
@@ -3792,7 +3809,6 @@
 
       return `
         <div class="space-y-6">
-          ${renderOmniChannelTotalSalesBanner()}
           <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
               <div class="flex items-center gap-2">
@@ -4144,13 +4160,20 @@
     }
 
     function renderDateWiseTeamDailySummaryTable() {
+      const u = currentUser;
+      const isAdminOrSup = canViewAll(u);
       const chMeta = getActiveChannelMeta();
       const allUsers = getUsersForMonth(selectedMonthKey);
-      const teamsList = chMeta.teams;
-      const showIndividualTeams = dateWiseTeamFilter === 'ALL'
+      const myAgentTeam = normalizeTeamNameAlias(u ? u.team : '');
+      const teamsList = isAdminOrSup
+        ? chMeta.teams
+        : (myAgentTeam && chMeta.teams.includes(myAgentTeam) ? [myAgentTeam] : [chMeta.teams[0]]);
+      const showIndividualTeams = !isAdminOrSup
         ? teamsList
-        : (teamsList.includes(dateWiseTeamFilter) ? [dateWiseTeamFilter] : []);
-      const showChannelCombined = dateWiseTeamFilter === 'ALL' || dateWiseTeamFilter === 'CHANNEL_TOTAL';
+        : (dateWiseTeamFilter === 'ALL'
+          ? teamsList
+          : (teamsList.includes(dateWiseTeamFilter) ? [dateWiseTeamFilter] : []));
+      const showChannelCombined = isAdminOrSup && (dateWiseTeamFilter === 'ALL' || dateWiseTeamFilter === 'CHANNEL_TOTAL');
 
       const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
         .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_') && getChannelForTeam(s.team) === activeChannel);
@@ -4269,12 +4292,13 @@
         <div class="space-y-4 mt-6">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200">
             <div>
-              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-800">Date-by-Date Team & Channel Summary</span>
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-800">${isAdminOrSup ? 'Date-by-Date Team & Channel Summary' : `${myAgentTeam} — Date-Wise Team Summary`}</span>
               <h3 class="text-base font-black text-slate-900 mt-1">
-                <i class="fa-solid fa-calendar-check text-indigo-600 mr-1.5"></i>Date-Wise Team & Total ${chMeta.name} Channel Sales Reports (${selectedMonthKey})
+                <i class="fa-solid fa-calendar-check text-indigo-600 mr-1.5"></i>${isAdminOrSup ? `Date-Wise Team & Total ${chMeta.name} Channel Sales Reports (${selectedMonthKey})` : `${myAgentTeam} — Date-Wise Team Total Sales Report (${selectedMonthKey})`}
               </h3>
-              <p class="text-xs font-bold text-slate-500">Chronological day-by-day sales breakdown for each individual team AND the combined ${chMeta.fullTitle} total, with individual CSV download on every table.</p>
+              <p class="text-xs font-bold text-slate-500">${isAdminOrSup ? `Chronological day-by-day sales breakdown for each individual team AND the combined ${chMeta.fullTitle} total, with individual CSV download on every table.` : `Chronological day-by-day sales breakdown for ${myAgentTeam} (${selectedMonthKey}).`}</p>
             </div>
+            ${isAdminOrSup ? `
             <div class="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button type="button" onclick="setDateWiseTeamFilter('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All Tables (${teamsList.length + 1})</button>
               <button type="button" onclick="setDateWiseTeamFilter('CHANNEL_TOTAL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === 'CHANNEL_TOTAL' ? 'bg-indigo-700 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">Total ${chMeta.name} Channel</button>
@@ -4282,6 +4306,7 @@
                 <button type="button" onclick="setDateWiseTeamFilter('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold ${dateWiseTeamFilter === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>
               `).join('')}
             </div>
+            ` : ''}
           </div>
 
           ${showIndividualTeams.map(teamName => buildDateWiseTableCard(
@@ -4369,7 +4394,7 @@
           ...ag, baseTgt, workTgt, leads, orders, rev, conv, rem, achPct,
           ...agProdTotals, daysCount: uniqueDailyLogs.length, dailyLogs: uniqueDailyLogs
         };
-      }).sort((a, b) => b.achPct - a.achPct || b.rev - a.rev);
+      }).sort((a, b) => b.rev - a.rev || b.achPct - a.achPct);
 
       const totConv = totLeads > 0 ? ((totOrders / totLeads) * 100).toFixed(2) : '0.00';
       const totRem = Math.max(0, totWork - totRev);
@@ -6226,7 +6251,7 @@
         const st = calcTeamStats(tn);
         const tlObj = monthUsersAll.find(u => u.role === 'admin' && u.team === tn);
         return { ...st, tlName: tlObj ? tlObj.name : 'Team Leader' };
-      }).sort((a, b) => b.pct - a.pct || b.revenue - a.revenue);
+      }).sort((a, b) => b.revenue - a.revenue || b.pct - a.pct);
 
       const rankedAgents = allUsers.map(ag => {
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
@@ -6237,7 +6262,7 @@
         const workTgt = calcWorkingTargetFromBase((ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174, ag.team);
         const pct = workTgt > 0 ? Math.round((revenue / workTgt) * 100) : 0;
         return { ...ag, leads, orders, revenue, conv, workTgt, pct };
-      }).sort((a, b) => b.pct - a.pct || b.revenue - a.revenue);
+      }).sort((a, b) => b.revenue - a.revenue || b.pct - a.pct);
 
       const myRankIdx = (currentUser && currentUser.role === 'agent')
         ? rankedAgents.findIndex(ag => String(ag.id) === String(currentUser.id))
@@ -6432,61 +6457,57 @@
 
       return `
         <div class="space-y-6">
-          <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
+          <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
             <div>
               <div class="flex items-center gap-2">
                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800"><i class="fa-solid fa-fire text-amber-500 mr-1"></i>Live Floor Competition</span>
-                <span class="text-xs font-extrabold text-emerald-600">${sales.length} ${ reportsDateFilter === 'ALL' ? 'Total Entries' : `of ${totalAgentsCount} Agents Submitted`}</span>
+                <span class="text-xs font-extrabold text-emerald-600">${sales.length} Agent Entries (${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)})</span>
               </div>
               <h2 class="text-xl font-black text-slate-900 mt-1">
                 <i class="fa-solid fa-file-invoice text-blue-600 mr-2"></i>
-                Daily Sales & Conversion Leaderboard (${reportsDateFilter === 'ALL' ? `Full Month • ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)})
+                Daily Sales & Conversion Leaderboard (${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)})
               </h2>
               <p class="text-xs font-bold text-slate-500 mt-0.5">
-                Showing all agents' sales reports for <strong>${reportsDateFilter === 'ALL' ? `All Dates in ${selectedMonthKey}` : cleanDisplayDate(reportsDateFilter)}</strong> sorted by highest sales amount!
+                Showing daily sales reports for <strong>${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}</strong> sorted by highest achieved sales amount!
               </p>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2.5">
-              <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+            <div class="flex flex-wrap items-center gap-2.5 bg-slate-50 p-2 rounded-2xl border border-slate-200/80">
+              <div class="flex items-center gap-2 bg-white border border-slate-200 px-3.5 py-2 rounded-xl shadow-2xs">
                 <i class="fa-solid fa-calendar-day text-blue-600 text-xs"></i>
-                <span class="text-[10px] font-extrabold uppercase text-slate-500">Select Date:</span>
-                <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-800 focus:outline-none cursor-pointer">
+                <span class="text-[10px] font-extrabold uppercase text-slate-500">Date:</span>
+                <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer">
               </div>
 
-              <button onclick="setReportsDateFilter('${getTodayFormatted()}')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-colors ${isShowingToday ? 'bg-blue-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
-                Today (${cleanDisplayDate(getTodayFormatted())})
-              </button>
-              <button onclick="setReportsDateFilter('ALL')" class="px-3 py-2 rounded-xl text-xs font-extrabold transition-colors ${reportsDateFilter === 'ALL' ? 'bg-slate-800 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}">
-                All Dates (${selectedMonthKey})
-              </button>
-
-              <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold cursor-pointer">
-                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Agents (${allUsersActiveCh.filter(usr => usr.role === 'agent').length})</option>
-                ${canViewAll(u) ? `
-                  <optgroup label="Facebook Channel">
-                    <option value="ALL_FB" ${logsFilterScope === 'ALL_FB' ? 'selected' : ''}>All Facebook Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'FACEBOOK').length})</option>
-                    ${CHANNEL_META.FACEBOOK.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
-                  </optgroup>
-                  <optgroup label="WhatsApp Channel">
-                    <option value="ALL_WA" ${logsFilterScope === 'ALL_WA' ? 'selected' : ''}>All WhatsApp Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'WHATSAPP').length})</option>
-                    ${CHANNEL_META.WHATSAPP.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
-                  </optgroup>
-                  <optgroup label="All Channels Combined">
-                    <option value="ALL_OMNI" ${logsFilterScope === 'ALL_OMNI' ? 'selected' : ''}>🌐 All Facebook + WhatsApp Teams (${allUsersOmni.filter(usr => usr.role === 'agent').length})</option>
-                  </optgroup>
-                ` : getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
-                ${u.role === 'agent' ? `<option value="MINE" ${logsFilterScope === 'MINE' ? 'selected' : ''}>Only My Reports</option>` : ''}
-              </select>
+              <div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">
+                <i class="fa-solid fa-users-viewfinder text-indigo-600 text-xs"></i>
+                <select onchange="setLogsScope(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                  <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Agents (${allUsersActiveCh.filter(usr => usr.role === 'agent').length})</option>
+                  ${canViewAll(u) ? `
+                    <optgroup label="Facebook Channel">
+                      <option value="ALL_FB" ${logsFilterScope === 'ALL_FB' ? 'selected' : ''}>All Facebook Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'FACEBOOK').length})</option>
+                      ${CHANNEL_META.FACEBOOK.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                    </optgroup>
+                    <optgroup label="WhatsApp Channel">
+                      <option value="ALL_WA" ${logsFilterScope === 'ALL_WA' ? 'selected' : ''}>All WhatsApp Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'WHATSAPP').length})</option>
+                      ${CHANNEL_META.WHATSAPP.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                    </optgroup>
+                    <optgroup label="All Channels Combined">
+                      <option value="ALL_OMNI" ${logsFilterScope === 'ALL_OMNI' ? 'selected' : ''}>🌐 All Facebook + WhatsApp Teams (${allUsersOmni.filter(usr => usr.role === 'agent').length})</option>
+                    </optgroup>
+                  ` : getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                  ${u.role === 'agent' ? `<option value="MINE" ${logsFilterScope === 'MINE' ? 'selected' : ''}>Only My Reports</option>` : ''}
+                </select>
+              </div>
 
               ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
-              <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
+              <button onclick="openAiImportModal()" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1.5 transition-colors">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Import
               </button>
               ` : ''}
               ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
-              <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
-                <i class="fa-solid fa-plus mr-1"></i> ${u.role === 'agent' ? 'Submit My Report' : 'Add New Report'}
+              <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="px-4 py-2 tab-active text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1.5">
+                <i class="fa-solid fa-plus"></i> ${u.role === 'agent' ? 'Submit My Report' : 'Add New Report'}
               </button>
               ` : ''}
             </div>
@@ -6582,7 +6603,6 @@
               ` : ''}
             </table>
           </div>
-          ${renderDateWiseTeamDailySummaryTable()}
         </div>
       `;
     }
@@ -6607,7 +6627,7 @@
 
           let sales = getStored('sales_records', []);
           sales = sales.map(s => String(s.userId) === String(agentId) ? { ...s, team: newTeamName } : s);
-          setStored('sales_records', sales);
+          setStored('sales_records', sales); markLocalSalesMutatedNow();
 
           let attList = getStored('attendance_records', []);
           attList = attList.map(a => String(a.userId) === String(agentId) ? { ...a, team: newTeamName } : a);
@@ -7654,7 +7674,7 @@
       let sales = getStored('sales_records', []);
       sales = sales.filter(s => !(String(s.userId) === String(entry.userId) && s.date === entry.date));
       sales.unshift(entry);
-      setStored('sales_records', sales);
+      setStored('sales_records', sales); markLocalSalesMutatedNow();
 
       const submittedMonthKey = entry.date.substring(3);
       if (submittedMonthKey && submittedMonthKey.length === 7) {
@@ -7750,7 +7770,7 @@
         () => {
           let sales = getStored('sales_records', []);
           sales = sales.filter(s => !(String(s.userId) === String(agentId) && s.date === dateStr));
-          setStored('sales_records', sales);
+          setStored('sales_records', sales); markLocalSalesMutatedNow();
 
           const logMeta = recordActivityLog('Deleted Sales Report', `Deleted sales report of ${agentName} (${agentId}) dated ${dateStr}`);
           closeModal('submitModal');
@@ -8894,7 +8914,7 @@
         syncPayloads.push({ ...entry, ...logMeta });
       }
 
-      setStored('sales_records', sales);
+      setStored('sales_records', sales); markLocalSalesMutatedNow();
       closeModal('aiImportModal');
       renderAppLayout();
       showPortalToast('AI Data Approved & Synced!', `Successfully updated ${approvedRows.length} agent record(s) across Portal & Google Sheet!`, 'success');
@@ -9513,16 +9533,19 @@
       return {
         messages: Array.isArray(hub.messages) ? hub.messages : [],
         notices: Array.isArray(hub.notices) ? hub.notices : [],
-        readReceipts: (hub.readReceipts && typeof hub.readReceipts === 'object') ? hub.readReceipts : {}
+        readReceipts: (hub.readReceipts && typeof hub.readReceipts === 'object') ? hub.readReceipts : {},
+        customGroups: Array.isArray(hub.customGroups) ? hub.customGroups : []
       };
     }
 
     function saveChatAndNoticeHubStore(hubData) {
       const configs = getStored('monthly_configs', {});
+      const existing = configs['CHAT_AND_NOTICES'] || {};
       const trimmedHub = {
-        messages: (hubData.messages || []).slice(-220),
-        notices: (hubData.notices || []).slice(-40),
-        readReceipts: hubData.readReceipts || {}
+        messages: (hubData.messages || existing.messages || []).slice(-220),
+        notices: (hubData.notices || existing.notices || []).slice(-40),
+        readReceipts: hubData.readReceipts || existing.readReceipts || {},
+        customGroups: hubData.customGroups || existing.customGroups || []
       };
       configs['CHAT_AND_NOTICES'] = trimmedHub;
       setStored('monthly_configs', configs);
@@ -9532,14 +9555,89 @@
       }).catch(() => {});
     }
 
+    function buildAccessibleGroupChannelsForUser(u) {
+      if (!u) return [];
+      const isMaster = isSuperAdmin(u) || isSupervisor(u);
+      const uCh = getChannelForTeam(u.team);
+      const uTeam = normalizeTeamNameAlias(u.team);
+      const inCurrentActiveChannel = (chKey) => isMaster ? (activeChannel === chKey) : (uCh === chKey);
+
+      const list = [
+        { id: 'GLOBAL_GROUP', name: '🌐 Central Floor Group (All)', subtitle: 'Everyone — All Facebook & WhatsApp Teams', badgeColor: 'bg-orange-500' }
+      ];
+
+      // Facebook Channel Groups (Shown when in Facebook Channel for FB members / Master)
+      if (inCurrentActiveChannel('FACEBOOK')) {
+        list.push({ id: 'FB_ALL_GROUP', name: '🔵 All Facebook Teams Group', subtitle: 'Facebook Combined (Team Nazim + Team Samad)', badgeColor: 'bg-blue-600' });
+        if (isMaster || u.role === 'admin' || uTeam === 'Team Nazim') {
+          list.push({ id: 'TEAM_NAZIM', name: '🟠 Team Nazim Official Group', subtitle: 'TL Nazim & Team Nazim Agents', badgeColor: 'bg-orange-500' });
+        }
+        if (isMaster || u.role === 'admin' || uTeam === 'Team Samad') {
+          list.push({ id: 'TEAM_SAMAD', name: '🔵 Team Samad Official Group', subtitle: 'TL Samad & Team Samad Agents', badgeColor: 'bg-indigo-600' });
+        }
+      }
+
+      // WhatsApp Channel Groups (Shown when in WhatsApp Channel for WA members / Master)
+      if (inCurrentActiveChannel('WHATSAPP')) {
+        list.push({ id: 'WA_ALL_GROUP', name: '🟢 All WhatsApp Teams Group', subtitle: 'WhatsApp Combined (All 3 WA Teams)', badgeColor: 'bg-emerald-600' });
+        if (isMaster || u.role === 'admin' || uTeam === 'Team Saikat') {
+          list.push({ id: 'TEAM_SAIKAT', name: '🟢 Team Saikat Official Group', subtitle: 'TL Saikat & Team Saikat Agents', badgeColor: 'bg-cyan-700' });
+        }
+        if (isMaster || u.role === 'admin' || uTeam === 'Team Parvaj') {
+          list.push({ id: 'TEAM_PARVAJ', name: '🟢 Team Parvaj Official Group', subtitle: 'TL Parvaj & Team Parvaj Agents', badgeColor: 'bg-teal-600' });
+        }
+        if (isMaster || u.role === 'admin' || uTeam === 'Team Shakib Baksh') {
+          list.push({ id: 'TEAM_SHAKIB', name: '🟢 Team Shakib Baksh Group', subtitle: 'TL Shakib Baksh & Team Agents', badgeColor: 'bg-emerald-600' });
+        }
+      }
+
+      // Custom Groups created by TLs / Admins where this user is a member
+      const { customGroups } = getChatAndNoticeHubStore();
+      customGroups.forEach(cg => {
+        if (!cg || !cg.id) return;
+        const mIds = Array.isArray(cg.memberIds) ? cg.memberIds.map(String) : [];
+        if (isMaster || String(cg.createdBy) === String(u.id) || mIds.includes(String(u.id))) {
+          list.push({
+            id: cg.id,
+            name: `👥 ${cg.name}`,
+            subtitle: `Custom Group (${mIds.length} Members • By ${cg.creatorName || 'TL'})`,
+            badgeColor: 'bg-purple-600',
+            isCustom: true,
+            customMeta: cg
+          });
+        }
+      });
+
+      return list;
+    }
+
     function isChatMessageVisibleToUser(msg, user) {
       if (!msg || !user) return false;
-      if (msg.roomId === 'GLOBAL_GROUP') return true;
-      if (msg.roomId === 'TEAM_NAZIM') return canViewAll(user) || user.team === 'Team Nazim';
-      if (msg.roomId === 'TEAM_SAMAD') return canViewAll(user) || user.team === 'Team Samad';
-      if (String(msg.roomId || '').startsWith('DM_')) {
-        const parts = String(msg.roomId).split('_');
+      const rId = String(msg.roomId || '');
+      if (rId.startsWith('DM_')) {
+        const parts = rId.split('_');
         return parts.includes(String(user.id));
+      }
+      const isMaster = isSuperAdmin(user) || isSupervisor(user);
+      if (isMaster) return true;
+      const uCh = getChannelForTeam(user.team);
+      const uTeam = normalizeTeamNameAlias(user.team);
+
+      if (rId === 'GLOBAL_GROUP') return true;
+      if (rId === 'FB_ALL_GROUP') return uCh === 'FACEBOOK';
+      if (rId === 'WA_ALL_GROUP') return uCh === 'WHATSAPP';
+      if (rId === 'TEAM_NAZIM') return (user.role === 'admin' && uCh === 'FACEBOOK') || uTeam === 'Team Nazim';
+      if (rId === 'TEAM_SAMAD') return (user.role === 'admin' && uCh === 'FACEBOOK') || uTeam === 'Team Samad';
+      if (rId === 'TEAM_SAIKAT') return (user.role === 'admin' && uCh === 'WHATSAPP') || uTeam === 'Team Saikat';
+      if (rId === 'TEAM_PARVAJ') return (user.role === 'admin' && uCh === 'WHATSAPP') || uTeam === 'Team Parvaj';
+      if (rId === 'TEAM_SHAKIB') return (user.role === 'admin' && uCh === 'WHATSAPP') || uTeam === 'Team Shakib Baksh';
+
+      if (rId.startsWith('CUSTOM_')) {
+        const { customGroups } = getChatAndNoticeHubStore();
+        const cg = customGroups.find(g => g && g.id === rId);
+        if (!cg) return false;
+        const mIds = Array.isArray(cg.memberIds) ? cg.memberIds.map(String) : [];
+        return String(cg.createdBy) === String(user.id) || mIds.includes(String(user.id));
       }
       return false;
     }
@@ -9559,7 +9657,7 @@
       return merged;
     }
 
-    // Marks channel as read locally AND syncs read receipt to cloud if there were unread messages from others
+    // Marks channel as read locally AND locks read timestamp >= max message timestamp + 1000ms so "1" badge NEVER sticks after viewing!
     function markChatChannelRead(channelId, syncToCloudIfNeeded = true) {
       if (!currentUser || !channelId) return;
       const uid = String(currentUser.id);
@@ -9570,16 +9668,17 @@
       if (!hub.readReceipts[uid]) hub.readReceipts[uid] = {};
 
       const prevCloudReadTs = Number(hub.readReceipts[uid][channelId] || 0);
-      const latestMsgFromOthersTs = hub.messages
-        .filter(m => m.roomId === channelId && String(m.senderId) !== uid)
+      const latestMsgTs = hub.messages
+        .filter(m => m && m.roomId === channelId)
         .reduce((max, m) => Math.max(max, Number(m.ts || 0)), 0);
 
+      const stampTs = Math.max(nowTs, latestMsgTs + 1000);
       const localMap = getLastReadMapForUser();
-      localMap[channelId] = Math.max(nowTs, latestMsgFromOthersTs);
+      localMap[channelId] = Math.max(Number(localMap[channelId] || 0), stampTs);
       localStorage.setItem(`gb_chat_read_${uid}`, JSON.stringify(localMap));
 
-      if (latestMsgFromOthersTs > prevCloudReadTs) {
-        hub.readReceipts[uid][channelId] = Math.max(nowTs, latestMsgFromOthersTs);
+      if (latestMsgTs > prevCloudReadTs) {
+        hub.readReceipts[uid][channelId] = stampTs;
         if (syncToCloudIfNeeded) {
           saveChatAndNoticeHubStore(hub);
         } else {
@@ -9590,7 +9689,31 @@
       }
     }
 
-    // Returns list of users who have SEEN a specific message!
+    function markAllChatChannelsReadForCurrentUser() {
+      if (!currentUser) return;
+      const uid = String(currentUser.id);
+      const hub = getChatAndNoticeHubStore();
+      if (!hub.readReceipts) hub.readReceipts = {};
+      if (!hub.readReceipts[uid]) hub.readReceipts[uid] = {};
+      const localMap = getLastReadMapForUser();
+      const nowTs = Date.now() + 2000;
+
+      const allRoomIds = new Set(['GLOBAL_GROUP', 'FB_ALL_GROUP', 'WA_ALL_GROUP', 'TEAM_NAZIM', 'TEAM_SAMAD', 'TEAM_SAIKAT', 'TEAM_PARVAJ', 'TEAM_SHAKIB']);
+      hub.messages.forEach(m => { if (m && m.roomId) allRoomIds.add(m.roomId); });
+      (hub.customGroups || []).forEach(g => { if (g && g.id) allRoomIds.add(g.id); });
+
+      allRoomIds.forEach(rId => {
+        const maxTs = hub.messages.filter(m => m && m.roomId === rId).reduce((mx, m) => Math.max(mx, Number(m.ts || 0)), 0);
+        const st = Math.max(nowTs, maxTs + 1000);
+        localMap[rId] = st;
+        hub.readReceipts[uid][rId] = st;
+      });
+      localStorage.setItem(`gb_chat_read_${uid}`, JSON.stringify(localMap));
+      saveChatAndNoticeHubStore(hub);
+      renderAppLayout();
+      showPortalToast('All Chats Marked Read!', 'Cleared all unread message indicators.', 'success');
+    }
+
     function getSeenByUsersForMessage(msg, allUsers) {
       if (!msg) return [];
       const { readReceipts } = getChatAndNoticeHubStore();
@@ -9609,7 +9732,6 @@
         return [];
       }
 
-      // Group message: check all users who have read this group channel at or after msgTs
       const seenNames = [];
       allUsers.forEach(usr => {
         const uid = String(usr.id);
@@ -9624,11 +9746,18 @@
 
     function getUnreadCountForChannel(channelId) {
       if (!currentUser) return 0;
+      if (activeTab === 'chat' && activeChatChannelId === channelId) {
+        return 0;
+      }
       const map = getLastReadMapForUser();
       const lastReadTs = Number(map[channelId] || 0);
+      const hiddenSet = getHiddenChatMessagesForCurrentUser();
       const { messages } = getChatAndNoticeHubStore();
       return messages.filter(m =>
+        m &&
         m.roomId === channelId &&
+        !hiddenSet.has(m.id) &&
+        isChatMessageVisibleToUser(m, currentUser) &&
         String(m.senderId) !== String(currentUser.id) &&
         Number(m.ts || 0) > lastReadTs
       ).length;
@@ -9637,8 +9766,11 @@
     function getUnreadChatCountForUser() {
       if (!currentUser) return 0;
       const map = getLastReadMapForUser();
+      const hiddenSet = getHiddenChatMessagesForCurrentUser();
       const { messages } = getChatAndNoticeHubStore();
       return messages.filter(m => {
+        if (!m || hiddenSet.has(m.id)) return false;
+        if (activeTab === 'chat' && m.roomId === activeChatChannelId) return false;
         if (!isChatMessageVisibleToUser(m, currentUser)) return false;
         if (String(m.senderId) === String(currentUser.id)) return false;
         const lastReadTs = Number(map[m.roomId] || 0);
@@ -9649,9 +9781,12 @@
     function getUnreadDmCountForUser() {
       if (!currentUser) return 0;
       const map = getLastReadMapForUser();
+      const hiddenSet = getHiddenChatMessagesForCurrentUser();
       const { messages } = getChatAndNoticeHubStore();
       return messages.filter(m => {
+        if (!m || hiddenSet.has(m.id)) return false;
         if (!String(m.roomId || '').startsWith('DM_')) return false;
+        if (activeTab === 'chat' && m.roomId === activeChatChannelId) return false;
         if (!isChatMessageVisibleToUser(m, currentUser)) return false;
         if (String(m.senderId) === String(currentUser.id)) return false;
         const lastReadTs = Number(map[m.roomId] || 0);
@@ -9667,7 +9802,6 @@
       const notices = Array.isArray(hub.notices) ? hub.notices : [];
       const messages = Array.isArray(hub.messages) ? hub.messages : [];
 
-      // 1. Process Official Admin Notices into every user's Bell Notification Center!
       const seenNoticeKey = `gb_seen_notices_${currentUser.id}`;
       let seenNotices = [];
       try { seenNotices = JSON.parse(localStorage.getItem(seenNoticeKey) || '[]'); } catch (e) {}
@@ -9713,12 +9847,23 @@
         saveNotificationsForCurrentUser(myNotifs.slice(0, 80));
       }
 
-      // 2. Process incoming Direct Messages (DMs) & Group messages
       const seenMsgKey = `gb_seen_chat_toasts_${currentUser.id}`;
       let seenMsgs = [];
       try { seenMsgs = JSON.parse(localStorage.getItem(seenMsgKey) || '[]'); } catch (e) {}
       const seenMsgSet = new Set(seenMsgs);
       const isInitialChatSeed = seenMsgSet.size === 0;
+
+      // On first seed for a user on this browser, automatically mark historical messages older than 1 hour as read so old history doesn't show phantom unread counts!
+      if (isInitialChatSeed && messages.length > 0) {
+        const localMap = getLastReadMapForUser();
+        const oneHourAgo = Date.now() - 3600000;
+        messages.forEach(m => {
+          if (m && m.roomId && Number(m.ts || 0) < oneHourAgo) {
+            localMap[m.roomId] = Math.max(Number(localMap[m.roomId] || 0), Number(m.ts || 0));
+          }
+        });
+        localStorage.setItem(`gb_chat_read_${currentUser.id}`, JSON.stringify(localMap));
+      }
 
       messages.slice(-30).forEach(m => {
         if (!m || !m.id) return;
@@ -10021,7 +10166,8 @@
       configs['CHAT_AND_NOTICES'] = {
         messages: (hub.messages || []).slice(-220),
         notices: (hub.notices || []).slice(-40),
-        readReceipts: hub.readReceipts || {}
+        readReceipts: hub.readReceipts || {},
+        customGroups: hub.customGroups || []
       };
       setStored('monthly_configs', configs);
       markChatChannelRead(activeChatChannelId, false);
@@ -10050,32 +10196,170 @@
       openModal('chatDeleteModal');
     }
 
+    let customGroupModalSearch = '';
+
+    function filterCustomGroupModalMembers(q) {
+      const query = String(q || '').toLowerCase().trim();
+      const rows = document.querySelectorAll('.custom-grp-member-row');
+      rows.forEach(r => {
+        const txt = (r.getAttribute('data-search') || '').toLowerCase();
+        r.style.display = (!query || txt.includes(query)) ? 'flex' : 'none';
+      });
+    }
+
+    function toggleSelectAllTeamInGroupModal(teamName, checkVal) {
+      const boxes = document.querySelectorAll(`.custom-grp-chk[data-team="${teamName}"]`);
+      boxes.forEach(b => { b.checked = checkVal; });
+    }
+
+    function renderCustomChatGroupModal() {
+      if (!currentUser) return '';
+      const allUsers = getUsersForMonth(selectedMonthKey, true).filter(u => String(u.id) !== String(currentUser.id));
+      const allTeams = [...CHANNEL_META.FACEBOOK.teams, ...CHANNEL_META.WHATSAPP.teams];
+
+      return `
+        <div id="customChatGroupModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+              <div>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-purple-100 text-purple-800">Team Leader Group Creator</span>
+                <h3 class="text-base font-black text-slate-900 mt-0.5">Create New Custom Chat Group</h3>
+                <p class="text-xs font-bold text-slate-400">Name your group and select members from any team to create a private group chat.</p>
+              </div>
+              <button type="button" onclick="closeModal('customChatGroupModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form onsubmit="handleSaveNewCustomChatGroup(event)" class="space-y-4">
+              <div>
+                <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Group Name</label>
+                <input type="text" id="customGrpNameInput" required placeholder="e.g. Night Shift Squad / Special Task Group" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-600">
+              </div>
+
+              <div class="space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-1">
+                  <label class="block text-xs font-extrabold text-slate-700 uppercase">Select Group Members</label>
+                  <div class="flex flex-wrap gap-1">
+                    ${allTeams.map(tn => `
+                      <button type="button" onclick="toggleSelectAllTeamInGroupModal('${tn}', true)" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-purple-600 text-slate-700 hover:text-white text-[9px] font-extrabold transition-colors">+ ${tn.replace('Team ', '')}</button>
+                    `).join('')}
+                  </div>
+                </div>
+
+                <div class="relative">
+                  <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3 top-2.5"></i>
+                  <input type="text" oninput="filterCustomGroupModalMembers(this.value)" placeholder="Search member by name, ID or team..." class="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none">
+                </div>
+
+                <div class="max-h-56 overflow-y-auto border border-slate-200 rounded-2xl divide-y divide-slate-100 p-1.5 bg-slate-50/50">
+                  ${allUsers.map(usr => `
+                    <label data-search="${usr.name} ${usr.id} ${usr.team}" class="custom-grp-member-row flex items-center justify-between p-2 rounded-xl hover:bg-white cursor-pointer transition-colors">
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <input type="checkbox" value="${usr.id}" data-team="${normalizeTeamNameAlias(usr.team)}" class="custom-grp-chk w-4 h-4 accent-purple-600 rounded">
+                        <span class="text-xs font-extrabold text-slate-900 truncate">${usr.name} <span class="text-slate-400 text-[10px]">(${usr.id})</span></span>
+                      </div>
+                      <span class="px-2 py-0.5 rounded-full text-[9px] font-black ${getTeamBadgeClasses(usr.team)} shrink-0">${usr.team}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeModal('customChatGroupModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" class="px-5 py-2.5 text-xs font-black text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-users-gear"></i> Create Group Now
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function openCreateCustomChatGroupModal() {
+      if (!currentUser || (currentUser.role !== 'admin' && !isSuperAdmin(currentUser) && !isSupervisor(currentUser))) return;
+      const inp = document.getElementById('customGrpNameInput');
+      if (inp) inp.value = '';
+      document.querySelectorAll('.custom-grp-chk').forEach(b => { b.checked = false; });
+      openModal('customChatGroupModal');
+    }
+
+    function handleSaveNewCustomChatGroup(e) {
+      e.preventDefault();
+      if (!currentUser) return;
+      const nameVal = (document.getElementById('customGrpNameInput')?.value || '').trim();
+      if (!nameVal) return;
+
+      const selectedIds = Array.from(document.querySelectorAll('.custom-grp-chk:checked')).map(b => String(b.value));
+      if (!selectedIds.includes(String(currentUser.id))) {
+        selectedIds.unshift(String(currentUser.id));
+      }
+      if (selectedIds.length < 2) {
+        showPortalToast('Select Members', 'Please select at least 1 other member for the group.', 'warning');
+        return;
+      }
+
+      const hub = getChatAndNoticeHubStore();
+      if (!Array.isArray(hub.customGroups)) hub.customGroups = [];
+      const newGroup = {
+        id: 'CUSTOM_' + Date.now(),
+        name: nameVal,
+        createdBy: String(currentUser.id),
+        creatorName: currentUser.name,
+        memberIds: selectedIds,
+        createdAt: getTodayFormatted()
+      };
+      hub.customGroups.push(newGroup);
+      saveChatAndNoticeHubStore(hub);
+      activeChatChannelId = newGroup.id;
+      closeModal('customChatGroupModal');
+      renderAppLayout();
+      showPortalToast('Custom Group Created!', `Created "${nameVal}" with ${selectedIds.length} members.`, 'success');
+    }
+
+    function handleDeleteCustomChatGroup(groupId) {
+      if (!currentUser) return;
+      const hub = getChatAndNoticeHubStore();
+      const target = (hub.customGroups || []).find(g => g && g.id === groupId);
+      if (!target) return;
+      if (!isSuperAdmin(currentUser) && String(target.createdBy) !== String(currentUser.id)) {
+        showPortalToast('Creator Only', 'Only the TL who created this group (or Super Admin) can delete it.', 'error');
+        return;
+      }
+      openConfirmWarningModal(
+        `Delete Custom Group "${target.name}"?`,
+        `Are you sure you want to delete the custom chat group <strong>"${target.name}"</strong>?`,
+        'Delete Custom Group',
+        () => {
+          hub.customGroups = (hub.customGroups || []).filter(g => g && g.id !== groupId);
+          saveChatAndNoticeHubStore(hub);
+          if (activeChatChannelId === groupId) activeChatChannelId = 'GLOBAL_GROUP';
+          renderAppLayout();
+          showPortalToast('Custom Group Deleted', `Removed group "${target.name}".`, 'warning');
+        },
+        'Yes, Delete Group',
+        false
+      );
+    }
+
     function renderChatHubView() {
       const u = currentUser;
-      const allUsers = getUsersForMonth(selectedMonthKey);
+      // Include ALL users from BOTH Facebook & WhatsApp so any agent can search & chat 1-on-1 with anyone across any team or channel!
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
       const { messages, notices } = getChatAndNoticeHubStore();
 
-      markChatChannelRead(activeChatChannelId, true);
+      // Build channel & team-isolated Group Channels for this user
+      const groupChannels = buildAccessibleGroupChannelsForUser(u);
 
-      // Build available Group Channels
-      const groupChannels = [
-        { id: 'GLOBAL_GROUP', name: '🌐 Full Floor Group (All)', subtitle: 'Everyone — Admins, Supervisor & All Agents', badgeColor: 'bg-blue-600' }
-      ];
-      if (canViewAll(u) || u.team === 'Team Nazim') {
-        groupChannels.push({ id: 'TEAM_NAZIM', name: '🟠 Team Nazim Group', subtitle: 'TL Nazim & Team Nazim Agents', badgeColor: 'bg-orange-500' });
+      // Ensure activeChatChannelId is valid & accessible
+      if (!String(activeChatChannelId).startsWith('DM_') && !groupChannels.some(g => g.id === activeChatChannelId)) {
+        activeChatChannelId = 'GLOBAL_GROUP';
       }
-      if (canViewAll(u) || u.team === 'Team Samad') {
-        groupChannels.push({ id: 'TEAM_SAMAD', name: '🔵 Team Samad Group', subtitle: 'TL Samad & Team Samad Agents', badgeColor: 'bg-indigo-600' });
-      }
+
+      markChatChannelRead(activeChatChannelId, false);
 
       const groupUnreadTotal = groupChannels.reduce((acc, gc) => acc + getUnreadCountForChannel(gc.id), 0);
       const dmUnreadTotal = getUnreadDmCountForUser();
 
-      // Build Direct Message (1-on-1) contacts list
-      // Priority sorting:
-      // 1) Users with UNREAD messages waiting for you at the very top!
-      // 2) Users with recent conversation history
-      // 3) Online / On Break status
       const otherUsers = allUsers
         .filter(usr => String(usr.id) !== String(u.id))
         .filter(usr => {
@@ -10086,7 +10370,7 @@
         .filter(usr => {
           if (!chatSearchQuery.trim()) return true;
           const q = chatSearchQuery.toLowerCase();
-          return usr.name.toLowerCase().includes(q) || String(usr.id).includes(q) || (usr.team || '').toLowerCase().includes(q);
+          return usr.name.toLowerCase().includes(q) || String(usr.id).includes(q) || (usr.team || '').toLowerCase().includes(q) || getChannelForTeam(usr.team).toLowerCase().includes(q);
         })
         .map(usr => {
           const dmId = getDmRoomId(u.id, usr.id);
@@ -10112,16 +10396,17 @@
           return stRank(a.usr) - stRank(b.usr);
         });
 
-      // Determine active channel header details
-      let activeHeaderTitle = '🌐 Full Floor Group (All)';
-      let activeHeaderSub = 'Group Chat • All Admins, Supervisor & Agents can communicate here';
+      let activeHeaderTitle = '🌐 Central Floor Group (All)';
+      let activeHeaderSub = 'Central Group • All Facebook & WhatsApp Teams can communicate here';
       let activeHeaderBadge = renderOnlineStatusBadge(u.id);
       let isDmChannel = false;
+      let activeCustomGroupMeta = null;
 
       const matchedGroup = groupChannels.find(g => g.id === activeChatChannelId);
       if (matchedGroup) {
         activeHeaderTitle = matchedGroup.name;
         activeHeaderSub = matchedGroup.subtitle;
+        if (matchedGroup.isCustom) activeCustomGroupMeta = matchedGroup.customMeta;
       } else if (String(activeChatChannelId).startsWith('DM_')) {
         isDmChannel = true;
         const parts = String(activeChatChannelId).split('_');
@@ -10129,7 +10414,7 @@
         const partnerObj = allUsers.find(usr => String(usr.id) === String(partnerId));
         if (partnerObj) {
           activeHeaderTitle = `${partnerObj.name} (${partnerObj.id})`;
-          activeHeaderSub = `Personal 1-on-1 Inbox • ${partnerObj.role === 'admin' ? 'Team Leader (Admin)' : (partnerObj.role === 'supervisor' ? 'Supervisor' : `${partnerObj.team} • Grade ${partnerObj.grade}`)}`;
+          activeHeaderSub = `Personal 1-on-1 Inbox • ${partnerObj.role === 'admin' ? `Team Leader (${partnerObj.team})` : (partnerObj.role === 'supervisor' ? 'Supervisor' : `${partnerObj.team} • Grade ${partnerObj.grade}`)}`;
           activeHeaderBadge = renderOnlineStatusBadge(partnerObj.id);
         }
       }
@@ -10137,13 +10422,14 @@
       const hiddenSet = getHiddenChatMessagesForCurrentUser();
       const channelMessages = messages.filter(m => m.roomId === activeChatChannelId && !hiddenSet.has(m.id));
       const latestNotice = notices.length > 0 ? notices[notices.length - 1] : null;
+      const canCreateCustomGroup = u.role === 'admin' || isSuperAdmin(u) || isSupervisor(u);
 
       const filterPills = [
         { key: 'ALL', label: 'All Chats', count: groupUnreadTotal + dmUnreadTotal },
         { key: 'INBOX', label: 'My Inbox', count: dmUnreadTotal },
         { key: 'GROUPS', label: 'Groups', count: groupUnreadTotal },
-        { key: 'ADMINS', label: 'Admins / TL', count: 0 },
-        { key: 'AGENTS', label: 'Agents', count: 0 }
+        { key: 'ADMINS', label: 'TL / Admins', count: 0 },
+        { key: 'AGENTS', label: 'All Agents', count: 0 }
       ];
 
       return `
@@ -10171,24 +10457,31 @@
           ` : ''}
 
           <div class="card-dynamic overflow-hidden grid grid-cols-1 lg:grid-cols-12 h-[calc(100vh-190px)] min-h-[560px]">
-            <!-- Left Sidebar: Unified Personal Inbox, Group Channels & Member Directory -->
+            <!-- Left Sidebar: Unified Personal Inbox, Scoped Group Channels & All-Channel Member Directory -->
             <div class="lg:col-span-4 border-r border-slate-200 flex flex-col bg-slate-50/60 h-full overflow-hidden">
               <div class="p-3.5 bg-white border-b border-slate-200 space-y-2.5">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-2">
                   <div>
                     <h3 class="text-xs font-black uppercase tracking-wider text-slate-900">
-                      <i class="fa-solid fa-inbox text-blue-600 mr-1.5"></i>Personal Inbox & Groups
+                      <i class="fa-solid fa-comments text-blue-600 mr-1.5"></i>Groups & All-Agent Inbox
                     </h3>
-                    <p class="text-[10px] font-bold text-slate-400">Find any Agent, Admin or Group in one place</p>
+                    <p class="text-[10px] font-bold text-slate-400">Search any FB or WA Agent/TL to chat 1-on-1</p>
                   </div>
-                  ${hasFeatureAccess(u, 'feat_post_notice') ? `
-                  <button onclick="openAnnouncementModal()" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[10px] font-black">
-                    <i class="fa-solid fa-bullhorn mr-1"></i>Post Notice
-                  </button>
-                  ` : ''}
+                  <div class="flex items-center gap-1.5">
+                    ${(groupUnreadTotal + dmUnreadTotal) > 0 ? `
+                    <button type="button" onclick="markAllChatChannelsReadForCurrentUser()" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-black" title="Clear all unread badges">
+                      <i class="fa-solid fa-check-double mr-0.5"></i>Mark Read
+                    </button>
+                    ` : ''}
+                    ${canCreateCustomGroup ? `
+                    <button type="button" onclick="openCreateCustomChatGroupModal()" class="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-black shadow-2xs flex items-center gap-1 cursor-pointer">
+                      <i class="fa-solid fa-users-gear"></i> + New Group
+                    </button>
+                    ` : ''}
+                  </div>
                 </div>
 
-                <!-- Category Filter Pills (All / My Inbox / Groups / Admins / Agents) -->
+                <!-- Category Filter Pills -->
                 <div class="flex flex-wrap items-center gap-1 pt-0.5">
                   ${filterPills.map(fp => `
                     <button type="button" onclick="setChatLeftFilter('${fp.key}')" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-colors ${activeChatLeftFilter === fp.key ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
@@ -10198,19 +10491,19 @@
                   `).join('')}
                 </div>
 
-                <!-- Search Bar -->
+                <!-- Search Bar (Searches across ALL Facebook & WhatsApp Agents and TLs!) -->
                 <div class="relative">
                   <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3 top-2.5"></i>
-                  <input type="text" id="chatMemberSearchInput" value="${chatSearchQuery}" oninput="onChatSearchInput(this.value)" placeholder="Search Agent or Admin name / ID..." class="w-full pl-8 pr-3 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white">
+                  <input type="text" id="chatMemberSearchInput" value="${chatSearchQuery}" oninput="onChatSearchInput(this.value)" placeholder="Search any FB / WA Agent or TL name / ID..." class="w-full pl-8 pr-3 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:bg-white">
                 </div>
               </div>
 
               <div id="chatLeftSidebarViewport" class="flex-1 overflow-y-auto p-2.5 space-y-4">
                 ${activeChatLeftFilter === 'ALL' || activeChatLeftFilter === 'GROUPS' ? `
-                <!-- Group Channels -->
+                <!-- Scoped Group Channels -->
                 <div>
                   <div class="flex items-center justify-between px-2 mb-1.5">
-                    <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">Group Channels (${groupChannels.length})</span>
+                    <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">Your Group Channels (${groupChannels.length})</span>
                     ${groupUnreadTotal > 0 ? `<span class="text-[10px] font-black text-red-600">${groupUnreadTotal} Unseen</span>` : ''}
                   </div>
                   <div class="space-y-1">
@@ -10223,7 +10516,7 @@
                           <div class="min-w-0 flex-1">
                             <div class="flex items-center justify-between gap-1">
                               <span class="text-xs font-black truncate">${gc.name}</span>
-                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shadow ">${unreadCnt}</span>` : ''}
+                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shadow">${unreadCnt}</span>` : ''}
                             </div>
                             <p class="text-[10px] font-bold ${isSel ? 'text-blue-100' : (unreadCnt > 0 ? 'text-blue-800 font-extrabold' : 'text-slate-400')} truncate mt-0.5">
                               ${lastMsg ? `${lastMsg.senderName.split(' ')[0]}: ${lastMsg.text}` : gc.subtitle}
@@ -10237,27 +10530,26 @@
                 ` : ''}
 
                 ${activeChatLeftFilter !== 'GROUPS' ? `
-                <!-- 1-on-1 Personal Inbox & Directory -->
+                <!-- 1-on-1 Personal Inbox & Full All-Channel Member Directory -->
                 <div>
                   <div class="flex items-center justify-between px-2 mb-1.5">
                     <span class="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      ${activeChatLeftFilter === 'INBOX' ? 'Active Personal Inbox' : (activeChatLeftFilter === 'ADMINS' ? 'Admins & Supervisor' : 'Personal Direct Messages')} (${otherUsers.length})
+                      ${activeChatLeftFilter === 'INBOX' ? 'Active Personal Inbox' : (activeChatLeftFilter === 'ADMINS' ? 'All TLs & Supervisor' : 'Direct 1-on-1 Chat (All FB & WA Members)')} (${otherUsers.length})
                     </span>
                     ${dmUnreadTotal > 0 ? `<span class="text-[10px] font-black text-red-600">${dmUnreadTotal} Unseen</span>` : ''}
                   </div>
                   <div class="space-y-1">
                     ${otherUsers.length === 0 ? `
                       <div class="p-6 text-center text-xs font-bold text-slate-400">
-                        ${activeChatLeftFilter === 'INBOX' ? 'No personal messages yet. Click "All Chats" or "Agents" above to message anyone!' : 'No matching members found.'}
+                        ${activeChatLeftFilter === 'INBOX' ? 'No personal messages yet. Click "All Chats" or search above to message any Agent or TL!' : 'No matching members found.'}
                       </div>
                     ` : otherUsers.map(({ usr, dmId, unreadCnt, lastMsg }) => {
                       const isSel = activeChatChannelId === dmId;
                       const st = getUserOnlineStatus(usr.id);
                       const dotCol = st === 'Online' ? 'bg-emerald-500' : (st === 'On Break' ? 'bg-amber-500' : 'bg-slate-300');
-                      const roleTag = usr.role === 'admin' ? 'TL / Admin' : (usr.role === 'supervisor' ? 'Supervisor' : usr.team.replace('Team ', ''));
+                      const roleTag = usr.role === 'admin' ? `TL • ${usr.team.replace('Team ', '')}` : (usr.role === 'supervisor' ? 'Supervisor' : usr.team.replace('Team ', ''));
 
-                      // Check if the last message in this DM was sent by currentUser and whether partner has seen it!
-                      let lastMsgSub = `ID: ${usr.id} • Click to message`;
+                      let lastMsgSub = `ID: ${usr.id} • ${usr.team}`;
                       if (lastMsg) {
                         const isSentByMe = String(lastMsg.senderId) === String(u.id);
                         if (isSentByMe) {
@@ -10278,13 +10570,13 @@
                           <div class="min-w-0 flex-1">
                             <div class="flex items-center justify-between gap-1">
                               <span class="text-xs font-extrabold truncate">${usr.name}</span>
-                              <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${isSel ? 'bg-white/20 text-white' : (usr.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-200 text-slate-700')} shrink-0">${roleTag}</span>
+                              <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${isSel ? 'bg-white/20 text-white' : getTeamBadgeClasses(usr.team)} shrink-0">${roleTag}</span>
                             </div>
                             <div class="flex items-center justify-between mt-0.5 gap-1">
                               <p class="text-[10px] font-semibold ${isSel ? 'text-blue-100' : (unreadCnt > 0 ? 'text-blue-900 font-black' : 'text-slate-400')} truncate">
                                 ${lastMsgSub}
                               </p>
-                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shrink-0 shadow ">${unreadCnt}</span>` : ''}
+                              ${unreadCnt > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white shrink-0 shadow">${unreadCnt}</span>` : ''}
                             </div>
                           </div>
                         </button>
@@ -10296,7 +10588,7 @@
               </div>
             </div>
 
-            <!-- Right Panel: Active Conversation Area with Seen / Read Receipts -->
+            <!-- Right Panel: Active Conversation Area -->
             <div class="lg:col-span-8 flex flex-col h-full bg-white overflow-hidden">
               <!-- Conversation Header -->
               <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
@@ -10310,8 +10602,13 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
+                  ${activeCustomGroupMeta && (isSuperAdmin(u) || String(activeCustomGroupMeta.createdBy) === String(u.id)) ? `
+                    <button type="button" onclick="handleDeleteCustomChatGroup('${activeCustomGroupMeta.id}')" class="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-black">
+                      <i class="fa-solid fa-trash-can mr-1"></i>Delete Group
+                    </button>
+                  ` : ''}
                   <span class="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-extrabold">
-                    <i class="fa-solid fa-check-double text-emerald-600"></i> Live Seen Tracking Active
+                    <i class="fa-solid fa-check-double text-emerald-600"></i> Live Seen Tracking
                   </span>
                   ${activeHeaderBadge}
                 </div>
@@ -10324,11 +10621,11 @@
                     <div class="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl mb-3 shadow-sm">
                       <i class="fa-regular fa-comments"></i>
                     </div>
-                    <h5 class="text-sm font-black text-slate-800">Start Your Conversation with ${activeHeaderTitle}!</h5>
+                    <h5 class="text-sm font-black text-slate-800">Start Your Conversation in ${activeHeaderTitle}!</h5>
                     <p class="text-xs font-bold text-slate-400 max-w-sm mt-1">
                       ${isDmChannel
                         ? 'This is your private 1-on-1 personal inbox. You will see a "Seen ✓✓" indicator as soon as they read your message.'
-                        : 'Messages sent in this group channel are visible to all group members and show who has seen each message.'}
+                        : 'Messages sent in this group channel are visible to all members of this group.'}
                     </p>
                   </div>
                 ` : channelMessages.map(m => {
@@ -10346,7 +10643,6 @@
                         : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold" title="${seenTooltip}"><i class="fa-solid fa-check"></i> Sent (Unread)</span>`;
                     }
                   } else {
-                    // Group Message Seen Indicator (Visible on all group messages so everyone knows who saw it!)
                     if (isSeen) {
                       const shortSeenList = seenNames.length <= 3
                         ? seenNames.map(n => n.split(' ')[0]).join(', ')
@@ -10404,8 +10700,6 @@
       `;
     }
 
-
-    
     // =========================================================================
     // NAZIM-EXCLUSIVE ROLE & FEATURE ACCESS CONTROL CENTER (ONLY ID 10122)
     // =========================================================================
