@@ -2060,11 +2060,12 @@
       lastCloudFetchTime = now;
 
       let pingQuery = '';
+      const liveCalendarMonthKey = getCurrentMonthKeyStr();
       if (currentUser) {
         const st = getUserOnlineStatus(currentUser.id);
-        pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}&monthKey=${encodeURIComponent(selectedMonthKey)}`;
+        pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}&monthKey=${encodeURIComponent(liveCalendarMonthKey)}`;
       } else {
-        pingQuery = `&monthKey=${encodeURIComponent(selectedMonthKey)}`;
+        pingQuery = `&monthKey=${encodeURIComponent(liveCalendarMonthKey)}`;
       }
 
       let handled = false;
@@ -7366,8 +7367,16 @@
         const workTgt = calcWorkingTargetFromBase((ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174, ag.team);
         const exactPct = workTgt > 0 ? (revenue / workTgt) * 100 : 0;
         const pct = Math.round(exactPct);
-        return { ...ag, leads, orders, revenue, conv, workTgt, exactPct, pct };
-      }).sort((a, b) => b.revenue - a.revenue || b.exactPct - a.exactPct);
+        const pctDisplay = exactPct.toFixed(1);
+        return { ...ag, leads, orders, revenue, conv, workTgt, exactPct, pct, pctDisplay };
+      }).sort((a, b) => {
+        // In All Channels mode, targets differ between Facebook & WhatsApp, so rank by Achievement Ratio (%) first!
+        // In single-channel mode (Facebook only or WhatsApp only), rank by Sales Amount (Revenue) first!
+        if (activeChannel === 'ALL_CHANNELS') {
+          return b.exactPct - a.exactPct || b.revenue - a.revenue || b.orders - a.orders;
+        }
+        return b.revenue - a.revenue || b.exactPct - a.exactPct || b.orders - a.orders;
+      });
 
       const myRankIdx = (currentUser && currentUser.role === 'agent')
         ? rankedAgents.findIndex(ag => String(ag.id) === String(currentUser.id))
@@ -7469,8 +7478,18 @@
           <div>
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 bg-white p-4 rounded-2xl border border-slate-200">
               <div>
-                <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
-                <p class="text-xs font-bold text-slate-500">Combined leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Active Agents)</p>
+                <div class="flex flex-wrap items-center gap-2">
+                  <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase ${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}">
+                    ${activeChannel === 'ALL_CHANNELS' ? 'Ranked by Target Achievement Ratio (%)' : 'Ranked by Achieved Sales Revenue (৳)'}
+                  </span>
+                </div>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">
+                  ${activeChannel === 'ALL_CHANNELS'
+                    ? `Fair cross-channel leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Agents) — sorted by <strong>Target Achievement %</strong> since Facebook & WhatsApp have different grade targets`
+                    : `Channel leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Agents) — sorted by <strong>Achieved Sales Revenue (৳)</strong>`
+                  }
+                </p>
               </div>
               ${myRankNum ? `
               <div class="px-4 py-2 rounded-2xl my-rank-name-pill flex items-center gap-2.5 text-xs font-black">
@@ -7529,8 +7548,8 @@
                       <td class="p-3.5 font-black text-emerald-600 text-sm">৳${ag.revenue.toLocaleString()}</td>
                       <td class="p-3.5">
                         <div class="flex items-center gap-2">
-                          <span class="font-black text-slate-800">${ag.pct}%</span>
-                          <div class="w-16 progress-track h-2"><div class="bg-blue-600 h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
+                          <span class="font-black ${activeChannel === 'ALL_CHANNELS' ? 'text-purple-700 text-sm' : 'text-slate-800'}">${ag.pctDisplay}%</span>
+                          <div class="w-16 progress-track h-2"><div class="${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-600' : 'bg-blue-600'} h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
                         </div>
                       </td>
                     </tr>`;
