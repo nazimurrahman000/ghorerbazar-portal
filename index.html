@@ -4165,11 +4165,28 @@
     // =========================================================================
     // LIVE AGENT SEARCH FILTER FOR MODALS & DROPDOWNS
     // =========================================================================
-    function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
+        function getEditableSalesAgentsForActor(mKey) {
+      const mk = mKey || selectedMonthKey;
+      const channelAgents = getUsersForMonth(mk, false).filter(u => u.role === 'agent');
+      const allFloatingAgents = getUsersForMonth(mk, true).filter(u => u.role === 'agent' && isPendingOrFloatingAgent(u));
+      const map = new Map();
+      channelAgents.forEach(a => map.set(String(a.id), a));
+      allFloatingAgents.forEach(a => {
+        if (!map.has(String(a.id))) map.set(String(a.id), a);
+      });
+      // Sort so active channel's agents appear first, followed by Floating/Unassigned agents clearly badged
+      return Array.from(map.values()).sort((a, b) => {
+        const aFloat = isPendingOrFloatingAgent(a) ? 1 : 0;
+        const bFloat = isPendingOrFloatingAgent(b) ? 1 : 0;
+        return aFloat - bFloat;
+      });
+    }
+
+function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
       const q = (document.getElementById(searchInputId)?.value || '').trim().toLowerCase();
       const sel = document.getElementById(selectElId);
       if (!sel) return;
-      const allAgents = getUsersForMonth(selectedMonthKey, false).filter(u => u.role === 'agent');
+      const allAgents = getEditableSalesAgentsForActor(selectedMonthKey);
       const prevVal = sel.value;
       const matched = !q
         ? allAgents
@@ -4179,7 +4196,7 @@
         sel.innerHTML = `<option value="">No agent found matching "${q}"</option>`;
         return;
       }
-      sel.innerHTML = matched.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${a.team})</option>`).join('');
+      sel.innerHTML = matched.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${isPendingOrFloatingAgent(a) ? '🟣 Floating / Pending' : a.team})</option>`).join('');
       if (matched.some(a => String(a.id) === String(prevVal))) {
         sel.value = prevVal;
       } else {
@@ -4192,7 +4209,7 @@
 
     function renderDriveProductModal() {
       const u = currentUser;
-      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      const allAgents = getEditableSalesAgentsForActor(selectedMonthKey);
       const activeProds = getActiveProductsForMonth(selectedMonthKey);
       const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
 
@@ -4219,7 +4236,7 @@
                   <input type="text" id="dpAgentSearchInput" oninput="filterAgentSelectBySearch('dpAgentSearchInput', 'dpModalAgentId', 'onDriveProdModalAgentChange')" placeholder="Search agent by name or ID..." class="w-full pl-9 pr-3.5 py-2 bg-amber-50/50 border border-amber-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500">
                 </div>
                 <select id="dpModalAgentId" onchange="onDriveProdModalAgentChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900">
-                  ${allAgents.map(ag => `<option value="${ag.id}">${ag.name} (${ag.id} • ${ag.team})</option>`).join('')}
+                  ${allAgents.map(ag => `<option value="${ag.id}">${ag.name} (${ag.id} • ${isPendingOrFloatingAgent(ag) ? '🟣 Floating / Pending' : ag.team})</option>`).join('')}
                 </select>
               </div>
 
@@ -4285,7 +4302,7 @@
     function onDriveProdModalAgentChange() {
       const u = currentUser;
       const agId = hasFeatureAccess(u, 'feat_manage_all_sales') ? (document.getElementById('dpModalAgentId')?.value || u.id) : u.id;
-      const allUsers = getUsersForMonth(selectedMonthKey);
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
       const agObj = allUsers.find(a => String(a.id) === String(agId)) || u;
       const monthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(selectedMonthKey));
       const st = computeAgentDriveProductStats(agObj, monthSales, selectedMonthKey);
@@ -4301,7 +4318,7 @@
       const u = currentUser;
       if (isCurrentChannelReadOnlyForUser(u)) return;
       const agId = hasFeatureAccess(u, 'feat_manage_all_sales') ? (document.getElementById('dpModalAgentId')?.value || u.id) : u.id;
-      const allUsers = getUsersForMonth(selectedMonthKey);
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
       const targetAgent = allUsers.find(a => String(a.id) === String(agId)) || u;
       const activeProds = getActiveProductsForMonth(selectedMonthKey);
 
@@ -4365,7 +4382,7 @@
     function renderDriveProductView() {
       const u = currentUser;
       const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
-      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      const allAgents = getEditableSalesAgentsForActor(selectedMonthKey);
       const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
       const monthSales = allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey));
       const activeProds = getActiveProductsForMonth(selectedMonthKey);
@@ -5904,36 +5921,46 @@
     }
 
     function onRosterAddExistingAgentSelect(empId) {
-      if (!empId) return;
+      const idInp = document.getElementById('rosterAddEmpId');
+      const nameInp = document.getElementById('rosterAddEmpName');
+      const teamSel = document.getElementById('rosterAddTeamSelect');
+      if (!empId) {
+        if (idInp) idInp.value = '';
+        if (nameInp) nameInp.value = '';
+        return;
+      }
       const allUsers = getUsersForMonth(selectedMonthKey, true);
       const usr = allUsers.find(u => String(u.id) === String(empId));
       if (usr) {
-        const idInp = document.getElementById('rosterAddEmpId');
-        const nameInp = document.getElementById('rosterAddEmpName');
-        const teamSel = document.getElementById('rosterAddTeamSelect');
-        const roleSel = document.getElementById('rosterAddRoleSelect');
         if (idInp) idInp.value = usr.id;
         if (nameInp) nameInp.value = usr.name;
-        if (teamSel) {
-          if (isSuperAdmin(currentUser) && !isPendingOrFloatingAgent(usr) && usr.team) {
-            teamSel.value = normalizeTeamNameAlias(usr.team);
-          } else if (currentUser && currentUser.role === 'admin') {
-            teamSel.value = normalizeTeamNameAlias(currentUser.team);
-          }
+        if (teamSel && currentUser && currentUser.role === 'admin' && !isSuperAdmin(currentUser)) {
+          teamSel.value = normalizeTeamNameAlias(currentUser.team);
         }
-        if (roleSel) roleSel.value = usr.role === 'admin' ? 'admin' : 'agent';
       }
     }
 
     function renderRosterAddModal() {
       const chMeta = getActiveChannelMeta();
-      const allUsersOmni = getUsersForMonth(selectedMonthKey, true).filter(u => u.role !== 'supervisor');
-      // Only show members who are either already in the actor's team OR are Unassigned/Floating/Pending (so another TL's active member cannot be taken until released!)
-      const selectableUsers = allUsersOmni.filter(usr => {
-        if (isSuperAdmin(currentUser)) return true;
-        if (isPendingOrFloatingAgent(usr)) return true;
-        return currentUser && normalizeTeamNameAlias(usr.team) === normalizeTeamNameAlias(currentUser.team);
+      const allUsersOmni = getUsersForMonth(selectedMonthKey, true).filter(u => u.role === 'agent');
+      const activeTeamNamesList = getDynamicTeamsForChannel('ALL_CHANNELS');
+
+      // STRICT ANTI-POACHING FILTER:
+      // Show ONLY agents who are Unassigned / Floating / Pending (NOT in any active team)!
+      // Sort Channel-Wise First: Current Channel's Floating/Pending agents at the top, followed by other channel's Floating/Pending agents.
+      const unassignedOnlyList = allUsersOmni.filter(usr => {
+        const t = normalizeTeamNameAlias(usr.team);
+        return !activeTeamNamesList.includes(t) || isPendingOrFloatingAgent(usr);
+      }).sort((a, b) => {
+        const targetCh = activeChannel === 'ALL_CHANNELS' ? getChannelForTeam(currentUser?.team) : activeChannel;
+        const aChMatch = getChannelForTeam(a.team) === targetCh ? 0 : 1;
+        const bChMatch = getChannelForTeam(b.team) === targetCh ? 0 : 1;
+        return aChMatch - bChMatch;
       });
+
+      const currentChKey = activeChannel === 'ALL_CHANNELS' ? getChannelForTeam(currentUser?.team) : activeChannel;
+      const primaryPoolAgents = unassignedOnlyList.filter(u => getChannelForTeam(u.team) === currentChKey);
+      const secondaryPoolAgents = unassignedOnlyList.filter(u => getChannelForTeam(u.team) !== currentChKey);
 
       const selectableTeams = isSuperAdmin(currentUser)
         ? getDynamicTeamsForChannel(activeChannel === 'ALL_CHANNELS' ? 'ALL_CHANNELS' : activeChannel)
@@ -5953,53 +5980,71 @@
           <div class="modal-card-anim bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
             <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
               <div>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-orange-100 text-orange-800">${chMeta.fullTitle} • Duty Roster (${selectedMonthKey})</span>
-                <h3 class="text-base font-black text-slate-900 mt-0.5">Add / Assign Member to Duty Roster</h3>
-                <p class="text-xs font-bold text-slate-400">Select an unassigned/pending agent or your team member, choose Team & 7-day shifts, then click Done.</p>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800"><i class="fa-solid fa-shield-halved mr-1"></i>Protected Team Roster Assignment (${selectedMonthKey})</span>
+                <h3 class="text-base font-black text-slate-900 mt-0.5">Assign Available / Floating Agent to Duty Roster</h3>
+                <p class="text-xs font-bold text-slate-500">Only <strong>Unassigned / Floating / Pending</strong> agents appear here. Active members of any team are strictly locked until released.</p>
               </div>
               <button type="button" onclick="closeModal('rosterAddModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <form onsubmit="handleSaveRosterModalAdd(event)" class="space-y-4">
-              <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200">
-                <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1"><i class="fa-solid fa-bolt text-amber-500 mr-1"></i>Select from Available / Unassigned Agents or Your Team</label>
-                <select onchange="onRosterAddExistingAgentSelect(this.value)" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-800">
-                  <option value="">-- Select an Unassigned Agent or type ID & Name below --</option>
-                  ${selectableUsers.map(u => `<option value="${u.id}">${u.name} (${u.id} • ${isPendingOrFloatingAgent(u) ? '🟢 Unassigned / Available' : u.team})</option>`).join('')}
+              <div class="p-3.5 rounded-2xl bg-purple-50/70 border-2 border-purple-200">
+                <label class="block text-[11px] font-black text-purple-900 uppercase mb-1.5">
+                  <i class="fa-solid fa-user-astronaut text-purple-600 mr-1"></i>Step 1: Select Available / Floating Agent (Channel-Wise First)
+                </label>
+                <select id="rosterAddPoolDropdown" required onchange="onRosterAddExistingAgentSelect(this.value)" class="w-full px-3.5 py-2.5 bg-white border border-purple-300 rounded-xl text-xs font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-600 cursor-pointer">
+                  <option value="">-- Select an Available / Floating Agent (${unassignedOnlyList.length} Available) --</option>
+                  ${primaryPoolAgents.length > 0 ? `
+                    <optgroup label="🟢 ${currentChKey === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Channel — Floating / Pending Pool (${primaryPoolAgents.length})">
+                      ${primaryPoolAgents.map(u => `<option value="${u.id}">${u.name} (ID: ${u.id} • ${u.team} • Unassigned)</option>`).join('')}
+                    </optgroup>
+                  ` : ''}
+                  ${secondaryPoolAgents.length > 0 ? `
+                    <optgroup label="🟣 ${currentChKey === 'WHATSAPP' ? 'Facebook' : 'WhatsApp'} Channel — Floating / Pending Pool (${secondaryPoolAgents.length})">
+                      ${secondaryPoolAgents.map(u => `<option value="${u.id}">${u.name} (ID: ${u.id} • ${u.team} • Unassigned)</option>`).join('')}
+                    </optgroup>
+                  ` : ''}
                 </select>
+                ${unassignedOnlyList.length === 0 ? `
+                  <p class="text-[11px] font-extrabold text-rose-600 mt-2">
+                    <i class="fa-solid fa-circle-info mr-1"></i>No unassigned/floating agents available right now! To move an agent from another team, their Team Leader must click <strong>Release</strong> on their row first, or create a new Agent ID in <strong>Target Setup & IDs</strong>.
+                  </p>
+                ` : `
+                  <p class="text-[10px] font-bold text-purple-700 mt-1.5">
+                    <i class="fa-solid fa-lock mr-1"></i>Active members of Team Nazim, Team Samad, Team Saikat, Team Parvaj & Team Shakib Baksh are hidden & protected from accidental transfer.
+                  </p>
+                `}
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Employee ID</label>
-                  <input type="text" id="rosterAddEmpId" required placeholder="e.g. 10357 or 11250" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-500">
+                  <label class="block text-xs font-extrabold text-slate-500 uppercase mb-1">Selected Employee ID (Locked)</label>
+                  <input type="text" id="rosterAddEmpId" readonly required placeholder="Auto-filled from selection above" class="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-black text-slate-700 cursor-not-allowed">
                 </div>
                 <div>
-                  <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Agent / Member Name</label>
-                  <input type="text" id="rosterAddEmpName" required placeholder="e.g. Md. Faruque Hossain" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-500">
+                  <label class="block text-xs font-extrabold text-slate-500 uppercase mb-1">Selected Agent Name (Locked)</label>
+                  <input type="text" id="rosterAddEmpName" readonly required placeholder="Auto-filled from selection above" class="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-black text-slate-700 cursor-not-allowed">
                 </div>
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Select Team (Dropdown)</label>
+                  <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Assign to Team</label>
                   <select id="rosterAddTeamSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
                     ${selectableTeams.map(tn => `<option value="${tn}" ${tn === currentUser.team ? 'selected' : ''}>${tn} (${getChannelForTeam(tn) === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'})</option>`).join('')}
-                    <option value="${chMeta.floatingTeam}">${chMeta.floatingTeam} (Unassigned / Floating Pool)</option>
                   </select>
                 </div>
                 <div>
                   <label class="block text-xs font-extrabold text-slate-700 uppercase mb-1">Member Role</label>
                   <select id="rosterAddRoleSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
                     <option value="agent">Sales Agent</option>
-                    ${isSuperAdmin(currentUser) ? `<option value="admin">Team Leader (TL)</option>` : ''}
                   </select>
                 </div>
               </div>
 
               <div class="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200/80 space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                  <span class="text-xs font-black text-indigo-950 uppercase"><i class="fa-solid fa-calendar-week text-indigo-600 mr-1.5"></i>Select 7-Day Weekly Duty Shifts</span>
+                  <span class="text-xs font-black text-indigo-950 uppercase"><i class="fa-solid fa-calendar-week text-indigo-600 mr-1.5"></i>Step 2: Select 7-Day Weekly Duty Shifts</span>
                   <div class="flex flex-wrap items-center gap-1">
                     <span class="text-[10px] font-bold text-slate-500 mr-1">Quick Fill:</span>
                     ${['7:00 AM', '9:00 AM', '10:00 AM', '3:00 PM', 'Night'].map(sh => `
@@ -6021,8 +6066,8 @@
 
               <div class="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
                 <button type="button" onclick="closeModal('rosterAddModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
-                <button type="submit" class="px-6 py-2.5 text-xs font-black text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-check-double"></i> Done — Add & Sync to Roster
+                <button type="submit" ${unassignedOnlyList.length === 0 ? 'disabled' : ''} class="px-6 py-2.5 text-xs font-black text-white bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 disabled:opacity-50 rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-check-double"></i> Done — Assign to Team & Roster
                 </button>
               </div>
             </form>
@@ -6037,6 +6082,8 @@
       renderAppLayout();
       const sel = document.getElementById('rosterAddTeamSelect');
       if (sel) sel.value = rosterAddModalTargetTeam;
+      const poolSel = document.getElementById('rosterAddPoolDropdown');
+      if (poolSel) poolSel.value = '';
       const idInp = document.getElementById('rosterAddEmpId');
       if (idInp) idInp.value = '';
       const nameInp = document.getElementById('rosterAddEmpName');
@@ -6052,17 +6099,23 @@
       const empName = document.getElementById('rosterAddEmpName')?.value.trim();
       const targetTeam = normalizeTeamNameAlias(document.getElementById('rosterAddTeamSelect')?.value || currentUser.team);
       const roleVal = document.getElementById('rosterAddRoleSelect')?.value || 'agent';
-      if (!empId || !empName) return;
+      if (!empId || !empName) {
+        showPortalToast('Select an Unassigned Agent', 'Please select an available agent from the Floating/Pending dropdown first.', 'warning');
+        return;
+      }
 
-      // Guard: Check if this agent is currently assigned to another active team in this month!
+      // STRICT GUARD FOR ALL ADMINS (INCLUDING SUPER ADMIN):
+      // Never allow assigning an agent who is currently in an active team unless they are Released to Floating Pool first!
       const allUsersMonth = getUsersForMonth(selectedMonthKey, true);
       const existingAgent = allUsersMonth.find(u => String(u.id) === String(empId));
-      if (existingAgent && !isSuperAdmin(currentUser)) {
+      const activeTeamNamesList = getDynamicTeamsForChannel('ALL_CHANNELS');
+      if (existingAgent) {
         const curTeam = normalizeTeamNameAlias(existingAgent.team);
-        if (!isPendingOrFloatingAgent(existingAgent) && curTeam !== normalizeTeamNameAlias(currentUser.team)) {
+        const isCurrentlyInActiveTeam = activeTeamNamesList.includes(curTeam) && !isPendingOrFloatingAgent(existingAgent);
+        if (isCurrentlyInActiveTeam && curTeam !== targetTeam) {
           showPortalToast(
-            'Agent Locked to ' + curTeam,
-            `${existingAgent.name} (${empId}) is currently assigned to ${curTeam}. Their TL must release them to the Floating Pool first before you can add them!`,
+            'Protected Team Member (' + curTeam + ')',
+            `${existingAgent.name} (${empId}) is already an active member of ${curTeam}. They must be Released to the Floating Pool first before being assigned to another team!`,
             'error'
           );
           return;
@@ -6086,7 +6139,7 @@
 
       openConfirmWarningModal(
         `Assign ${newRow.name} (${newRow.id}) to ${targetTeam} Roster (${selectedMonthKey})?`,
-        `<strong>Member:</strong> ${newRow.name} (ID: ${newRow.id})<br><strong>Assigned Team (${selectedMonthKey}):</strong> ${targetTeam}<br><strong>Weekly Shifts:</strong> Sat: ${newRow.sat}, Sun: ${newRow.sun}, Mon: ${newRow.mon}, Tue: ${newRow.tue}, Wed: ${newRow.wed}, Thu: ${newRow.thu}, Fri: ${newRow.fri}<br><br>Confirm to add this member to ${targetTeam}'s Duty Roster and sync for ${selectedMonthKey} (past months' data will remain untouched).`,
+        `<strong>Available Agent:</strong> ${newRow.name} (ID: ${newRow.id})<br><strong>Assigned Team (${selectedMonthKey}):</strong> ${targetTeam}<br><strong>Weekly Shifts:</strong> Sat: ${newRow.sat}, Sun: ${newRow.sun}, Mon: ${newRow.mon}, Tue: ${newRow.tue}, Wed: ${newRow.wed}, Thu: ${newRow.thu}, Fri: ${newRow.fri}<br><br>Confirm to assign this floating/pending agent to ${targetTeam}'s Duty Roster for ${selectedMonthKey}.`,
         'Confirm Roster Assignment',
         async () => {
           let savedList = getStored('roster_records', []);
@@ -6127,13 +6180,13 @@
           );
 
           const logMeta = recordActivityLog(
-            'Added Member to Duty Roster',
-            `[${targetCh}] ${currentUser.name} assigned ${newRow.name} (${newRow.id}) under ${targetTeam} for ${selectedMonthKey}: Sat=${newRow.sat}, Sun=${newRow.sun}, Mon=${newRow.mon}, Tue=${newRow.tue}, Wed=${newRow.wed}, Thu=${newRow.thu}, Fri=${newRow.fri}`
+            'Assigned Floating Member to Duty Roster',
+            `[${targetCh}] ${currentUser.name} assigned ${newRow.name} (${newRow.id}) from Floating Pool to ${targetTeam} for ${selectedMonthKey}: Sat=${newRow.sat}, Sun=${newRow.sun}, Mon=${newRow.mon}, Tue=${newRow.tue}, Wed=${newRow.wed}, Thu=${newRow.thu}, Fri=${newRow.fri}`
           );
 
           closeModal('rosterAddModal');
           renderAppLayout();
-          showPortalToast('Member Added & Synced to Roster!', `${newRow.name} (${newRow.id}) is now live under ${targetTeam} for ${selectedMonthKey}.`, 'success');
+          showPortalToast('Member Assigned & Synced to Roster!', `${newRow.name} (${newRow.id}) is now live under ${targetTeam} for ${selectedMonthKey}.`, 'success');
           if (userToSave && isCurrentOrFutureMonth) {
             await postToSheet('SAVE_USER', { ...userToSave, ...logMeta }).catch(() => {});
           }
@@ -8590,7 +8643,7 @@ function renderRankingAndComparison() {
 
     function renderSubmitModal() {
       const u = currentUser;
-      const allAgents = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+      const allAgents = getEditableSalesAgentsForActor(selectedMonthKey);
       
       return `
         <div id="submitModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -8614,7 +8667,7 @@ function renderRankingAndComparison() {
                   <input type="text" id="subAgentSearchInput" oninput="filterAgentSelectBySearch('subAgentSearchInput', 'subAgentId', 'onModalChange')" placeholder="Type agent name or ID (e.g. 10191, Shagor, Rafi)..." class="w-full pl-9 pr-3.5 py-2 bg-orange-50/50 border border-orange-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500">
                 </div>
                 <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
-                  ${allAgents.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id} • ${usr.team})</option>`).join('')}
+                  ${allAgents.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id} • ${isPendingOrFloatingAgent(usr) ? '🟣 Floating / Pending' : usr.team})</option>`).join('')}
                 </select>
               </div>
 
@@ -8999,7 +9052,7 @@ function renderRankingAndComparison() {
       let resolvedAgentId = currentUser ? currentUser.id : null;
       if (hasFeatureAccess(currentUser, 'feat_manage_all_sales')) {
         const selEl = document.getElementById('subAgentId');
-        const allAg = getUsersForMonth(selectedMonthKey).filter(usr => usr.role === 'agent');
+        const allAg = getEditableSalesAgentsForActor(selectedMonthKey);
         const preferredId = agentId || lastSelectedAgentId || (allAg[0] && allAg[0].id);
         if (selEl && preferredId) {
           selEl.value = preferredId;
@@ -9084,7 +9137,7 @@ function renderRankingAndComparison() {
       e.preventDefault();
       const u = currentUser;
       if (!hasFeatureAccess(u, 'feat_manage_all_sales') && !hasFeatureAccess(u, 'feat_submit_own_sales')) return;
-      const allUsers = getUsersForMonth(selectedMonthKey);
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
       const targetAgent = hasFeatureAccess(u, 'feat_manage_all_sales') ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
 
       const leads = Number(document.getElementById('subLeads').value) || 0;
