@@ -561,7 +561,9 @@
       activeChannel = chKey;
       localStorage.setItem('gb_active_channel', chKey);
       const chTeams = CHANNEL_META[chKey].teams;
-      if (currentUser && currentUser.role === 'admin' && chTeams.includes(currentUser.team)) {
+      if (chKey === 'ALL_CHANNELS') {
+        dashboardScope = 'ALL';
+      } else if (currentUser && currentUser.role === 'admin' && chTeams.includes(currentUser.team)) {
         dashboardScope = currentUser.team;
       } else {
         dashboardScope = 'ALL';
@@ -1910,12 +1912,12 @@
       let agentCount = 1;
       
       if (canViewAll(user)) {
-        const defaultTeam = user.role === 'admin' ? user.team : 'ALL';
+        const defaultTeam = (activeChannel === 'ALL_CHANNELS' || user.role !== 'admin') ? 'ALL' : user.team;
         const scope = scopeOverride || dashboardScope || defaultTeam;
-        const agents = allUsers.filter(u => u.role === 'agent' && (scope === 'ALL' ? true : u.team === scope));
-        const tls = allUsers.filter(u => u.role === 'admin' && (scope === 'ALL' ? true : u.team === scope));
+        const agents = allUsers.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u) && (scope === 'ALL' ? true : normalizeTeamNameAlias(u.team) === normalizeTeamNameAlias(scope)));
+        const tls = allUsers.filter(u => u.role === 'admin' && (scope === 'ALL' ? true : normalizeTeamNameAlias(u.team) === normalizeTeamNameAlias(scope)));
         const agentsTargetSum = agents.reduce((sum, a) => sum + (Number(a.baseTarget) || 0), 0);
-        const tlsTargetSum = tls.reduce((sum, tl) => sum + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
+        const tlsTargetSum = tls.reduce((sum, tl) => sum + (Number(tl.baseTarget) || (getChannelForTeam(tl.team) === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET)), 0);
         baseTarget = agentsTargetSum + tlsTargetSum;
         agentCount = agents.length || 1;
       } else {
@@ -2291,11 +2293,11 @@
           activeChannel = currentUser.role === 'supervisor' ? 'ALL_CHANNELS' : getChannelForTeam(currentUser.team);
           localStorage.setItem('gb_active_channel', activeChannel);
         }
-        if (currentUser.role === 'admin') {
-          dashboardScope = currentUser.team;
-          monthlyPerfTeamScope = 'ALL';
-        } else if (currentUser.role === 'supervisor') {
+        if (activeChannel === 'ALL_CHANNELS' || currentUser.role === 'supervisor') {
           dashboardScope = 'ALL';
+          monthlyPerfTeamScope = 'ALL';
+        } else if (currentUser.role === 'admin') {
+          dashboardScope = currentUser.team;
           monthlyPerfTeamScope = 'ALL';
         }
         logsFilterScope = 'ALL';
@@ -2657,92 +2659,91 @@
           </aside>
 
           <div id="mainScrollContainer" class="flex-1 flex flex-col h-screen overflow-y-auto min-w-0">
-            <header class="h-16 px-5 lg:px-7 flex items-center justify-between gap-3 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-2xs shrink-0 whitespace-nowrap overflow-x-auto">
-              <!-- Left Group: Channel Switcher, Active Section Title & Month Selector (Aligned on a single clean row) -->
-              <div class="flex items-center gap-2.5 shrink-0">
+            <header class="h-14 px-3.5 lg:px-5 flex items-center justify-between gap-2 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-2xs shrink-0 whitespace-nowrap overflow-hidden">
+              <!-- Left Group: Channel Switcher, Active Section Title & Month Selector (Compact & Zero Scrollbar) -->
+              <div class="flex items-center gap-2 min-w-0">
                 ${u.role !== 'agent' ? `
-                <div class="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/90 h-9" title="Switch between All Channels, Facebook Channel, and WhatsApp Channel">
-                  <button type="button" onclick="switchPortalChannel('ALL_CHANNELS')" class="h-7 px-3 rounded-lg text-xs font-black inline-flex items-center gap-1.5 transition-all cursor-pointer ${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/80'}">
-                    <i class="fa-solid fa-layer-group text-[11px]"></i> All Channels
+                <div class="inline-flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-xl border border-slate-200/90 h-8 shrink-0" title="Switch between All Channels, Facebook Channel, and WhatsApp Channel">
+                  <button type="button" onclick="switchPortalChannel('ALL_CHANNELS')" class="h-7 px-2.5 rounded-lg text-[11px] font-black inline-flex items-center gap-1 transition-all cursor-pointer ${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/80'}">
+                    <i class="fa-solid fa-layer-group text-[10px]"></i> All Channels
                   </button>
-                  <button type="button" onclick="switchPortalChannel('FACEBOOK')" class="h-7 px-3 rounded-lg text-xs font-black inline-flex items-center gap-1.5 transition-all cursor-pointer ${activeChannel === 'FACEBOOK' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/80'}">
-                    <i class="fa-brands fa-facebook-f text-[11px]"></i> Facebook
+                  <button type="button" onclick="switchPortalChannel('FACEBOOK')" class="h-7 px-2.5 rounded-lg text-[11px] font-black inline-flex items-center gap-1 transition-all cursor-pointer ${activeChannel === 'FACEBOOK' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/80'}">
+                    <i class="fa-brands fa-facebook-f text-[10px]"></i> Facebook
                   </button>
-                  <button type="button" onclick="switchPortalChannel('WHATSAPP')" class="h-7 px-3 rounded-lg text-xs font-black inline-flex items-center gap-1.5 transition-all cursor-pointer ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/80'}">
-                    <i class="fa-brands fa-whatsapp text-xs"></i> WhatsApp
+                  <button type="button" onclick="switchPortalChannel('WHATSAPP')" class="h-7 px-2.5 rounded-lg text-[11px] font-black inline-flex items-center gap-1 transition-all cursor-pointer ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200/80'}">
+                    <i class="fa-brands fa-whatsapp text-[11px]"></i> WhatsApp
                   </button>
                 </div>
                 ` : `
-                <span class="h-9 px-3.5 rounded-xl text-xs font-black inline-flex items-center gap-1.5 ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'}">
+                <span class="h-8 px-3 rounded-xl text-[11px] font-black inline-flex items-center gap-1.5 shrink-0 ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'}">
                   <i class="${getActiveChannelMeta().icon}"></i>${getActiveChannelMeta().fullTitle}
                 </span>
                 `}
 
-                <div class="h-5 w-px bg-slate-200"></div>
+                <div class="h-4 w-px bg-slate-200 shrink-0 hidden xl:block"></div>
 
-                <h2 class="text-xs font-black uppercase ${getActiveChannelMeta().colorClass} tracking-wider px-1">
-                  ${activeTab === 'agents' ? 'Target Setup & IDs' : (activeTab === 'chat' ? 'Chat' : (activeTab === 'ranking' ? 'Ranking' : (activeTab === 'role_management' ? 'Role & Access' : activeTab.replace('_', ' '))))}
+                <h2 class="text-[11px] font-black uppercase ${getActiveChannelMeta().colorClass} tracking-wide px-0.5 truncate hidden xl:block">
+                  ${activeTab === 'agents' ? 'Target Setup' : (activeTab === 'chat' ? 'Chat' : (activeTab === 'ranking' ? 'Ranking' : (activeTab === 'role_management' ? 'Roles' : activeTab.replace('_', ' '))))}
                 </h2>
 
-                <div class="h-5 w-px bg-slate-200"></div>
+                <div class="h-4 w-px bg-slate-200 shrink-0"></div>
 
-                <div class="h-9 inline-flex items-center gap-1.5 bg-blue-50/90 border border-blue-200/90 px-3 rounded-xl" title="Switch month to view past performance history or set up next month's targets & roster">
-                  <i class="fa-regular fa-calendar-days text-blue-600 text-xs"></i>
-                  <span class="text-[10px] font-extrabold uppercase text-slate-500">Month:</span>
-                  <select onchange="changeSelectedMonth(this.value)" class="bg-transparent text-xs font-black text-blue-900 focus:outline-none cursor-pointer">
+                <div class="h-8 inline-flex items-center gap-1 bg-blue-50/90 border border-blue-200/90 px-2.5 rounded-xl shrink-0" title="Switch month to view past performance history or set up next month's targets & roster">
+                  <i class="fa-regular fa-calendar-days text-blue-600 text-[11px]"></i>
+                  <select onchange="changeSelectedMonth(this.value)" class="bg-transparent text-[11px] font-black text-blue-900 focus:outline-none cursor-pointer">
                     ${AVAILABLE_MONTHS.map(m => `<option value="${m.key}" ${m.key === selectedMonthKey ? 'selected' : ''}>${m.label}</option>`).join('')}
                   </select>
                 </div>
 
                 ${isCurrentChannelReadOnlyForUser(u) ? `
-                <span class="h-8 px-2.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-black uppercase inline-flex items-center gap-1">
-                  <i class="fa-solid fa-eye"></i>View-Only
+                <span class="h-7 px-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-300 text-[9px] font-black uppercase inline-flex items-center gap-1 shrink-0" title="View-Only Mode">
+                  <i class="fa-solid fa-eye"></i><span class="hidden 2xl:inline">View-Only</span>
                 </span>
                 ` : ''}
               </div>
 
               <!-- Right Group: Notice Board, Bell Alerts, Online Pill, Sync, Hard Refresh & Profile -->
-              <div class="flex items-center gap-2 shrink-0">
-                <button onclick="openModal('noticeBoardModal')" title="Open Official Floor Notice Board" class="h-9 px-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-extrabold rounded-xl inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button onclick="openModal('noticeBoardModal')" title="Open Official Floor Notice Board" class="h-8 px-2.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-[11px] font-extrabold rounded-xl inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0">
                   <i class="fa-solid fa-clipboard-list text-amber-600 text-xs"></i>
-                  <span>Notice Board</span>
+                  <span class="hidden md:inline">Notices</span>
                 </button>
 
                 ${renderHeaderBellNotificationWidget()}
 
-                <button onclick="hasFeatureAccess(currentUser, 'tab_agents') ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="h-9 px-3 bg-slate-100 hover:bg-slate-200 border border-slate-200/80 text-slate-800 text-xs font-extrabold rounded-xl inline-flex items-center gap-2 transition-colors cursor-pointer">
+                <button onclick="hasFeatureAccess(currentUser, 'tab_agents') ? setTab('agents') : setTab('ranking')" title="Online Now: ${onlineNamesTooltip}" class="h-8 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200/80 text-slate-800 text-[11px] font-extrabold rounded-xl inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0">
                   <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
                   <span>${activeOnlineUsers.length} Online</span>
                 </button>
 
-                <button onclick="fetchFromSheet()" class="h-9 px-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-xl inline-flex items-center gap-1.5 hover:bg-emerald-100 transition-colors cursor-pointer" title="Sync data from Google Sheet">
+                <button onclick="fetchFromSheet()" class="h-8 px-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-extrabold rounded-xl inline-flex items-center gap-1 hover:bg-emerald-100 transition-colors cursor-pointer shrink-0" title="Sync data from Google Sheet">
                   <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
-                  <span>Sync Now</span>
+                  <span class="hidden lg:inline">Sync</span>
                 </button>
 
-                <button onclick="handleHardRefreshPortal()" title="Hard Refresh (Ctrl + F5)" class="w-9 h-9 bg-slate-100 hover:bg-indigo-600 text-slate-600 hover:text-white border border-slate-200 hover:border-indigo-600 rounded-xl inline-flex items-center justify-center transition-colors shadow-2xs shrink-0 cursor-pointer">
+                <button onclick="handleHardRefreshPortal()" title="Hard Refresh (Ctrl + F5)" class="w-8 h-8 bg-slate-100 hover:bg-indigo-600 text-slate-600 hover:text-white border border-slate-200 hover:border-indigo-600 rounded-xl inline-flex items-center justify-center transition-colors shadow-2xs shrink-0 cursor-pointer">
                   <i class="fa-solid fa-rotate-right text-xs"></i>
                 </button>
 
-                <div class="relative pl-3 ml-1 border-l border-slate-200">
-                  <div onclick="event.stopPropagation(); toggleProfileMenuDropdown();" title="Click for Profile Picture & Password Options" class="flex items-center gap-2.5 py-1 cursor-pointer group select-none">
+                <div class="relative pl-2 ml-0.5 border-l border-slate-200 shrink-0">
+                  <div onclick="event.stopPropagation(); toggleProfileMenuDropdown();" title="Click for Profile Picture & Password Options" class="flex items-center gap-2 py-0.5 cursor-pointer group select-none">
                     <div class="relative shrink-0">
-                      ${renderUserAvatarHtml(u, 'w-9 h-9 rounded-xl text-xs', 'tab-active text-white', false)}
-                      <span class="w-4 h-4 rounded-full bg-slate-900 text-white flex items-center justify-center text-[8px] absolute -bottom-1 -right-1 shadow ring-2 ring-white group-hover:bg-blue-600">
-                        <i class="fa-solid fa-chevron-down text-[7px]"></i>
+                      ${renderUserAvatarHtml(u, 'w-8 h-8 rounded-xl text-xs', 'tab-active text-white', false)}
+                      <span class="w-3.5 h-3.5 rounded-full bg-slate-900 text-white flex items-center justify-center text-[7px] absolute -bottom-0.5 -right-0.5 shadow ring-1 ring-white group-hover:bg-blue-600">
+                        <i class="fa-solid fa-chevron-down text-[6px]"></i>
                       </span>
                     </div>
-                    <div class="text-left leading-tight">
-                      <p class="text-xs font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1">
-                        <span>${u.name}</span>
-                        <i class="fa-solid fa-angle-down text-[10px] text-slate-400 group-hover:text-blue-600"></i>
+                    <div class="text-left leading-tight max-w-[140px]">
+                      <p class="text-[11px] font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-1 truncate">
+                        <span class="truncate">${u.name}</span>
+                        <i class="fa-solid fa-angle-down text-[9px] text-slate-400 group-hover:text-blue-600 shrink-0"></i>
                       </p>
-                      <p class="text-[10px] font-extrabold ${isSupervisor(u) ? 'text-purple-600' : 'text-orange-600'} uppercase mt-0.5">${roleBadgeText}</p>
+                      <p class="text-[9px] font-extrabold ${isSupervisor(u) ? 'text-purple-600' : 'text-orange-600'} uppercase truncate">${roleBadgeText}</p>
                     </div>
                   </div>
 
-                  <!-- Profile Click Dropdown Menu (2 Options: 1. Add/Change Profile Picture, 2. Change Password) -->
-                  <div id="profileActionDropdownMenu" class="${profileMenuDropdownOpen ? '' : 'hidden'} fixed right-6 top-16 w-60 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2 z-[80] modal-card-anim">
+                  <!-- Profile Click Dropdown Menu -->
+                  <div id="profileActionDropdownMenu" class="${profileMenuDropdownOpen ? '' : 'hidden'} fixed right-5 top-14 w-60 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2 z-[80] modal-card-anim">
                     <div class="px-3 py-2 border-b border-slate-100 mb-1">
                       <p class="text-xs font-black text-slate-900 truncate">${u.name}</p>
                       <p class="text-[10px] font-bold text-slate-400">Employee ID: ${u.id}</p>
@@ -3554,7 +3555,7 @@
       // CLEAN, CLUTTER-FREE EXECUTIVE DASHBOARD FOR SUPERVISOR
       // (No personal targets or edit buttons — pure At-a-Glance All-Team & Channel Control)
       // =====================================================================
-      if (isSup) {
+      if (isSup || activeChannel === 'ALL_CHANNELS') {
         return `
           <div class="space-y-4">
             <!-- Supervisor Clean Header Banner -->
