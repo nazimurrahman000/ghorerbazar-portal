@@ -568,11 +568,14 @@
       } else {
         dashboardScope = 'ALL';
       }
-      monthlyPerfTeamScope = 'ALL';
+      const defaultTeamScope = (chKey !== 'ALL_CHANNELS' && currentUser && (currentUser.role === 'admin' || currentUser.role === 'agent') && chTeams.includes(normalizeTeamNameAlias(currentUser.team)))
+        ? normalizeTeamNameAlias(currentUser.team)
+        : 'ALL';
+      monthlyPerfTeamScope = defaultTeamScope;
       monthlyPerfAgentId = 'ALL';
-      driveProdTeamScope = 'ALL';
+      driveProdTeamScope = defaultTeamScope;
       driveProdAgentId = 'ALL';
-      sprintTabTeamScope = 'ALL';
+      sprintTabTeamScope = defaultTeamScope;
       logsFilterScope = 'ALL';
       if (typeof dateWiseTeamFilter !== 'undefined') dateWiseTeamFilter = 'ALL';
       renderAppLayout();
@@ -2321,9 +2324,18 @@
         if (activeChannel === 'ALL_CHANNELS' || currentUser.role === 'supervisor') {
           dashboardScope = 'ALL';
           monthlyPerfTeamScope = 'ALL';
+          driveProdTeamScope = 'ALL';
+          sprintTabTeamScope = 'ALL';
         } else if (currentUser.role === 'admin') {
-          dashboardScope = currentUser.team;
-          monthlyPerfTeamScope = 'ALL';
+          const myTeamClean = normalizeTeamNameAlias(currentUser.team);
+          dashboardScope = myTeamClean;
+          monthlyPerfTeamScope = myTeamClean;
+          driveProdTeamScope = myTeamClean;
+          sprintTabTeamScope = myTeamClean;
+        } else if (currentUser.role === 'agent') {
+          const myTeamClean = normalizeTeamNameAlias(currentUser.team);
+          sprintTabTeamScope = myTeamClean;
+          driveProdTeamScope = myTeamClean;
         }
         logsFilterScope = 'ALL';
         reportsDateFilter = getTodayFormatted();
@@ -2361,8 +2373,11 @@
       setStored('session_user', user);
       activeChannel = user.role === 'supervisor' ? 'ALL_CHANNELS' : getChannelForTeam(user.team);
       localStorage.setItem('gb_active_channel', activeChannel);
-      dashboardScope = user.role === 'admin' ? user.team : 'ALL';
-      monthlyPerfTeamScope = 'ALL';
+      const loginTeamScope = (user.role === 'admin' || user.role === 'agent') ? normalizeTeamNameAlias(user.team) : 'ALL';
+      dashboardScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+      monthlyPerfTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+      driveProdTeamScope = loginTeamScope;
+      sprintTabTeamScope = loginTeamScope;
       monthlyPerfAgentId = 'ALL';
       logsFilterScope = 'ALL';
       reportsDateFilter = getTodayFormatted();
@@ -2481,8 +2496,18 @@
       } else if (tab === 'attendance') {
         logsFilterScope = 'ALL';
       } else if (tab === 'monthly_perf') {
-        monthlyPerfTeamScope = 'ALL';
+        monthlyPerfTeamScope = (activeChannel !== 'ALL_CHANNELS' && currentUser && currentUser.role === 'admin') ? normalizeTeamNameAlias(currentUser.team) : 'ALL';
         monthlyPerfAgentId = 'ALL';
+      } else if (tab === 'sprint_target') {
+        if (activeChannel !== 'ALL_CHANNELS' && currentUser && (currentUser.role === 'admin' || currentUser.role === 'agent')) {
+          const myT = normalizeTeamNameAlias(currentUser.team);
+          if (getActiveChannelMeta().teams.includes(myT)) sprintTabTeamScope = myT;
+        }
+      } else if (tab === 'drive_product') {
+        if (activeChannel !== 'ALL_CHANNELS' && currentUser && (currentUser.role === 'admin' || currentUser.role === 'agent')) {
+          const myT = normalizeTeamNameAlias(currentUser.team);
+          if (getActiveChannelMeta().teams.includes(myT)) driveProdTeamScope = myT;
+        }
       }
       renderAppLayout();
     }
@@ -5316,13 +5341,18 @@ function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
     function renderActivityLogsView() {
       const u = currentUser;
       const rawAllowedLogs = deduplicateActivityLogsList(getStored('activity_logs', [])).filter(l => canActorSeeActivityLog(u, l));
-      const allLogs = rawAllowedLogs.filter(l => l.team === 'All Teams' || (activeChannel === 'ALL_CHANNELS' || getChannelForTeam(l.team) === activeChannel));
+      const allLogs = rawAllowedLogs.filter(l => l.team === 'All Teams' || l.team === 'Floating' || l.team === 'WA Floating' || (activeChannel === 'ALL_CHANNELS' || getChannelForTeam(l.team) === activeChannel));
 
       let visibleLogs = [];
       if (canViewAll(u)) {
-        visibleLogs = activityTeamFilter === 'ALL' ? allLogs : allLogs.filter(l => l.team === activityTeamFilter);
+        visibleLogs = activityTeamFilter === 'ALL' ? allLogs : allLogs.filter(l => normalizeTeamNameAlias(l.team) === normalizeTeamNameAlias(activityTeamFilter));
+        if (activityAgentFilter !== 'ALL') {
+          const targetAg = getUsersForMonth(selectedMonthKey, true).find(x => String(x.id) === String(activityAgentFilter));
+          const targetNameLow = targetAg ? String(targetAg.name || '').toLowerCase() : '';
+          visibleLogs = visibleLogs.filter(l => String(l.userId) === String(activityAgentFilter) || String(l.details || '').includes(`(${activityAgentFilter})`) || (targetNameLow && String(l.details || '').toLowerCase().includes(targetNameLow)));
+        }
       } else {
-        visibleLogs = rawAllowedLogs.filter(l => String(l.userId) === String(u.id));
+        visibleLogs = rawAllowedLogs;
       }
 
       function getActionBadgeStyle(act) {
@@ -5350,13 +5380,24 @@ function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
             </div>
 
             ${canViewAll(u) ? `
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-extrabold text-slate-400 uppercase">Filter Team:</span>
-              <select onchange="setActivityTeamFilter(this.value)" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold">
-                <option value="ALL" ${activityTeamFilter === 'ALL' ? 'selected' : ''}>All Users & Teams</option>
-                ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${activityTeamFilter === tn ? 'selected' : ''}>${tn}</option>`).join('')}
-                <option value="All Teams" ${activityTeamFilter === 'All Teams' ? 'selected' : ''}>Supervisors</option>
-              </select>
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <span class="text-[10px] font-extrabold text-slate-400 uppercase">Team:</span>
+                <select onchange="setActivityTeamFilter(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                  <option value="ALL" ${activityTeamFilter === 'ALL' ? 'selected' : ''}>All Users & Teams</option>
+                  ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${activityTeamFilter === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                  <option value="Floating" ${activityTeamFilter === 'Floating' ? 'selected' : ''}>Floating Agents</option>
+                  <option value="All Teams" ${activityTeamFilter === 'All Teams' ? 'selected' : ''}>Supervisors</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
+                <i class="fa-solid fa-user-clock text-rose-500 text-xs"></i>
+                <span class="text-[10px] font-extrabold text-rose-700 uppercase">Agent / User:</span>
+                <select onchange="setActivityAgentFilter(this.value)" class="bg-transparent text-xs font-extrabold text-rose-900 focus:outline-none cursor-pointer">
+                  <option value="ALL" ${activityAgentFilter === 'ALL' ? 'selected' : ''}>All Members (${getUsersForMonth(selectedMonthKey, false).length})</option>
+                  ${getUsersForMonth(selectedMonthKey, false).map(usr => `<option value="${usr.id}" ${String(activityAgentFilter) === String(usr.id) ? 'selected' : ''}>${usr.name} (${usr.id})</option>`).join('')}
+                </select>
+              </div>
             </div>
             ` : ''}
           </div>
@@ -7289,60 +7330,6 @@ function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
             }).join('')}
           </div>
 
-          <!-- Admin / Team Leader Total Target Milestones (80% & 100% Reward) — Visible ONLY to Admins & Supervisors -->
-          ${isAdminOrSup && channelTLMilestones.length > 0 ? `
-          <div class="grid grid-cols-1 md:grid-cols-${channelTLMilestones.length} gap-4">
-            ${channelTLMilestones.map(st => {
-              const item = st.theme;
-              const hit80 = st.achieved >= st.target80 && st.target80 > 0;
-              const hit100 = st.achieved >= st.target100 && st.target100 > 0;
-              const isTeamSelected = sprintTabTeamScope === st.teamName;
-              return `
-                <div onclick="setSprintTabTeam('${isTeamSelected ? 'ALL' : st.teamName}')" title="Click to filter leaderboard by ${st.teamName} (click again for All Teams)" class="card-dynamic p-4 border-t-4 ${item.border} cursor-pointer transition-all ${isTeamSelected ? 'ring-4 ring-blue-500/25 bg-blue-50/30 border-blue-500' : 'hover:shadow-md'}">
-                  <div class="flex justify-between items-start mb-3">
-                    <div>
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${item.pill}">${st.teamName} • TL Milestone</span>
-                        <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600')}">
-                          ${hit100 ? '🏆 100% Full Reward!' : (hit80 ? '🔥 80% Reward Unlocked!' : '80% / 100% Total Target')}
-                        </span>
-                        <span class="px-2 py-0.5 rounded text-[9px] font-black ${isTeamSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-blue-700'}">
-                          ${isTeamSelected ? '● Filtering Table (Click for All)' : 'Click to Filter Team →'}
-                        </span>
-                      </div>
-                      <h4 class="text-sm font-black text-slate-900 mt-1">TL: ${st.tlName} (${st.agentCount} Agents + TL Target)</h4>
-                    </div>
-                    <div class="text-right">
-                      <span class="text-2xl font-black text-slate-900">${st.pct}%</span>
-                      <span class="block text-[9px] font-extrabold uppercase text-slate-400">Of Total Target</span>
-                    </div>
-                  </div>
-                  <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-center mb-2.5">
-                    <div>
-                      <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Achieved Revenue</span>
-                      <strong class="text-xs font-black text-emerald-600">৳${st.achieved.toLocaleString()}</strong>
-                    </div>
-                    <div class="border-x border-slate-200">
-                      <span class="text-[9px] font-extrabold uppercase text-amber-700 block">🎯 80% Reward Goal</span>
-                      <strong class="text-xs font-black text-slate-900">৳${st.target80.toLocaleString()}</strong>
-                      <span class="block text-[9px] font-bold ${hit80 ? 'text-emerald-600' : 'text-amber-600'}">${hit80 ? 'Unlocked ✅' : `Need ৳${st.rem80.toLocaleString()}`}</span>
-                    </div>
-                    <div>
-                      <span class="text-[9px] font-extrabold uppercase text-indigo-700 block">🏆 100% Full Target</span>
-                      <strong class="text-xs font-black text-slate-900">৳${st.target100.toLocaleString()}</strong>
-                      <span class="block text-[9px] font-bold ${hit100 ? 'text-emerald-600' : 'text-indigo-600'}">${hit100 ? 'Unlocked ✅' : `Need ৳${st.rem100.toLocaleString()}`}</span>
-                    </div>
-                  </div>
-                  <div class="relative progress-track h-2 bg-slate-100">
-                    <div class="bg-gradient-to-r ${item.bar} h-2 rounded-full" style="width:${Math.min(100, st.pct)}%"></div>
-                    <div class="absolute top-0 bottom-0 w-0.5 bg-amber-500" style="left:80%" title="80% Reward Milestone"></div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-          ` : ''}
-
           <!-- Agent Sprint Competition Leaderboard Table -->
           <div class="card-dynamic overflow-hidden overflow-x-auto">
             <div class="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2">
@@ -7675,6 +7662,43 @@ function renderRankingAndComparison() {
               </div>
             </div>
 
+            ${rankedAgents.length >= 3 ? `
+            <!-- Clean, Executive Top 3 Champions Podium (Gold #1, Silver #2, Bronze #3) -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-4">
+              ${rankedAgents.slice(0, 3).map((topAg, tIdx) => {
+                const podiumThemes = [
+                  { rankTitle: '🥇 1st Place • Champion', border: 'border-2 border-amber-300 bg-gradient-to-br from-amber-50/90 via-white to-yellow-50/60 shadow-sm', pill: 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-2xs', metricTxt: 'text-amber-700', ringCls: 'ring-2 ring-amber-400' },
+                  { rankTitle: '🥈 2nd Place • 1st Runner-Up', border: 'border-2 border-slate-300 bg-gradient-to-br from-slate-50/90 via-white to-slate-100/60 shadow-xs', pill: 'bg-gradient-to-r from-slate-600 to-slate-700 text-white', metricTxt: 'text-slate-700', ringCls: 'ring-2 ring-slate-300' },
+                  { rankTitle: '🥉 3rd Place • 2nd Runner-Up', border: 'border-2 border-orange-300 bg-gradient-to-br from-orange-50/80 via-white to-amber-50/50 shadow-xs', pill: 'bg-gradient-to-r from-orange-600 to-amber-700 text-white', metricTxt: 'text-orange-700', ringCls: 'ring-2 ring-orange-300' }
+                ];
+                const pt = podiumThemes[tIdx];
+                return `
+                  <div class="rounded-2xl p-4 ${pt.border} flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="relative shrink-0">
+                        ${renderUserAvatarHtml(topAg, 'w-11 h-11 rounded-2xl text-sm ' + pt.ringCls, 'bg-slate-800 text-white', false)}
+                        <span class="w-5 h-5 rounded-full ${pt.pill} text-[10px] font-black flex items-center justify-center absolute -top-1.5 -left-1.5 shadow">#${tIdx + 1}</span>
+                      </div>
+                      <div class="min-w-0">
+                        <span class="px-2 py-0.5 rounded-md ${pt.pill} text-[9px] font-black uppercase tracking-wider inline-block">${pt.rankTitle}</span>
+                        <h4 class="text-sm font-black text-slate-900 truncate mt-1">${topAg.name} <span class="text-[10px] font-bold text-slate-400">(${topAg.id})</span></h4>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                          <span class="px-2 py-0.5 rounded-full text-[9px] font-black ${getTeamBadgeClasses(topAg.team)}">${topAg.team}</span>
+                          <span class="text-[10px] font-extrabold text-slate-500">Grade ${topAg.grade}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="text-right shrink-0 pl-2 border-l border-slate-200/80">
+                      <span class="text-lg font-black ${pt.metricTxt} block leading-tight">${topAg.pctDisplay}%</span>
+                      <strong class="text-xs font-black text-emerald-600 block mt-0.5">৳${topAg.revenue.toLocaleString()}</strong>
+                      <span class="text-[9px] font-bold text-slate-400 block">${topAg.orders} Ord (${topAg.conv}%)</span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+            ` : ''}
+
             <div class="card-dynamic overflow-hidden overflow-x-auto">
               <table class="w-full text-left text-xs whitespace-nowrap">
                 <thead class="table-header-light uppercase font-extrabold">
@@ -7702,7 +7726,8 @@ function renderRankingAndComparison() {
                     else if (idx === 1) rankBadge = `<span class="w-7 h-7 rounded-full bg-slate-300 text-slate-800 flex items-center justify-center font-black ${isMe ? 'ring-4 ring-blue-400' : ''}">2</span>`;
                     else if (idx === 2) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-700 text-white flex items-center justify-center font-black ${isMe ? 'ring-4 ring-blue-400' : ''}">3</span>`;
 
-                    return `<tr class="${isMe ? 'my-rank-row-glow' : 'hover:bg-slate-50/90'} transition-colors">
+                    const top3RowBg = idx === 0 ? 'bg-amber-50/60 border-l-4 border-l-amber-400' : (idx === 1 ? 'bg-slate-50/90 border-l-4 border-l-slate-400' : (idx === 2 ? 'bg-orange-50/40 border-l-4 border-l-orange-400' : 'hover:bg-slate-50/90'));
+                    return `<tr class="${isMe ? 'my-rank-row-glow' : top3RowBg} transition-colors">
                       <td class="p-3.5">${rankBadge}</td>
                       <td class="p-3.5 font-extrabold text-slate-900">
                         <div class="inline-flex items-center gap-2.5 ${isMe ? 'my-rank-name-pill px-3 py-1.5 rounded-xl' : ''}">
@@ -10537,13 +10562,18 @@ function renderRankingAndComparison() {
       return { bg: 'bg-purple-600 text-white', icon: 'fa-bell', badgeBg: 'bg-purple-100 text-purple-800', badgeText: 'Activity' };
     }
 
-        function canActorSeeActivityLog(actor, logItem) {
+    let activityAgentFilter = 'ALL';
+    function setActivityAgentFilter(agId) { activityAgentFilter = agId; renderAppLayout(); }
+
+    function canActorSeeActivityLog(actor, logItem) {
       if (!actor || !logItem) return false;
-      if (isSuperAdmin(actor) || actor.role === 'supervisor') return true;
-      if (actor.role === 'admin') {
-        return getChannelForTeam(logItem.team) === getChannelForTeam(actor.team);
+      if (isSuperAdmin(actor) || actor.role === 'supervisor' || actor.role === 'admin') {
+        return true;
       }
-      return String(logItem.userId) === String(actor.id);
+      const myId = String(actor.id);
+      const myName = String(actor.name || '').toLowerCase();
+      const det = String(logItem.details || '').toLowerCase();
+      return String(logItem.userId) === myId || det.includes(`(${myId})`) || (myName && det.includes(myName));
     }
 
     function syncAdminBellNotificationsFromActivityLogs(logsList, triggerLivePopup = false) {
@@ -11835,7 +11865,78 @@ function renderRankingAndComparison() {
       );
     }
 
-    function renderChatHubView() {
+        // =========================================================================
+    // CHAT EMOJI & GIF PICKER ENGINE
+    // =========================================================================
+    let chatEmojiPickerOpen = false;
+    let chatGifPickerOpen = false;
+
+    const QUICK_CHAT_EMOJIS = [
+      '😀','😂','🤣','😊','😍','🥳','😎','🤩','🔥','🎉','🏆','🥇','💯','🚀','⚡','🎯',
+      '💪','👏','🙌','👍','🤝','❤️','💙','💚','✨','🌟','📈','💰','🫡','🙏','☕','✅'
+    ];
+
+    const QUICK_CHAT_GIFS = [
+      { title: '🎉 Celebration', url: 'https://media.giphy.com/media/g9582DNuQppxC/giphy.gif' },
+      { title: '🔥 On Fire', url: 'https://media.giphy.com/media/l0HlKrB02QY0f1mbm/giphy.gif' },
+      { title: '👏 Applause', url: 'https://media.giphy.com/media/nbvFVPiEiJH6JOGIok/giphy.gif' },
+      { title: '🏆 Champion', url: 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif' },
+      { title: '🚀 Target Hit!', url: 'https://media.giphy.com/media/trN9ht5RlE3Dcwavg2/giphy.gif' },
+      { title: '💪 Great Job', url: 'https://media.giphy.com/media/111ebonMs90YLu/giphy.gif' },
+      { title: '🥳 Party Time', url: 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif' },
+      { title: '💯 High Five', url: 'https://media.giphy.com/media/3oEjHV0z8S7WM4MwnK/giphy.gif' }
+    ];
+
+    function toggleChatEmojiPicker(e) {
+      if (e) e.stopPropagation();
+      chatEmojiPickerOpen = !chatEmojiPickerOpen;
+      if (chatEmojiPickerOpen) chatGifPickerOpen = false;
+      renderAppLayout();
+    }
+
+    function toggleChatGifPicker(e) {
+      if (e) e.stopPropagation();
+      chatGifPickerOpen = !chatGifPickerOpen;
+      if (chatGifPickerOpen) chatEmojiPickerOpen = false;
+      renderAppLayout();
+    }
+
+    function insertChatEmoji(emojiChar) {
+      const inp = document.getElementById('chatComposerInput');
+      if (inp) {
+        inp.value = (inp.value || '') + emojiChar;
+        inp.focus();
+      }
+    }
+
+    function sendQuickChatGif(gifUrl, gifTitle) {
+      chatGifPickerOpen = false;
+      chatEmojiPickerOpen = false;
+      const inp = document.getElementById('chatComposerInput');
+      if (inp) {
+        inp.value = `[GIF:${gifUrl}] ${gifTitle || ''}`.trim();
+      }
+      const fakeEv = { preventDefault: () => {} };
+      handleSendChatMessage(fakeEv);
+    }
+
+    function formatChatMessageBodyHtml(rawText) {
+      const s = String(rawText || '');
+      const gifMatch = s.match(/\[GIF:(https?:\/\/[^\]]+)\]\s*(.*)/i);
+      if (gifMatch) {
+        const gUrl = gifMatch[1];
+        const caption = gifMatch[2] || '';
+        return `
+          <div class="space-y-1.5">
+            <img src="${gUrl}" alt="GIF" class="rounded-xl max-h-44 w-auto object-cover border border-white/20 shadow-xs">
+            ${caption ? `<span class="block text-[11px] font-extrabold">${caption}</span>` : ''}
+          </div>
+        `;
+      }
+      return s;
+    }
+
+function renderChatHubView() {
       const u = currentUser;
       // Include ALL users from BOTH Facebook & WhatsApp so any agent can search & chat 1-on-1 with anyone across any team or channel!
       const allUsers = getUsersForMonth(selectedMonthKey, true);
@@ -12174,7 +12275,7 @@ function renderRankingAndComparison() {
                         ` : ''}
                       </div>
                       <div class="max-w-[78%] px-4 py-2.5 rounded-2xl text-xs font-bold leading-relaxed shadow-sm whitespace-pre-wrap ${isMine ? 'tab-active text-white rounded-br-xs' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-xs'}">
-                        ${m.text}
+                        ${formatChatMessageBodyHtml(m.text)}
                       </div>
                       ${seenStatusHtml ? `<div class="mt-1 px-1">${seenStatusHtml}</div>` : ''}
                     </div>
@@ -12182,13 +12283,52 @@ function renderRankingAndComparison() {
                 }).join('')}
               </div>
 
-              <!-- Message Composer -->
-              <form onsubmit="handleSendChatMessage(event)" class="p-3.5 bg-white border-t border-slate-200 flex items-center gap-2.5 shrink-0">
-                <input type="text" id="chatComposerInput" autocomplete="off" placeholder="Write a message to ${activeHeaderTitle}..." class="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white">
-                <button type="submit" class="px-5 py-3 tab-active text-white rounded-2xl text-xs font-extrabold shadow-md flex items-center gap-2 shrink-0">
-                  <i class="fa-solid fa-paper-plane"></i> Send
-                </button>
-              </form>
+              <!-- Message Composer with Emoji & GIF Picker -->
+              <div class="relative bg-white border-t border-slate-200 shrink-0">
+                ${chatEmojiPickerOpen ? `
+                  <div class="absolute bottom-16 left-3.5 z-30 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 modal-card-anim">
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                      <span class="text-[10px] font-black uppercase text-slate-500"><i class="fa-regular fa-face-smile text-amber-500 mr-1"></i>Quick Emojis</span>
+                      <button type="button" onclick="chatEmojiPickerOpen=false; renderAppLayout();" class="text-slate-400 hover:text-slate-600 text-xs"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="grid grid-cols-8 gap-1">
+                      ${QUICK_CHAT_EMOJIS.map(em => `
+                        <button type="button" onclick="insertChatEmoji('${em}')" class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-base transition-transform hover:scale-110 cursor-pointer">${em}</button>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+
+                ${chatGifPickerOpen ? `
+                  <div class="absolute bottom-16 left-12 z-30 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 modal-card-anim">
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                      <span class="text-[10px] font-black uppercase text-purple-700"><i class="fa-solid fa-film text-purple-600 mr-1"></i>Send Celebration / Reaction GIF</span>
+                      <button type="button" onclick="chatGifPickerOpen=false; renderAppLayout();" class="text-slate-400 hover:text-slate-600 text-xs"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
+                      ${QUICK_CHAT_GIFS.map(gf => `
+                        <div onclick="sendQuickChatGif('${gf.url}', '${gf.title}')" class="group relative rounded-xl overflow-hidden border border-slate-200 hover:border-purple-500 cursor-pointer bg-slate-900 h-24">
+                          <img src="${gf.url}" alt="${gf.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform opacity-90 group-hover:opacity-100">
+                          <span class="absolute bottom-1 left-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-900/80 text-white text-[9px] font-black truncate">${gf.title}</span>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                ` : ''}
+
+                <form onsubmit="chatEmojiPickerOpen=false; chatGifPickerOpen=false; handleSendChatMessage(event)" class="p-3 flex items-center gap-2">
+                  <button type="button" onclick="toggleChatEmojiPicker(event)" title="Insert Emoji" class="w-10 h-10 rounded-xl ${chatEmojiPickerOpen ? 'bg-amber-500 text-white shadow' : 'bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200'} flex items-center justify-center text-base shrink-0 transition-colors cursor-pointer">
+                    <i class="fa-regular fa-face-smile"></i>
+                  </button>
+                  <button type="button" onclick="toggleChatGifPicker(event)" title="Send Reaction / Celebration GIF" class="h-10 px-2.5 rounded-xl ${chatGifPickerOpen ? 'bg-purple-600 text-white shadow' : 'bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200'} flex items-center justify-center text-[11px] font-black shrink-0 transition-colors cursor-pointer">
+                    GIF
+                  </button>
+                  <input type="text" id="chatComposerInput" autocomplete="off" placeholder="Write a message or pick Emoji / GIF to ${activeHeaderTitle}..." class="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white">
+                  <button type="submit" class="px-5 py-2.5 tab-active text-white rounded-2xl text-xs font-extrabold shadow-md flex items-center gap-2 shrink-0 cursor-pointer">
+                    <i class="fa-solid fa-paper-plane"></i> Send
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
         </div>
