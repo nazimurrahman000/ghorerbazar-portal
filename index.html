@@ -692,6 +692,30 @@
     let sprintTabPhase = 'AUTO'; // 'AUTO' | 'S1' | 'S2' | 'S3'
     let sprintTabTeamScope = 'ALL'; // 'ALL' | 'Team Nazim' | 'Team Samad'
 
+    // Sort Mode Selectors ('AUTO' | 'ACHIEVEMENT' | 'AMOUNT')
+    let floorRankingSortMode = 'AUTO';
+    let monthlyPerfSortMode = 'AUTO';
+    let sprintTabSortMode = 'AUTO';
+
+    function setFloorRankingSortMode(val) { floorRankingSortMode = val; renderAppLayout(); }
+    function setMonthlyPerfSortMode(val) { monthlyPerfSortMode = val; renderAppLayout(); }
+    function setSprintTabSortMode(val) { sprintTabSortMode = val; renderAppLayout(); }
+
+    function getEffectiveRankingSortBy() {
+      if (floorRankingSortMode === 'ACHIEVEMENT') return 'ACHIEVEMENT';
+      if (floorRankingSortMode === 'AMOUNT') return 'AMOUNT';
+      return activeChannel === 'ALL_CHANNELS' ? 'ACHIEVEMENT' : 'AMOUNT';
+    }
+    function getEffectiveMonthlyPerfSortBy() {
+      if (monthlyPerfSortMode === 'ACHIEVEMENT') return 'ACHIEVEMENT';
+      if (monthlyPerfSortMode === 'AMOUNT') return 'AMOUNT';
+      return activeChannel === 'ALL_CHANNELS' ? 'ACHIEVEMENT' : 'AMOUNT';
+    }
+    function getEffectiveSprintSortBy() {
+      if (sprintTabSortMode === 'AMOUNT') return 'AMOUNT';
+      return 'ACHIEVEMENT';
+    }
+
     let activityTeamFilter = 'ALL';
 
     let pollInterval = null;
@@ -4404,8 +4428,8 @@
                 </select>
               </div>
 
-              <button onclick="exportDriveProductCsv()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors" title="Download filtered Drive Product table as CSV">
-                <i class="fa-solid fa-file-csv"></i> Download CSV
+              <button onclick="exportDriveProductCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download filtered Drive Product table as CSV">
+                <i class="fa-solid fa-file-csv text-xs"></i> Download CSV
               </button>
 
               ${hasFeatureAccess(u, 'feat_edit_products') ? `
@@ -4614,8 +4638,14 @@
         totBase += baseTgt; totWork += workTgt; totLeads += leads; totOrders += orders; totRev += rev;
         prodKeys.forEach(k => { grandProds[k] = Number(((grandProds[k] || 0) + (dpStats.prodKg[k] || 0)).toFixed(2)); });
 
-        return { ag, baseTgt, workTgt, leads, orders, conv, rev, rem, achPct, prodKg: dpStats.prodKg };
-      }).sort((a, b) => b.rev - a.rev);
+        const exactPct = workTgt > 0 ? (rev / workTgt) * 100 : 0;
+        return { ag, baseTgt, workTgt, leads, orders, conv, rev, rem, achPct, exactPct, prodKg: dpStats.prodKg };
+      }).sort((a, b) => {
+        if (getEffectiveMonthlyPerfSortBy() === 'ACHIEVEMENT') {
+          return b.exactPct - a.exactPct || b.rev - a.rev;
+        }
+        return b.rev - a.rev || b.exactPct - a.exactPct;
+      });
 
       const csvRows = agentRows.map((r, idx) => [
         idx + 1, r.ag.id, r.ag.name, r.ag.team, r.ag.grade,
@@ -4800,10 +4830,10 @@
                 <button
                   type="button"
                   onclick="exportDateWiseSummaryCsv('${scopeKey}')"
-                  class="px-3 py-1.5 rounded-xl bg-white text-slate-900 hover:bg-emerald-50 hover:text-emerald-700 text-[11px] font-black shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+                  class="h-7 px-2.5 rounded-lg bg-white text-slate-900 hover:bg-emerald-50 hover:text-emerald-700 text-[10px] font-black shadow-2xs inline-flex items-center gap-1 transition-colors cursor-pointer"
                   title="Download only this table as a CSV spreadsheet"
                 >
-                  <i class="fa-solid fa-file-csv text-emerald-600 text-xs"></i> Download CSV
+                  <i class="fa-solid fa-file-csv text-emerald-600 text-[11px]"></i> Download CSV
                 </button>
               </div>
             </div>
@@ -4958,11 +4988,17 @@
         totOrders += orders;
         totRev += rev;
 
+        const exactPct = workTgt > 0 ? (rev / workTgt) * 100 : 0;
         return {
-          ...ag, baseTgt, workTgt, leads, orders, rev, conv, rem, achPct,
+          ...ag, baseTgt, workTgt, leads, orders, rev, conv, rem, achPct, exactPct,
           ...agProdTotals, daysCount: uniqueDailyLogs.length, dailyLogs: uniqueDailyLogs
         };
-      }).sort((a, b) => b.rev - a.rev || b.achPct - a.achPct);
+      }).sort((a, b) => {
+        if (getEffectiveMonthlyPerfSortBy() === 'ACHIEVEMENT') {
+          return b.exactPct - a.exactPct || b.rev - a.rev;
+        }
+        return b.rev - a.rev || b.exactPct - a.exactPct;
+      });
 
       const totConv = totLeads > 0 ? ((totOrders / totLeads) * 100).toFixed(2) : '0.00';
       const totRem = Math.max(0, totWork - totRev);
@@ -4984,16 +5020,25 @@
                 </p>
               </div>
               ${!canViewAll(u) ? `
-              <button onclick="exportMonthlyPerformanceCsv()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
-                <i class="fa-solid fa-file-csv"></i> Download CSV
+              <button onclick="exportMonthlyPerformanceCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-file-csv text-xs"></i> CSV
               </button>
               ` : ''}
             </div>
 
             ${canViewAll(u) ? `
-            <div class="flex flex-wrap items-center gap-2.5">
-              <button onclick="exportMonthlyPerformanceCsv()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5 transition-colors" title="Download currently filtered Monthly Performance data as CSV">
-                <i class="fa-solid fa-file-csv"></i> Download CSV
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl" title="Choose sorting order for table & CSV download">
+                <i class="fa-solid fa-arrow-down-wide-short text-indigo-600 text-[11px]"></i>
+                <span class="text-[10px] font-extrabold uppercase text-slate-400">Sort:</span>
+                <select onchange="setMonthlyPerfSortMode(this.value)" class="bg-transparent text-[11px] font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                  <option value="AUTO" ${monthlyPerfSortMode === 'AUTO' ? 'selected' : ''}>Default (${activeChannel === 'ALL_CHANNELS' ? 'Achievement %' : 'Sales Amount'})</option>
+                  <option value="ACHIEVEMENT" ${monthlyPerfSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Achievement % Wise</option>
+                  <option value="AMOUNT" ${monthlyPerfSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
+                </select>
+              </div>
+              <button onclick="exportMonthlyPerformanceCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download currently sorted & filtered Monthly Performance data as CSV">
+                <i class="fa-solid fa-file-csv text-xs"></i> Download CSV
               </button>
               ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
               <button onclick="openAiImportModal()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2 transition-colors">
@@ -6946,8 +6991,12 @@
         return {
           ag, workTgt, curGoal, curSales, curRem, curPct, activeSprintOrders, activeSprintLeads, convRatio
         };
-      // Sort strictly by Achievement % (Highest to Lowest), then by Sales Amount
-      }).sort((a, b) => b.curPct - a.curPct || b.curSales - a.curSales);
+      }).sort((a, b) => {
+        if (getEffectiveSprintSortBy() === 'AMOUNT') {
+          return b.curSales - a.curSales || b.curPct - a.curPct;
+        }
+        return b.curPct - a.curPct || b.curSales - a.curSales;
+      });
 
       // Export ONLY the selected Sprint's columns (no other sprints mixed in!)
       const headers = [
@@ -7065,7 +7114,12 @@
           ...ag, workTgt, s1Goal, s1Sales, s1Pct, s2Goal, s2Sales, s2Pct, s3Goal, s3Sales, s3Pct,
           curGoal, curSales, curRem, curPct, sprintOrders, sprintLeads, conv
         };
-      }).sort((a, b) => b.curPct - a.curPct || b.curSales - a.curSales);
+      }).sort((a, b) => {
+        if (getEffectiveSprintSortBy() === 'AMOUNT') {
+          return b.curSales - a.curSales || b.curPct - a.curPct;
+        }
+        return b.curPct - a.curPct || b.curSales - a.curSales;
+      });
 
       const mySprintRankIdx = u.role === 'agent'
         ? rankedSprintAgents.findIndex(a => String(a.id) === String(u.id))
@@ -7134,8 +7188,17 @@
                 ${getActiveChannelMeta().teams.map(tn => `<button onclick="setSprintTabTeam('${tn}')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>`).join('')}
               </div>
 
-              <button onclick="exportSprintTargetCsv()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
-                <i class="fa-solid fa-file-csv"></i> Download CSV
+              <div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl" title="Choose sorting order for Sprint table & CSV download">
+                <i class="fa-solid fa-arrow-down-wide-short text-blue-600 text-[11px]"></i>
+                <span class="text-[10px] font-extrabold uppercase text-slate-400">Sort:</span>
+                <select onchange="setSprintTabSortMode(this.value)" class="bg-transparent text-[11px] font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                  <option value="AUTO" ${sprintTabSortMode === 'AUTO' ? 'selected' : ''}>Default (Achievement %)</option>
+                  <option value="ACHIEVEMENT" ${sprintTabSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Achievement % Wise</option>
+                  <option value="AMOUNT" ${sprintTabSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
+                </select>
+              </div>
+              <button onclick="exportSprintTargetCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+                <i class="fa-solid fa-file-csv text-xs"></i> Download CSV
               </button>
             </div>
           </div>
@@ -7323,7 +7386,54 @@
       `;
     }
 
-    function renderRankingAndComparison() {
+        function exportOverallFloorRankingCsv() {
+      const monthUsersAll = getUsersForMonth(selectedMonthKey);
+      const allUsers = monthUsersAll.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u));
+      const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+      const monthSales = allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+      const effSort = getEffectiveRankingSortBy();
+
+      const rankedAgents = allUsers.map(ag => {
+        const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+        const leads = agSales.reduce((s, c) => s + Number(c.leads || 0), 0);
+        const orders = agSales.reduce((s, c) => s + Number(c.orders || 0), 0);
+        const revenue = agSales.reduce((s, c) => s + Number(c.amount || 0), 0);
+        const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) + '%' : '0.00%';
+        const workTgt = calcWorkingTargetFromBase((ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174, ag.team);
+        const exactPct = workTgt > 0 ? (revenue / workTgt) * 100 : 0;
+        const pctDisplay = exactPct.toFixed(1) + '%';
+        return { ag, leads, orders, revenue, conv, workTgt, exactPct, pctDisplay };
+      }).sort((a, b) => {
+        if (effSort === 'ACHIEVEMENT') {
+          return b.exactPct - a.exactPct || b.revenue - a.revenue || b.orders - a.orders;
+        }
+        return b.revenue - a.revenue || b.exactPct - a.exactPct || b.orders - a.orders;
+      });
+
+      const headers = [
+        'Rank', 'Emp ID', 'Agent Name', 'Team', 'Grade',
+        'Achievement Ratio (%)', 'Achieved Revenue (BDT)', 'Working Target (+5% BDT)',
+        'Total Leads', 'Total Orders', 'Conversion Ratio (%)'
+      ];
+      const rows = rankedAgents.map((r, idx) => [
+        idx + 1,
+        r.ag.id,
+        r.ag.name,
+        r.ag.team,
+        r.ag.grade,
+        r.pctDisplay,
+        r.revenue,
+        r.workTgt,
+        r.leads,
+        r.orders,
+        r.conv
+      ]);
+      const safeMonth = selectedMonthKey.replace('/', '-');
+      const chSlug = getActiveChannelMeta().name.replace(/\s+/g, '_');
+      downloadPortalCsvFile(`Floor_Ranking_${chSlug}_${effSort}_Wise_${safeMonth}.csv`, headers, rows);
+    }
+
+function renderRankingAndComparison() {
       const monthUsersAll = getUsersForMonth(selectedMonthKey);
       const allUsers = monthUsersAll.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u));
       const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
@@ -7370,9 +7480,8 @@
         const pctDisplay = exactPct.toFixed(1);
         return { ...ag, leads, orders, revenue, conv, workTgt, exactPct, pct, pctDisplay };
       }).sort((a, b) => {
-        // In All Channels mode, targets differ between Facebook & WhatsApp, so rank by Achievement Ratio (%) first!
-        // In single-channel mode (Facebook only or WhatsApp only), rank by Sales Amount (Revenue) first!
-        if (activeChannel === 'ALL_CHANNELS') {
+        const effSort = getEffectiveRankingSortBy();
+        if (effSort === 'ACHIEVEMENT') {
           return b.exactPct - a.exactPct || b.revenue - a.revenue || b.orders - a.orders;
         }
         return b.revenue - a.revenue || b.exactPct - a.exactPct || b.orders - a.orders;
@@ -7476,27 +7585,41 @@
           </div>
 
           <div>
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 bg-white p-4 rounded-2xl border border-slate-200">
+            <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4 bg-white p-4 rounded-2xl border border-slate-200">
               <div>
                 <div class="flex flex-wrap items-center gap-2">
                   <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase ${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}">
-                    ${activeChannel === 'ALL_CHANNELS' ? 'Ranked by Target Achievement Ratio (%)' : 'Ranked by Achieved Sales Revenue (৳)'}
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}">
+                    ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'Sorted by Target Achievement Ratio (%)' : 'Sorted by Achieved Sales Revenue (৳)'}
                   </span>
                 </div>
                 <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  ${activeChannel === 'ALL_CHANNELS'
-                    ? `Fair cross-channel leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Agents) — sorted by <strong>Target Achievement %</strong> since Facebook & WhatsApp have different grade targets`
-                    : `Channel leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Agents) — sorted by <strong>Achieved Sales Revenue (৳)</strong>`
-                  }
+                  Leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Agents) — use the Sort dropdown to switch between <strong>Achievement % Wise</strong> and <strong>Amount Wise</strong> anytime.
                 </p>
               </div>
-              ${myRankNum ? `
-              <div class="px-4 py-2 rounded-2xl my-rank-name-pill flex items-center gap-2.5 text-xs font-black">
-                <i class="fa-solid fa-star text-amber-300 animate-spin"></i>
-                <span>Your Current Floor Position: <strong class="text-amber-300 text-sm">#${myRankNum} (${getOrdinal(myRankNum)} Place)</strong></span>
+
+              <div class="flex flex-wrap items-center gap-2">
+                ${myRankNum ? `
+                <div class="h-8 px-3 rounded-xl my-rank-name-pill inline-flex items-center gap-2 text-[11px] font-black">
+                  <i class="fa-solid fa-star text-amber-300 animate-spin text-[10px]"></i>
+                  <span>Your Rank: <strong class="text-amber-300">#${myRankNum} (${getOrdinal(myRankNum)})</strong></span>
+                </div>
+                ` : ''}
+
+                <div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl" title="Switch ranking sort order between Achievement % and Sales Amount">
+                  <i class="fa-solid fa-arrow-down-wide-short text-purple-600 text-[11px]"></i>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400">Sort By:</span>
+                  <select onchange="setFloorRankingSortMode(this.value)" class="bg-transparent text-[11px] font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                    <option value="AUTO" ${floorRankingSortMode === 'AUTO' ? 'selected' : ''}>Default (${activeChannel === 'ALL_CHANNELS' ? 'Achievement %' : 'Sales Amount'})</option>
+                    <option value="ACHIEVEMENT" ${floorRankingSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Achievement % Wise</option>
+                    <option value="AMOUNT" ${floorRankingSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
+                  </select>
+                </div>
+
+                <button type="button" onclick="exportOverallFloorRankingCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download Floor Ranking CSV according to selected Sort order">
+                  <i class="fa-solid fa-file-csv text-xs"></i> Download CSV
+                </button>
               </div>
-              ` : ''}
             </div>
 
             <div class="card-dynamic overflow-hidden overflow-x-auto">
@@ -7508,12 +7631,13 @@
                     <th class="p-3.5">Live Status</th>
                     <th class="p-3.5">Team</th>
                     <th class="p-3.5 text-center">Grade</th>
+                    ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? `<th class="p-3.5 bg-purple-50 text-purple-900 border-x border-purple-200">Achievement % (Rank Basis)</th>` : ''}
+                    <th class="p-3.5">Achieved Revenue</th>
+                    <th class="p-3.5">Working Target (+5%)</th>
+                    ${getEffectiveRankingSortBy() !== 'ACHIEVEMENT' ? `<th class="p-3.5">Achievement %</th>` : ''}
                     <th class="p-3.5 text-center">Total Leads</th>
                     <th class="p-3.5 text-center">Total Orders</th>
                     <th class="p-3.5 text-center">Conv. Ratio</th>
-                    <th class="p-3.5">Working Target (+5%)</th>
-                    <th class="p-3.5">Achieved Revenue</th>
-                    <th class="p-3.5">Achievement</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100 font-semibold">
@@ -7541,17 +7665,27 @@
                       <td class="p-3.5">${renderOnlineStatusBadge(ag.id)}</td>
                       <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(ag.team)}">${ag.team}</span></td>
                       <td class="p-3.5 text-center font-black text-slate-700">${ag.grade}</td>
+                      ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? `
+                      <td class="p-3.5 bg-purple-50/50 border-x border-purple-100">
+                        <div class="flex items-center gap-2">
+                          <span class="px-2 py-0.5 rounded-md bg-purple-600 text-white font-black text-xs shadow-2xs">${ag.pctDisplay}%</span>
+                          <div class="w-16 progress-track h-2 bg-purple-200/70"><div class="bg-purple-600 h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
+                        </div>
+                      </td>
+                      ` : ''}
+                      <td class="p-3.5 font-black text-emerald-600 text-sm">৳${ag.revenue.toLocaleString()}</td>
+                      <td class="p-3.5 font-bold text-slate-600">৳${ag.workTgt.toLocaleString()}</td>
+                      ${getEffectiveRankingSortBy() !== 'ACHIEVEMENT' ? `
+                      <td class="p-3.5">
+                        <div class="flex items-center gap-2">
+                          <span class="font-black text-slate-800">${ag.pctDisplay}%</span>
+                          <div class="w-16 progress-track h-2"><div class="bg-blue-600 h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
+                        </div>
+                      </td>
+                      ` : ''}
                       <td class="p-3.5 text-center font-bold text-slate-700">${ag.leads.toLocaleString()}</td>
                       <td class="p-3.5 text-center font-black text-blue-600">${ag.orders.toLocaleString()}</td>
                       <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-extrabold">${ag.conv}%</span></td>
-                      <td class="p-3.5 font-bold text-slate-600">৳${ag.workTgt.toLocaleString()}</td>
-                      <td class="p-3.5 font-black text-emerald-600 text-sm">৳${ag.revenue.toLocaleString()}</td>
-                      <td class="p-3.5">
-                        <div class="flex items-center gap-2">
-                          <span class="font-black ${activeChannel === 'ALL_CHANNELS' ? 'text-purple-700 text-sm' : 'text-slate-800'}">${ag.pctDisplay}%</span>
-                          <div class="w-16 progress-track h-2"><div class="${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-600' : 'bg-blue-600'} h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
-                        </div>
-                      </td>
                     </tr>`;
                   }).join('')}
                 </tbody>
@@ -10449,14 +10583,14 @@
 
       return `
         <div class="relative" id="bellNotificationWrapper">
-          <button type="button" onclick="toggleBellNotificationDropdown(event)" title="${isAdminOrSup ? 'Live Agent Login, Logout & Data Activity Notifications' : 'Notifications & Duty Reminders'}" class="w-10 h-10 rounded-xl ${unreadCount > 0 ? 'bg-blue-50 border border-blue-200 text-blue-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} flex items-center justify-center relative transition-colors">
-            <i class="fa-solid fa-bell text-sm ${unreadCount > 0 ? 'bell-ring' : ''}"></i>
-            <span id="headerBellUnreadDot" class="${unreadCount > 0 ? 'flex' : 'hidden'} absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-red-600 text-white text-[10px] font-black rounded-full items-center justify-center shadow-md ring-2 ring-white">
+          <button type="button" onclick="toggleBellNotificationDropdown(event)" title="${isAdminOrSup ? 'Live Agent Login, Logout & Data Activity Notifications' : 'Notifications & Duty Reminders'}" class="w-8 h-8 rounded-xl ${unreadCount > 0 ? 'bg-blue-50 border border-blue-200 text-blue-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} flex items-center justify-center relative transition-colors cursor-pointer shrink-0">
+            <i class="fa-solid fa-bell text-xs ${unreadCount > 0 ? 'bell-ring' : ''}"></i>
+            <span id="headerBellUnreadDot" class="${unreadCount > 0 ? 'flex' : 'hidden'} absolute -top-1 -right-1 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[9px] font-black rounded-full items-center justify-center shadow-md ring-2 ring-white">
               ${unreadCount}
             </span>
           </button>
 
-          <div id="notificationDropdownMenu" class="${notificationDropdownOpen ? '' : 'hidden'} absolute right-0 mt-2.5 w-80 sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+          <div id="notificationDropdownMenu" class="${notificationDropdownOpen ? '' : 'hidden'} fixed right-4 sm:right-24 top-14 w-80 sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-[85] overflow-hidden modal-card-anim">
             <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <i class="fa-solid fa-bell text-amber-400 text-xs"></i>
@@ -10538,6 +10672,7 @@
       if (e) e.stopPropagation();
       notificationDropdownOpen = !notificationDropdownOpen;
       if (notificationDropdownOpen) {
+        profileMenuDropdownOpen = false;
         const myNotifs = getNotificationsForCurrentUser().map(n => ({ ...n, read: true }));
         saveNotificationsForCurrentUser(myNotifs);
       }
