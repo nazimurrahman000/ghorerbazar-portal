@@ -757,7 +757,7 @@
     // =========================================================================
     const PORTAL_FEATURES_CATALOG = [
       // Section 1: Sidebar Navigation Tabs
-      { key: 'tab_dashboard', category: 'Sidebar Tabs', label: 'Dashboard & Targets Tab', desc: 'View main KPI cards, sprint progress & product targets', icon: 'fa-gauge-high', color: 'text-blue-600' },
+      { key: 'tab_dashboard', category: 'Sidebar Tabs', label: 'Dashboard Tab', desc: 'View main KPI cards, sprint progress & product targets', icon: 'fa-gauge-high', color: 'text-blue-600' },
       { key: 'tab_monthly_perf', category: 'Sidebar Tabs', label: 'Monthly Performance Tab', desc: 'View monthly performance summary & date-wise breakdown', icon: 'fa-chart-column', color: 'text-purple-600' },
       { key: 'tab_sprint_target', category: 'Sidebar Tabs', label: 'Sprint Target Tab', desc: 'View live 10-day Sprint leaderboard, agent sprint goals & TL 80%/100% milestones', icon: 'fa-bolt', color: 'text-blue-600' },
       { key: 'tab_drive_product', category: 'Sidebar Tabs', label: 'Drive Product Tab', desc: 'View all agents Drive Product KG targets, achieved quantities & date-wise submissions', icon: 'fa-box-open', color: 'text-amber-500' },
@@ -2230,10 +2230,13 @@
           const cldHub = res.monthlyConfigs['CHAT_AND_NOTICES'] || {};
 
           const msgMap = new Map();
+          const nowMergeMs = Date.now();
           (Array.isArray(cldHub.messages) ? cldHub.messages : []).forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
           (Array.isArray(locHub.messages) ? locHub.messages : []).forEach(m => {
-            if (m && m.id && !msgMap.has(m.id) && (Date.now() - Number(m.ts || 0) < 20000)) {
-              msgMap.set(m.id, m);
+            if (!m || !m.id) return;
+            const sentRef = Number(m.localSentAt || m.ts || 0);
+            if (!msgMap.has(m.id) && (nowMergeMs - sentRef < 90000)) {
+              msgMap.set(m.id, { ...m, localSentAt: sentRef || nowMergeMs });
             }
           });
           const mergedMsgs = Array.from(msgMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-220);
@@ -2610,7 +2613,7 @@
               <nav class="space-y-1">
                 ${hasFeatureAccess(u, 'tab_dashboard') ? `
                 <button onclick="setTab('dashboard')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'dashboard' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard & Targets
+                  <i class="fa-solid fa-gauge-high text-sm"></i> Dashboard
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_monthly_perf') ? `
@@ -4187,8 +4190,9 @@
     // =========================================================================
     // LIVE AGENT SEARCH FILTER FOR MODALS & DROPDOWNS
     // =========================================================================
-        function getEditableSalesAgentsForActor(mKey) {
+    function getEditableSalesAgentsForActor(mKey) {
       const mk = mKey || selectedMonthKey;
+      const myTeamNorm = currentUser ? normalizeTeamNameAlias(currentUser.team) : '';
       const channelAgents = getUsersForMonth(mk, false).filter(u => u.role === 'agent');
       const allFloatingAgents = getUsersForMonth(mk, true).filter(u => u.role === 'agent' && isPendingOrFloatingAgent(u));
       const map = new Map();
@@ -4196,26 +4200,49 @@
       allFloatingAgents.forEach(a => {
         if (!map.has(String(a.id))) map.set(String(a.id), a);
       });
-      // Sort so active channel's agents appear first, followed by Floating/Unassigned agents clearly badged
+      // Sort so the logged-in TL's OWN team agents appear FIRST, then other channel teams, then Floating/Pending agents
       return Array.from(map.values()).sort((a, b) => {
-        const aFloat = isPendingOrFloatingAgent(a) ? 1 : 0;
-        const bFloat = isPendingOrFloatingAgent(b) ? 1 : 0;
-        return aFloat - bFloat;
+        const aRank = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : (isPendingOrFloatingAgent(a) ? 2 : 1);
+        const bRank = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : (isPendingOrFloatingAgent(b) ? 2 : 1);
+        return aRank - bRank;
       });
     }
 
-function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
+    function getDefaultModalTeamFilterForActor() {
+      if (!currentUser) return 'ALL';
+      const myTeam = normalizeTeamNameAlias(currentUser.team);
+      const chTeams = getActiveChannelMeta().teams;
+      if ((currentUser.role === 'admin' || currentUser.role === 'agent') && chTeams.includes(myTeam)) {
+        return myTeam;
+      }
+      return 'ALL';
+    }
+
+    function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName, teamSelectElId) {
       const q = (document.getElementById(searchInputId)?.value || '').trim().toLowerCase();
+      const teamFilterVal = teamSelectElId ? (document.getElementById(teamSelectElId)?.value || 'ALL') : 'ALL';
       const sel = document.getElementById(selectElId);
       if (!sel) return;
       const allAgents = getEditableSalesAgentsForActor(selectedMonthKey);
       const prevVal = sel.value;
-      const matched = !q
+
+      // If user types a search query, search across all editable agents; otherwise filter by the selected Team in the modal!
+      const teamScopedAgents = (q || teamFilterVal === 'ALL')
         ? allAgents
-        : allAgents.filter(a => String(a.name || '').toLowerCase().includes(q) || String(a.id || '').toLowerCase().includes(q) || String(a.team || '').toLowerCase().includes(q));
+        : allAgents.filter(a => {
+            if (teamFilterVal === 'FLOATING_POOL') return isPendingOrFloatingAgent(a);
+            return normalizeTeamNameAlias(a.team) === normalizeTeamNameAlias(teamFilterVal);
+          });
+
+      const matched = !q
+        ? teamScopedAgents
+        : teamScopedAgents.filter(a => String(a.name || '').toLowerCase().includes(q) || String(a.id || '').toLowerCase().includes(q) || String(a.team || '').toLowerCase().includes(q));
+
+      const countBadgeEl = document.getElementById(selectElId + '_countBadge');
+      if (countBadgeEl) countBadgeEl.textContent = `${matched.length} Agent(s)`;
 
       if (matched.length === 0) {
-        sel.innerHTML = `<option value="">No agent found matching "${q}"</option>`;
+        sel.innerHTML = `<option value="">No agent found</option>`;
         return;
       }
       sel.innerHTML = matched.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${isPendingOrFloatingAgent(a) ? '🟣 Floating / Pending' : a.team})</option>`).join('');
@@ -4248,18 +4275,30 @@ function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
             </div>
 
             <form onsubmit="handleSaveDriveProductTotal(event)" class="space-y-4">
-              <div class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'} space-y-1.5">
-                <div class="flex items-center justify-between">
-                  <label class="block text-xs font-extrabold text-slate-600 uppercase">Select Agent (${allAgents.length} Agents)</label>
-                  <span class="text-[10px] font-bold text-amber-600"><i class="fa-solid fa-magnifying-glass mr-1"></i>Search by Name or ID</span>
+              <div class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'} space-y-2 p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1"><i class="fa-solid fa-users-line text-amber-600 mr-1"></i>1. Select Team</label>
+                    <select id="dpModalTeamFilter" onchange="filterAgentSelectBySearch('dpAgentSearchInput', 'dpModalAgentId', 'onDriveProdModalAgentChange', 'dpModalTeamFilter')" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${tn === getDefaultModalTeamFilterForActor() ? 'selected' : ''}>${tn} ${normalizeTeamNameAlias(u?.team) === tn ? '(My Team)' : ''}</option>`).join('')}
+                      <option value="FLOATING_POOL">🟣 Floating / Pending Pool</option>
+                      <option value="ALL" ${getDefaultModalTeamFilterForActor() === 'ALL' ? 'selected' : ''}>All Channel Teams (${allAgents.length})</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1"><i class="fa-solid fa-magnifying-glass text-amber-600 mr-1"></i>Or Search Any Agent</label>
+                    <input type="text" id="dpAgentSearchInput" oninput="filterAgentSelectBySearch('dpAgentSearchInput', 'dpModalAgentId', 'onDriveProdModalAgentChange', 'dpModalTeamFilter')" placeholder="Type Name or ID..." class="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                  </div>
                 </div>
-                <div class="relative">
-                  <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
-                  <input type="text" id="dpAgentSearchInput" oninput="filterAgentSelectBySearch('dpAgentSearchInput', 'dpModalAgentId', 'onDriveProdModalAgentChange')" placeholder="Search agent by name or ID..." class="w-full pl-9 pr-3.5 py-2 bg-amber-50/50 border border-amber-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase">2. Select Agent Name</label>
+                    <span id="dpModalAgentId_countBadge" class="text-[10px] font-black text-amber-700"></span>
+                  </div>
+                  <select id="dpModalAgentId" onchange="onDriveProdModalAgentChange()" class="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900 cursor-pointer">
+                    ${allAgents.map(ag => `<option value="${ag.id}">${ag.name} (${ag.id} • ${isPendingOrFloatingAgent(ag) ? '🟣 Floating / Pending' : ag.team})</option>`).join('')}
+                  </select>
                 </div>
-                <select id="dpModalAgentId" onchange="onDriveProdModalAgentChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900">
-                  ${allAgents.map(ag => `<option value="${ag.id}">${ag.name} (${ag.id} • ${isPendingOrFloatingAgent(ag) ? '🟣 Floating / Pending' : ag.team})</option>`).join('')}
-                </select>
               </div>
 
               <!-- Date Range Selection (From Date -> To Date) -->
@@ -4308,9 +4347,28 @@ function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
 
     function openDriveProductModal(agentId) {
       if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+      const teamFilterEl = document.getElementById('dpModalTeamFilter');
+      const searchEl = document.getElementById('dpAgentSearchInput');
+      if (searchEl) searchEl.value = '';
+
+      const allEditable = getEditableSalesAgentsForActor(selectedMonthKey);
+      let targetAgentObj = null;
+      if (hasFeatureAccess(currentUser, 'feat_manage_all_sales') && agentId) {
+        targetAgentObj = allEditable.find(a => String(a.id) === String(agentId));
+      }
+      if (teamFilterEl) {
+        if (targetAgentObj) {
+          teamFilterEl.value = isPendingOrFloatingAgent(targetAgentObj) ? 'FLOATING_POOL' : normalizeTeamNameAlias(targetAgentObj.team);
+        } else {
+          teamFilterEl.value = getDefaultModalTeamFilterForActor();
+        }
+      }
+      filterAgentSelectBySearch('dpAgentSearchInput', 'dpModalAgentId', null, 'dpModalTeamFilter');
+
       const selEl = document.getElementById('dpModalAgentId');
-      const targetId = (hasFeatureAccess(currentUser, 'feat_manage_all_sales') && agentId) ? agentId : currentUser.id;
-      if (selEl && targetId) selEl.value = targetId;
+      if (selEl && targetAgentObj) {
+        selEl.value = targetAgentObj.id;
+      }
 
       const fromEl = document.getElementById('dpFromDate');
       const toEl = document.getElementById('dpToDate');
@@ -8690,18 +8748,30 @@ function renderRankingAndComparison() {
             </div>
 
             <form onsubmit="handleSalesSubmit(event)" class="space-y-4">
-              <div id="agentSelectContainer" class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'} space-y-1.5">
-                <div class="flex items-center justify-between">
-                  <label class="block text-xs font-extrabold text-slate-600 uppercase">Select Agent (${allAgents.length} Agents)</label>
-                  <span class="text-[10px] font-bold text-orange-600"><i class="fa-solid fa-magnifying-glass mr-1"></i>Search by Name or ID</span>
+              <div id="agentSelectContainer" class="${hasFeatureAccess(u, 'feat_manage_all_sales') ? '' : 'hidden'} space-y-2 p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1"><i class="fa-solid fa-users-line text-orange-600 mr-1"></i>1. Select Team</label>
+                    <select id="subModalTeamFilter" onchange="filterAgentSelectBySearch('subAgentSearchInput', 'subAgentId', 'onModalChange', 'subModalTeamFilter')" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${tn === getDefaultModalTeamFilterForActor() ? 'selected' : ''}>${tn} ${normalizeTeamNameAlias(u?.team) === tn ? '(My Team)' : ''}</option>`).join('')}
+                      <option value="FLOATING_POOL">🟣 Floating / Pending Pool</option>
+                      <option value="ALL" ${getDefaultModalTeamFilterForActor() === 'ALL' ? 'selected' : ''}>All Channel Teams (${allAgents.length})</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1"><i class="fa-solid fa-magnifying-glass text-orange-600 mr-1"></i>Or Search Any Agent</label>
+                    <input type="text" id="subAgentSearchInput" oninput="filterAgentSelectBySearch('subAgentSearchInput', 'subAgentId', 'onModalChange', 'subModalTeamFilter')" placeholder="Type Name or ID..." class="w-full px-3 py-2 bg-white border border-orange-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                  </div>
                 </div>
-                <div class="relative">
-                  <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs absolute left-3.5 top-1/2 -translate-y-1/2"></i>
-                  <input type="text" id="subAgentSearchInput" oninput="filterAgentSelectBySearch('subAgentSearchInput', 'subAgentId', 'onModalChange')" placeholder="Type agent name or ID (e.g. 10191, Shagor, Rafi)..." class="w-full pl-9 pr-3.5 py-2 bg-orange-50/50 border border-orange-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase">2. Select Agent Name</label>
+                    <span id="subAgentId_countBadge" class="text-[10px] font-black text-orange-700"></span>
+                  </div>
+                  <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800 cursor-pointer">
+                    ${allAgents.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id} • ${isPendingOrFloatingAgent(usr) ? '🟣 Floating / Pending' : usr.team})</option>`).join('')}
+                  </select>
                 </div>
-                <select id="subAgentId" onchange="onModalChange()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-800">
-                  ${allAgents.map(usr => `<option value="${usr.id}">${usr.name} (${usr.id} • ${isPendingOrFloatingAgent(usr) ? '🟣 Floating / Pending' : usr.team})</option>`).join('')}
-                </select>
               </div>
 
               <div>
@@ -9084,9 +9154,23 @@ function renderRankingAndComparison() {
       if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales') && !hasFeatureAccess(currentUser, 'feat_submit_own_sales')) return;
       let resolvedAgentId = currentUser ? currentUser.id : null;
       if (hasFeatureAccess(currentUser, 'feat_manage_all_sales')) {
-        const selEl = document.getElementById('subAgentId');
+        const teamFilterEl = document.getElementById('subModalTeamFilter');
+        const searchEl = document.getElementById('subAgentSearchInput');
+        if (searchEl) searchEl.value = '';
+
         const allAg = getEditableSalesAgentsForActor(selectedMonthKey);
-        const preferredId = agentId || lastSelectedAgentId || (allAg[0] && allAg[0].id);
+        const targetAgObj = agentId ? allAg.find(a => String(a.id) === String(agentId)) : null;
+        if (teamFilterEl) {
+          if (targetAgObj) {
+            teamFilterEl.value = isPendingOrFloatingAgent(targetAgObj) ? 'FLOATING_POOL' : normalizeTeamNameAlias(targetAgObj.team);
+          } else {
+            teamFilterEl.value = getDefaultModalTeamFilterForActor();
+          }
+        }
+        filterAgentSelectBySearch('subAgentSearchInput', 'subAgentId', null, 'subModalTeamFilter');
+
+        const selEl = document.getElementById('subAgentId');
+        const preferredId = (targetAgObj && targetAgObj.id) || (selEl && selEl.value) || (allAg[0] && allAg[0].id);
         if (selEl && preferredId) {
           selEl.value = preferredId;
           lastSelectedAgentId = preferredId;
@@ -11738,8 +11822,10 @@ function renderRankingAndComparison() {
         text: textVal,
         date: getTodayFormatted(),
         time: getNowTimeStr(),
-        ts: nowTs
+        ts: nowTs,
+        localSentAt: nowTs
       };
+      markLocalUserOrConfigMutatedNow();
 
       hub.messages.push(newMsg);
       if (!hub.readReceipts) hub.readReceipts = {};
