@@ -1103,24 +1103,21 @@
       const borderCol = isErr ? 'border-rose-400/90' : (isWarn ? 'border-amber-400/90' : 'border-emerald-400/90');
       const iconBg = isErr ? 'bg-rose-600' : (isWarn ? 'bg-amber-500' : 'bg-emerald-600');
       const iconCls = isErr ? 'fa-circle-exclamation' : (isWarn ? 'fa-triangle-exclamation' : 'fa-circle-check');
-      const badgeBg = isErr ? 'bg-rose-500/20 text-rose-300' : (isWarn ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300');
-      const badgeTxt = isErr ? 'Action Blocked' : (isWarn ? 'Notice' : 'Synced Instantly');
 
       const toast = document.createElement('div');
-      toast.className = `toast-popup-anim bg-slate-900/95 backdrop-blur-md text-white p-4 rounded-2xl shadow-2xl border-2 ${borderCol} flex items-start gap-3.5 w-80 sm:w-96 pointer-events-auto`;
+      toast.className = `toast-popup-anim bg-slate-900/95 backdrop-blur-md text-white px-3 py-2 rounded-xl shadow-lg border ${borderCol} flex items-center gap-2.5 w-64 sm:w-72 pointer-events-auto`;
       toast.innerHTML = `
-        <div class="w-10 h-10 rounded-xl ${iconBg} text-white flex items-center justify-center text-base shrink-0 shadow-md">
+        <div class="w-6 h-6 rounded-lg ${iconBg} text-white flex items-center justify-center text-xs shrink-0 shadow-xs">
           <i class="fa-solid ${iconCls}"></i>
         </div>
         <div class="flex-1 min-w-0">
-          <div class="flex items-center justify-between gap-2">
-            <span class="px-2 py-0.5 rounded ${badgeBg} text-[9px] font-black uppercase tracking-wider">${badgeTxt}</span>
-            <span class="text-[10px] font-bold text-slate-400">${getNowTimeStr()}</span>
+          <div class="flex items-center justify-between gap-1">
+            <h4 class="text-[11px] font-black text-white truncate">${title}</h4>
+            <span class="text-[9px] font-bold text-slate-400 shrink-0">${getNowTimeStr()}</span>
           </div>
-          <h4 class="text-sm font-black text-white mt-1 leading-tight">${title}</h4>
-          <p class="text-xs font-semibold text-slate-300 mt-0.5 leading-snug">${message}</p>
+          <p class="text-[10px] font-semibold text-slate-300 line-clamp-2 leading-tight mt-0.5">${message}</p>
         </div>
-        <button type="button" onclick="this.closest('.toast-popup-anim').remove()" class="text-slate-400 hover:text-white">
+        <button type="button" onclick="this.closest('.toast-popup-anim').remove()" class="text-slate-400 hover:text-white text-xs shrink-0">
           <i class="fa-solid fa-xmark"></i>
         </button>
       `;
@@ -1128,7 +1125,7 @@
 
       setTimeout(() => {
         if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
-      }, 4200);
+      }, 2800);
     }
 
     async function executeConfirmedAction() {
@@ -2166,7 +2163,7 @@
       if (Array.isArray(res.salesRecords)) {
         const local = getStored('sales_records', []);
         // Protect fresh local optimistic sales/product edits for 10 seconds so an in-flight stale GET poll never reverts the UI!
-        if ((Date.now() - lastLocalSalesMutationMs) >= 10000) {
+        if ((Date.now() - lastLocalSalesMutationMs) >= 20000) {
           if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
             setStored('sales_records', res.salesRecords);
             changed = true;
@@ -4389,9 +4386,20 @@ function filterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName) {
           sales.unshift(entry);
           setStored('sales_records', sales); markLocalSalesMutatedNow();
 
+          if (canViewAll(u)) {
+            const agTeamNorm = normalizeTeamNameAlias(targetAgent.team);
+            if (isPendingOrFloatingAgent(targetAgent)) {
+              dashboardScope = 'ALL';
+              driveProdTeamScope = 'ALL';
+            } else if (dashboardScope !== 'ALL' && dashboardScope !== agTeamNorm) {
+              dashboardScope = agTeamNorm;
+              driveProdTeamScope = agTeamNorm;
+            }
+          }
+
           const logMeta = recordActivityLog(
             'Updated Drive Product Total',
-            `Updated Drive Product total for ${targetAgent.name} (${rangeLabel}) — Last Update: ${lastUpdateFormatted}`
+            `Updated Drive Product total for ${targetAgent.name} (${targetAgent.id}) (${rangeLabel}) — Last Update: ${lastUpdateFormatted}`
           );
 
           closeModal('driveProdModal');
@@ -9458,21 +9466,32 @@ function renderRankingAndComparison() {
               ctx.imageSmoothingQuality = 'high';
               ctx.drawImage(img, 0, 0, w, h);
 
-              // Erase light-grey table gridlines (e.g. Gray ~215-248) -> pure white (255)
-              // and sharpen dark text so Tesseract never drops table rows!
+              // Auto-detect Dark Mode screenshots (white text on dark background) vs Light Mode tables!
               const imgData = ctx.getImageData(0, 0, w, h);
               const d = imgData.data;
+              let darkPixels = 0;
+              const totalPixels = d.length / 4;
+              for (let i = 0; i < d.length; i += 16) {
+                const lumSample = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                if (lumSample < 95) darkPixels++;
+              }
+              const isDarkBgImage = (darkPixels / (totalPixels / 4)) > 0.5;
+
               for (let i = 0; i < d.length; i += 4) {
-                const r = d[i], g = d[i + 1], b = d[i + 2];
+                let r = d[i], g = d[i + 1], b = d[i + 2];
+                if (isDarkBgImage) {
+                  // Invert dark-mode screenshot so white text becomes crisp dark text on pure white background!
+                  r = 255 - r; g = 255 - g; b = 255 - b;
+                }
                 const lum = 0.299 * r + 0.587 * g + 0.114 * b;
                 const maxDiff = Math.max(Math.abs(r - g), Math.abs(g - b), Math.abs(r - b));
                 if (lum >= 202 || (lum >= 188 && maxDiff <= 14)) {
-                  // Table border line or light background -> pure white
                   d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
-                } else if (lum < 155) {
-                  // Dark text pixel -> darken for crisp OCR contrast
-                  const v = Math.max(0, Math.round(lum * 0.45));
+                } else if (lum < 165) {
+                  const v = Math.max(0, Math.round(lum * 0.38));
                   d[i] = v; d[i + 1] = v; d[i + 2] = v;
+                } else {
+                  d[i] = r; d[i + 1] = g; d[i + 2] = b;
                 }
               }
               ctx.putImageData(imgData, 0, 0);
@@ -9670,17 +9689,17 @@ function renderRankingAndComparison() {
     }
 
     function extractProductAmountsFromLine(lineText) {
-      const lower = String(lineText || '').toLowerCase();
+      const lower = String(lineText || '').replace(/,/g, '.').toLowerCase();
       const prods = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
       let foundAnyProd = false;
 
       const prodPatterns = [
-        { key: 'ajwa', regex: /ajwa(?:\s*dates)?[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|gm|g)?/i },
-        { key: 'pinkSalt', regex: /(?:pink\s*)?salt[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|gm|g)?/i },
-        { key: 'blackGarlic', regex: /(?:black\s*)?garlic[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|gm|g)?/i },
-        { key: 'sunHoney', regex: /(?:sundarban|sun\.?\s*h|sundarban\s*honey)[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|gm|g)?/i },
-        { key: 'bsHoney', regex: /(?:black\s*seed|bs\.?\s*h|kalojira)[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|gm|g)?/i },
-        { key: 'gawaGhee', regex: /(?:gawa\s*)?ghee[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|gm|g)?/i }
+        { key: 'ajwa', regex: /ajwa(?:[\s\w]*?dates)?[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|g)?/i },
+        { key: 'pinkSalt', regex: /(?:glarvest|himalayan|pink)?[\s\w]*?salt[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|g)?/i },
+        { key: 'blackGarlic', regex: /(?:black\s*)?garlic[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|g)?/i },
+        { key: 'sunHoney', regex: /(?:sundarban|sundorban|shunderban|sun\.?\s*h)(?:\s*honey)?[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|g)?/i },
+        { key: 'bsHoney', regex: /(?:black\s*seed|bs\.?\s*h|kalojira)(?:\s*honey)?[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|g)?/i },
+        { key: 'gawaGhee', regex: /(?:gawa\s*)?ghee[\s:=-]*(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|g)?/i }
       ];
 
       prodPatterns.forEach(pp => {
@@ -9688,8 +9707,10 @@ function renderRankingAndComparison() {
         if (m) {
           let val = parseFloat(m[1]) || 0;
           const unit = (m[2] || '').toLowerCase();
-          if (unit === 'gm' || unit === 'g' || val >= 100) {
+          if (unit === 'gm' || unit === 'g') {
             val = Number((val / 1000).toFixed(2));
+          } else {
+            val = Number(val.toFixed(2));
           }
           prods[pp.key] = val;
           foundAnyProd = true;
@@ -9758,12 +9779,38 @@ function renderRankingAndComparison() {
       }
       if (!cat) return null;
 
-      // 3. Detect Variant Weight (e.g., 500gm, 500 gm, 1kg, 250gm, 200gm, 400gm, 100gm)
+      // 2.5 DIRECT SUMMARY LINE DETECTOR:
+      // If the line is a direct summary line like "Gawa Ghee 10.25 kg", "Sundarban Honey 9.5 kg",
+      // "Black Seed Honey 5.75 kg", "Ajwa Premium Fresh Dates 3 kg", "Glarvest Himalayan Pink Salt 0.5 kg"
+      // (i.e. NO ERP product code A000..., NO 13-digit barcode, NO "ghorerbazar" store column),
+      // extract the exact decimal or integer KG directly without splitting at the decimal point!
+      const hasErpTableColumns = Boolean(matchedCodeInfo) || /ghorer\s*bazar|894\d{7,10}|[৳$]\s*\d/i.test(raw);
+      if (!hasErpTableColumns) {
+        const normalizedDec = lower.replace(/(\d),(\d)/g, '$1.$2');
+        const directWeightMatch = normalizedDec.match(/(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|qm|9m|g|q)/i);
+        if (directWeightMatch) {
+          const rawVal = parseFloat(directWeightMatch[1]) || 0;
+          const unitStr = directWeightMatch[2].toLowerCase();
+          const finalKg = unitStr.startsWith('k') ? Number(rawVal.toFixed(2)) : Number((rawVal / 1000).toFixed(2));
+          if (finalKg > 0) {
+            return {
+              cat,
+              unitKg: finalKg,
+              qty: 1,
+              totalKg: finalKg,
+              itemSummary: `${finalKg}kg`
+            };
+          }
+        }
+      }
+
+      // 3. Detect Variant Weight for full ERP Table rows (e.g., 500gm, 500 gm, 1kg, 250gm, 200gm, 400gm, 100gm)
+      // Use negative lookbehind `(?<![.\d])` so `9.5 kg` or `60.3 kg` is NEVER mistaken for `5 kg` or `3 kg`!
       let unitKg = matchedCodeInfo ? matchedCodeInfo.unitKg : 1.0;
       let sizeLabel = matchedCodeInfo ? matchedCodeInfo.label : '1kg';
       let sizeEndIdx = 0;
 
-      const weightRegex = /\b(500|250|200|400|100|1|2|0\.5|0\.25)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i;
+      const weightRegex = /(?<![.\d])(500|250|200|400|100|1|2|0\.5|0\.25)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i;
       const wMatch = lower.match(weightRegex);
       if (wMatch) {
         const wNum = parseFloat(wMatch[1]) || 1;
@@ -9850,7 +9897,7 @@ function renderRankingAndComparison() {
     }
 
     function analyzeErpOcrText(ocrText) {
-      const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
+      const allAgents = getUsersForMonth(selectedMonthKey, true).filter(u => u.role === 'agent');
       const existingSales = deduplicateSalesRecordsList(getStored('sales_records', []));
       const fullText = String(ocrText || '');
       const rawLines = fullText.split(/\r?\n/);
@@ -10085,7 +10132,7 @@ function renderRankingAndComparison() {
       const resBox = document.getElementById('aiAnalysisResultContainer');
       if (resBox) resBox.classList.remove('hidden');
 
-      const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
+      const allAgents = getUsersForMonth(selectedMonthKey, true).filter(u => u.role === 'agent');
       const existingSales = getStored('sales_records', []);
 
       let dupCount = 0;
@@ -10191,22 +10238,22 @@ function renderRankingAndComparison() {
             <input type="number" min="0" value="${r.amount}" oninput="aiDetectedRecords[${idx}].amount=Number(this.value)||0" class="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg font-black text-emerald-600">
           </td>
           <td class="p-2.5 text-center bg-amber-50/30">
-            <input type="number" step="0.01" min="0" value="${r.ajwa}" oninput="aiDetectedRecords[${idx}].ajwa=Number(this.value)||0" class="w-14 px-1.5 py-1 bg-white border border-amber-200 rounded-lg text-center font-bold">
+            <input type="number" step="0.01" min="0" value="${r.ajwa}" oninput="aiDetectedRecords[${idx}].ajwa=Number(this.value)||0" class="w-20 min-w-[78px] px-2 py-1 bg-white border border-amber-200 rounded-lg text-center font-extrabold text-slate-900">
           </td>
           <td class="p-2.5 text-center bg-rose-50/30">
-            <input type="number" step="0.01" min="0" value="${r.pinkSalt}" oninput="aiDetectedRecords[${idx}].pinkSalt=Number(this.value)||0" class="w-14 px-1.5 py-1 bg-white border border-rose-200 rounded-lg text-center font-bold">
+            <input type="number" step="0.01" min="0" value="${r.pinkSalt}" oninput="aiDetectedRecords[${idx}].pinkSalt=Number(this.value)||0" class="w-20 min-w-[78px] px-2 py-1 bg-white border border-rose-200 rounded-lg text-center font-extrabold text-slate-900">
           </td>
           <td class="p-2.5 text-center bg-purple-50/30">
-            <input type="number" step="0.01" min="0" value="${r.blackGarlic}" oninput="aiDetectedRecords[${idx}].blackGarlic=Number(this.value)||0" class="w-14 px-1.5 py-1 bg-white border border-purple-200 rounded-lg text-center font-bold">
+            <input type="number" step="0.01" min="0" value="${r.blackGarlic}" oninput="aiDetectedRecords[${idx}].blackGarlic=Number(this.value)||0" class="w-20 min-w-[78px] px-2 py-1 bg-white border border-purple-200 rounded-lg text-center font-extrabold text-slate-900">
           </td>
           <td class="p-2.5 text-center bg-orange-50/30">
-            <input type="number" step="0.01" min="0" value="${r.sunHoney}" oninput="aiDetectedRecords[${idx}].sunHoney=Number(this.value)||0" class="w-14 px-1.5 py-1 bg-white border border-orange-200 rounded-lg text-center font-bold">
+            <input type="number" step="0.01" min="0" value="${r.sunHoney}" oninput="aiDetectedRecords[${idx}].sunHoney=Number(this.value)||0" class="w-20 min-w-[78px] px-2 py-1 bg-white border border-orange-200 rounded-lg text-center font-extrabold text-slate-900">
           </td>
           <td class="p-2.5 text-center bg-blue-50/30">
-            <input type="number" step="0.01" min="0" value="${r.bsHoney}" oninput="aiDetectedRecords[${idx}].bsHoney=Number(this.value)||0" class="w-14 px-1.5 py-1 bg-white border border-blue-200 rounded-lg text-center font-bold">
+            <input type="number" step="0.01" min="0" value="${r.bsHoney}" oninput="aiDetectedRecords[${idx}].bsHoney=Number(this.value)||0" class="w-20 min-w-[78px] px-2 py-1 bg-white border border-blue-200 rounded-lg text-center font-extrabold text-slate-900">
           </td>
           <td class="p-2.5 text-center bg-emerald-50/30">
-            <input type="number" step="0.01" min="0" value="${r.gawaGhee}" oninput="aiDetectedRecords[${idx}].gawaGhee=Number(this.value)||0" class="w-14 px-1.5 py-1 bg-white border border-emerald-200 rounded-lg text-center font-bold">
+            <input type="number" step="0.01" min="0" value="${r.gawaGhee}" oninput="aiDetectedRecords[${idx}].gawaGhee=Number(this.value)||0" class="w-20 min-w-[78px] px-2 py-1 bg-white border border-emerald-200 rounded-lg text-center font-extrabold text-slate-900">
           </td>
           <td class="p-2.5 text-center">
             <button type="button" onclick="removeAiDetectedRow(${idx})" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center mx-auto">
@@ -10297,7 +10344,7 @@ function renderRankingAndComparison() {
 
     function executeAiApprovalCommit(approvedRows) {
       let sales = getStored('sales_records', []);
-      const allAgents = getUsersForMonth(selectedMonthKey).filter(u => u.role === 'agent');
+      const allAgents = getUsersForMonth(selectedMonthKey, true).filter(u => u.role === 'agent');
       const syncPayloads = [];
       const lastUpdateFormatted = formatFullMonthDateDisplay(getTodayFormatted());
 
@@ -10371,6 +10418,19 @@ function renderRankingAndComparison() {
       }
 
       setStored('sales_records', sales); markLocalSalesMutatedNow();
+      if (canViewAll(currentUser) && approvedRows.length > 0) {
+        const firstAg = allAgents.find(a => String(a.id) === String(approvedRows[0].userId));
+        if (firstAg) {
+          const agTeamNorm = normalizeTeamNameAlias(firstAg.team);
+          if (isPendingOrFloatingAgent(firstAg)) {
+            dashboardScope = 'ALL';
+            driveProdTeamScope = 'ALL';
+          } else if (dashboardScope !== 'ALL' && dashboardScope !== agTeamNorm) {
+            dashboardScope = agTeamNorm;
+            driveProdTeamScope = agTeamNorm;
+          }
+        }
+      }
       closeModal('aiImportModal');
       renderAppLayout();
       showPortalToast('AI Data Approved & Synced!', `Successfully updated ${approvedRows.length} agent record(s) across Portal & Google Sheet!`, 'success');
@@ -10831,7 +10891,7 @@ function renderRankingAndComparison() {
       if (!container) return;
 
       const toast = document.createElement('div');
-      toast.className = 'toast-popup-anim bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border-2 border-amber-400/80 flex items-start gap-3 w-80 sm:w-96 pointer-events-auto';
+      toast.className = 'toast-popup-anim bg-slate-900 text-white px-3 py-2.5 rounded-xl shadow-xl border border-amber-400/80 flex items-start gap-2.5 w-64 sm:w-72 pointer-events-auto';
       toast.innerHTML = `
         <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base shrink-0 shadow-md">
           <i class="fa-solid fa-bell bell-ring"></i>
