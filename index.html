@@ -7324,32 +7324,38 @@
 
     function renderRankingAndComparison() {
       const monthUsersAll = getUsersForMonth(selectedMonthKey);
-      const allUsers = monthUsersAll.filter(u => u.role === 'agent');
-      const allSales = getStored('sales_records', []);
-      const monthSales = allSales.filter(s => s.date.endsWith(selectedMonthKey));
+      const allUsers = monthUsersAll.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u));
+      const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+      const monthSales = allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
 
       function calcTeamStats(teamName) {
-        const tAgents = allUsers.filter(a => a.team === teamName);
-        const tTLs = monthUsersAll.filter(u => u.role === 'admin' && u.team === teamName);
+        const cleanTeam = normalizeTeamNameAlias(teamName);
+        const ch = getChannelForTeam(cleanTeam);
+        const tAgents = allUsers.filter(a => normalizeTeamNameAlias(a.team) === cleanTeam);
+        const tTLs = monthUsersAll.filter(u => u.role === 'admin' && normalizeTeamNameAlias(u.team) === cleanTeam);
         const agentsBase = tAgents.reduce((s, a) => s + Number(a.baseTarget || 0), 0);
-        const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
+        const defaultTlTarget = ch === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
+        const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || defaultTlTarget), 0);
         const baseTgt = agentsBase + tlBase;
-        const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
-        const tSales = monthSales.filter(s => s.team === teamName);
+        const workTgt = calcWorkingTargetFromBase(baseTgt, ch);
+        const tSales = monthSales.filter(s => normalizeTeamNameAlias(s.team) === cleanTeam);
         const leads = tSales.reduce((s, c) => s + Number(c.leads || 0), 0);
         const orders = tSales.reduce((s, c) => s + Number(c.orders || 0), 0);
         const revenue = tSales.reduce((s, c) => s + Number(c.amount || 0), 0);
         const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
-        const pct = workTgt > 0 ? Math.min(100, Math.round((revenue / workTgt) * 100)) : 0;
-        return { teamName, agentCount: tAgents.length, workTgt, leads, orders, revenue, conv, pct };
+        const exactPct = workTgt > 0 ? (revenue / workTgt) * 100 : 0;
+        const pctDisplay = exactPct.toFixed(1);
+        const pctBar = Math.min(100, Math.round(exactPct));
+        return { teamName: cleanTeam, ch, agentCount: tAgents.length, workTgt, leads, orders, revenue, conv, exactPct, pctDisplay, pctBar };
       }
 
       const chTeams = getActiveChannelMeta().teams;
+      // Strictly sort teams by Achievement Ratio (exactPct descending), then Revenue descending!
       const teamStatsList = chTeams.map(tn => {
         const st = calcTeamStats(tn);
-        const tlObj = monthUsersAll.find(u => u.role === 'admin' && u.team === tn);
+        const tlObj = monthUsersAll.find(u => u.role === 'admin' && normalizeTeamNameAlias(u.team) === normalizeTeamNameAlias(tn));
         return { ...st, tlName: tlObj ? tlObj.name : 'Team Leader' };
-      }).sort((a, b) => b.revenue - a.revenue || b.pct - a.pct);
+      }).sort((a, b) => b.exactPct - a.exactPct || b.revenue - a.revenue);
 
       const rankedAgents = allUsers.map(ag => {
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
@@ -7358,9 +7364,10 @@
         const revenue = agSales.reduce((s, c) => s + Number(c.amount || 0), 0);
         const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
         const workTgt = calcWorkingTargetFromBase((ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 1232174, ag.team);
-        const pct = workTgt > 0 ? Math.round((revenue / workTgt) * 100) : 0;
-        return { ...ag, leads, orders, revenue, conv, workTgt, pct };
-      }).sort((a, b) => b.revenue - a.revenue || b.pct - a.pct);
+        const exactPct = workTgt > 0 ? (revenue / workTgt) * 100 : 0;
+        const pct = Math.round(exactPct);
+        return { ...ag, leads, orders, revenue, conv, workTgt, exactPct, pct };
+      }).sort((a, b) => b.revenue - a.revenue || b.exactPct - a.exactPct);
 
       const myRankIdx = (currentUser && currentUser.role === 'agent')
         ? rankedAgents.findIndex(ag => String(ag.id) === String(currentUser.id))
@@ -7371,48 +7378,88 @@
         return n + (s[(v - 20) % 10] || s[v] || s[0]);
       };
 
-      const cardThemes = [
-        { border: 'border-t-orange-500', pill: 'bg-orange-100 text-orange-800', txt: 'text-orange-600', bar: 'from-orange-500 to-amber-500' },
-        { border: 'border-t-blue-600', pill: 'bg-blue-100 text-blue-800', txt: 'text-blue-600', bar: 'from-blue-600 to-indigo-600' },
-        { border: 'border-t-emerald-600', pill: 'bg-emerald-100 text-emerald-800', txt: 'text-emerald-600', bar: 'from-emerald-600 to-teal-500' }
-      ];
+      function getTeamRankCardTheme(teamName, rankIdx) {
+        const t = normalizeTeamNameAlias(teamName);
+        if (t === 'Team Nazim') return { border: 'border-t-orange-500', pill: 'bg-orange-100 text-orange-800 border-orange-200', txt: 'text-orange-600', bar: 'from-orange-500 to-amber-500' };
+        if (t === 'Team Samad') return { border: 'border-t-blue-600', pill: 'bg-blue-100 text-blue-800 border-blue-200', txt: 'text-blue-600', bar: 'from-blue-600 to-indigo-600' };
+        if (t === 'Team Saikat') return { border: 'border-t-cyan-600', pill: 'bg-cyan-100 text-cyan-900 border-cyan-200', txt: 'text-cyan-700', bar: 'from-cyan-600 to-teal-600' };
+        if (t === 'Team Parvaj') return { border: 'border-t-teal-600', pill: 'bg-teal-100 text-teal-900 border-teal-200', txt: 'text-teal-600', bar: 'from-teal-600 to-emerald-600' };
+        return { border: 'border-t-emerald-600', pill: 'bg-emerald-100 text-emerald-800 border-emerald-200', txt: 'text-emerald-600', bar: 'from-emerald-600 to-teal-500' };
+      }
+
+      // Responsive Grid Class: Never cram 5 cards on a single laptop row!
+      // For 2 teams -> 2 cols; For 3 teams -> 3 cols; For 5 teams -> 3 cols on top + 2 cols below on laptop screens!
+      const gridColsClass = chTeams.length === 2
+        ? 'grid-cols-1 lg:grid-cols-2'
+        : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3';
 
       return `
         <div class="space-y-6">
+          ${isSupervisor(currentUser) ? renderSupervisorQuickChannelTeamBar('ALL', "setDashboardScope") : ""}
           <div>
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 bg-white p-4 rounded-2xl border border-slate-200">
               <div>
-                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>${getActiveChannelMeta().fullTitle} — Team Comparison (${selectedMonthKey})</h2>
-                <p class="text-xs font-bold text-slate-500">${chTeams.join(' vs ')} — Monthly performance head-to-head sorted by Achievement %</p>
+                <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>${getActiveChannelMeta().fullTitle} — Team Comparison (${selectedMonthKey})</h2>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">${chTeams.join(' vs ')} — Ranked strictly by <strong>Target Achievement Ratio (%)</strong></p>
               </div>
+              <span class="px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-black shrink-0">
+                <i class="fa-solid fa-trophy text-amber-500 mr-1"></i> Ranked by Achievement %
+              </span>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-${chTeams.length} gap-5">
+            <div class="grid ${gridColsClass} gap-4">
               ${teamStatsList.map((st, idx) => {
-                const th = cardThemes[idx % cardThemes.length];
+                const th = getTeamRankCardTheme(st.teamName, idx);
+                const rankMedal = idx === 0 ? '🥇 #1' : (idx === 1 ? '🥈 #2' : (idx === 2 ? '🥉 #3' : `#${idx + 1}`));
                 return `
-                  <div class="card-dynamic p-5 border-t-4 ${th.border}">
-                    <div class="flex justify-between items-center mb-4">
-                      <div>
-                        <span class="px-3 py-1 rounded-full ${th.pill} text-xs font-black uppercase">#${idx + 1} • ${st.teamName}</span>
-                        <p class="text-xs font-bold text-slate-400 mt-1">TL: ${st.tlName} • ${st.agentCount} Agents</p>
+                  <div class="card-dynamic p-5 border-t-4 ${th.border} flex flex-col justify-between">
+                    <div>
+                      <div class="flex justify-between items-start gap-2 mb-3">
+                        <div class="min-w-0">
+                          <div class="flex flex-wrap items-center gap-1.5">
+                            <span class="px-2.5 py-0.5 rounded-lg bg-slate-900 text-white text-xs font-black">${rankMedal}</span>
+                            <span class="px-2.5 py-0.5 rounded-lg border ${th.pill} text-xs font-black uppercase truncate">
+                              <i class="${st.ch === 'WHATSAPP' ? 'fa-brands fa-whatsapp' : 'fa-brands fa-facebook-f'} mr-1"></i>${st.teamName}
+                            </span>
+                          </div>
+                          <p class="text-xs font-bold text-slate-500 mt-1.5 truncate">TL: <strong class="text-slate-700">${st.tlName}</strong> • ${st.agentCount} Agents</p>
+                        </div>
+                        <div class="text-right shrink-0">
+                          <span class="text-2xl font-black ${th.txt} leading-none">${st.pctDisplay}%</span>
+                          <p class="text-[9px] font-black uppercase text-slate-400 mt-0.5">Achieved</p>
+                        </div>
                       </div>
-                      <div class="text-right">
-                        <span class="text-3xl font-black ${th.txt}">${st.pct}%</span>
-                        <p class="text-[10px] font-bold uppercase text-slate-400">Achieved</p>
+
+                      <!-- Clean 2x2 Metric Grid (Never Overlaps on Any Laptop Screen!) -->
+                      <div class="grid grid-cols-2 gap-2.5 p-3 bg-slate-50 rounded-2xl mb-3.5 border border-slate-200/80">
+                        <div class="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span class="text-[9px] font-extrabold text-slate-400 uppercase block">Achieved Revenue</span>
+                          <strong class="text-sm font-black text-emerald-600 mt-0.5 block">৳${st.revenue.toLocaleString()}</strong>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span class="text-[9px] font-extrabold text-slate-400 uppercase block">Conversion Ratio</span>
+                          <strong class="text-sm font-black text-indigo-600 mt-0.5 block">${st.conv}%</strong>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span class="text-[9px] font-extrabold text-slate-400 uppercase block">Total Leads</span>
+                          <strong class="text-sm font-black text-slate-800 mt-0.5 block">${st.leads.toLocaleString()}</strong>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span class="text-[9px] font-extrabold text-slate-400 uppercase block">Total Orders</span>
+                          <strong class="text-sm font-black text-blue-600 mt-0.5 block">${st.orders.toLocaleString()}</strong>
+                        </div>
                       </div>
                     </div>
-                    <div class="grid grid-cols-4 gap-2 p-3 bg-slate-50 rounded-2xl mb-4 text-center border border-slate-100">
-                      <div><span class="text-[10px] font-bold text-slate-400 uppercase block">Revenue</span><strong class="text-sm font-black text-emerald-600">৳${st.revenue.toLocaleString()}</strong></div>
-                      <div class="border-l border-slate-200"><span class="text-[10px] font-bold text-slate-400 uppercase block">Total Leads</span><strong class="text-sm font-black text-slate-800">${st.leads.toLocaleString()}</strong></div>
-                      <div class="border-x border-slate-200"><span class="text-[10px] font-bold text-slate-400 uppercase block">Total Orders</span><strong class="text-sm font-black text-blue-600">${st.orders.toLocaleString()}</strong></div>
-                      <div><span class="text-[10px] font-bold text-slate-400 uppercase block">Conv. Ratio</span><strong class="text-sm font-black text-indigo-600">${st.conv}%</strong></div>
+
+                    <div>
+                      <div class="flex flex-wrap justify-between items-center gap-1 text-[11px] font-bold text-slate-600 mb-1.5">
+                        <span>Target (+5%): <strong class="text-slate-900">৳${st.workTgt.toLocaleString()}</strong></span>
+                        <span>Remaining: <strong class="text-rose-600">৳${Math.max(0, st.workTgt - st.revenue).toLocaleString()}</strong></span>
+                      </div>
+                      <div class="progress-track h-2.5 bg-slate-200/80">
+                        <div class="bg-gradient-to-r ${th.bar} h-2.5 rounded-full transition-all" style="width:${st.pctBar}%"></div>
+                      </div>
                     </div>
-                    <div class="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
-                      <span>Target (+5%): ৳${st.workTgt.toLocaleString()}</span>
-                      <span>Remaining: ৳${Math.max(0, st.workTgt - st.revenue).toLocaleString()}</span>
-                    </div>
-                    <div class="progress-track h-2.5"><div class="bg-gradient-to-r ${th.bar} h-2.5 rounded-full" style="width:${st.pct}%"></div></div>
                   </div>
                 `;
               }).join('')}
@@ -7420,10 +7467,10 @@
           </div>
 
           <div>
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 bg-white p-4 rounded-2xl border border-slate-200">
               <div>
-                <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
-                <p class="text-xs font-bold text-slate-500">Combined leaderboard across both teams sorted by sales revenue and order volume</p>
+                <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
+                <p class="text-xs font-bold text-slate-500">Combined leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Active Agents)</p>
               </div>
               ${myRankNum ? `
               <div class="px-4 py-2 rounded-2xl my-rank-name-pill flex items-center gap-2.5 text-xs font-black">
@@ -7473,7 +7520,7 @@
                         </div>
                       </td>
                       <td class="p-3.5">${renderOnlineStatusBadge(ag.id)}</td>
-                      <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${ag.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${ag.team}</span></td>
+                      <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(ag.team)}">${ag.team}</span></td>
                       <td class="p-3.5 text-center font-black text-slate-700">${ag.grade}</td>
                       <td class="p-3.5 text-center font-bold text-slate-700">${ag.leads.toLocaleString()}</td>
                       <td class="p-3.5 text-center font-black text-blue-600">${ag.orders.toLocaleString()}</td>
