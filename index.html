@@ -750,6 +750,12 @@
       }
     });
     let dutyReminderInterval = null;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && currentUser) {
+        fetchFromSheet(true);
+      }
+    });
+
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen || profileMenuDropdownOpen) return true;
@@ -1232,11 +1238,11 @@
     }
 
     function getUserOnlineStatus(userId) {
-      const uid = String(userId);
-      if (currentUser && String(currentUser.id) === uid) {
+      const uid = String(userId).trim();
+      if (currentUser && String(currentUser.id).trim() === uid) {
         if (currentUser.role === 'agent') {
           const today = getTodayFormatted();
-          const myAtt = getStored('attendance_records', []).find(a => String(a.userId) === uid && a.date === today);
+          const myAtt = getStored('attendance_records', []).find(a => String(a.userId).trim() === uid && a.date === today);
           if (myAtt && myAtt.status === 'On Break') return 'On Break';
         }
         return 'Online';
@@ -1244,14 +1250,48 @@
 
       const now = Date.now();
       const onlineList = getStored('online_users', []);
-      const oRec = onlineList.find(o => String(o.id) === uid);
-      // Use clientReceivedAt (stamped when cloud response arrives) to avoid PC clock vs Google Server clock skew!
-      if (oRec && oRec.state !== 'Offline' && Number(oRec.lastSeen) > 0) {
+      const oRec = onlineList.find(o => String(o.id).trim() === uid);
+      // If user explicitly logged out in Online_Status, respect Offline state if no newer attendance tick exists
+      if (oRec && oRec.state !== 'Offline') {
         const refTs = Number(oRec.clientReceivedAt || oRec.lastSeen || 0);
-        if ((now - refTs) < 75000) {
+        // 5-minute (300,000ms) window so background-throttled browser tabs stay Online!
+        if (refTs === 0 || (now - refTs) < 300000) {
           return oRec.state === 'On Break' ? 'On Break' : 'Online';
         }
       }
+
+      // Fallback 1: Check today's Attendance_Logs — if an agent is currently Working or On Break (not Completed / not Logged out),
+      // they are on duty right now!
+      const today = getTodayFormatted();
+      const attList = getStored('attendance_records', []);
+      const todayAtt = attList.find(a => String(a.userId).trim() === uid && String(a.date || '').replace(/^'/, '').trim() === today);
+      if (todayAtt && todayAtt.status && todayAtt.status !== 'Completed') {
+        const logoutClean = String(todayAtt.logoutTime || '--:--').trim();
+        if (logoutClean === '--:--' || logoutClean === '' || logoutClean === '-') {
+          // Check if they explicitly logged out in Activity Logs after their login
+          const recentLogs = getStored('activity_logs', []);
+          const lastUserAuthLog = recentLogs.find(l =>
+            String(l.userId).trim() === uid &&
+            String(l.date || '').replace(/^'/, '').trim() === today &&
+            (String(l.action || '').includes('Login') || String(l.action || '').includes('Logout'))
+          );
+          if (!lastUserAuthLog || !String(lastUserAuthLog.action || '').includes('Logout')) {
+            return todayAtt.status === 'On Break' ? 'On Break' : 'Online';
+          }
+        }
+      }
+
+      // Fallback 2: For Admins / TLs / Supervisors (who don't have Attendance_Logs rows), check today's Activity_Logs
+      const actLogs = getStored('activity_logs', []);
+      const latestAuth = actLogs.find(l =>
+        String(l.userId).trim() === uid &&
+        String(l.date || '').replace(/^'/, '').trim() === today &&
+        (String(l.action || '').includes('Login') || String(l.action || '').includes('Logout'))
+      );
+      if (latestAuth && String(latestAuth.action || '').includes('Login') && (!oRec || oRec.state !== 'Offline')) {
+        return 'Online';
+      }
+
       return 'Offline';
     }
 
@@ -2111,26 +2151,27 @@
         if (res && res.status === 'success') handleCloudData(res);
       };
 
-      // Fast direct fetch (completes in ~300-600ms) + JSONP fallback
+      // Single clean request (no duplicate parallel hits so Apps Script LockService never bottlenecks with 50+ users!)
       fetch(`${webhookUrl}?t=${now}${pingQuery}`)
         .then(r => r.json())
         .then(onSuccess)
-        .catch(() => { isFetchingCloud = false; });
-
-      const cbName = 'gb_cb_' + now;
-      const script = document.createElement('script');
-      window[cbName] = function(res) {
-        delete window[cbName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-        onSuccess(res);
-      };
-      script.src = `${webhookUrl}?callback=${cbName}&t=${now}${pingQuery}`;
-      script.onerror = function() {
-        delete window[cbName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-        isFetchingCloud = false;
-      };
-      document.body.appendChild(script);
+        .catch(() => {
+          // Only fallback to JSONP if direct fetch fails (e.g. strict browser CORS)
+          const cbName = 'gb_cb_' + now;
+          const script = document.createElement('script');
+          window[cbName] = function(res) {
+            delete window[cbName];
+            if (script.parentNode) script.parentNode.removeChild(script);
+            onSuccess(res);
+          };
+          script.src = `${webhookUrl}?callback=${cbName}&t=${now}${pingQuery}`;
+          script.onerror = function() {
+            delete window[cbName];
+            if (script.parentNode) script.parentNode.removeChild(script);
+            isFetchingCloud = false;
+          };
+          document.body.appendChild(script);
+        });
     }
 
     function isUserInteractingWithControl() {
@@ -2733,8 +2774,11 @@
         ? `TL (${u.team})`
         : (u.role === 'supervisor' ? `Supervisor (View All)` : `${u.team} • Grade ${u.grade}`);
 
-      const allUsersList = getUsersForMonth(selectedMonthKey);
+      const allUsersList = getUsersForMonth(selectedMonthKey, true);
       const activeOnlineUsers = allUsersList.filter(usr => {
+        if (activeChannel !== 'ALL_CHANNELS' && usr.role !== 'supervisor' && getChannelForTeam(usr.team) !== activeChannel) {
+          return false;
+        }
         const st = getUserOnlineStatus(usr.id);
         return st === 'Online' || st === 'On Break';
       });
