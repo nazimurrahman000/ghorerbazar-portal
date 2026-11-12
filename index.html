@@ -8059,26 +8059,56 @@ function renderRankingAndComparison() {
       }).catch(() => {});
     }
 
+    // Shift End Time Helper: Returns exact timestamp (ms) when a shift on (dayNum/monthNum/yearNum) finishes!
+    // - 7:00 AM shift  -> Ends at 3:00 PM (15:00) same day
+    // - 9:00 AM shift  -> Ends at 5:00 PM (17:00) same day
+    // - 10:00 AM shift -> Ends at 6:00 PM (18:00) same day
+    // - 3:00 PM shift  -> Ends at 11:00 PM (23:00) same day
+    // - Night (11 PM)  -> Ends at 7:00 AM (07:00) the NEXT day
+    function getShiftEndTimestampMs(dayNum, monthNum, yearNum, shiftStr) {
+      const s = String(shiftStr || '').trim().toUpperCase();
+      if (s.includes('NIGHT') || s.includes('11:00')) {
+        // Starts 11:00 PM on dayNum -> Ends 7:00 AM on (dayNum + 1)
+        return new Date(yearNum, monthNum - 1, dayNum + 1, 7, 0, 0).getTime();
+      }
+      if (s.includes('3:00')) {
+        // Starts 3:00 PM -> Ends 11:00 PM (23:00) on dayNum
+        return new Date(yearNum, monthNum - 1, dayNum, 23, 0, 0).getTime();
+      }
+      if (s.includes('10:00')) {
+        // Starts 10:00 AM -> Ends 6:00 PM (18:00) on dayNum
+        return new Date(yearNum, monthNum - 1, dayNum, 18, 0, 0).getTime();
+      }
+      if (s.includes('9:00')) {
+        // Starts 9:00 AM -> Ends 5:00 PM (17:00) on dayNum
+        return new Date(yearNum, monthNum - 1, dayNum, 17, 0, 0).getTime();
+      }
+      if (s.includes('7:00')) {
+        // Starts 7:00 AM -> Ends 3:00 PM (15:00) on dayNum
+        return new Date(yearNum, monthNum - 1, dayNum, 15, 0, 0).getTime();
+      }
+      // Default fallback: 3:00 PM shift -> Ends 11:00 PM (23:00)
+      return new Date(yearNum, monthNum - 1, dayNum, 23, 0, 0).getTime();
+    }
+
+    function getShiftTimeRangeLabel(shiftStr) {
+      const s = String(shiftStr || '').trim().toUpperCase();
+      if (s.includes('NIGHT') || s.includes('11:00')) return 'Night (11:00 PM – 7:00 AM)';
+      if (s.includes('3:00')) return '3:00 PM – 11:00 PM';
+      if (s.includes('10:00')) return '10:00 AM – 6:00 PM';
+      if (s.includes('9:00')) return '9:00 AM – 5:00 PM';
+      if (s.includes('7:00')) return '7:00 AM – 3:00 PM';
+      return shiftStr;
+    }
+
+    // Only flags a shift as Missing AFTER its duty end time has passed!
     function isRosterShiftDueForReportCheck(dayNum, monthNum, yearNum, shiftStr) {
       const s = String(shiftStr || '').trim().toUpperCase();
       if (!s || s === 'DO' || s.includes('OFF')) return false;
 
-      const now = new Date();
-      const curY = now.getFullYear();
-      const curM = now.getMonth() + 1;
-      const curD = now.getDate();
-      const curHr = now.getHours();
-
-      if (yearNum > curY || (yearNum === curY && monthNum > curM)) return false;
-      if (yearNum === curY && monthNum === curM) {
-        if (dayNum > curD) return false;
-        if (dayNum === curD) {
-          if (s.includes('NIGHT') || s.includes('11:00')) return false;
-          if (s.includes('3:00') && curHr < 15) return false;
-          if (curHr < 9) return false;
-        }
-      }
-      return true;
+      const nowMs = Date.now();
+      const shiftEndMs = getShiftEndTimestampMs(dayNum, monthNum, yearNum, s);
+      return nowMs >= shiftEndMs;
     }
 
     function computeMissingAndLeaveDataForMonth(mKey, teamScopeFilter = 'ALL', agentIdFilter = 'ALL') {
@@ -8682,7 +8712,7 @@ function renderRankingAndComparison() {
                       </td>
                       <td class="p-3.5 text-center">
                         <span class="px-2.5 py-1 rounded-lg text-[11px] font-black ${isNight ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' : 'bg-slate-100 text-slate-700'}">
-                          ${isNight ? '<i class="fa-solid fa-moon mr-1"></i>' : '<i class="fa-regular fa-clock mr-1"></i>'}${item.shift}
+                          ${isNight ? '<i class="fa-solid fa-moon mr-1"></i>' : '<i class="fa-regular fa-clock mr-1"></i>'}${getShiftTimeRangeLabel(item.shift)}
                         </span>
                       </td>
                       <td class="p-3.5 text-center">
