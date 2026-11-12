@@ -8769,7 +8769,6 @@ function renderRankingAndComparison() {
                           <button type="button" onclick="openMarkLeaveModal('${lv.userId}', '${lv.date}', '${lv.leaveType}', '${String(lv.reason || '').replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg font-extrabold text-[11px]">
                             <i class="fa-solid fa-pen"></i> Edit
                           </button>
-                          <button type="button" onclick="handleRevertLeaveRecord('${lv.userId}', '${String(lv.userName).replace(/'/g, "\\'")}')" class="hidden"></button>
                           <button type="button" onclick="handleRevertLeaveRecord('${lv.userId}', '${String(lv.userName).replace(/'/g, "\\'")}', '${lv.date}')" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-extrabold text-[11px]" title="Remove Leave/Absent status">
                             <i class="fa-solid fa-trash-can"></i>
                           </button>
