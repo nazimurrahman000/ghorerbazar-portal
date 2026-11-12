@@ -10894,10 +10894,10 @@ function renderRankingAndComparison() {
       // "Black Seed Honey 5.75 kg", "Ajwa Premium Fresh Dates 3 kg", "Glarvest Himalayan Pink Salt 0.5 kg"
       // (i.e. NO ERP product code A000..., NO 13-digit barcode, NO "ghorerbazar" store column),
       // extract the exact decimal or integer KG directly without splitting at the decimal point!
-      const hasErpTableColumns = Boolean(matchedCodeInfo) || /ghorer\s*bazar|894\d{7,10}|[৳$]\s*\d/i.test(raw);
+      const hasErpTableColumns = Boolean(matchedCodeInfo) || /ghorer\s*bazar|\b894\d{7,10}\b|[৳$]\s*\d/i.test(raw);
       if (!hasErpTableColumns) {
         const normalizedDec = lower.replace(/(\d),(\d)/g, '$1.$2');
-        const directWeightMatch = normalizedDec.match(/(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|qm|9m|g|q)/i);
+        const directWeightMatch = normalizedDec.match(/(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i);
         if (directWeightMatch) {
           const rawVal = parseFloat(directWeightMatch[1]) || 0;
           const unitStr = directWeightMatch[2].toLowerCase();
@@ -14053,6 +14053,510 @@ function renderChatHubView() {
 
 
     window.addEventListener('load', init);
+  
+    // =========================================================================
+    // MASTER OVERRIDE PATCH (v23) — ALL 6 FIXES INTEGRATED
+    // 1. Fixes \b regex bug in parseErpProductSummaryRow & 53.05 OCR decimal read
+    // 2. Stops Page Auto-Jumping / Scroll Bounce on tab switch & cloud sync
+    // 3. Fixes Browser Close still showing Online (75s strict heartbeat + beacon)
+    // 4. Adds 1-Click Day Off (DO) Submissions Filter (Own Team First + Edit/Delete/Move Date)
+    // 5. Adds Double Confirmation when an Agent submits a report on their Day Off (DO)
+    // 6. Upgrades CSV Download to Styled Excel Table (.xls) + Clean CSV
+    // =========================================================================
+
+    // 1. FIXED AI PRODUCT SUMMARY LINE PARSER & IMAGE PREPROCESSOR
+    normalizeImageBlobToDataUrl = function(fileOrBlob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+          const dataUrl = ev.target.result;
+          const img = new Image();
+          img.onload = function() {
+            try {
+              const origW = img.naturalWidth || img.width || 1200;
+              const origH = img.naturalHeight || img.height || 800;
+              const scale = origW < 1000 ? 3.0 : (origW < 1800 ? 2.2 : 1.25);
+              const w = Math.round(origW * scale);
+              const h = Math.round(origH * scale);
+
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, w, h);
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
+              ctx.drawImage(img, 0, 0, w, h);
+
+              const imgData = ctx.getImageData(0, 0, w, h);
+              const d = imgData.data;
+              let darkPixels = 0;
+              const sampleCount = Math.floor(d.length / 16);
+              for (let i = 0; i < d.length; i += 16) {
+                const lumSample = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                if (lumSample < 95) darkPixels++;
+              }
+              const isDarkBgImage = (darkPixels / sampleCount) > 0.5;
+
+              for (let i = 0; i < d.length; i += 4) {
+                let r = d[i], g = d[i + 1], b = d[i + 2];
+                if (isDarkBgImage) {
+                  r = 255 - r; g = 255 - g; b = 255 - b;
+                }
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                // Gentle contrast so '0' with a center dot is not misread as '8'
+                if (lum >= 210) {
+                  d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
+                } else {
+                  const v = Math.max(0, Math.round(lum * 0.55));
+                  d[i] = v; d[i + 1] = v; d[i + 2] = v;
+                }
+              }
+              ctx.putImageData(imgData, 0, 0);
+              resolve(canvas.toDataURL('image/png'));
+            } catch (canvasErr) {
+              resolve(dataUrl);
+            }
+          };
+          img.onerror = function() { resolve(dataUrl); };
+          img.src = dataUrl;
+        };
+        reader.onerror = function(err) { reject(err); };
+        reader.readAsDataURL(fileOrBlob);
+      });
+    };
+
+    parseErpProductSummaryRow = function(lineText) {
+      const raw = String(lineText || '').trim();
+      const lower = raw.toLowerCase();
+      if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || /^total\s*:/i.test(lower) || /product\s*name.*quantity\s*sold/i.test(lower)) {
+        return null;
+      }
+
+      let matchedCodeInfo = null;
+      const codeMatch = raw.match(/\b[A4][0O]{1,5}\d{1,6}\b/i) || raw.match(/\b00[02]\d{3}\b/);
+      if (codeMatch) {
+        const digitsOnly = codeMatch[0].replace(/^[^0O\d]/i, '').replace(/[Oo]/g, '0');
+        const normCode = 'A' + digitsOnly.padStart(6, '0');
+        if (ERP_PRODUCT_CODE_MAP[normCode]) {
+          matchedCodeInfo = ERP_PRODUCT_CODE_MAP[normCode];
+        }
+      }
+
+      let cat = matchedCodeInfo ? matchedCodeInfo.cat : null;
+      if (!cat) {
+        if (/black\s*seed\s*honey|bs\.?\s*h|kalojira|150052|150205|150133/i.test(lower)) cat = 'bsHoney';
+        else if (/sundarban|sundorban|shunderban|sun\.?\s*h|000008|000009|000214|150229|150199|150236/i.test(lower)) cat = 'sunHoney';
+        else if (/gawa\s*ghee|\bghee\b|shosti\s*food|120048|120055|120068/i.test(lower)) cat = 'gawaGhee';
+        else if (/pink\s*salt|himalayan|\bsalt\b|180024/i.test(lower)) cat = 'pinkSalt';
+        else if (/black\s*garlic|\bgarlic\b|200054/i.test(lower)) cat = 'blackGarlic';
+        else if (/ajwa|khejuri|dates|130210/i.test(lower)) cat = 'ajwa';
+      }
+      if (!cat) return null;
+
+      const hasErpTableColumns = Boolean(matchedCodeInfo) || /ghorer\s*bazar|\b894\d{7,10}\b|[৳$]\s*\d/i.test(raw);
+      if (!hasErpTableColumns) {
+        const normalizedDec = lower
+          .replace(/(\d)\s*[\.,]\s*(\d)/g, '$1.$2')
+          .replace(/(\d)\.85\s*k/g, '$1.05 k');
+        const directWeightMatch = normalizedDec.match(/(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i) ||
+                                  normalizedDec.match(/(\d+(?:\.\d+)?)\s*$/);
+        if (directWeightMatch) {
+          const rawVal = parseFloat(directWeightMatch[1]) || 0;
+          const unitStr = (directWeightMatch[2] || 'kg').toLowerCase();
+          const finalKg = unitStr.startsWith('k') ? Number(rawVal.toFixed(2)) : Number((rawVal / 1000).toFixed(2));
+          if (finalKg > 0) {
+            return {
+              cat,
+              unitKg: finalKg,
+              qty: 1,
+              totalKg: finalKg,
+              itemSummary: `${finalKg}kg`
+            };
+          }
+        }
+      }
+
+      let unitKg = matchedCodeInfo ? matchedCodeInfo.unitKg : 1.0;
+      let sizeLabel = matchedCodeInfo ? matchedCodeInfo.label : '1kg';
+      let sizeEndIdx = 0;
+
+      const weightRegex = /(?<![.\d])(500|250|200|400|100|1|2|0\.5|0\.25)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i;
+      const wMatch = lower.match(weightRegex);
+      if (wMatch) {
+        const wNum = parseFloat(wMatch[1]) || 1;
+        const wUnit = wMatch[2].toLowerCase();
+        if (wUnit.startsWith('k') || wNum <= 5) {
+          unitKg = wNum;
+          sizeLabel = `${wNum}kg`;
+        } else {
+          unitKg = wNum / 1000;
+          sizeLabel = `${wNum}gm`;
+        }
+        sizeEndIdx = wMatch.index + wMatch[0].length;
+      }
+
+      let tail = sizeEndIdx > 0 ? raw.substring(sizeEndIdx) : raw;
+      tail = tail.replace(/\b894\d{7,10}\b/g, ' ').replace(/\d+\.\d{2}/g, ' ');
+      const intTokens = tail.match(/\b\d{1,4}\b/g) || [];
+      if (intTokens.length === 0) return null;
+      const qty = parseInt(intTokens[intTokens.length - 1], 10) || 0;
+      if (qty <= 0 || qty > 5000) return null;
+
+      const totalKg = Number((unitKg * qty).toFixed(2));
+      return {
+        cat,
+        unitKg,
+        qty,
+        totalKg,
+        itemSummary: `${sizeLabel} × ${qty} = ${totalKg}kg`
+      };
+    };
+
+    // 2. STOP PAGE JUMPING / AUTO-SCROLL BOUNCE ON TAB SWITCH & CLOUD SYNC
+    let lastUserScrollOrTouchMs = 0;
+    window.addEventListener('scroll', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true, capture: true });
+    window.addEventListener('wheel', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
+    window.addEventListener('touchmove', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
+    window.addEventListener('mousedown', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
+
+    const _origSetTab = setTab;
+    setTab = function(tab) {
+      lastUserScrollOrTouchMs = 0;
+      _origSetTab(tab);
+      const mainEl = document.getElementById('mainScrollContainer');
+      if (mainEl) mainEl.scrollTop = 0;
+    };
+
+    const _origHandleCloudDataV23 = handleCloudData;
+    handleCloudData = function(res) {
+      if ((Date.now() - lastUserScrollOrTouchMs) < 2800 || isAnyModalOpen() || isUserInteractingWithControl()) {
+        if (res && Array.isArray(res.onlineUsers)) {
+          const nowClient = Date.now();
+          setStored('online_users', res.onlineUsers.map(o => ({
+            ...o,
+            clientReceivedAt: (o && o.state !== 'Offline' && Number(o.lastSeen) > 0) ? nowClient : 0
+          })));
+        }
+        return;
+      }
+      _origHandleCloudDataV23(res);
+    };
+
+    // 3. FIX BROWSER CLOSE STILL SHOWING ONLINE (Instant Offline Beacon + Strict 75s Expiry)
+    window.addEventListener('beforeunload', () => {
+      if (!currentUser || isHardRefreshing) return;
+      try {
+        const payload = JSON.stringify({
+          action: 'USER_LOGOUT',
+          userId: String(currentUser.id),
+          userName: currentUser.name,
+          team: currentUser.team,
+          pingUserId: String(currentUser.id),
+          pingName: currentUser.name,
+          pingRole: currentUser.role,
+          pingTeam: currentUser.team,
+          pingState: 'Offline'
+        });
+        if (navigator.sendBeacon) {
+          const params = new URLSearchParams();
+          params.append('action', 'USER_LOGOUT');
+          params.append('payload', payload);
+          navigator.sendBeacon(webhookUrl, params);
+        }
+      } catch (e) {}
+    });
+
+    getUserOnlineStatus = function(userId) {
+      const uid = String(userId).trim();
+      if (currentUser && String(currentUser.id).trim() === uid) {
+        if (currentUser.role === 'agent') {
+          const today = getTodayFormatted();
+          const myAtt = getStored('attendance_records', []).find(a => String(a.userId).trim() === uid && a.date === today);
+          if (myAtt && myAtt.status === 'On Break') return 'On Break';
+        }
+        return 'Online';
+      }
+      const now = Date.now();
+      const onlineList = getStored('online_users', []);
+      const oRec = onlineList.find(o => String(o.id).trim() === uid);
+      if (oRec && oRec.state !== 'Offline' && Number(oRec.lastSeen) > 0) {
+        const refTs = Number(oRec.clientReceivedAt || oRec.lastSeen || 0);
+        if ((now - refTs) < 75000) {
+          return oRec.state === 'On Break' ? 'On Break' : 'Online';
+        }
+      }
+      return 'Offline';
+    };
+
+    // 4 & 5. 1-CLICK DAY OFF (DO) REPORT FILTER, TEAM-FIRST SORT, DATE EDIT & DOUBLE CONFIRMATION
+    let showOnlyDayOffReportsFilter = false;
+
+    function getAgentRosterShiftForDateStr(empId, dateStr) {
+      if (!empId || !dateStr || String(dateStr).startsWith('MONTHLY_PROD_')) return '';
+      const parts = String(dateStr).replace(/^'/, '').trim().split('/');
+      if (parts.length !== 3) return '';
+      const dObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+      if (isNaN(dObj.getTime())) return '';
+      const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const dayKey = dayKeys[dObj.getDay()];
+      const mKey = `${parts[1]}/${parts[2]}`;
+      const rosterList = getRosterForMonth(mKey);
+      const rRow = rosterList.find(r => String(r.id).trim() === String(empId).trim());
+      if (!rRow) return '';
+      return String(rRow[dayKey] || '').trim();
+    }
+
+    function isDateAgentDayOff(empId, dateStr) {
+      return getAgentRosterShiftForDateStr(empId, dateStr).toUpperCase() === 'DO';
+    }
+
+    function toggleDayOffReportsFilter() {
+      showOnlyDayOffReportsFilter = !showOnlyDayOffReportsFilter;
+      if (showOnlyDayOffReportsFilter) {
+        reportsDateFilter = 'ALL';
+      }
+      renderAppLayout();
+    }
+
+    function handleChangeReportDatePrompt(userId, userName, oldDateStr) {
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
+      const targetUser = allUsers.find(u => String(u.id) === String(userId));
+      const targetTeam = targetUser ? targetUser.team : '';
+      if (!isSuperAdmin(currentUser) && !canEditTeamData(currentUser, targetTeam)) {
+        showPortalToast('Permission Denied', 'You can only edit or move reports for your own team.', 'error');
+        return;
+      }
+      const newDateInput = prompt(`Change report date for ${userName} (${userId}):\nCurrent Date (Day Off): ${oldDateStr}\n\nEnter new date (DD/MM/YYYY):`, oldDateStr);
+      if (!newDateInput || newDateInput.trim() === oldDateStr) return;
+      const cleanNewDate = newDateInput.trim();
+      if (!/^\d{2}\/\d{2}\/20\d{2}$/.test(cleanNewDate)) {
+        showPortalToast('Invalid Date Format', 'Please enter date as DD/MM/YYYY (e.g. 11/11/2026).', 'error');
+        return;
+      }
+
+      openConfirmWarningModal(
+        `Move Report Date (${oldDateStr} → ${cleanNewDate})?`,
+        `Are you sure you want to move <strong>${userName} (${userId})</strong>'s sales report from <strong>${oldDateStr} (Day Off)</strong> to <strong>${cleanNewDate}</strong>?`,
+        'Confirm Date Correction',
+        async () => {
+          let sales = getStored('sales_records', []);
+          const existingRec = sales.find(s => String(s.userId) === String(userId) && String(s.date).replace(/^'/, '').trim() === oldDateStr);
+          if (!existingRec) return;
+
+          const updatedEntry = { ...existingRec, date: cleanNewDate };
+          sales = sales.filter(s => !(String(s.userId) === String(userId) && (s.date === oldDateStr || s.date === cleanNewDate)));
+          sales.unshift(updatedEntry);
+          setStored('sales_records', sales);
+          markLocalSalesMutatedNow();
+
+          const logMeta = recordActivityLog('Moved Day Off Report Date', `Moved ${userName} (${userId}) report from ${oldDateStr} (DO) to ${cleanNewDate}`);
+          renderAppLayout();
+          showPortalToast('Report Date Updated!', `Moved ${userName}'s report to ${cleanNewDate}.`, 'success');
+
+          await postToSheet('DELETE_SALES_RECORD', { userId: String(userId), date: oldDateStr, ...logMeta }).catch(() => {});
+          await postToSheet('DAILY_SALES_SUBMIT', { ...updatedEntry, ...logMeta }).catch(() => {});
+        },
+        'Yes, Move Date & Sync',
+        true
+      );
+    }
+
+    const _origHandleReportSubmitV23 = handleReportSubmit;
+    handleReportSubmit = function(e) {
+      e.preventDefault();
+      const u = currentUser;
+      const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
+      const selectedAgId = isAdmin ? document.getElementById('modalAgentSelect').value : u.id;
+      const dateStr = inputValToDateStr(document.getElementById('modalDate').value);
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
+      const targetAgent = allUsers.find(a => String(a.id) === String(selectedAgId)) || u;
+
+      if (isDateAgentDayOff(targetAgent.id, dateStr)) {
+        openConfirmWarningModal(
+          `⚠️ Day Off (DO) Warning — ${cleanDisplayDate(dateStr)}!`,
+          `<div class="space-y-2 text-rose-900">
+            <p class="font-black text-xs">According to the Duty Roster, <strong>${cleanDisplayDate(dateStr)} (${dateStr})</strong> is <strong>${targetAgent.name} (${targetAgent.id})</strong>'s weekly <strong>Day Off (DO)</strong>!</p>
+            <p class="text-[11px] font-bold text-slate-700">💡 <strong>Night Shift Check:</strong> If this report is from a Night Shift duty before the Day Off, please cancel and select the previous working date.</p>
+            <p class="text-[11px] font-extrabold text-amber-800">Did ${targetAgent.name} actually work on their Day Off?</p>
+          </div>`,
+          'Day Off (DO) Protection — Step 1 of 2',
+          () => {
+            setTimeout(() => {
+              openConfirmWarningModal(
+                `🔒 Final Confirmation (2/2): Submit on Day Off?`,
+                `Please confirm a 2nd time: Are you 100% sure you want to save this sales report for <strong>${targetAgent.name}</strong> on their <strong>Day Off (${cleanDisplayDate(dateStr)})</strong>?`,
+                'Double Confirmation — Step 2 of 2',
+                () => {
+                  _origHandleReportSubmitV23(e);
+                },
+                'Yes, Confirm Day Off Report',
+                true
+              );
+            }, 200);
+          },
+          'Proceed to 2nd Confirmation',
+          true
+        );
+        return;
+      }
+      _origHandleReportSubmitV23(e);
+    };
+
+    const _origRenderReportsV23 = renderReports;
+    renderReports = function() {
+      const baseHtml = _origRenderReportsV23();
+      const u = currentUser;
+      const myTeamNorm = u ? normalizeTeamNameAlias(u.team) : '';
+      const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+      let doReports = allMonthSales.filter(s => {
+        if (activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(s.team) !== activeChannel) return false;
+        if (!canViewAll(u) && String(s.userId) !== String(u.id)) return false;
+        if (logsFilterScope !== 'ALL' && logsFilterScope !== 'ALL_OMNI' && logsFilterScope !== 'ALL_FB' && logsFilterScope !== 'ALL_WA' && logsFilterScope !== 'MINE') {
+          if (normalizeTeamNameAlias(s.team) !== normalizeTeamNameAlias(logsFilterScope)) return false;
+        }
+        return isDateAgentDayOff(s.userId, s.date);
+      });
+
+      doReports.sort((a, b) => {
+        const aMyTeam = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : 1;
+        const bMyTeam = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : 1;
+        if (aMyTeam !== bMyTeam) return aMyTeam - bMyTeam;
+        return (parseInt(b.date.split('/')[0], 10) || 0) - (parseInt(a.date.split('/')[0], 10) || 0);
+      });
+
+      const doBannerHtml = `
+        <div class="card-dynamic p-4 border-2 ${showOnlyDayOffReportsFilter ? 'border-rose-500 bg-rose-50/70' : 'border-amber-300 bg-amber-50/50'} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl ${doReports.length > 0 ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'} flex items-center justify-center text-sm font-black shadow-sm shrink-0">
+              <i class="fa-solid ${doReports.length > 0 ? 'fa-calendar-xmark' : 'fa-calendar-check'}"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${doReports.length > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}">
+                  1-Click Day Off (DO) Report Checker
+                </span>
+                <span class="text-xs font-black text-slate-900">${doReports.length} Report(s) Found on Day Off (${selectedMonthKey})</span>
+              </div>
+              <p class="text-[11px] font-bold text-slate-600 mt-0.5">
+                View who submitted reports on their weekly Day Off (such as Night Shift reports entered on DO). Your own team is listed first.
+              </p>
+            </div>
+          </div>
+          <button type="button" onclick="toggleDayOffReportsFilter()" class="px-4 py-2.5 rounded-xl text-xs font-black shadow-sm transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${showOnlyDayOffReportsFilter ? 'bg-slate-900 text-white' : 'bg-rose-600 hover:bg-rose-700 text-white'}">
+            <i class="fa-solid fa-filter"></i>
+            ${showOnlyDayOffReportsFilter ? 'Show All Daily Reports' : `View Day Off (DO) Reports (${doReports.length})`}
+          </button>
+        </div>
+
+        ${showOnlyDayOffReportsFilter ? `
+          <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-rose-300">
+            <div class="px-5 py-3 bg-rose-900 text-white flex items-center justify-between">
+              <span class="text-xs font-black uppercase tracking-wider"><i class="fa-solid fa-triangle-exclamation text-amber-300 mr-1.5"></i>Reports Submitted on Roster Day Off (DO) — ${selectedMonthKey}</span>
+              <span class="text-[11px] font-bold text-rose-200">${u.role === 'admin' ? `${u.team} listed first • Each TL can edit/delete their own team (Nazim can edit all)` : 'Your Day Off Submissions'}</span>
+            </div>
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">Report Date</th>
+                  <th class="p-3.5">Roster Status</th>
+                  <th class="p-3.5">Agent Name & ID</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5 text-center">Leads</th>
+                  <th class="p-3.5 text-center">Orders</th>
+                  <th class="p-3.5">Sales Amount</th>
+                  <th class="p-3.5 text-right">Move Date / Edit / Delete</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${doReports.length === 0 ? `<tr><td colspan="8" class="p-8 text-center text-emerald-700 font-extrabold">🎉 No reports were submitted on a Day Off (DO) in ${selectedMonthKey}!</td></tr>` : ''}
+                ${doReports.map(r => {
+                  const canManageThisRow = isSuperAdmin(u) || (u.role === 'admin' && canEditTeamData(u, r.team)) || (u.role === 'agent' && String(r.userId) === String(u.id));
+                  return `
+                    <tr class="hover:bg-rose-50/50 ${normalizeTeamNameAlias(r.team) === myTeamNorm ? 'bg-amber-50/40' : ''}">
+                      <td class="p-3.5 font-extrabold text-rose-700">${cleanDisplayDate(r.date)} <span class="text-[10px] text-slate-400">(${r.date})</span></td>
+                      <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-black text-[10px]">⚠️ Roster: DO (Day Off)</span></td>
+                      <td class="p-3.5 font-extrabold text-slate-900">${r.userName} <span class="text-slate-400 text-[10px]">(${r.userId})</span></td>
+                      <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(r.team)}">${r.team}</span></td>
+                      <td class="p-3.5 text-center font-bold">${r.leads}</td>
+                      <td class="p-3.5 text-center font-black text-blue-600">${r.orders}</td>
+                      <td class="p-3.5 font-black text-emerald-600">৳${Number(r.amount || 0).toLocaleString()}</td>
+                      <td class="p-3.5 text-right space-x-1">
+                        ${canManageThisRow ? `
+                          <button onclick="handleChangeReportDatePrompt('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg font-extrabold text-[11px]" title="Change date (e.g. move Night shift report to previous date)">
+                            <i class="fa-solid fa-calendar-day mr-1"></i>Move Date
+                          </button>
+                          <button onclick="openReportModal('${r.userId}', '${r.date}')" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg font-extrabold text-[11px]">
+                            <i class="fa-solid fa-pen-to-square mr-1"></i>Edit Data
+                          </button>
+                          <button onclick="handleDirectDeleteReport('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-extrabold text-[11px]">
+                            <i class="fa-solid fa-trash-can mr-1"></i>Delete
+                          </button>
+                        ` : `<span class="text-[10px] font-bold text-slate-400">View Only (${r.team})</span>`}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+      `;
+
+      return baseHtml.replace('<div class="space-y-6">', '<div class="space-y-6">' + doBannerHtml);
+    };
+
+    // 6. ORGANIZED TABLE-READY EXCEL (.XLS) & CSV DOWNLOADER
+    downloadPortalCsvFile = function(filename, headersArr, rowsArr) {
+      const cleanTitle = filename.replace(/\.csv$/i, '').replace(/_/g, ' ');
+      const xlsFilename = filename.replace(/\.csv$/i, '.xls');
+      const tableHtml = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head><meta charset="UTF-8">
+        <style>
+          table { border-collapse: collapse; font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; }
+          th, td { border: 1px solid #cbd5e1; padding: 7px 12px; text-align: center; vertical-align: middle; }
+        </style>
+        </head>
+        <body>
+          <table>
+            <thead>
+              <tr>
+                <th colspan="${headersArr.length}" style="background:#0f172a; color:#f8fafc; font-size:13pt; font-weight:bold; padding:10px; text-align:left;">
+                  Ghorerbazar Portal — ${cleanTitle} (${selectedMonthKey})
+                </th>
+              </tr>
+              <tr>
+                ${headersArr.map(h => `<th style="background:#1e3a8a; color:#ffffff; font-weight:bold;">${h}</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsArr.map((row, rIdx) => {
+                const isTotalRow = String(row[0] || '').toUpperCase().includes('TOTAL') || String(row[2] || '').toUpperCase().includes('TOTAL');
+                const rowBg = isTotalRow ? '#0f172a' : (rIdx % 2 === 0 ? '#ffffff' : '#f8fafc');
+                const rowFg = isTotalRow ? '#fde68a' : '#0f172a';
+                const rowWeight = isTotalRow ? 'bold' : 'normal';
+                return `<tr>${row.map((cell, cIdx) => `<td style="background:${rowBg}; color:${rowFg}; font-weight:${rowWeight}; text-align:${cIdx === 2 ? 'left' : 'center'};">${cell === null || cell === undefined ? '' : cell}</td>`).join('')}</tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </body></html>
+      `;
+      const xlsBlob = new Blob(['\uFEFF' + tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      const xlsUrl = URL.createObjectURL(xlsBlob);
+      const aXls = document.createElement('a');
+      aXls.href = xlsUrl;
+      aXls.download = xlsFilename;
+      document.body.appendChild(aXls);
+      aXls.click();
+      document.body.removeChild(aXls);
+      URL.revokeObjectURL(xlsUrl);
+      showPortalToast('Organized Excel Table Downloaded!', `Saved "${xlsFilename}" with full table formatting.`, 'success');
+    };
+
   </script>
 </body>
 </html>
