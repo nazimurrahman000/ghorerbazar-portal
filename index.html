@@ -575,6 +575,8 @@
       monthlyPerfAgentId = 'ALL';
       driveProdTeamScope = defaultTeamScope;
       driveProdAgentId = 'ALL';
+      missingReportsTeamScope = defaultTeamScope;
+      missingReportsAgentFilter = 'ALL';
       sprintTabTeamScope = defaultTeamScope;
       logsFilterScope = 'ALL';
       if (typeof dateWiseTeamFilter !== 'undefined') dateWiseTeamFilter = 'ALL';
@@ -692,6 +694,12 @@
     let driveProdTeamScope = 'ALL';
     let driveProdAgentId = 'ALL';
 
+    let missingReportsTeamScope = (currentUser && currentUser.role === 'admin') ? normalizeTeamNameAlias(currentUser.team) : 'ALL';
+    let missingReportsAgentFilter = 'ALL';
+    let missingReportsDateFilter = 'ALL';
+    let missingReportsSubView = 'MISSING'; // 'MISSING' | 'LEAVE_LOG'
+    let pendingLeaveModalContext = null;
+
     let sprintTabPhase = 'AUTO'; // 'AUTO' | 'S1' | 'S2' | 'S3'
     let sprintTabTeamScope = 'ALL'; // 'ALL' | 'Team Nazim' | 'Team Samad'
 
@@ -745,7 +753,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen || profileMenuDropdownOpen) return true;
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal'];
+      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -762,6 +770,7 @@
       { key: 'tab_sprint_target', category: 'Sidebar Tabs', label: 'Sprint Target Tab', desc: 'View live 10-day Sprint leaderboard, agent sprint goals & TL 80%/100% milestones', icon: 'fa-bolt', color: 'text-blue-600' },
       { key: 'tab_drive_product', category: 'Sidebar Tabs', label: 'Drive Product Tab', desc: 'View all agents Drive Product KG targets, achieved quantities & date-wise submissions', icon: 'fa-box-open', color: 'text-amber-500' },
       { key: 'tab_reports', category: 'Sidebar Tabs', label: 'Daily Sales Reports Tab', desc: 'Access daily sales & conversion logs table', icon: 'fa-file-invoice', color: 'text-blue-600' },
+      { key: 'tab_missing_reports', category: 'Sidebar Tabs', label: 'Missing & Leave Tab', desc: 'Auto-detect roster-based missing sales reports & track Casual/Sick Leave or Absent records', icon: 'fa-calendar-xmark', color: 'text-rose-600' },
       { key: 'tab_ranking', category: 'Sidebar Tabs', label: 'Ranking Tab', desc: 'View floor leaderboard & team head-to-head comparison', icon: 'fa-trophy', color: 'text-amber-500' },
       { key: 'tab_roster', category: 'Sidebar Tabs', label: 'Duty Roster Tab', desc: 'View weekly shift schedule and Day Off (DO) table', icon: 'fa-calendar-week', color: 'text-indigo-600' },
       { key: 'tab_attendance', category: 'Sidebar Tabs', label: 'Attendance & Duty Logs Tab', desc: 'View login/logout times, working hours & break history', icon: 'fa-clock', color: 'text-emerald-600' },
@@ -800,6 +809,7 @@
         tab_sprint_target: true, // Admin can toggle off in Role & Feature Access if next month has no sprint!
         tab_drive_product: true,
         tab_reports: true,
+        tab_missing_reports: true,
         tab_ranking: true,
         tab_roster: true,
         tab_attendance: true,
@@ -2046,7 +2056,7 @@
       } : {};
       const fullData = { action, timestamp: new Date().toISOString(), ...pingInfo, ...payload };
 
-      if (action !== 'ATTENDANCE_SYNC' && action !== 'SEND_CHAT_MESSAGE' && action !== 'MARK_CHAT_READ' && action !== 'SAVE_MONTHLY_CONFIG') {
+      if (action !== 'DAILY_SALES_SUBMIT' && action !== 'DELETE_SALES_RECORD' && action !== 'ATTENDANCE_SYNC' && action !== 'SEND_CHAT_MESSAGE' && action !== 'MARK_CHAT_READ' && action !== 'SAVE_MONTHLY_CONFIG') {
         const reqSignature = `${action}_${fullData.userId || ''}_${fullData.date || ''}_${fullData.logAction || ''}_${fullData.logDetails || ''}`;
         const nowMs = Date.now();
         if (reqSignature === lastSentRequestKey && (nowMs - lastSentRequestTime) < 2500) {
@@ -2063,6 +2073,7 @@
         await fetch(webhookUrl, {
           method: 'POST',
           mode: 'no-cors',
+          keepalive: true,
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: bodyParams.toString()
         });
@@ -2158,16 +2169,120 @@
       lastLocalUserOrConfigMutationMs = Date.now();
     }
 
+    // =========================================================================
+    // ZERO-LOSS PERSISTENT SALES OUTBOX QUEUE (200+ CONCURRENT AGENTS SAFE)
+    // =========================================================================
+    function getPendingSalesOutboxQueue() {
+      try {
+        const q = JSON.parse(localStorage.getItem('gb_pending_sales_queue') || '{}');
+        return (q && typeof q === 'object') ? q : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function savePendingSalesOutboxQueue(qObj) {
+      localStorage.setItem('gb_pending_sales_queue', JSON.stringify(qObj || {}));
+    }
+
+    function enqueueVerifiedSalesSubmission(entryObj, logMetaObj, isDeletion = false) {
+      if (!entryObj || !entryObj.userId || !entryObj.date) return;
+      const q = getPendingSalesOutboxQueue();
+      const key = `${String(entryObj.userId).trim()}_${String(entryObj.date).trim()}`;
+      q[key] = {
+        entry: { ...entryObj },
+        logMeta: logMetaObj || {},
+        isDeletion: Boolean(isDeletion),
+        queuedAt: Date.now(),
+        lastAttemptAt: Date.now(),
+        attempts: 1
+      };
+      savePendingSalesOutboxQueue(q);
+    }
+
+    function doesCloudRecordMatchPending(cloudRec, pendingEntry) {
+      if (!cloudRec || !pendingEntry) return false;
+      const isMonthlyProd = String(pendingEntry.date || '').startsWith('MONTHLY_PROD_');
+      if (isMonthlyProd) {
+        return Number(cloudRec.ajwa || 0) === Number(pendingEntry.ajwa || 0) &&
+               Number(cloudRec.gawaGhee || 0) === Number(pendingEntry.gawaGhee || 0) &&
+               Number(cloudRec.sunHoney || 0) === Number(pendingEntry.sunHoney || 0) &&
+               Number(cloudRec.bsHoney || 0) === Number(pendingEntry.bsHoney || 0);
+      }
+      return Number(cloudRec.amount || 0) === Number(pendingEntry.amount || 0) &&
+             Number(cloudRec.orders || 0) === Number(pendingEntry.orders || 0) &&
+             Number(cloudRec.leads || 0) === Number(pendingEntry.leads || 0);
+    }
+
     function handleCloudData(res) {
       let changed = false;
       if (Array.isArray(res.salesRecords)) {
         const local = getStored('sales_records', []);
-        // Protect fresh local optimistic sales/product edits for 10 seconds so an in-flight stale GET poll never reverts the UI!
-        if ((Date.now() - lastLocalSalesMutationMs) >= 20000) {
-          if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
-            setStored('sales_records', res.salesRecords);
-            changed = true;
+        const pendingQ = getPendingSalesOutboxQueue();
+        const nowMs = Date.now();
+        let queueModified = false;
+
+        const cloudMap = new Map();
+        res.salesRecords.forEach(r => {
+          if (r && r.userId && r.date) {
+            const cleanD = String(r.date).replace(/^'/, '').trim();
+            cloudMap.set(`${String(r.userId).trim()}_${cleanD}`, { ...r, date: cleanD });
           }
+        });
+
+        const mergedList = [...res.salesRecords.map(r => ({ ...r, date: String(r.date || '').replace(/^'/, '').trim() }))];
+
+        Object.keys(pendingQ).forEach(k => {
+          const item = pendingQ[k];
+          if (!item || !item.entry) {
+            delete pendingQ[k];
+            queueModified = true;
+            return;
+          }
+          if ((nowMs - Number(item.queuedAt || 0)) > 86400000) {
+            delete pendingQ[k];
+            queueModified = true;
+            return;
+          }
+          const cloudMatch = cloudMap.get(k);
+          if (item.isDeletion) {
+            if (!cloudMatch) {
+              delete pendingQ[k];
+              queueModified = true;
+            } else {
+              const idxInMerged = mergedList.findIndex(m => `${String(m.userId).trim()}_${m.date}` === k);
+              if (idxInMerged !== -1) mergedList.splice(idxInMerged, 1);
+              if ((nowMs - Number(item.lastAttemptAt || 0)) > 6500) {
+                item.lastAttemptAt = nowMs;
+                item.attempts = (item.attempts || 1) + 1;
+                queueModified = true;
+                postToSheet('DELETE_SALES_RECORD', { userId: String(item.entry.userId), date: item.entry.date, ...(item.logMeta || {}) }).catch(() => {});
+              }
+            }
+          } else {
+            if (cloudMatch && doesCloudRecordMatchPending(cloudMatch, item.entry)) {
+              delete pendingQ[k];
+              queueModified = true;
+            } else {
+              const idxInMerged = mergedList.findIndex(m => `${String(m.userId).trim()}_${m.date}` === k);
+              if (idxInMerged !== -1) mergedList[idxInMerged] = item.entry;
+              else mergedList.unshift(item.entry);
+
+              if ((nowMs - Number(item.lastAttemptAt || 0)) > 6500) {
+                item.lastAttemptAt = nowMs;
+                item.attempts = (item.attempts || 1) + 1;
+                queueModified = true;
+                postToSheet('DAILY_SALES_SUBMIT', { ...item.entry, ...(item.logMeta || {}) }).catch(() => {});
+              }
+            }
+          }
+        });
+
+        if (queueModified) savePendingSalesOutboxQueue(pendingQ);
+
+        if (JSON.stringify(mergedList) !== JSON.stringify(local)) {
+          setStored('sales_records', mergedList);
+          changed = true;
         }
       }
       if (Array.isArray(res.attendanceRecords)) {
@@ -2224,6 +2339,27 @@
         const localCfg = getStored('monthly_configs', {});
         const isRecentConfigEdit = (Date.now() - lastLocalUserOrConfigMutationMs) < 10000;
         const mergedConfigs = isRecentConfigEdit ? { ...res.monthlyConfigs, ...localCfg } : { ...localCfg, ...res.monthlyConfigs };
+
+        // Merge LEAVE_RECORDS_* keys so local leave/absent updates are never overwritten by stale cloud polls
+        Object.keys({ ...localCfg, ...(res.monthlyConfigs || {}) }).forEach(cfgK => {
+          if (cfgK.startsWith('LEAVE_RECORDS_')) {
+            const locLv = (localCfg[cfgK] && typeof localCfg[cfgK] === 'object') ? localCfg[cfgK] : {};
+            const cldLv = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
+            const combinedLv = { ...cldLv };
+            Object.keys(locLv).forEach(lk => {
+              const lItem = locLv[lk];
+              const cItem = cldLv[lk];
+              if (!cItem || Number(lItem.updatedTs || 0) >= Number(cItem.updatedTs || 0)) {
+                if (lItem.isRemoved) delete combinedLv[lk];
+                else combinedLv[lk] = lItem;
+              }
+            });
+            Object.keys(combinedLv).forEach(lk => {
+              if (combinedLv[lk] && combinedLv[lk].isRemoved) delete combinedLv[lk];
+            });
+            mergedConfigs[cfgK] = combinedLv;
+          }
+        });
 
         if (localCfg['CHAT_AND_NOTICES'] || res.monthlyConfigs['CHAT_AND_NOTICES']) {
           const locHub = localCfg['CHAT_AND_NOTICES'] || {};
@@ -2326,12 +2462,14 @@
           monthlyPerfTeamScope = 'ALL';
           driveProdTeamScope = 'ALL';
           sprintTabTeamScope = 'ALL';
+          missingReportsTeamScope = 'ALL';
         } else if (currentUser.role === 'admin') {
           const myTeamClean = normalizeTeamNameAlias(currentUser.team);
           dashboardScope = myTeamClean;
           monthlyPerfTeamScope = myTeamClean;
           driveProdTeamScope = myTeamClean;
           sprintTabTeamScope = myTeamClean;
+          missingReportsTeamScope = myTeamClean;
         } else if (currentUser.role === 'agent') {
           const myTeamClean = normalizeTeamNameAlias(currentUser.team);
           sprintTabTeamScope = myTeamClean;
@@ -2378,6 +2516,7 @@
       monthlyPerfTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
       driveProdTeamScope = loginTeamScope;
       sprintTabTeamScope = loginTeamScope;
+      missingReportsTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
       monthlyPerfAgentId = 'ALL';
       logsFilterScope = 'ALL';
       reportsDateFilter = getTodayFormatted();
@@ -2508,6 +2647,13 @@
           const myT = normalizeTeamNameAlias(currentUser.team);
           if (getActiveChannelMeta().teams.includes(myT)) driveProdTeamScope = myT;
         }
+      } else if (tab === 'missing_reports') {
+        if (activeChannel !== 'ALL_CHANNELS' && currentUser && currentUser.role === 'admin') {
+          const myT = normalizeTeamNameAlias(currentUser.team);
+          if (getActiveChannelMeta().teams.includes(myT)) missingReportsTeamScope = myT;
+        } else if (activeChannel === 'ALL_CHANNELS') {
+          missingReportsTeamScope = 'ALL';
+        }
       }
       renderAppLayout();
     }
@@ -2637,6 +2783,19 @@
                 ${hasFeatureAccess(u, 'tab_reports') ? `
                 <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-file-invoice text-sm text-blue-600"></i> Daily Sales Reports
+                </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_missing_reports') ? `
+                <button onclick="setTab('missing_reports')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'missing_reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <span class="flex items-center gap-3">
+                    <i class="fa-solid fa-calendar-xmark text-sm ${activeTab === 'missing_reports' ? 'text-amber-300' : 'text-rose-600'}"></i> Missing & Leave
+                  </span>
+                  ${(() => {
+                    const mCount = getQuickMissingReportBadgeCountForSidebar();
+                    return mCount > 0
+                      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === 'missing_reports' ? 'bg-white text-rose-700' : 'bg-rose-600 text-white'} shadow">${mCount}</span>`
+                      : `<span class="px-1.5 py-0.5 rounded text-[9px] font-black ${activeTab === 'missing_reports' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}">OK</span>`;
+                  })()}
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_ranking') ? `
@@ -2831,6 +2990,7 @@
         ${renderChangePasswordModal()}
         ${renderRosterAddModal()}
         ${renderLogoutConfirmModal()}
+        ${renderMarkLeaveModal()}
       `;
       document.getElementById('app').innerHTML = html;
 
@@ -2936,6 +3096,7 @@
       if (activeTab === 'ranking' && hasFeatureAccess(currentUser, 'tab_ranking')) return renderRankingAndComparison();
       if (activeTab === 'chat' && hasFeatureAccess(currentUser, 'tab_chat')) return renderChatHubView();
       if (activeTab === 'reports' && hasFeatureAccess(currentUser, 'tab_reports')) return renderReports();
+      if (activeTab === 'missing_reports' && hasFeatureAccess(currentUser, 'tab_missing_reports')) return renderMissingReportsAndLeaveView();
       if (activeTab === 'agents' && hasFeatureAccess(currentUser, 'tab_agents')) return renderManageAgents();
       return renderDashboard();
     }
@@ -4463,6 +4624,7 @@
           closeModal('driveProdModal');
           renderAppLayout();
           showPortalToast('Drive Product Total Synced!', `Updated ${targetAgent.name}'s total (${rangeLabel}).`, 'success');
+          enqueueVerifiedSalesSubmission(entry, logMeta, false);
           postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta }).catch(() => {});
         },
         'Yes, Save & Sync',
@@ -8651,6 +8813,789 @@ function renderRankingAndComparison() {
       `;
     }
 
+    
+    // =========================================================================
+    // SMART ROSTER-BASED MISSING REPORTS & LEAVE / ABSENT TRACKER
+    // =========================================================================
+    const LEAVE_STATUS_TYPES = [
+      { key: 'Casual Leave', label: 'Casual Leave (CL)', badge: 'bg-blue-100 text-blue-800 border-blue-200', icon: 'fa-umbrella-beach' },
+      { key: 'Sick Leave', label: 'Sick Leave (SL)', badge: 'bg-amber-100 text-amber-900 border-amber-200', icon: 'fa-briefcase-medical' },
+      { key: 'Emergency Leave', label: 'Emergency Leave (EL)', badge: 'bg-purple-100 text-purple-800 border-purple-200', icon: 'fa-bolt' },
+      { key: 'Absent', label: 'Absent (Uninformed)', badge: 'bg-rose-100 text-rose-800 border-rose-300', icon: 'fa-user-xmark' },
+      { key: 'Extra Day Off', label: 'Swap / Extra Day Off (DO)', badge: 'bg-teal-100 text-teal-800 border-teal-200', icon: 'fa-calendar-check' }
+    ];
+
+    function getLeaveRecordsStoreForMonth(mKey) {
+      const mk = mKey || selectedMonthKey;
+      const configs = getStored('monthly_configs', {});
+      const cfgKey = `LEAVE_RECORDS_${mk}`;
+      const raw = (configs[cfgKey] && typeof configs[cfgKey] === 'object') ? configs[cfgKey] : {};
+      const clean = {};
+      Object.keys(raw).forEach(k => {
+        if (raw[k] && !raw[k].isRemoved) clean[k] = raw[k];
+      });
+      return clean;
+    }
+
+    function saveLeaveRecordEntry(mKey, userId, dateStr, leaveEntryObj) {
+      const mk = mKey || selectedMonthKey;
+      const cfgKey = `LEAVE_RECORDS_${mk}`;
+      const configs = getStored('monthly_configs', {});
+      if (!configs[cfgKey] || typeof configs[cfgKey] !== 'object') configs[cfgKey] = {};
+      const mapKey = `${String(userId).trim()}_${String(dateStr).trim()}`;
+      configs[cfgKey][mapKey] = {
+        ...leaveEntryObj,
+        updatedTs: Date.now()
+      };
+      setStored('monthly_configs', configs);
+      markLocalUserOrConfigMutatedNow();
+      postToSheet('SAVE_MONTHLY_CONFIG', {
+        monthKey: cfgKey,
+        configJson: JSON.stringify(configs[cfgKey])
+      }).catch(() => {});
+    }
+
+    function removeLeaveRecordEntry(mKey, userId, dateStr) {
+      const mk = mKey || selectedMonthKey;
+      const cfgKey = `LEAVE_RECORDS_${mk}`;
+      const configs = getStored('monthly_configs', {});
+      if (!configs[cfgKey] || typeof configs[cfgKey] !== 'object') return;
+      const mapKey = `${String(userId).trim()}_${String(dateStr).trim()}`;
+      configs[cfgKey][mapKey] = { isRemoved: true, updatedTs: Date.now() };
+      setStored('monthly_configs', configs);
+      markLocalUserOrConfigMutatedNow();
+      postToSheet('SAVE_MONTHLY_CONFIG', {
+        monthKey: cfgKey,
+        configJson: JSON.stringify(configs[cfgKey])
+      }).catch(() => {});
+    }
+
+    function isRosterShiftDueForReportCheck(dayNum, monthNum, yearNum, shiftStr) {
+      const s = String(shiftStr || '').trim().toUpperCase();
+      if (!s || s === 'DO' || s.includes('OFF')) return false;
+
+      const now = new Date();
+      const curY = now.getFullYear();
+      const curM = now.getMonth() + 1;
+      const curD = now.getDate();
+      const curHr = now.getHours();
+
+      if (yearNum > curY || (yearNum === curY && monthNum > curM)) return false;
+      if (yearNum === curY && monthNum === curM) {
+        if (dayNum > curD) return false;
+        if (dayNum === curD) {
+          if (s.includes('NIGHT') || s.includes('11:00')) return false;
+          if (s.includes('3:00') && curHr < 15) return false;
+          if (curHr < 9) return false;
+        }
+      }
+      return true;
+    }
+
+    function computeMissingAndLeaveDataForMonth(mKey, teamScopeFilter = 'ALL', agentIdFilter = 'ALL') {
+      const mk = mKey || selectedMonthKey;
+      const parts = mk.split('/');
+      const monthNum = parseInt(parts[0], 10) || 11;
+      const yearNum = parseInt(parts[1], 10) || 2026;
+      const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+
+      const u = currentUser;
+      const allUsersInChannel = getUsersForMonth(mk, activeChannel === 'ALL_CHANNELS');
+      const allAgents = allUsersInChannel.filter(usr => usr.role === 'agent' && !isPendingOrFloatingAgent(usr) && !isUserAccountDeactivated(usr));
+
+      let targetAgents = [];
+      if (u && u.role === 'agent' && !canViewAll(u)) {
+        targetAgents = allAgents.filter(a => String(a.id) === String(u.id));
+      } else {
+        targetAgents = allAgents.filter(a => {
+          if (teamScopeFilter && teamScopeFilter !== 'ALL' && normalizeTeamNameAlias(a.team) !== normalizeTeamNameAlias(teamScopeFilter)) {
+            return false;
+          }
+          if (agentIdFilter && agentIdFilter !== 'ALL' && String(a.id) !== String(agentIdFilter)) {
+            return false;
+          }
+          return true;
+        });
+      }
+
+      const rosterList = getRosterForMonth(mk);
+      const rosterMap = new Map();
+      rosterList.forEach(r => rosterMap.set(String(r.id), r));
+
+      const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+        .filter(s => String(s.date || '').endsWith(mk) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+      const now = new Date();
+      const maxDayToScan = (yearNum === now.getFullYear() && monthNum === (now.getMonth() + 1))
+        ? now.getDate()
+        : ((yearNum < now.getFullYear() || (yearNum === now.getFullYear() && monthNum < (now.getMonth() + 1))) ? daysInMonth : 0);
+
+      const activeDatesSet = new Set(monthSales.map(s => s.date));
+      const leaveStore = getLeaveRecordsStoreForMonth(mk);
+      Object.values(leaveStore).forEach(lv => { if (lv && lv.date) activeDatesSet.add(lv.date); });
+
+      const submittedKeySet = new Set(monthSales.map(s => `${String(s.userId).trim()}_${String(s.date).trim()}`));
+      const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const dayShortNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+      const missingItems = [];
+      const leaveItems = [];
+      let totalScheduledDuties = 0;
+      let totalSubmittedDuties = 0;
+
+      for (let d = maxDayToScan; d >= 1; d--) {
+        const dateStr = `${String(d).padStart(2, '0')}/${String(monthNum).padStart(2, '0')}/${yearNum}`;
+        const isRecentDay = (yearNum === now.getFullYear() && monthNum === (now.getMonth() + 1) && (now.getDate() - d) <= 2);
+        if (!activeDatesSet.has(dateStr) && !isRecentDay) continue;
+
+        const dateObj = new Date(yearNum, monthNum - 1, d);
+        const dowIdx = dateObj.getDay();
+        const dKey = dayKeys[dowIdx];
+        const dayName = dayShortNames[dowIdx];
+
+        targetAgents.forEach(ag => {
+          const rRow = rosterMap.get(String(ag.id));
+          const shiftVal = rRow ? (rRow[dKey] || '3:00 PM') : '3:00 PM';
+          const mapKey = `${String(ag.id).trim()}_${dateStr}`;
+          const hasSubmitted = submittedKeySet.has(mapKey);
+          const leaveObj = leaveStore[mapKey] || null;
+
+          if (leaveObj && !hasSubmitted) {
+            leaveItems.push({
+              userId: String(ag.id),
+              userName: ag.name,
+              team: ag.team,
+              grade: ag.grade,
+              date: dateStr,
+              dayName,
+              shift: shiftVal,
+              leaveType: leaveObj.leaveType || 'Casual Leave',
+              reason: leaveObj.reason || '-',
+              markedBy: leaveObj.markedBy || 'Admin',
+              markedAt: leaveObj.markedAt || dateStr
+            });
+            return;
+          }
+
+          if (!isRosterShiftDueForReportCheck(d, monthNum, yearNum, shiftVal)) {
+            return;
+          }
+
+          totalScheduledDuties++;
+          if (hasSubmitted) {
+            totalSubmittedDuties++;
+          } else {
+            missingItems.push({
+              userId: String(ag.id),
+              userName: ag.name,
+              team: ag.team,
+              grade: ag.grade,
+              date: dateStr,
+              dayName,
+              shift: shiftVal
+            });
+          }
+        });
+      }
+
+      Object.keys(leaveStore).forEach(k => {
+        const lv = leaveStore[k];
+        if (!lv || !lv.userId || !lv.date) return;
+        const alreadyListed = leaveItems.some(x => x.userId === String(lv.userId) && x.date === lv.date);
+        if (alreadyListed) return;
+        const ag = targetAgents.find(a => String(a.id) === String(lv.userId));
+        if (!ag) return;
+        const dParts = lv.date.split('/');
+        const dObj = new Date(parseInt(dParts[2], 10), parseInt(dParts[1], 10) - 1, parseInt(dParts[0], 10));
+        const dow = dObj.getDay();
+        const rRow = rosterMap.get(String(ag.id));
+        leaveItems.unshift({
+          userId: String(ag.id),
+          userName: ag.name,
+          team: ag.team,
+          grade: ag.grade,
+          date: lv.date,
+          dayName: dayShortNames[dow] || '',
+          shift: rRow ? (rRow[dayKeys[dow]] || '3:00 PM') : '3:00 PM',
+          leaveType: lv.leaveType || 'Casual Leave',
+          reason: lv.reason || '-',
+          markedBy: lv.markedBy || 'Admin',
+          markedAt: lv.markedAt || lv.date
+        });
+      });
+
+      return {
+        missingItems,
+        leaveItems,
+        totalScheduledDuties,
+        totalSubmittedDuties,
+        targetAgentsCount: targetAgents.length
+      };
+    }
+
+    function getQuickMissingReportBadgeCountForSidebar() {
+      try {
+        if (!currentUser) return 0;
+        const defaultTeam = (currentUser.role === 'admin' && activeChannel !== 'ALL_CHANNELS')
+          ? normalizeTeamNameAlias(currentUser.team)
+          : 'ALL';
+        const res = computeMissingAndLeaveDataForMonth(selectedMonthKey, defaultTeam, 'ALL');
+        return res.missingItems.length;
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    function setMissingReportsTeamScope(scope) {
+      missingReportsTeamScope = scope;
+      missingReportsAgentFilter = 'ALL';
+      renderAppLayout();
+    }
+
+    function setMissingReportsAgentFilter(agId) {
+      missingReportsAgentFilter = agId;
+      renderAppLayout();
+    }
+
+    function setMissingReportsDateFilter(dStr) {
+      missingReportsDateFilter = dStr;
+      renderAppLayout();
+    }
+
+    function setMissingReportsSubView(v) {
+      missingReportsSubView = v;
+      renderAppLayout();
+    }
+
+    function openMarkLeaveModal(userId, dateStr, existingLeaveType = 'Casual Leave', existingReason = '') {
+      if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
+      const targetAg = allUsers.find(u => String(u.id) === String(userId)) || currentUser;
+
+      if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales') && String(targetAg.id) !== String(currentUser.id)) {
+        return;
+      }
+
+      pendingLeaveModalContext = {
+        userId: String(targetAg.id),
+        userName: targetAg.name,
+        team: targetAg.team,
+        date: dateStr || getTodayFormatted()
+      };
+
+      renderAppLayout();
+      const typeEl = document.getElementById('leaveModalTypeSelect');
+      const reasonEl = document.getElementById('leaveModalReasonInput');
+      const dateEl = document.getElementById('leaveModalDateInput');
+      if (typeEl) typeEl.value = existingLeaveType || 'Casual Leave';
+      if (reasonEl) reasonEl.value = existingReason && existingReason !== '-' ? existingReason : '';
+      if (dateEl) dateEl.value = dateToInputVal(pendingLeaveModalContext.date);
+      openModal('markLeaveModal');
+    }
+
+    function renderMarkLeaveModal() {
+      if (!currentUser) return '';
+      const ctx = pendingLeaveModalContext || { userId: currentUser.id, userName: currentUser.name, team: currentUser.team, date: getTodayFormatted() };
+      const allAgents = getEditableSalesAgentsForActor(selectedMonthKey);
+      const canManageAll = hasFeatureAccess(currentUser, 'feat_manage_all_sales');
+
+      return `
+        <div id="markLeaveModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+          <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-base shadow-xs">
+                  <i class="fa-solid fa-calendar-minus"></i>
+                </div>
+                <div>
+                  <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-700">Leave / Absent Status</span>
+                  <h3 class="text-base font-black text-slate-900 mt-0.5">Mark Leave or Absent</h3>
+                </div>
+              </div>
+              <button type="button" onclick="closeModal('markLeaveModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form onsubmit="handleSaveLeaveRecord(event)" class="space-y-3.5">
+              ${canManageAll ? `
+              <div>
+                <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Agent Name</label>
+                <select id="leaveModalAgentSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                  ${allAgents.map(a => `<option value="${a.id}" ${String(a.id) === String(ctx.userId) ? 'selected' : ''}>${a.name} (${a.id} • ${a.team})</option>`).join('')}
+                </select>
+              </div>
+              ` : `
+              <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
+                <span>Agent: <strong class="text-slate-900">${ctx.userName}</strong></span>
+                <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-mono font-black">ID: ${ctx.userId}</span>
+              </div>
+              `}
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Date</label>
+                  <input type="date" id="leaveModalDateInput" required value="${dateToInputVal(ctx.date)}" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Leave / Status Type</label>
+                  <select id="leaveModalTypeSelect" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                    ${LEAVE_STATUS_TYPES.map(lt => `<option value="${lt.key}">${lt.label}</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Reason / Note (Optional)</label>
+                <input type="text" id="leaveModalReasonInput" placeholder="e.g. Fever / Family function / Approved by TL..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500">
+              </div>
+
+              <p class="text-[11px] font-bold text-slate-400 leading-relaxed">
+                <i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Once marked as Leave/Absent, this date will be excused from Missing Reports and logged in the Leave & Absent History table.
+              </p>
+
+              <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeModal('markLeaveModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
+                <button type="submit" class="px-5 py-2.5 text-xs font-black text-white bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-700 hover:to-orange-700 rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-check-double"></i> Save Leave / Absent Status
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    function handleSaveLeaveRecord(e) {
+      e.preventDefault();
+      if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+      const canManageAll = hasFeatureAccess(currentUser, 'feat_manage_all_sales');
+      const selectedAgId = canManageAll
+        ? (document.getElementById('leaveModalAgentSelect')?.value || pendingLeaveModalContext?.userId || currentUser.id)
+        : currentUser.id;
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
+      const targetAg = allUsers.find(u => String(u.id) === String(selectedAgId)) || currentUser;
+
+      const dateStr = inputValToDateStr(document.getElementById('leaveModalDateInput')?.value);
+      const mKey = dateStr.substring(3) || selectedMonthKey;
+      const leaveType = document.getElementById('leaveModalTypeSelect')?.value || 'Casual Leave';
+      const reason = (document.getElementById('leaveModalReasonInput')?.value || '').trim() || '-';
+
+      const entryObj = {
+        userId: String(targetAg.id),
+        userName: targetAg.name,
+        team: targetAg.team,
+        date: dateStr,
+        leaveType,
+        reason,
+        markedBy: currentUser.name,
+        markedAt: `${getTodayFormatted()} ${getNowTimeStr()}`
+      };
+
+      saveLeaveRecordEntry(mKey, targetAg.id, dateStr, entryObj);
+      recordActivityLog(
+        `Marked ${leaveType}`,
+        `Marked ${targetAg.name} (${targetAg.id}) as ${leaveType} on ${dateStr} — Reason: ${reason}`,
+        true
+      );
+
+      closeModal('markLeaveModal');
+      renderAppLayout();
+      showPortalToast(`${leaveType} Saved!`, `${targetAg.name} (${dateStr}) moved to Leave & Absent Log.`, 'success');
+    }
+
+    function handleRevertLeaveRecord(userId, userName, dateStr) {
+      if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+      if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales') && String(userId) !== String(currentUser.id)) return;
+
+      const mKey = dateStr.substring(3) || selectedMonthKey;
+      openConfirmWarningModal(
+        `Remove Leave / Absent Status (${dateStr})?`,
+        `Are you sure you want to remove the Leave/Absent status for <strong>${userName} (${userId})</strong> on <strong>${dateStr}</strong>?<br><br>If no sales report is submitted for that date, it will return to the Missing Reports list.`,
+        'Revert Leave Status',
+        () => {
+          removeLeaveRecordEntry(mKey, userId, dateStr);
+          recordActivityLog('Removed Leave Status', `Reverted Leave/Absent status for ${userName} (${userId}) on ${dateStr}`, true);
+          renderAppLayout();
+          showPortalToast('Leave Status Removed', `Reverted ${userName} (${dateStr}).`, 'warning');
+        },
+        'Yes, Remove Status',
+        false
+      );
+    }
+
+    function exportMissingAndLeaveCsv() {
+      const { missingItems, leaveItems } = computeMissingAndLeaveDataForMonth(selectedMonthKey, missingReportsTeamScope, missingReportsAgentFilter);
+      const isLeaveView = missingReportsSubView === 'LEAVE_LOG';
+      const safeMonth = selectedMonthKey.replace('/', '-');
+
+      if (isLeaveView) {
+        const headers = ['SL', 'Date', 'Day', 'Emp ID', 'Agent Name', 'Team', 'Roster Shift', 'Leave / Absent Type', 'Reason / Note', 'Marked By'];
+        const rows = leaveItems
+          .filter(item => missingReportsDateFilter === 'ALL' || item.date === missingReportsDateFilter)
+          .map((item, idx) => [
+            idx + 1, item.date, item.dayName, item.userId, item.userName, item.team, item.shift, item.leaveType, item.reason, item.markedBy
+          ]);
+        downloadPortalCsvFile(`Leave_And_Absent_Log_${missingReportsTeamScope.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, rows);
+      } else {
+        const headers = ['SL', 'Missing Date', 'Day', 'Emp ID', 'Agent Name', 'Team', 'Grade', 'Scheduled Duty Shift', 'Status'];
+        const rows = missingItems
+          .filter(item => missingReportsDateFilter === 'ALL' || item.date === missingReportsDateFilter)
+          .map((item, idx) => [
+            idx + 1, item.date, item.dayName, item.userId, item.userName, item.team, item.grade, item.shift, 'Report Missing'
+          ]);
+        downloadPortalCsvFile(`Missing_Reports_${missingReportsTeamScope.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, rows);
+      }
+    }
+
+    function renderMissingReportsAndLeaveView() {
+      const u = currentUser;
+      const isAdminOrSup = canViewAll(u);
+      const chMeta = getActiveChannelMeta();
+      const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+      const allChannelAgents = getUsersForMonth(selectedMonthKey, activeChannel === 'ALL_CHANNELS')
+        .filter(usr => usr.role === 'agent' && !isPendingOrFloatingAgent(usr) && !isUserAccountDeactivated(usr));
+      const teamFilteredAgents = (missingReportsTeamScope === 'ALL' || !isAdminOrSup)
+        ? allChannelAgents
+        : allChannelAgents.filter(a => normalizeTeamNameAlias(a.team) === normalizeTeamNameAlias(missingReportsTeamScope));
+
+      const {
+        missingItems,
+        leaveItems,
+        totalScheduledDuties,
+        totalSubmittedDuties
+      } = computeMissingAndLeaveDataForMonth(selectedMonthKey, missingReportsTeamScope, missingReportsAgentFilter);
+
+      const allRelevantDates = Array.from(new Set([...missingItems.map(x => x.date), ...leaveItems.map(x => x.date)]));
+      const filteredMissing = missingReportsDateFilter === 'ALL'
+        ? missingItems
+        : missingItems.filter(x => x.date === missingReportsDateFilter);
+      const filteredLeaves = missingReportsDateFilter === 'ALL'
+        ? leaveItems
+        : leaveItems.filter(x => x.date === missingReportsDateFilter);
+
+      const agentMissingSummaryMap = new Map();
+      filteredMissing.forEach(m => {
+        const prev = agentMissingSummaryMap.get(m.userId) || { userId: m.userId, userName: m.userName, team: m.team, dates: [] };
+        prev.dates.push(m.date.substring(0, 5));
+        agentMissingSummaryMap.set(m.userId, prev);
+      });
+      const agentMissingPills = Array.from(agentMissingSummaryMap.values()).sort((a, b) => b.dates.length - a.dates.length);
+
+      const clCount = filteredLeaves.filter(l => l.leaveType === 'Casual Leave').length;
+      const slCount = filteredLeaves.filter(l => l.leaveType === 'Sick Leave').length;
+      const absentCount = filteredLeaves.filter(l => l.leaveType === 'Absent').length;
+      const otherLeaveCount = filteredLeaves.length - clCount - slCount - absentCount;
+
+      const compliancePct = totalScheduledDuties > 0 ? Math.round((totalSubmittedDuties / totalScheduledDuties) * 100) : 100;
+
+      return `
+        <div class="space-y-4">
+          ${isSupervisor(u) || activeChannel === 'ALL_CHANNELS' ? renderSupervisorQuickChannelTeamBar(missingReportsTeamScope, 'setMissingReportsTeamScope') : ''}
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-rose-100 text-rose-700 border border-rose-200">
+                  <i class="fa-solid fa-calendar-check mr-1"></i>Auto Roster-Linked Tracker
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-50 text-indigo-700">
+                  🌙 Night Shift Auto-Matched to Start Date
+                </span>
+                <span class="text-xs font-bold text-slate-400">Period: ${monthLabel}</span>
+              </div>
+              <h2 class="text-xl font-black text-slate-900 mt-1">
+                <i class="fa-solid fa-calendar-xmark text-rose-600 mr-2"></i>${isAdminOrSup ? `${missingReportsTeamScope === 'ALL' ? chMeta.fullTitle : missingReportsTeamScope} — Missing Reports & Leave Tracker` : 'My Missing Reports & Leave / Absent Log'}
+              </h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">
+                ${isAdminOrSup
+                  ? 'Automatically checks the Duty Roster (excluding DO) to find who missed submitting their sales report. Submit directly in 1 click or mark as Leave/Absent!'
+                  : 'Checks your weekly Duty Roster (excluding DO). If any duty date is missing a report, click "+ Submit Report" to clear it immediately.'}
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              ${isAdminOrSup ? `
+              <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap items-center gap-1 border border-slate-200">
+                ${chMeta.teams.map(tn => `
+                  <button type="button" onclick="setMissingReportsTeamScope('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${missingReportsTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                    ${tn}${u.role === 'admin' && normalizeTeamNameAlias(u.team) === tn ? ' (My Team)' : ''}
+                  </button>
+                `).join('')}
+                <button type="button" onclick="setMissingReportsTeamScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${missingReportsTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                  All ${chMeta.name} (${allChannelAgents.length})
+                </button>
+              </div>
+
+              <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                <i class="fa-solid fa-user text-slate-400 text-xs"></i>
+                <select onchange="setMissingReportsAgentFilter(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                  <option value="ALL" ${missingReportsAgentFilter === 'ALL' ? 'selected' : ''}>All Agents (${teamFilteredAgents.length})</option>
+                  ${teamFilteredAgents.map(ag => `<option value="${ag.id}" ${String(missingReportsAgentFilter) === String(ag.id) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
+                </select>
+              </div>
+              ` : ''}
+
+              <div class="flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
+                <i class="fa-regular fa-calendar text-rose-600 text-xs"></i>
+                <select onchange="setMissingReportsDateFilter(this.value)" class="bg-transparent text-xs font-extrabold text-rose-900 focus:outline-none cursor-pointer">
+                  <option value="ALL" ${missingReportsDateFilter === 'ALL' ? 'selected' : ''}>All Dates in ${selectedMonthKey}</option>
+                  ${allRelevantDates.map(dStr => `<option value="${dStr}" ${missingReportsDateFilter === dStr ? 'selected' : ''}>${cleanDisplayDate(dStr)}</option>`).join('')}
+                </select>
+              </div>
+
+              ${!isCurrentChannelReadOnlyForUser(u) ? `
+              <button type="button" onclick="openMarkLeaveModal('${u.role === 'agent' ? u.id : (missingReportsAgentFilter !== 'ALL' ? missingReportsAgentFilter : (teamFilteredAgents[0]?.id || u.id))}', '${missingReportsDateFilter !== 'ALL' ? missingReportsDateFilter : getTodayFormatted()}')" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-calendar-plus"></i> + Add Leave / Absent
+              </button>
+              ` : ''}
+
+              <button type="button" onclick="exportMissingAndLeaveCsv()" class="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-file-csv text-xs"></i> CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div onclick="setMissingReportsSubView('MISSING')" class="card-dynamic p-4 border-l-4 border-l-rose-600 cursor-pointer ${missingReportsSubView === 'MISSING' ? 'ring-2 ring-rose-500/30 bg-rose-50/30' : ''}">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-black uppercase text-rose-600">Pending Missing Reports</span>
+                <div class="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-xs font-black"><i class="fa-solid fa-triangle-exclamation"></i></div>
+              </div>
+              <p class="text-2xl font-black text-slate-900 mt-2">${filteredMissing.length} <span class="text-xs font-bold text-slate-500">Report(s) Missing</span></p>
+              <p class="text-[11px] font-bold text-rose-700 mt-0.5">${agentMissingPills.length} Agent(s) have pending dates</p>
+            </div>
+
+            <div class="card-dynamic p-4 border-l-4 border-l-emerald-600">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-black uppercase text-emerald-600">Roster Duty Compliance</span>
+                <div class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-black"><i class="fa-solid fa-check-double"></i></div>
+              </div>
+              <div class="flex items-baseline justify-between mt-2">
+                <p class="text-2xl font-black text-slate-900">${compliancePct}%</p>
+                <span class="text-[11px] font-extrabold text-emerald-700">${totalSubmittedDuties} / ${totalScheduledDuties} Duties</span>
+              </div>
+              <div class="w-full bg-slate-200 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                <div class="bg-emerald-600 h-1.5 rounded-full" style="width: ${compliancePct}%"></div>
+              </div>
+            </div>
+
+            <div onclick="setMissingReportsSubView('LEAVE_LOG')" class="card-dynamic p-4 border-l-4 border-l-blue-600 cursor-pointer ${missingReportsSubView === 'LEAVE_LOG' ? 'ring-2 ring-blue-500/30 bg-blue-50/30' : ''}">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-black uppercase text-blue-600">Casual & Sick Leaves</span>
+                <div class="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-black"><i class="fa-solid fa-umbrella-beach"></i></div>
+              </div>
+              <p class="text-2xl font-black text-slate-900 mt-2">${clCount + slCount + otherLeaveCount} <span class="text-xs font-bold text-slate-500">Day(s) on Leave</span></p>
+              <p class="text-[11px] font-bold text-slate-500 mt-0.5">CL: <strong>${clCount}</strong> • SL: <strong>${slCount}</strong> • Other: <strong>${otherLeaveCount}</strong></p>
+            </div>
+
+            <div onclick="setMissingReportsSubView('LEAVE_LOG')" class="card-dynamic p-4 border-l-4 border-l-amber-500 cursor-pointer ${missingReportsSubView === 'LEAVE_LOG' ? 'ring-2 ring-amber-500/30 bg-amber-50/30' : ''}">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-black uppercase text-amber-700">Uninformed Absent</span>
+                <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-black"><i class="fa-solid fa-user-xmark"></i></div>
+              </div>
+              <p class="text-2xl font-black text-slate-900 mt-2">${absentCount} <span class="text-xs font-bold text-slate-500">Absent Day(s)</span></p>
+              <p class="text-[11px] font-bold text-amber-800 mt-0.5">Click to view full Leave & Absent log</p>
+            </div>
+          </div>
+
+          ${agentMissingPills.length > 0 && isAdminOrSup ? `
+          <div class="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[10px] font-black uppercase tracking-wider text-rose-700">
+                <i class="fa-solid fa-bolt mr-1"></i>Quick Agent Filter — Click any agent below to see only their missing dates:
+              </span>
+              ${missingReportsAgentFilter !== 'ALL' ? `
+                <button type="button" onclick="setMissingReportsAgentFilter('ALL')" class="text-[11px] font-extrabold text-blue-600 hover:underline">Show All Agents</button>
+              ` : ''}
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              ${agentMissingPills.map(ap => `
+                <button type="button" onclick="setMissingReportsAgentFilter('${ap.userId}')" class="px-2.5 py-1 rounded-xl text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer ${String(missingReportsAgentFilter) === String(ap.userId) ? 'bg-rose-600 text-white border-rose-600 shadow' : 'bg-rose-50/70 hover:bg-rose-100 text-slate-800 border-rose-200'}">
+                  <span>${ap.userName}</span>
+                  <span class="px-1.5 py-0.2 rounded-full text-[10px] font-black ${String(missingReportsAgentFilter) === String(ap.userId) ? 'bg-white text-rose-700' : 'bg-rose-600 text-white'}">${ap.dates.length}</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+          ` : ''}
+
+          <div class="flex flex-wrap items-center justify-between gap-3 bg-white px-4 py-2.5 rounded-2xl border border-slate-200">
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="setMissingReportsSubView('MISSING')" class="px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${missingReportsSubView === 'MISSING' ? 'bg-rose-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+                <i class="fa-solid fa-file-circle-exclamation"></i>
+                <span>Missing Sales Reports (${filteredMissing.length})</span>
+              </button>
+              <button type="button" onclick="setMissingReportsSubView('LEAVE_LOG')" class="px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${missingReportsSubView === 'LEAVE_LOG' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+                <i class="fa-solid fa-umbrella-beach"></i>
+                <span>Leave & Absent Log (${filteredLeaves.length})</span>
+              </button>
+            </div>
+            <span class="text-[11px] font-bold text-slate-400">
+              <i class="fa-solid fa-wand-magic-sparkles text-amber-500 mr-1"></i>As soon as a report is submitted or marked as Leave, it automatically disappears from the Missing list!
+            </span>
+          </div>
+
+          ${missingReportsSubView === 'MISSING' ? `
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <div class="px-5 py-3 bg-slate-900 text-white flex items-center justify-between">
+              <span class="text-xs font-black uppercase tracking-wider">
+                <i class="fa-solid fa-triangle-exclamation text-amber-400 mr-1.5"></i>Roster-Verified Missing Sales Reports (${filteredMissing.length})
+              </span>
+              <span class="text-[11px] font-bold text-slate-300">Day Off (DO) & Leave dates are automatically excluded</span>
+            </div>
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">SL</th>
+                  <th class="p-3.5">Missing Date & Day</th>
+                  <th class="p-3.5">Agent Name & ID</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5 text-center">Roster Duty Shift</th>
+                  <th class="p-3.5 text-center">Status</th>
+                  <th class="p-3.5 text-right">Quick Actions (1-Click Resolve)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${filteredMissing.length === 0 ? `
+                  <tr>
+                    <td colspan="7" class="p-10 text-center">
+                      <div class="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl mx-auto mb-2">
+                        <i class="fa-solid fa-circle-check"></i>
+                      </div>
+                      <p class="text-sm font-black text-slate-800">100% All Reports Submitted!</p>
+                      <p class="text-xs font-bold text-slate-400 mt-0.5">No missing sales reports found for the selected filter in ${monthLabel}.</p>
+                    </td>
+                  </tr>
+                ` : ''}
+                ${filteredMissing.map((item, idx) => {
+                  const isNight = String(item.shift).toUpperCase().includes('NIGHT');
+                  const canAct = !isCurrentChannelReadOnlyForUser(u) && (hasFeatureAccess(u, 'feat_manage_all_sales') || String(item.userId) === String(u.id));
+                  return `
+                    <tr class="hover:bg-rose-50/40 transition-colors">
+                      <td class="p-3.5 font-black text-slate-400">#${idx + 1}</td>
+                      <td class="p-3.5">
+                        <div class="flex items-center gap-2">
+                          <span class="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 font-black text-xs">${cleanDisplayDate(item.date)}</span>
+                          <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-extrabold uppercase">${item.dayName}</span>
+                        </div>
+                      </td>
+                      <td class="p-3.5 font-extrabold text-slate-900">
+                        <div class="flex items-center gap-2.5">
+                          ${renderUserAvatarHtml({ id: item.userId, name: item.userName }, 'w-8 h-8 rounded-xl text-xs', 'bg-rose-100 text-rose-700', false)}
+                          <div>
+                            <span>${item.userName}</span> <span class="text-slate-400 text-[10px]">(${item.userId})</span>
+                            <span class="block text-[10px] text-slate-400 font-bold">Grade ${item.grade}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="p-3.5">
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(item.team)}">${item.team}</span>
+                      </td>
+                      <td class="p-3.5 text-center">
+                        <span class="px-2.5 py-1 rounded-lg text-[11px] font-black ${isNight ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' : 'bg-slate-100 text-slate-700'}">
+                          ${isNight ? '<i class="fa-solid fa-moon mr-1"></i>' : '<i class="fa-regular fa-clock mr-1"></i>'}${item.shift}
+                        </span>
+                      </td>
+                      <td class="p-3.5 text-center">
+                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black">
+                          <span class="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping"></span>Report Missing
+                        </span>
+                      </td>
+                      <td class="p-3.5 text-right space-x-1.5">
+                        ${canAct ? `
+                          <button type="button" onclick="openReportModal('${item.userId}', '${item.date}')" class="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-extrabold text-[11px] shadow-xs inline-flex items-center gap-1 cursor-pointer">
+                            <i class="fa-solid fa-plus-circle"></i> Submit Report
+                          </button>
+                          <button type="button" onclick="openMarkLeaveModal('${item.userId}', '${item.date}')" class="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-extrabold text-[11px] inline-flex items-center gap-1 cursor-pointer" title="Mark as Casual Leave, Sick Leave, or Absent">
+                            <i class="fa-solid fa-umbrella-beach text-amber-600"></i> Mark Leave / Absent
+                          </button>
+                        ` : `<span class="text-slate-400 text-[11px]">View Only</span>`}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          ` : `
+          <div class="card-dynamic overflow-hidden overflow-x-auto">
+            <div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between">
+              <span class="text-xs font-black uppercase tracking-wider">
+                <i class="fa-solid fa-umbrella-beach text-amber-300 mr-1.5"></i>Leave & Absent History Log (${filteredLeaves.length})
+              </span>
+              <span class="text-[11px] font-bold text-indigo-200">Shows Casual Leave, Sick Leave, Emergency Leave & Absent records</span>
+            </div>
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">SL</th>
+                  <th class="p-3.5">Date & Day</th>
+                  <th class="p-3.5">Agent Name & ID</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5 text-center">Roster Shift</th>
+                  <th class="p-3.5">Leave / Absent Type</th>
+                  <th class="p-3.5">Reason / Note</th>
+                  <th class="p-3.5">Marked By</th>
+                  <th class="p-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${filteredLeaves.length === 0 ? `
+                  <tr>
+                    <td colspan="9" class="p-10 text-center text-slate-400 font-bold">
+                      No Leave or Absent records logged for ${monthLabel} yet.
+                    </td>
+                  </tr>
+                ` : ''}
+                ${filteredLeaves.map((lv, idx) => {
+                  const typeMeta = LEAVE_STATUS_TYPES.find(t => t.key === lv.leaveType) || LEAVE_STATUS_TYPES[0];
+                  const canEditLv = !isCurrentChannelReadOnlyForUser(u) && (hasFeatureAccess(u, 'feat_manage_all_sales') || String(lv.userId) === String(u.id));
+                  return `
+                    <tr class="hover:bg-slate-50">
+                      <td class="p-3.5 font-black text-slate-400">#${idx + 1}</td>
+                      <td class="p-3.5">
+                        <span class="font-extrabold text-slate-900">${cleanDisplayDate(lv.date)}</span>
+                        <span class="ml-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-black uppercase">${lv.dayName}</span>
+                      </td>
+                      <td class="p-3.5 font-extrabold text-slate-900">
+                        <div class="flex items-center gap-2">
+                          ${renderUserAvatarHtml({ id: lv.userId, name: lv.userName }, 'w-7 h-7 rounded-lg text-[11px]', 'bg-indigo-100 text-indigo-700', false)}
+                          <span>${lv.userName} <span class="text-slate-400 text-[10px]">(${lv.userId})</span></span>
+                        </div>
+                      </td>
+                      <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(lv.team)}">${lv.team}</span></td>
+                      <td class="p-3.5 text-center font-bold text-slate-600">${lv.shift}</td>
+                      <td class="p-3.5">
+                        <span class="px-2.5 py-1 rounded-lg border text-[11px] font-black inline-flex items-center gap-1.5 ${typeMeta.badge}">
+                          <i class="fa-solid ${typeMeta.icon}"></i>${lv.leaveType}
+                        </span>
+                      </td>
+                      <td class="p-3.5 font-bold text-slate-700 whitespace-normal min-w-[200px]">${lv.reason}</td>
+                      <td class="p-3.5 text-[11px] font-bold text-slate-500">${lv.markedBy}</td>
+                      <td class="p-3.5 text-right space-x-1">
+                        ${canEditLv ? `
+                          <button type="button" onclick="openReportModal('${lv.userId}', '${lv.date}')" class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-extrabold text-[11px]" title="Submit Sales Report instead">
+                            <i class="fa-solid fa-file-pen mr-1"></i>Submit Report
+                          </button>
+                          <button type="button" onclick="openMarkLeaveModal('${lv.userId}', '${lv.date}', '${lv.leaveType}', '${String(lv.reason || '').replace(/'/g, "\'")}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg font-extrabold text-[11px]">
+                            <i class="fa-solid fa-pen"></i> Edit
+                          </button>
+                          <button type="button" onclick="handleRevertLeaveRecord('${lv.userId}', '${String(lv.userName).replace(/'/g, "\'")}', '${lv.date}')" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-extrabold text-[11px]" title="Remove Leave/Absent status">
+                            <i class="fa-solid fa-trash-can"></i>
+                          </button>
+                        ` : '-'}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          `}
+        </div>
+      `;
+    }
+
     function renderReports() {
       const u = currentUser;
       const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
@@ -10036,6 +10981,11 @@ function renderRankingAndComparison() {
       if (lvStore[`${String(entry.userId).trim()}_${String(entry.date).trim()}`]) {
         removeLeaveRecordEntry(entryMKey, entry.userId, entry.date);
       }
+      const entryMKey = String(entry.date || '').substring(3) || selectedMonthKey;
+      const lvStore = getLeaveRecordsStoreForMonth(entryMKey);
+      if (lvStore[`${String(entry.userId).trim()}_${String(entry.date).trim()}`]) {
+        removeLeaveRecordEntry(entryMKey, entry.userId, entry.date);
+      }
       sales = sales.filter(s => !(String(s.userId) === String(entry.userId) && s.date === entry.date));
       sales.unshift(entry);
       setStored('sales_records', sales); markLocalSalesMutatedNow();
@@ -10061,7 +11011,8 @@ function renderRankingAndComparison() {
         'success'
       );
 
-      // Non-blocking background cloud sync
+      // Zero-loss persistent outbox queue + background cloud sync
+      enqueueVerifiedSalesSubmission(entry, logMeta, false);
       postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta }).catch(() => {});
       setTimeout(fetchFromSheet, 1800);
     }
@@ -10141,6 +11092,7 @@ function renderRankingAndComparison() {
           renderAppLayout();
           showPortalToast('Report Deleted Instantly', `Deleted ${agentName}'s sales report dated ${dateStr}.`, 'warning');
 
+          enqueueVerifiedSalesSubmission({ userId: String(agentId), date: dateStr }, logMeta, true);
           postToSheet('DELETE_SALES_RECORD', { userId: String(agentId), date: dateStr, ...logMeta }).catch(() => {});
           setTimeout(fetchFromSheet, 1800);
         }
@@ -11314,6 +12266,7 @@ function renderRankingAndComparison() {
             ? `AI ERP Drive Product Total for ${agObj.name} (Last Update: ${lastUpdateFormatted}) — Ajwa:${entry.ajwa}kg, Salt:${entry.pinkSalt}kg, Garlic:${entry.blackGarlic}kg, Sun.H:${entry.sunHoney}kg, BS.H:${entry.bsHoney}kg, Ghee:${entry.gawaGhee}kg`
             : `AI ERP Import for ${agObj.name} (${item.date}) — Amt: ৳${entry.amount.toLocaleString()}, Orders: ${entry.orders}`
         );
+        enqueueVerifiedSalesSubmission(entry, logMeta, false);
         syncPayloads.push({ ...entry, ...logMeta });
       }
 
