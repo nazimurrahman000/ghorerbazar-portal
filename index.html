@@ -575,6 +575,8 @@
       monthlyPerfAgentId = 'ALL';
       driveProdTeamScope = defaultTeamScope;
       driveProdAgentId = 'ALL';
+      missingReportsTeamScope = defaultTeamScope;
+      missingReportsAgentFilter = 'ALL';
       sprintTabTeamScope = defaultTeamScope;
       logsFilterScope = 'ALL';
       if (typeof dateWiseTeamFilter !== 'undefined') dateWiseTeamFilter = 'ALL';
@@ -692,6 +694,12 @@
     let driveProdTeamScope = 'ALL';
     let driveProdAgentId = 'ALL';
 
+    let missingReportsTeamScope = (currentUser && currentUser.role === 'admin') ? normalizeTeamNameAlias(currentUser.team) : 'ALL';
+    let missingReportsAgentFilter = 'ALL';
+    let missingReportsDateFilter = 'ALL';
+    let missingReportsSubView = 'MISSING'; // 'MISSING' | 'LEAVE_LOG'
+    let pendingLeaveModalContext = null;
+
     let sprintTabPhase = 'AUTO'; // 'AUTO' | 'S1' | 'S2' | 'S3'
     let sprintTabTeamScope = 'ALL'; // 'ALL' | 'Team Nazim' | 'Team Samad'
 
@@ -745,7 +753,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen || profileMenuDropdownOpen) return true;
-      const modalIds = ['submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal'];
+      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -762,6 +770,7 @@
       { key: 'tab_sprint_target', category: 'Sidebar Tabs', label: 'Sprint Target Tab', desc: 'View live 10-day Sprint leaderboard, agent sprint goals & TL 80%/100% milestones', icon: 'fa-bolt', color: 'text-blue-600' },
       { key: 'tab_drive_product', category: 'Sidebar Tabs', label: 'Drive Product Tab', desc: 'View all agents Drive Product KG targets, achieved quantities & date-wise submissions', icon: 'fa-box-open', color: 'text-amber-500' },
       { key: 'tab_reports', category: 'Sidebar Tabs', label: 'Daily Sales Reports Tab', desc: 'Access daily sales & conversion logs table', icon: 'fa-file-invoice', color: 'text-blue-600' },
+      { key: 'tab_missing_reports', category: 'Sidebar Tabs', label: 'Missing & Leave Tab', desc: 'Auto-detect roster-based missing sales reports & track Casual/Sick Leave or Absent records', icon: 'fa-calendar-xmark', color: 'text-rose-600' },
       { key: 'tab_ranking', category: 'Sidebar Tabs', label: 'Ranking Tab', desc: 'View floor leaderboard & team head-to-head comparison', icon: 'fa-trophy', color: 'text-amber-500' },
       { key: 'tab_roster', category: 'Sidebar Tabs', label: 'Duty Roster Tab', desc: 'View weekly shift schedule and Day Off (DO) table', icon: 'fa-calendar-week', color: 'text-indigo-600' },
       { key: 'tab_attendance', category: 'Sidebar Tabs', label: 'Attendance & Duty Logs Tab', desc: 'View login/logout times, working hours & break history', icon: 'fa-clock', color: 'text-emerald-600' },
@@ -800,6 +809,7 @@
         tab_sprint_target: true, // Admin can toggle off in Role & Feature Access if next month has no sprint!
         tab_drive_product: true,
         tab_reports: true,
+        tab_missing_reports: true,
         tab_ranking: true,
         tab_roster: true,
         tab_attendance: true,
@@ -2046,7 +2056,7 @@
       } : {};
       const fullData = { action, timestamp: new Date().toISOString(), ...pingInfo, ...payload };
 
-      if (action !== 'ATTENDANCE_SYNC' && action !== 'SEND_CHAT_MESSAGE' && action !== 'MARK_CHAT_READ' && action !== 'SAVE_MONTHLY_CONFIG') {
+      if (action !== 'DAILY_SALES_SUBMIT' && action !== 'DELETE_SALES_RECORD' && action !== 'ATTENDANCE_SYNC' && action !== 'SEND_CHAT_MESSAGE' && action !== 'MARK_CHAT_READ' && action !== 'SAVE_MONTHLY_CONFIG') {
         const reqSignature = `${action}_${fullData.userId || ''}_${fullData.date || ''}_${fullData.logAction || ''}_${fullData.logDetails || ''}`;
         const nowMs = Date.now();
         if (reqSignature === lastSentRequestKey && (nowMs - lastSentRequestTime) < 2500) {
@@ -2063,6 +2073,7 @@
         await fetch(webhookUrl, {
           method: 'POST',
           mode: 'no-cors',
+          keepalive: true,
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: bodyParams.toString()
         });
@@ -2158,16 +2169,120 @@
       lastLocalUserOrConfigMutationMs = Date.now();
     }
 
+    // =========================================================================
+    // ZERO-LOSS PERSISTENT SALES OUTBOX QUEUE (200+ CONCURRENT AGENTS SAFE)
+    // =========================================================================
+    function getPendingSalesOutboxQueue() {
+      try {
+        const q = JSON.parse(localStorage.getItem('gb_pending_sales_queue') || '{}');
+        return (q && typeof q === 'object') ? q : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function savePendingSalesOutboxQueue(qObj) {
+      localStorage.setItem('gb_pending_sales_queue', JSON.stringify(qObj || {}));
+    }
+
+    function enqueueVerifiedSalesSubmission(entryObj, logMetaObj, isDeletion = false) {
+      if (!entryObj || !entryObj.userId || !entryObj.date) return;
+      const q = getPendingSalesOutboxQueue();
+      const key = `${String(entryObj.userId).trim()}_${String(entryObj.date).trim()}`;
+      q[key] = {
+        entry: { ...entryObj },
+        logMeta: logMetaObj || {},
+        isDeletion: Boolean(isDeletion),
+        queuedAt: Date.now(),
+        lastAttemptAt: Date.now(),
+        attempts: 1
+      };
+      savePendingSalesOutboxQueue(q);
+    }
+
+    function doesCloudRecordMatchPending(cloudRec, pendingEntry) {
+      if (!cloudRec || !pendingEntry) return false;
+      const isMonthlyProd = String(pendingEntry.date || '').startsWith('MONTHLY_PROD_');
+      if (isMonthlyProd) {
+        return Number(cloudRec.ajwa || 0) === Number(pendingEntry.ajwa || 0) &&
+               Number(cloudRec.gawaGhee || 0) === Number(pendingEntry.gawaGhee || 0) &&
+               Number(cloudRec.sunHoney || 0) === Number(pendingEntry.sunHoney || 0) &&
+               Number(cloudRec.bsHoney || 0) === Number(pendingEntry.bsHoney || 0);
+      }
+      return Number(cloudRec.amount || 0) === Number(pendingEntry.amount || 0) &&
+             Number(cloudRec.orders || 0) === Number(pendingEntry.orders || 0) &&
+             Number(cloudRec.leads || 0) === Number(pendingEntry.leads || 0);
+    }
+
     function handleCloudData(res) {
       let changed = false;
       if (Array.isArray(res.salesRecords)) {
         const local = getStored('sales_records', []);
-        // Protect fresh local optimistic sales/product edits for 10 seconds so an in-flight stale GET poll never reverts the UI!
-        if ((Date.now() - lastLocalSalesMutationMs) >= 20000) {
-          if (JSON.stringify(res.salesRecords) !== JSON.stringify(local)) {
-            setStored('sales_records', res.salesRecords);
-            changed = true;
+        const pendingQ = getPendingSalesOutboxQueue();
+        const nowMs = Date.now();
+        let queueModified = false;
+
+        const cloudMap = new Map();
+        res.salesRecords.forEach(r => {
+          if (r && r.userId && r.date) {
+            const cleanD = String(r.date).replace(/^'/, '').trim();
+            cloudMap.set(`${String(r.userId).trim()}_${cleanD}`, { ...r, date: cleanD });
           }
+        });
+
+        const mergedList = [...res.salesRecords.map(r => ({ ...r, date: String(r.date || '').replace(/^'/, '').trim() }))];
+
+        Object.keys(pendingQ).forEach(k => {
+          const item = pendingQ[k];
+          if (!item || !item.entry) {
+            delete pendingQ[k];
+            queueModified = true;
+            return;
+          }
+          if ((nowMs - Number(item.queuedAt || 0)) > 86400000) {
+            delete pendingQ[k];
+            queueModified = true;
+            return;
+          }
+          const cloudMatch = cloudMap.get(k);
+          if (item.isDeletion) {
+            if (!cloudMatch) {
+              delete pendingQ[k];
+              queueModified = true;
+            } else {
+              const idxInMerged = mergedList.findIndex(m => `${String(m.userId).trim()}_${m.date}` === k);
+              if (idxInMerged !== -1) mergedList.splice(idxInMerged, 1);
+              if ((nowMs - Number(item.lastAttemptAt || 0)) > 6500) {
+                item.lastAttemptAt = nowMs;
+                item.attempts = (item.attempts || 1) + 1;
+                queueModified = true;
+                postToSheet('DELETE_SALES_RECORD', { userId: String(item.entry.userId), date: item.entry.date, ...(item.logMeta || {}) }).catch(() => {});
+              }
+            }
+          } else {
+            if (cloudMatch && doesCloudRecordMatchPending(cloudMatch, item.entry)) {
+              delete pendingQ[k];
+              queueModified = true;
+            } else {
+              const idxInMerged = mergedList.findIndex(m => `${String(m.userId).trim()}_${m.date}` === k);
+              if (idxInMerged !== -1) mergedList[idxInMerged] = item.entry;
+              else mergedList.unshift(item.entry);
+
+              if ((nowMs - Number(item.lastAttemptAt || 0)) > 6500) {
+                item.lastAttemptAt = nowMs;
+                item.attempts = (item.attempts || 1) + 1;
+                queueModified = true;
+                postToSheet('DAILY_SALES_SUBMIT', { ...item.entry, ...(item.logMeta || {}) }).catch(() => {});
+              }
+            }
+          }
+        });
+
+        if (queueModified) savePendingSalesOutboxQueue(pendingQ);
+
+        if (JSON.stringify(mergedList) !== JSON.stringify(local)) {
+          setStored('sales_records', mergedList);
+          changed = true;
         }
       }
       if (Array.isArray(res.attendanceRecords)) {
@@ -2224,6 +2339,27 @@
         const localCfg = getStored('monthly_configs', {});
         const isRecentConfigEdit = (Date.now() - lastLocalUserOrConfigMutationMs) < 10000;
         const mergedConfigs = isRecentConfigEdit ? { ...res.monthlyConfigs, ...localCfg } : { ...localCfg, ...res.monthlyConfigs };
+
+        // Merge LEAVE_RECORDS_* keys so local leave/absent updates are never overwritten by stale cloud polls
+        Object.keys({ ...localCfg, ...(res.monthlyConfigs || {}) }).forEach(cfgK => {
+          if (cfgK.startsWith('LEAVE_RECORDS_')) {
+            const locLv = (localCfg[cfgK] && typeof localCfg[cfgK] === 'object') ? localCfg[cfgK] : {};
+            const cldLv = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
+            const combinedLv = { ...cldLv };
+            Object.keys(locLv).forEach(lk => {
+              const lItem = locLv[lk];
+              const cItem = cldLv[lk];
+              if (!cItem || Number(lItem.updatedTs || 0) >= Number(cItem.updatedTs || 0)) {
+                if (lItem.isRemoved) delete combinedLv[lk];
+                else combinedLv[lk] = lItem;
+              }
+            });
+            Object.keys(combinedLv).forEach(lk => {
+              if (combinedLv[lk] && combinedLv[lk].isRemoved) delete combinedLv[lk];
+            });
+            mergedConfigs[cfgK] = combinedLv;
+          }
+        });
 
         if (localCfg['CHAT_AND_NOTICES'] || res.monthlyConfigs['CHAT_AND_NOTICES']) {
           const locHub = localCfg['CHAT_AND_NOTICES'] || {};
@@ -2326,12 +2462,14 @@
           monthlyPerfTeamScope = 'ALL';
           driveProdTeamScope = 'ALL';
           sprintTabTeamScope = 'ALL';
+          missingReportsTeamScope = 'ALL';
         } else if (currentUser.role === 'admin') {
           const myTeamClean = normalizeTeamNameAlias(currentUser.team);
           dashboardScope = myTeamClean;
           monthlyPerfTeamScope = myTeamClean;
           driveProdTeamScope = myTeamClean;
           sprintTabTeamScope = myTeamClean;
+          missingReportsTeamScope = myTeamClean;
         } else if (currentUser.role === 'agent') {
           const myTeamClean = normalizeTeamNameAlias(currentUser.team);
           sprintTabTeamScope = myTeamClean;
@@ -2378,6 +2516,7 @@
       monthlyPerfTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
       driveProdTeamScope = loginTeamScope;
       sprintTabTeamScope = loginTeamScope;
+      missingReportsTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
       monthlyPerfAgentId = 'ALL';
       logsFilterScope = 'ALL';
       reportsDateFilter = getTodayFormatted();
@@ -2508,6 +2647,13 @@
           const myT = normalizeTeamNameAlias(currentUser.team);
           if (getActiveChannelMeta().teams.includes(myT)) driveProdTeamScope = myT;
         }
+      } else if (tab === 'missing_reports') {
+        if (activeChannel !== 'ALL_CHANNELS' && currentUser && currentUser.role === 'admin') {
+          const myT = normalizeTeamNameAlias(currentUser.team);
+          if (getActiveChannelMeta().teams.includes(myT)) missingReportsTeamScope = myT;
+        } else if (activeChannel === 'ALL_CHANNELS') {
+          missingReportsTeamScope = 'ALL';
+        }
       }
       renderAppLayout();
     }
@@ -2637,6 +2783,19 @@
                 ${hasFeatureAccess(u, 'tab_reports') ? `
                 <button onclick="setTab('reports')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
                   <i class="fa-solid fa-file-invoice text-sm text-blue-600"></i> Daily Sales Reports
+                </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'tab_missing_reports') ? `
+                <button onclick="setTab('missing_reports')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'missing_reports' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <span class="flex items-center gap-3">
+                    <i class="fa-solid fa-calendar-xmark text-sm ${activeTab === 'missing_reports' ? 'text-amber-300' : 'text-rose-600'}"></i> Missing & Leave
+                  </span>
+                  ${(() => {
+                    const mCount = getQuickMissingReportBadgeCountForSidebar();
+                    return mCount > 0
+                      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === 'missing_reports' ? 'bg-white text-rose-700' : 'bg-rose-600 text-white'} shadow">${mCount}</span>`
+                      : `<span class="px-1.5 py-0.5 rounded text-[9px] font-black ${activeTab === 'missing_reports' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}">OK</span>`;
+                  })()}
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_ranking') ? `
@@ -2831,6 +2990,7 @@
         ${renderChangePasswordModal()}
         ${renderRosterAddModal()}
         ${renderLogoutConfirmModal()}
+        ${renderMarkLeaveModal()}
       `;
       document.getElementById('app').innerHTML = html;
 
@@ -2936,6 +3096,7 @@
       if (activeTab === 'ranking' && hasFeatureAccess(currentUser, 'tab_ranking')) return renderRankingAndComparison();
       if (activeTab === 'chat' && hasFeatureAccess(currentUser, 'tab_chat')) return renderChatHubView();
       if (activeTab === 'reports' && hasFeatureAccess(currentUser, 'tab_reports')) return renderReports();
+      if (activeTab === 'missing_reports' && hasFeatureAccess(currentUser, 'tab_missing_reports')) return renderMissingReportsAndLeaveView();
       if (activeTab === 'agents' && hasFeatureAccess(currentUser, 'tab_agents')) return renderManageAgents();
       return renderDashboard();
     }
@@ -4463,6 +4624,7 @@
           closeModal('driveProdModal');
           renderAppLayout();
           showPortalToast('Drive Product Total Synced!', `Updated ${targetAgent.name}'s total (${rangeLabel}).`, 'success');
+          enqueueVerifiedSalesSubmission(entry, logMeta, false);
           postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta }).catch(() => {});
         },
         'Yes, Save & Sync',
@@ -7897,7 +8059,6 @@ function renderRankingAndComparison() {
       }).catch(() => {});
     }
 
-    // Determines if a given shift on date `dd/mm/yyyy` has already started/passed so we know if a report is expected!
     function isRosterShiftDueForReportCheck(dayNum, monthNum, yearNum, shiftStr) {
       const s = String(shiftStr || '').trim().toUpperCase();
       if (!s || s === 'DO' || s.includes('OFF')) return false;
@@ -7912,18 +8073,14 @@ function renderRankingAndComparison() {
       if (yearNum === curY && monthNum === curM) {
         if (dayNum > curD) return false;
         if (dayNum === curD) {
-          // On today's date: Night shift (11:00 PM) hasn't finished yet, so don't flag today's Night shift as missing until tomorrow morning!
           if (s.includes('NIGHT') || s.includes('11:00')) return false;
-          // Evening shift (3:00 PM) starts at 15:00
           if (s.includes('3:00') && curHr < 15) return false;
-          // Morning/General shifts (7 AM / 9 AM / 10 AM)
           if (curHr < 9) return false;
         }
       }
       return true;
     }
 
-    // Computes all Roster-based Missing Report items AND Leave/Absent logs for the selected month
     function computeMissingAndLeaveDataForMonth(mKey, teamScopeFilter = 'ALL', agentIdFilter = 'ALL') {
       const mk = mKey || selectedMonthKey;
       const parts = mk.split('/');
@@ -7935,9 +8092,6 @@ function renderRankingAndComparison() {
       const allUsersInChannel = getUsersForMonth(mk, activeChannel === 'ALL_CHANNELS');
       const allAgents = allUsersInChannel.filter(usr => usr.role === 'agent' && !isPendingOrFloatingAgent(usr) && !isUserAccountDeactivated(usr));
 
-      // Role & Filter Scoping:
-      // - Agent: ONLY sees their own ID
-      // - Admin/TL/Supervisor/Nazim: Filtered by `teamScopeFilter` and `agentIdFilter`
       let targetAgents = [];
       if (u && u.role === 'agent' && !canViewAll(u)) {
         targetAgents = allAgents.filter(a => String(a.id) === String(u.id));
@@ -7960,14 +8114,11 @@ function renderRankingAndComparison() {
       const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
         .filter(s => String(s.date || '').endsWith(mk) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
 
-      // Determine the earliest active day in the month that has any sales or leave records,
-      // so if a month just started on the 5th or 1st, we check from the 1st up to today!
       const now = new Date();
       const maxDayToScan = (yearNum === now.getFullYear() && monthNum === (now.getMonth() + 1))
         ? now.getDate()
         : ((yearNum < now.getFullYear() || (yearNum === now.getFullYear() && monthNum < (now.getMonth() + 1))) ? daysInMonth : 0);
 
-      // Only scan dates where the floor was active (or if no sales in month yet, scan today/yesterday)
       const activeDatesSet = new Set(monthSales.map(s => s.date));
       const leaveStore = getLeaveRecordsStoreForMonth(mk);
       Object.values(leaveStore).forEach(lv => { if (lv && lv.date) activeDatesSet.add(lv.date); });
@@ -7981,11 +8132,8 @@ function renderRankingAndComparison() {
       let totalScheduledDuties = 0;
       let totalSubmittedDuties = 0;
 
-      // Scan from newest date down to day 1 so today's/yesterday's missing reports appear at the top!
       for (let d = maxDayToScan; d >= 1; d--) {
         const dateStr = `${String(d).padStart(2, '0')}/${String(monthNum).padStart(2, '0')}/${yearNum}`;
-        // If this date is in the past and literally 0 agents across the entire floor submitted a report (e.g. before portal data entry started),
-        // only include it if it's within the last 3 days OR if at least 1 report/leave exists on that date!
         const isRecentDay = (yearNum === now.getFullYear() && monthNum === (now.getMonth() + 1) && (now.getDate() - d) <= 2);
         if (!activeDatesSet.has(dateStr) && !isRecentDay) continue;
 
@@ -8039,7 +8187,6 @@ function renderRankingAndComparison() {
         });
       }
 
-      // Also include any Leave records marked for future dates in this month (e.g. pre-approved Casual Leave tomorrow!)
       Object.keys(leaveStore).forEach(k => {
         const lv = leaveStore[k];
         if (!lv || !lv.userId || !lv.date) return;
@@ -8114,7 +8261,6 @@ function renderRankingAndComparison() {
       const allUsers = getUsersForMonth(selectedMonthKey, true);
       const targetAg = allUsers.find(u => String(u.id) === String(userId)) || currentUser;
 
-      // Agent can only mark or request leave for themselves; TL/Admin can mark for any agent
       if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales') && String(targetAg.id) !== String(currentUser.id)) {
         return;
       }
@@ -8308,7 +8454,6 @@ function renderRankingAndComparison() {
         totalSubmittedDuties
       } = computeMissingAndLeaveDataForMonth(selectedMonthKey, missingReportsTeamScope, missingReportsAgentFilter);
 
-      // Unique dates for quick date filter dropdown
       const allRelevantDates = Array.from(new Set([...missingItems.map(x => x.date), ...leaveItems.map(x => x.date)]));
       const filteredMissing = missingReportsDateFilter === 'ALL'
         ? missingItems
@@ -8317,7 +8462,6 @@ function renderRankingAndComparison() {
         ? leaveItems
         : leaveItems.filter(x => x.date === missingReportsDateFilter);
 
-      // Group missing counts per agent so TL can see at a glance who has the most missing reports
       const agentMissingSummaryMap = new Map();
       filteredMissing.forEach(m => {
         const prev = agentMissingSummaryMap.get(m.userId) || { userId: m.userId, userName: m.userName, team: m.team, dates: [] };
@@ -8326,7 +8470,6 @@ function renderRankingAndComparison() {
       });
       const agentMissingPills = Array.from(agentMissingSummaryMap.values()).sort((a, b) => b.dates.length - a.dates.length);
 
-      // Group leave counts by type
       const clCount = filteredLeaves.filter(l => l.leaveType === 'Casual Leave').length;
       const slCount = filteredLeaves.filter(l => l.leaveType === 'Sick Leave').length;
       const absentCount = filteredLeaves.filter(l => l.leaveType === 'Absent').length;
@@ -8338,7 +8481,6 @@ function renderRankingAndComparison() {
         <div class="space-y-4">
           ${isSupervisor(u) || activeChannel === 'ALL_CHANNELS' ? renderSupervisorQuickChannelTeamBar(missingReportsTeamScope, 'setMissingReportsTeamScope') : ''}
 
-          <!-- Top Header & Smart Filters -->
           <div class="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
             <div>
               <div class="flex flex-wrap items-center gap-2">
@@ -8362,7 +8504,6 @@ function renderRankingAndComparison() {
 
             <div class="flex flex-wrap items-center gap-2">
               ${isAdminOrSup ? `
-              <!-- Team Filter (Defaults to TL's Own Team!) -->
               <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap items-center gap-1 border border-slate-200">
                 ${chMeta.teams.map(tn => `
                   <button type="button" onclick="setMissingReportsTeamScope('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${missingReportsTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
@@ -8374,7 +8515,6 @@ function renderRankingAndComparison() {
                 </button>
               </div>
 
-              <!-- Agent Filter -->
               <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
                 <i class="fa-solid fa-user text-slate-400 text-xs"></i>
                 <select onchange="setMissingReportsAgentFilter(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
@@ -8384,7 +8524,6 @@ function renderRankingAndComparison() {
               </div>
               ` : ''}
 
-              <!-- Date Filter -->
               <div class="flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
                 <i class="fa-regular fa-calendar text-rose-600 text-xs"></i>
                 <select onchange="setMissingReportsDateFilter(this.value)" class="bg-transparent text-xs font-extrabold text-rose-900 focus:outline-none cursor-pointer">
@@ -8405,7 +8544,6 @@ function renderRankingAndComparison() {
             </div>
           </div>
 
-          <!-- 4 Summary KPI Cards (Clean At-a-Glance Overview) -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             <div onclick="setMissingReportsSubView('MISSING')" class="card-dynamic p-4 border-l-4 border-l-rose-600 cursor-pointer ${missingReportsSubView === 'MISSING' ? 'ring-2 ring-rose-500/30 bg-rose-50/30' : ''}">
               <div class="flex items-center justify-between">
@@ -8450,7 +8588,6 @@ function renderRankingAndComparison() {
           </div>
 
           ${agentMissingPills.length > 0 && isAdminOrSup ? `
-          <!-- Quick Agent-Wise Missing Summary Strip -->
           <div class="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs">
             <div class="flex items-center justify-between mb-2">
               <span class="text-[10px] font-black uppercase tracking-wider text-rose-700">
@@ -8471,7 +8608,6 @@ function renderRankingAndComparison() {
           </div>
           ` : ''}
 
-          <!-- Sub-Tab Toggle Bar: [1. Missing Reports Action Queue] vs [2. Leave & Absent History Log] -->
           <div class="flex flex-wrap items-center justify-between gap-3 bg-white px-4 py-2.5 rounded-2xl border border-slate-200">
             <div class="flex items-center gap-2">
               <button type="button" onclick="setMissingReportsSubView('MISSING')" class="px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${missingReportsSubView === 'MISSING' ? 'bg-rose-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
@@ -8489,7 +8625,6 @@ function renderRankingAndComparison() {
           </div>
 
           ${missingReportsSubView === 'MISSING' ? `
-          <!-- TABLE 1: MISSING REPORTS ACTION QUEUE -->
           <div class="card-dynamic overflow-hidden overflow-x-auto">
             <div class="px-5 py-3 bg-slate-900 text-white flex items-center justify-between">
               <span class="text-xs font-black uppercase tracking-wider">
@@ -8572,7 +8707,6 @@ function renderRankingAndComparison() {
             </table>
           </div>
           ` : `
-          <!-- TABLE 2: LEAVE & ABSENT HISTORY LOG -->
           <div class="card-dynamic overflow-hidden overflow-x-auto">
             <div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between">
               <span class="text-xs font-black uppercase tracking-wider">
@@ -8632,10 +8766,11 @@ function renderRankingAndComparison() {
                           <button type="button" onclick="openReportModal('${lv.userId}', '${lv.date}')" class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-extrabold text-[11px]" title="Submit Sales Report instead">
                             <i class="fa-solid fa-file-pen mr-1"></i>Submit Report
                           </button>
-                          <button type="button" onclick="openMarkLeaveModal('${lv.userId}', '${lv.date}', '${lv.leaveType}', '${String(lv.reason || '').replace(/'/g, "\'")}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg font-extrabold text-[11px]">
+                          <button type="button" onclick="openMarkLeaveModal('${lv.userId}', '${lv.date}', '${lv.leaveType}', '${String(lv.reason || '').replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg font-extrabold text-[11px]">
                             <i class="fa-solid fa-pen"></i> Edit
                           </button>
-                          <button type="button" onclick="handleRevertLeaveRecord('${lv.userId}', '${String(lv.userName).replace(/'/g, "\'")}', '${lv.date}')" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-extrabold text-[11px]" title="Remove Leave/Absent status">
+                          <button type="button" onclick="handleRevertLeaveRecord('${lv.userId}', '${String(lv.userName).replace(/'/g, "\\'")}')" class="hidden"></button>
+                          <button type="button" onclick="handleRevertLeaveRecord('${lv.userId}', '${String(lv.userName).replace(/'/g, "\\'")}', '${lv.date}')" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-extrabold text-[11px]" title="Remove Leave/Absent status">
                             <i class="fa-solid fa-trash-can"></i>
                           </button>
                         ` : '-'}
@@ -10061,7 +10196,8 @@ function renderRankingAndComparison() {
         'success'
       );
 
-      // Non-blocking background cloud sync
+      // Zero-loss persistent outbox queue + background cloud sync
+      enqueueVerifiedSalesSubmission(entry, logMeta, false);
       postToSheet('DAILY_SALES_SUBMIT', { ...entry, ...logMeta }).catch(() => {});
       setTimeout(fetchFromSheet, 1800);
     }
@@ -10141,6 +10277,7 @@ function renderRankingAndComparison() {
           renderAppLayout();
           showPortalToast('Report Deleted Instantly', `Deleted ${agentName}'s sales report dated ${dateStr}.`, 'warning');
 
+          enqueueVerifiedSalesSubmission({ userId: String(agentId), date: dateStr }, logMeta, true);
           postToSheet('DELETE_SALES_RECORD', { userId: String(agentId), date: dateStr, ...logMeta }).catch(() => {});
           setTimeout(fetchFromSheet, 1800);
         }
@@ -11314,6 +11451,7 @@ function renderRankingAndComparison() {
             ? `AI ERP Drive Product Total for ${agObj.name} (Last Update: ${lastUpdateFormatted}) — Ajwa:${entry.ajwa}kg, Salt:${entry.pinkSalt}kg, Garlic:${entry.blackGarlic}kg, Sun.H:${entry.sunHoney}kg, BS.H:${entry.bsHoney}kg, Ghee:${entry.gawaGhee}kg`
             : `AI ERP Import for ${agObj.name} (${item.date}) — Amt: ৳${entry.amount.toLocaleString()}, Orders: ${entry.orders}`
         );
+        enqueueVerifiedSalesSubmission(entry, logMeta, false);
         syncPayloads.push({ ...entry, ...logMeta });
       }
 
