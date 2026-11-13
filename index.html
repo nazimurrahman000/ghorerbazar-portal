@@ -3963,54 +3963,86 @@
 
       return `
         <div class="space-y-4">
-          <div class="banner-hero-light px-5 py-4 rounded-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
-            <div>
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600' : (dashboardScope === 'Team Nazim' ? 'bg-orange-500' : (dashboardScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800'))} text-white">
-                  ${canViewAll(u) ? `${dashboardScope === 'ALL' ? `Full ${getActiveChannelMeta().name} Floor (${tInfo.agentCount})` : dashboardScope}` : u.team}
-                </span>
-                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
-                  ${canViewAll(u) ? `${tInfo.agentCount} Agents` : `Grade: ${myMonthUser.grade}`}
-                </span>
-                <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
-                  Period: ${periodLabel}
-                </span>
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
+            <!-- Row 1: Left Welcome Identity & Scope Badges | Right Action Buttons (Never Wraps Awkwardly!) -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3.5 border-b border-slate-100">
+              <div class="flex items-center gap-3.5 min-w-0">
+                <div class="relative shrink-0">
+                  ${renderUserAvatarHtml(u, 'w-12 h-12 rounded-2xl text-base', 'tab-active text-white', true)}
+                  <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-white absolute -bottom-0.5 -right-0.5" title="Online & Active"></span>
+                </div>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600' : (dashboardScope === 'Team Nazim' ? 'bg-orange-500' : (dashboardScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800'))} text-white shadow-2xs">
+                      <i class="${getActiveChannelMeta().icon} mr-1"></i>${canViewAll(u) ? `${dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope}` : u.team}
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200/80">
+                      <i class="fa-solid fa-users text-slate-400 mr-1"></i>${canViewAll(u) ? `${tInfo.agentCount} Active Agents` : `Grade: ${myMonthUser.grade}`}
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200/60">
+                      <i class="fa-regular fa-calendar-check mr-1"></i>${periodLabel}
+                    </span>
+                  </div>
+                  <h2 class="text-xl font-black text-slate-900 mt-1 truncate">Welcome, ${u.name}! 👋</h2>
+                </div>
               </div>
-              <h2 class="text-lg font-black text-slate-900 mt-1">Welcome, ${u.name}! 👋</h2>
-              
-              <div class="flex flex-wrap items-center gap-2 mt-1.5">
-                <div class="px-2.5 py-0.5 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-600">
-                  Base: <strong class="text-slate-900">৳${tInfo.baseTarget.toLocaleString()}</strong>
-                </div>
-                <div class="px-2.5 py-0.5 rounded-lg bg-blue-50/70 border border-blue-200 text-[11px] font-bold text-blue-700">
-                  Working (+5%): <strong>৳${tInfo.workingTarget.toLocaleString()}</strong>
-                </div>
-                <div class="px-2.5 py-0.5 rounded-lg bg-emerald-50/70 border border-emerald-200 text-[11px] font-bold text-emerald-700">
-                  Daily Goal (÷26): <strong>৳${tInfo.dailyTarget.toLocaleString()}</strong>
-                </div>
+
+              <!-- Action Buttons Group (Aligned Cleanly on Top Right) -->
+              <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
+                <button onclick="openAiImportModal()" class="h-10 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm inline-flex items-center gap-2 transition-all cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i>
+                  <span>AI ERP Report Import</span>
+                </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
+                <button onclick="openReportModal()" class="h-10 px-4 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm inline-flex items-center gap-2 transition-all cursor-pointer">
+                  <i class="fa-solid fa-plus-circle"></i>
+                  <span>${hasFeatureAccess(u, 'feat_manage_all_sales') ? 'Add / Edit Agent Data' : 'Submit Daily Report'}</span>
+                </button>
+                ` : ''}
               </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2.5">
-              ${canViewAll(u) ? `
-              <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap items-center gap-1 border border-slate-200">
-                ${getActiveChannelMeta().teams.map((tn, tIdx) => {
-                  const activeColors = ['bg-orange-500 text-white shadow', 'bg-blue-600 text-white shadow', 'bg-emerald-600 text-white shadow'];
-                  return `<button onclick="setDashboardScope('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === tn ? activeColors[tIdx % activeColors.length] : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>`;
-                }).join('')}
-                <button onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${dashboardScope === 'ALL' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (${monthUsers.filter(usr => usr.role === 'agent').length})</button>
+            <!-- Row 2: Left Structured Target Summary Strip (Single Clean Line) | Right Team Scope Switcher -->
+            <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+              <!-- 3-Column Target Strip -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 flex-1 max-w-3xl">
+                <div class="px-3.5 py-2 rounded-xl bg-slate-50/90 border border-slate-200/80 flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-7 h-7 rounded-lg bg-slate-200/80 text-slate-700 flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-bullseye"></i></span>
+                    <span class="text-[10px] font-extrabold uppercase text-slate-500">Base Target</span>
+                  </div>
+                  <strong class="text-xs font-black text-slate-900">৳${tInfo.baseTarget.toLocaleString()}</strong>
+                </div>
+
+                <div class="px-3.5 py-2 rounded-xl bg-blue-50/60 border border-blue-200/80 flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-chart-line"></i></span>
+                    <span class="text-[10px] font-extrabold uppercase text-blue-700">Working (+5%)</span>
+                  </div>
+                  <strong class="text-xs font-black text-blue-900">৳${tInfo.workingTarget.toLocaleString()}</strong>
+                </div>
+
+                <div class="px-3.5 py-2 rounded-xl bg-emerald-50/60 border border-emerald-200/80 flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-calendar-day"></i></span>
+                    <span class="text-[10px] font-extrabold uppercase text-emerald-700">Daily Goal (÷26)</span>
+                  </div>
+                  <strong class="text-xs font-black text-emerald-900">৳${tInfo.dailyTarget.toLocaleString()}</strong>
+                </div>
               </div>
-              ` : ''}
-              ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
-              <button onclick="openAiImportModal()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2 transition-colors">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
-              </button>
-              ` : ''}
-              ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
-              <button onclick="openReportModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-2">
-                <i class="fa-solid fa-plus-circle"></i>
-                ${hasFeatureAccess(u, 'feat_manage_all_sales') ? 'Add / Edit Agent Data' : 'Submit Daily Report'}
-              </button>
+
+              <!-- Team SwitcherSegmented Control -->
+              ${canViewAll(u) ? `
+              <div class="inline-flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/90 self-start xl:self-auto shrink-0">
+                <span class="text-[10px] font-black uppercase text-slate-400 px-2 hidden sm:inline"><i class="fa-solid fa-filter mr-1"></i>Team:</span>
+                ${getActiveChannelMeta().teams.map((tn) => {
+                  const isSelected = normalizeTeamNameAlias(dashboardScope) === normalizeTeamNameAlias(tn);
+                  return `<button type="button" onclick="setDashboardScope('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${isSelected ? getTeamBannerHeaderColor(tn) + ' text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">${tn}</button>`;
+                }).join('')}
+                <button type="button" onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${dashboardScope === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">All (${monthUsers.filter(usr => usr.role === 'agent' && !isPendingOrFloatingAgent(usr)).length})</button>
+              </div>
               ` : ''}
             </div>
           </div>
@@ -16772,6 +16804,387 @@ function renderChatHubView() {
       };
     } catch (patchV30Err) {
       console.error('Non-fatal patch v30 warning:', patchV30Err);
+    }
+
+    
+    // =========================================================================
+    // MASTER VERIFIED UPGRADE PATCH (v31) — DAY OFF (DO) & ZERO-DATA FIXES:
+    // 1. Auto-ignore & hide 0-Sales / 0-Orders / 0-Leads entries from Day Off (DO) Submissions list + 1-Click Clean All 0-Data Rows button
+    // 2. Never show "Not submitted on 31 Oct 2026" (cross-month / pre-portal launch warning) when viewing Day 01 of the month
+    // 3. Added "✅ Approve Day Off Duty" button on each Day Off submission row — clicking it marks that date as an Approved Day Off Duty in cloud config (DO_APPROVED_DUTIES_<monthKey>) and immediately removes it from the warning list!
+    // 4. Verified 2-Step Day Off Confirmation when Agent or Admin submits a report on a Roster Day Off (DO)
+    // =========================================================================
+    try {
+      window.showZeroDataDoEntries = false;
+
+      window.toggleShowZeroDataDoEntries = function() {
+        window.showZeroDataDoEntries = !window.showZeroDataDoEntries;
+        renderAppLayout();
+      };
+
+      window.getApprovedDayOffDutiesStore = function(mKey) {
+        const mk = mKey || selectedMonthKey;
+        const configs = getStored('monthly_configs', {});
+        const storeKey = `DO_APPROVED_DUTIES_${mk}`;
+        return (configs[storeKey] && typeof configs[storeKey] === 'object') ? configs[storeKey] : {};
+      };
+
+      window.isDayOffDutyApproved = function(userId, dateStr) {
+        if (!userId || !dateStr) return false;
+        const cleanD = String(dateStr).replace(/^'/, '').trim();
+        const mk = cleanD.substring(3) || selectedMonthKey;
+        const store = window.getApprovedDayOffDutiesStore(mk);
+        const item = store[`${String(userId).trim()}_${cleanD}`];
+        return Boolean(item && !item.isRemoved);
+      };
+
+      window.handleApproveDayOffDuty = function(userId, userName, dateStr) {
+        if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const targetUser = allUsers.find(u => String(u.id) === String(userId));
+        const targetTeam = targetUser ? targetUser.team : '';
+        if (!isSuperAdmin(currentUser) && !canEditTeamData(currentUser, targetTeam) && String(currentUser.id) !== String(userId)) {
+          showPortalToast('Permission Denied', 'You can only approve Day Off duties for your own team.', 'error');
+          return;
+        }
+
+        const cleanD = String(dateStr).replace(/^'/, '').trim();
+        const mk = cleanD.substring(3) || selectedMonthKey;
+
+        openConfirmWarningModal(
+          `✅ Approve Day Off Duty (${cleanDisplayDate(cleanD)})?`,
+          `Did <strong>${userName} (${userId})</strong> legitimately work on their <strong>Day Off (${cleanDisplayDate(cleanD)} • ${cleanD})</strong>?<br><br>• Approving this as <strong>Day Off Duty</strong> will remove it from the Day Off warning list.<br>• Their sales report on <strong>${cleanDisplayDate(cleanD)}</strong> will remain 100% counted in their Daily, Sprint & Monthly targets!`,
+          'Approve Day Off Duty',
+          async () => {
+            const configs = getStored('monthly_configs', {});
+            const storeKey = `DO_APPROVED_DUTIES_${mk}`;
+            if (!configs[storeKey] || typeof configs[storeKey] !== 'object') {
+              configs[storeKey] = {};
+            }
+            configs[storeKey][`${String(userId).trim()}_${cleanD}`] = {
+              userId: String(userId).trim(),
+              userName,
+              team: targetTeam,
+              date: cleanD,
+              approvedBy: currentUser.name,
+              approvedAt: `${getTodayFormatted()} ${getNowTimeStr()}`,
+              updatedTs: Date.now()
+            };
+            setStored('monthly_configs', configs);
+            markLocalUserOrConfigMutatedNow();
+
+            const logMeta = recordActivityLog(
+              'Approved Day Off Duty',
+              `Approved Day Off (DO) working duty for ${userName} (${userId}) on ${cleanD}`
+            );
+
+            renderAppLayout();
+            showPortalToast('Day Off Duty Approved!', `${userName}'s report on ${cleanDisplayDate(cleanD)} is now approved & cleared from warnings.`, 'success');
+
+            postToSheet('SAVE_MONTHLY_CONFIG', {
+              monthKey: storeKey,
+              configJson: JSON.stringify(configs[storeKey]),
+              ...logMeta
+            }).catch(() => {});
+          },
+          '✅ Yes, Approve Day Off Duty',
+          true
+        );
+      };
+
+      window.handleCleanAllZeroDayOffEntries = function() {
+        if (!currentUser || !canViewAll(currentUser) || isCurrentChannelReadOnlyForUser(currentUser)) return;
+        const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+          .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+        const zeroDoRows = allMonthSales.filter(s => {
+          if (window.isUserTeamLeaderRecord && window.isUserTeamLeaderRecord(s.userId)) return false;
+          if (activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(s.team) !== activeChannel) return false;
+          if (missingReportsTeamScope !== 'ALL' && normalizeTeamNameAlias(s.team) !== normalizeTeamNameAlias(missingReportsTeamScope)) return false;
+          if (!isSuperAdmin(currentUser) && !canEditTeamData(currentUser, s.team)) return false;
+          const isZero = (Number(s.amount || 0) === 0 && Number(s.orders || 0) === 0 && Number(s.leads || 0) === 0);
+          return isZero && window.isDateAgentDayOff(s.userId, s.date);
+        });
+
+        if (zeroDoRows.length === 0) {
+          showPortalToast('No 0-Data Rows', 'There are no 0-Leads / 0-Orders / ৳0 Day Off entries to clean.', 'warning');
+          return;
+        }
+
+        openConfirmWarningModal(
+          `🧹 Clean ${zeroDoRows.length} Empty (৳0) Day Off Entries?`,
+          `Are you sure you want to permanently remove <strong>${zeroDoRows.length}</strong> empty Day Off entries (with <strong>0 Leads, 0 Orders & ৳0 Sales</strong>)?<br><br>Since their sales are ৳0 and those dates are Roster Day Offs (DO), deleting them is <strong>100% safe</strong>—they will NOT go to Missing Reports and will NOT affect any sales targets!`,
+          'Safe Zero-Data Cleanup',
+          async () => {
+            const removeKeySet = new Set(zeroDoRows.map(r => `${String(r.userId).trim()}_${String(r.date).replace(/^'/, '').trim()}`));
+            let sales = getStored('sales_records', []);
+            sales = sales.filter(s => !removeKeySet.has(`${String(s.userId).trim()}_${String(s.date).replace(/^'/, '').trim()}`));
+            setStored('sales_records', sales);
+            markLocalSalesMutatedNow();
+
+            const logMeta = recordActivityLog(
+              'Cleaned Empty (৳0) Day Off Entries',
+              `Deleted ${zeroDoRows.length} empty (0 Leads / 0 Orders / ৳0) Day Off entries in ${selectedMonthKey}`
+            );
+
+            renderAppLayout();
+            showPortalToast('Empty ৳0 Entries Cleaned!', `Removed ${zeroDoRows.length} empty Day Off records.`, 'success');
+
+            for (const r of zeroDoRows) {
+              enqueueVerifiedSalesSubmission({ userId: String(r.userId), date: r.date }, logMeta, true);
+              await postToSheet('DELETE_SALES_RECORD', { userId: String(r.userId), date: r.date }).catch(() => {});
+            }
+          },
+          `Yes, Delete ${zeroDoRows.length} Empty (৳0) Entries`,
+          false
+        );
+      };
+
+      // Merge DO_APPROVED_DUTIES_* in handleCloudData so approved Day Off duties never get overwritten by background sync
+      const _origHandleCloudDataV31 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
+          const localCfg = getStored('monthly_configs', {});
+          Object.keys({ ...localCfg, ...res.monthlyConfigs }).forEach(cfgK => {
+            if (cfgK.startsWith('DO_APPROVED_DUTIES_')) {
+              const locDo = (localCfg[cfgK] && typeof localCfg[cfgK] === 'object') ? localCfg[cfgK] : {};
+              const cldDo = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
+              res.monthlyConfigs[cfgK] = { ...cldDo, ...locDo };
+            }
+          });
+        }
+        _origHandleCloudDataV31(res);
+      };
+
+      // Update getPrevDateAndShiftInfo so Day 01 of a month NEVER flags the previous month's last day (e.g., 31 Oct 2026) as "Not submitted"!
+      window.getPrevDateAndShiftInfo = function(empId, dateStr) {
+        if (!empId || !dateStr) return null;
+        const cleanCurrDate = String(dateStr).replace(/^'/, '').trim();
+        const parts = cleanCurrDate.split('/');
+        if (parts.length !== 3) return null;
+        const currMonthYear = `${parts[1]}/${parts[2]}`;
+        const dObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        if (isNaN(dObj.getTime())) return null;
+
+        const prevDateObj = new Date(dObj.getTime());
+        prevDateObj.setDate(prevDateObj.getDate() - 1);
+        const prevD = String(prevDateObj.getDate()).padStart(2, '0');
+        const prevM = String(prevDateObj.getMonth() + 1).padStart(2, '0');
+        const prevY = prevDateObj.getFullYear();
+        const prevDateStr = `${prevD}/${prevM}/${prevY}`;
+        const prevMonthYear = `${prevM}/${prevY}`;
+
+        // CRITICAL FIX: If the previous day belongs to a DIFFERENT month (e.g., 31/10/2026 when checking 01/11/2026),
+        // do NOT flag it as "Not submitted", because the portal either wasn't launched yet or it belongs to a past month's archive!
+        const isCrossMonthBoundary = (prevMonthYear !== currMonthYear);
+
+        const prevShift = window.getAgentRosterShiftForDateStr(empId, prevDateStr) || '3:00 PM';
+        const isPrevNightShift = !isCrossMonthBoundary && (prevShift.toUpperCase().includes('NIGHT') || prevShift.includes('11:00'));
+
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const prevReport = allSales.find(s =>
+          String(s.userId).trim() === String(empId).trim() &&
+          String(s.date || '').replace(/^'/, '').trim() === prevDateStr &&
+          (Number(s.amount || 0) > 0 || Number(s.orders || 0) > 0 || Number(s.leads || 0) > 0)
+        );
+        const hasSubmittedPrevDate = isCrossMonthBoundary ? true : Boolean(prevReport);
+
+        return {
+          prevDateStr,
+          prevShift,
+          isCrossMonthBoundary,
+          isPrevNightShift,
+          hasSubmittedPrevDate,
+          prevReport
+        };
+      };
+
+      // Override renderMissingReportsAndLeaveView so:
+      // 1) 0-Leads / 0-Orders / ৳0 rows are automatically hidden by default (with a toggle & 1-Click Clean button)
+      // 2) Approved Day Off Duties are hidden from the Day Off warning list
+      // 3) Each active Day Off submission has a green "✅ Day Off Duty" button right next to "Move Date"
+      const _origRenderMissingBaseV31 = _origRenderMissingReportsAndLeaveViewSafe;
+      renderMissingReportsAndLeaveView = function() {
+        const u = currentUser;
+        const isAdminOrSup = canViewAll(u);
+        const myTeamNorm = u ? normalizeTeamNameAlias(u.team) : '';
+        const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+          .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+        const allRawDoRows = allMonthSales.filter(s => {
+          if (window.isUserTeamLeaderRecord && window.isUserTeamLeaderRecord(s.userId)) return false;
+          if (activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(s.team) !== activeChannel) return false;
+          if (!isAdminOrSup && String(s.userId) !== String(u.id)) return false;
+          if (isAdminOrSup && missingReportsTeamScope !== 'ALL' && normalizeTeamNameAlias(s.team) !== normalizeTeamNameAlias(missingReportsTeamScope)) return false;
+          if (isAdminOrSup && missingReportsAgentFilter !== 'ALL' && String(s.userId) !== String(missingReportsAgentFilter)) return false;
+          if (missingReportsDateFilter !== 'ALL' && s.date !== missingReportsDateFilter) return false;
+          if (window.isDayOffDutyApproved(s.userId, s.date)) return false;
+          return window.isDateAgentDayOff(s.userId, s.date);
+        });
+
+        const zeroDoCount = allRawDoRows.filter(s => Number(s.amount || 0) === 0 && Number(s.orders || 0) === 0 && Number(s.leads || 0) === 0).length;
+        const realDoRows = allRawDoRows.filter(s => Number(s.amount || 0) > 0 || Number(s.orders || 0) > 0 || Number(s.leads || 0) > 0);
+
+        let doSubmissions = window.showZeroDataDoEntries ? [...allRawDoRows] : [...realDoRows];
+
+        doSubmissions.sort((a, b) => {
+          const aMy = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : 1;
+          const bMy = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : 1;
+          if (aMy !== bMy) return aMy - bMy;
+          return (parseInt(b.date.split('/')[0], 10) || 0) - (parseInt(a.date.split('/')[0], 10) || 0);
+        });
+
+        const approvedStore = window.getApprovedDayOffDutiesStore(selectedMonthKey);
+        const approvedCount = Object.values(approvedStore).filter(x => x && !x.isRemoved && (missingReportsTeamScope === 'ALL' || normalizeTeamNameAlias(x.team) === normalizeTeamNameAlias(missingReportsTeamScope))).length;
+
+        let htmlOut = _origRenderMissingBaseV31();
+
+        const leaveBtnMarker = `<span>Leave & Absent Log (`;
+        const btnIdx = htmlOut.indexOf(leaveBtnMarker);
+        if (btnIdx !== -1) {
+          const closeBtnIdx = htmlOut.indexOf('</button>', btnIdx);
+          if (closeBtnIdx !== -1) {
+            const doSubTabBtn = `
+                <button type="button" onclick="setMissingReportsSubView('DO_REPORTS')" class="px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${missingReportsSubView === 'DO_REPORTS' ? 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-400' : 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'}">
+                  <i class="fa-solid fa-user-clock"></i>
+                  <span>⚠️ Day Off (DO) Submissions (${realDoRows.length})</span>
+                </button>`;
+            htmlOut = htmlOut.slice(0, closeBtnIdx + 9) + doSubTabBtn + htmlOut.slice(closeBtnIdx + 9);
+          }
+        }
+
+        if (missingReportsSubView === 'DO_REPORTS') {
+          const tableMarker = `<div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between">`;
+          const tIdx = htmlOut.indexOf(tableMarker);
+          if (tIdx !== -1) {
+            const cardStartIdx = htmlOut.lastIndexOf('<div class="card-dynamic', tIdx);
+            if (cardStartIdx !== -1) {
+              const doTableHtml = `
+            <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-amber-400">
+              <div class="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-xs font-black uppercase tracking-wider text-amber-400">
+                    <i class="fa-solid fa-calendar-day mr-1.5"></i>Agent Sales Reports Submitted on Roster Day Off (DO) — ${selectedMonthKey} (${realDoRows.length} Active)
+                  </span>
+                  ${approvedCount > 0 ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black">✅ ${approvedCount} Approved as Day Off Duty</span>` : ''}
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  ${zeroDoCount > 0 ? `
+                    <button type="button" onclick="toggleShowZeroDataDoEntries()" class="px-2.5 py-1 rounded-lg ${window.showZeroDataDoEntries ? 'bg-amber-400 text-slate-950' : 'bg-white/10 hover:bg-white/20 text-slate-200'} text-[10px] font-black cursor-pointer transition-colors">
+                      <i class="fa-solid ${window.showZeroDataDoEntries ? 'fa-eye-slash' : 'fa-eye'} mr-1"></i>${window.showZeroDataDoEntries ? `Hide ${zeroDoCount} Empty (৳0) Rows` : `Show ${zeroDoCount} Hidden Empty (৳0) Rows`}
+                    </button>
+                    ${(isAdminOrSup && !isCurrentChannelReadOnlyForUser(u)) ? `
+                      <button type="button" onclick="handleCleanAllZeroDayOffEntries()" class="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black shadow-xs cursor-pointer transition-colors" title="Safely delete all 0-Leads / 0-Orders / ৳0 Day Off rows">
+                        <i class="fa-solid fa-broom mr-1"></i>1-Click Delete All ${zeroDoCount} Empty (৳0) Rows
+                      </button>
+                    ` : ''}
+                  ` : `
+                    <span class="text-[11px] font-bold text-slate-300">
+                      Click "✅ Day Off Duty" if the agent worked on their Day Off, or "Move Date" to shift to Night/Working date
+                    </span>
+                  `}
+                </div>
+              </div>
+              <table class="w-full text-left text-xs whitespace-nowrap">
+                <thead class="table-header-light uppercase font-extrabold">
+                  <tr>
+                    <th class="p-3.5">SL</th>
+                    <th class="p-3.5">Submitted Date (DO)</th>
+                    <th class="p-3.5">Agent Name & ID</th>
+                    <th class="p-3.5">Team</th>
+                    <th class="p-3.5">Roster & Night Shift Check</th>
+                    <th class="p-3.5 text-center">Leads / Orders</th>
+                    <th class="p-3.5">Sales Amount</th>
+                    <th class="p-3.5 text-right">Actions (Approve DO Duty / Move Date / Delete)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-semibold">
+                  ${doSubmissions.length === 0 ? `
+                    <tr>
+                      <td colspan="8" class="p-10 text-center text-emerald-700 font-extrabold">
+                        🎉 No pending Day Off (DO) sales submissions to review for ${selectedMonthKey}!
+                        ${zeroDoCount > 0 && !window.showZeroDataDoEntries ? `<span class="block text-xs text-slate-400 font-bold mt-1">(${zeroDoCount} empty ৳0 row(s) are automatically hidden — click "Show ${zeroDoCount} Hidden Empty (৳0) Rows" above if you wish to delete them)</span>` : ''}
+                      </td>
+                    </tr>
+                  ` : ''}
+                  ${doSubmissions.map((r, idx) => {
+                    const canManageRow = isSuperAdmin(u) || (u.role === 'admin' && canEditTeamData(u, r.team)) || (u.role === 'agent' && String(r.userId) === String(u.id));
+                    const pInfo = window.getPrevDateAndShiftInfo(r.userId, r.date) || {};
+                    const isMissedNight = pInfo.isPrevNightShift && !pInfo.hasSubmittedPrevDate;
+                    const isMissedPrevDay = !pInfo.isCrossMonthBoundary && !pInfo.isPrevNightShift && !pInfo.hasSubmittedPrevDate && pInfo.prevDateStr;
+                    const isZeroRow = Number(r.amount || 0) === 0 && Number(r.orders || 0) === 0 && Number(r.leads || 0) === 0;
+
+                    return `
+                      <tr class="hover:bg-amber-50/50 ${isZeroRow ? 'opacity-65 bg-slate-50' : (isMissedNight ? 'bg-indigo-50/50' : (normalizeTeamNameAlias(r.team) === myTeamNorm ? 'bg-amber-50/30' : ''))}">
+                        <td class="p-3.5 font-black text-slate-400">#${idx + 1}</td>
+                        <td class="p-3.5">
+                          <span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-black text-xs">${cleanDisplayDate(r.date)}</span>
+                          <span class="text-[10px] text-slate-400 ml-1">(${r.date})</span>
+                        </td>
+                        <td class="p-3.5 font-extrabold text-slate-900">${r.userName} <span class="text-slate-400 text-[10px]">(${r.userId})</span></td>
+                        <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(r.team)}">${r.team}</span></td>
+                        <td class="p-3.5">
+                          <div class="flex flex-col gap-1">
+                            <span class="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-black text-[10px] w-fit">⚠️ ${cleanDisplayDate(r.date)}: DO (Day Off)</span>
+                            ${isZeroRow ? `
+                              <span class="px-2.5 py-0.5 rounded-md bg-slate-200 text-slate-700 font-extrabold text-[10px] w-fit">
+                                🧹 Empty ৳0 Record (Safe to Delete)
+                              </span>
+                            ` : (isMissedNight ? `
+                              <span class="px-2.5 py-0.5 rounded-md bg-indigo-900 text-amber-300 font-black text-[10px] w-fit animate-pulse">
+                                🌙 Not submitted on Night Shift (${cleanDisplayDate(pInfo.prevDateStr)})!
+                              </span>
+                            ` : (isMissedPrevDay ? `
+                              <span class="px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[10px] w-fit">
+                                ⚠️ Not submitted on ${cleanDisplayDate(pInfo.prevDateStr)} (${pInfo.prevShift})
+                              </span>
+                            ` : (pInfo.isCrossMonthBoundary ? `
+                              <span class="text-[10px] font-bold text-slate-500">📅 First Day of Month (${cleanDisplayDate(r.date)})</span>
+                            ` : `
+                              <span class="text-[10px] font-bold text-emerald-700">✅ Prev Day (${cleanDisplayDate(pInfo.prevDateStr || '')}) Submitted</span>
+                            `)))}
+                          </div>
+                        </td>
+                        <td class="p-3.5 text-center font-bold">${r.leads} Leads / <strong class="text-blue-600">${r.orders} Ord</strong></td>
+                        <td class="p-3.5 font-black ${isZeroRow ? 'text-slate-400' : 'text-emerald-600'} text-sm">৳${Number(r.amount || 0).toLocaleString()}</td>
+                        <td class="p-3.5 text-right space-x-1.5">
+                          ${canManageRow ? `
+                            ${!isZeroRow ? `
+                              <button type="button" onclick="handleApproveDayOffDuty('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[11px] shadow-xs cursor-pointer" title="Agent worked on their Day Off — approve & remove from this warning list">
+                                <i class="fa-solid fa-circle-check mr-1"></i>Day Off Duty
+                              </button>
+                            ` : ''}
+                            ${isMissedNight && !isZeroRow ? `
+                              <button type="button" onclick="executeMoveReportDate('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}', '${pInfo.prevDateStr}')" class="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-black text-[11px] shadow-sm cursor-pointer" title="1-Click Move to Night Shift Date (${pInfo.prevDateStr})">
+                                <i class="fa-solid fa-moon text-amber-300 mr-1"></i>Move to Night (${cleanDisplayDate(pInfo.prevDateStr)})
+                              </button>
+                            ` : ''}
+                            <button type="button" onclick="handleChangeReportDatePrompt('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl font-black text-[11px] shadow-xs cursor-pointer">
+                              <i class="fa-solid fa-calendar-day mr-1"></i>Move Date
+                            </button>
+                            <button type="button" onclick="openReportModal('${r.userId}', '${r.date}')" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl font-extrabold text-[11px] cursor-pointer" title="Edit Data">
+                              <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                            <button type="button" onclick="handleDirectDeleteReport('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-extrabold text-[11px] cursor-pointer" title="Delete Entry">
+                              <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                          ` : `<span class="text-[11px] font-bold text-slate-400">View Only (${r.team})</span>`}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+              htmlOut = htmlOut.slice(0, cardStartIdx) + doTableHtml;
+            }
+          }
+        }
+        return htmlOut;
+      };
+    } catch (patchV31Err) {
+      console.error('Non-fatal patch v31 warning:', patchV31Err);
     }
 
     window.addEventListener('load', init);
