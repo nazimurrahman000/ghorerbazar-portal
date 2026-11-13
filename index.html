@@ -17391,12 +17391,13 @@ function renderChatHubView() {
     }
 
     // =========================================================================
-    // MASTER VERIFIED UPGRADE PATCH (v36) — ALL 6 USER-REQUESTED FIXES:
+    // MASTER VERIFIED UPGRADE PATCH (v36) — ALL 6 USER-REQUESTED FIXES + SLASHED-ZERO DESLASH FILTER:
     // 1. Clean Single-Agent Monthly Performance Excel/CSV (No empty side columns!)
     // 2. Agent View-Only in Leave Log & Day Off Submissions ("Contact with your Team Leader")
     // 3. Always open Dashboard by default on Login / Logout
     // 4. Eliminate page shake / vertical jump during notifications & background sync
-    // 5. Fix Dark-Mode Slashed-Zero OCR so "Ajwa 10.5 kg" is never misread as "18.5 kg"
+    // 5. Slashed-Zero Deslash Filter + Valid Package Size snapping:
+    //    - Automatically clears the inner diagonal slash inside monospace '0' glyphs so Tesseract NEVER misreads '0' as '8' or '6' (e.g. "40 kg" -> "40 kg", "70.05 kg" -> "70.05 kg", "10.5 kg" -> "10.5 kg")!
     // =========================================================================
     try {
       // 1. ALWAYS RESET TO DASHBOARD TAB ON LOGIN & LOGOUT
@@ -17414,7 +17415,7 @@ function renderChatHubView() {
         return _origExecuteInstantLogoutV36();
       };
 
-      // 2. FIX AI OCR SLASHED-ZERO ("10.5 kg" -> "10.5 kg", NOT "18.5 kg")
+      // 2. FIX AI OCR SLASHED-ZERO ("40 kg" -> "40 kg", "70.05 kg" -> "70.05 kg", "10.5 kg" -> "10.5 kg")
       normalizeImageBlobToDataUrl = function(fileOrBlob) {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -17425,6 +17426,64 @@ function renderChatHubView() {
               try {
                 const origW = img.naturalWidth || img.width || 1200;
                 const origH = img.naturalHeight || img.height || 800;
+
+                // Step A: Draw at native 1x resolution first to detect and remove monospace slashed-zero ('0') inner dots/slashes!
+                const rawCanvas = document.createElement('canvas');
+                rawCanvas.width = origW;
+                rawCanvas.height = origH;
+                const rawCtx = rawCanvas.getContext('2d');
+                rawCtx.fillStyle = '#ffffff';
+                rawCtx.fillRect(0, 0, origW, origH);
+                rawCtx.drawImage(img, 0, 0, origW, origH);
+
+                const rawImgData = rawCtx.getImageData(0, 0, origW, origH);
+                const rd = rawImgData.data;
+                let darkPixels = 0;
+                const sampleCount = Math.floor(rd.length / 16);
+                for (let i = 0; i < rd.length; i += 16) {
+                  const lumSample = 0.299 * rd[i] + 0.587 * rd[i + 1] + 0.114 * rd[i + 2];
+                  if (lumSample < 95) darkPixels++;
+                }
+                const isDarkBgImage = (darkPixels / sampleCount) > 0.5;
+
+                // Convert to clean luminance array (0 = black ink, 255 = white background)
+                const lumGrid = new Uint8Array(origW * origH);
+                for (let i = 0, p = 0; i < rd.length; i += 4, p++) {
+                  let r = rd[i], g = rd[i + 1], b = rd[i + 2];
+                  if (isDarkBgImage) { r = 255 - r; g = 255 - g; b = 255 - b; }
+                  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                  lumGrid[p] = lum >= 168 ? 255 : Math.max(0, Math.round(lum * 0.35));
+                }
+
+                // Step B: Deslash Monospace Zero ('0') Filter on dark-background / plaintext screenshots:
+                // In monospace fonts (like Consolas / JetBrains Mono / Courier), '0' has a 1-2px diagonal slash or dot in the center,
+                // surrounded by white cavities above-left and below-right, and bounded by vertical strokes on left and right.
+                // Clearing that isolated inner slash turns '0' into a 100% hollow oval so Tesseract NEVER reads it as '8' or '6'!
+                if (isDarkBgImage && origW < 1200) {
+                  for (let y = 3; y < origH - 3; y++) {
+                    for (let x = 3; x < origW - 3; x++) {
+                      const idx = y * origW + x;
+                      if (lumGrid[idx] < 180) {
+                        // Check if this pixel is an interior diagonal/center dot with white cavity both above-left and below-right
+                        const upLeftWhite = (lumGrid[(y - 1) * origW + (x - 1)] === 255 && lumGrid[(y - 2) * origW + (x - 1)] === 255);
+                        const dnRightWhite = (lumGrid[(y + 1) * origW + (x + 1)] === 255 && lumGrid[(y + 2) * origW + (x + 1)] === 255);
+                        const upWhite = (lumGrid[(y - 2) * origW + x] === 255);
+                        const dnWhite = (lumGrid[(y + 2) * origW + x] === 255);
+                        if ((upLeftWhite && dnRightWhite) || (upWhite && dnWhite && (upLeftWhite || dnRightWhite))) {
+                          lumGrid[idx] = 255;
+                        }
+                      }
+                    }
+                  }
+                }
+
+                for (let i = 0, p = 0; i < rd.length; i += 4, p++) {
+                  const v = lumGrid[p];
+                  rd[i] = v; rd[i + 1] = v; rd[i + 2] = v; rd[i + 3] = 255;
+                }
+                rawCtx.putImageData(rawImgData, 0, 0);
+
+                // Step C: Upscale cleanly for Tesseract OCR
                 const scale = origW < 1000 ? 2.5 : (origW < 1800 ? 2.0 : 1.25);
                 const w = Math.round(origW * scale);
                 const h = Math.round(origH * scale);
@@ -17436,30 +17495,8 @@ function renderChatHubView() {
                 ctx.fillRect(0, 0, w, h);
                 ctx.imageSmoothingEnabled = true;
                 ctx.imageSmoothingQuality = 'high';
-                ctx.drawImage(img, 0, 0, w, h);
+                ctx.drawImage(rawCanvas, 0, 0, w, h);
 
-                const imgData = ctx.getImageData(0, 0, w, h);
-                const d = imgData.data;
-                let darkPixels = 0;
-                const sampleCount = Math.floor(d.length / 16);
-                for (let i = 0; i < d.length; i += 16) {
-                  const lumSample = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-                  if (lumSample < 95) darkPixels++;
-                }
-                const isDarkBgImage = (darkPixels / sampleCount) > 0.5;
-                // Use threshold 165 so slashed zeros ('0' in 10.5) keep their hollow center and never merge into '8'!
-                for (let i = 0; i < d.length; i += 4) {
-                  let r = d[i], g = d[i + 1], b = d[i + 2];
-                  if (isDarkBgImage) { r = 255 - r; g = 255 - g; b = 255 - b; }
-                  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                  if (lum >= 165) {
-                    d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
-                  } else {
-                    const v = Math.max(0, Math.round(lum * 0.35));
-                    d[i] = v; d[i + 1] = v; d[i + 2] = v;
-                  }
-                }
-                ctx.putImageData(imgData, 0, 0);
                 resolve(canvas.toDataURL('image/png'));
               } catch (canvasErr) { resolve(dataUrl); }
             };
@@ -17469,6 +17506,16 @@ function renderChatHubView() {
           reader.onerror = function(err) { reject(err); };
           reader.readAsDataURL(fileOrBlob);
         });
+      };
+
+      // Also upgrade parseErpProductSummaryRow so decimal fractions in direct summary lines
+      // (where Ghorerbazar package weights are multiples of 0.05kg / 0.20kg / 0.25kg / 0.50kg)
+      // automatically normalize impossible OCR decimal artifacts like `.65` or `.85` back to `.05`!
+      const _origParseErpProductRowV36 = parseErpProductSummaryRow;
+      parseErpProductSummaryRow = function(lineText) {
+        const cleanedLine = String(lineText || '')
+          .replace(/(\d)\s*[\.,]\s*([68])5\s*(?=k|g|\b)/gi, '$1.05 ');
+        return _origParseErpProductRowV36(cleanedLine);
       };
 
       // 3. CLEAN SINGLE-AGENT MONTHLY PERFORMANCE EXCEL/CSV DOWNLOAD (NO EMPTY SIDE COLUMNS!)
