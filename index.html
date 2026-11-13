@@ -17391,20 +17391,24 @@ function renderChatHubView() {
     }
 
     // =========================================================================
-    // MASTER VERIFIED UPGRADE PATCH (v38) — PROVEN AI OCR + FAST SHEET SYNC + ALL 6 FIXES:
-    // 1. Reverts Canvas Image Processor to the proven original (from v27/index_15) so Agent Names & Product rows are never lost!
-    // 2. Post-OCR Smart Slashed-Zero Weight Fixer:
-    //    - Fixes `.65` / `.85` -> `.05` (e.g. Gawa Ghee 70.65 kg -> 70.05 kg)
-    //    - Fixes dark-mode monospace slashed-zero (`0` read as `8`, e.g. 18.5 kg -> 10.5 kg, 48 kg -> 40 kg) without touching image pixels!
-    // 3. Fast Cloud Sync: Pauses background read polls for 2.5s during data submission so Google Sheet updates 3-4x faster
-    // 4. Clean Single-Agent Monthly Performance Excel/CSV (No empty side columns!)
-    // 5. Agent View-Only in Leave Log & Day Off Submissions ("Contact with your Team Leader")
-    // 6. Always open Dashboard by default on Login / Logout & prevent page shake
+    // MASTER VERIFIED UPGRADE PATCH (v40) — PURE VALUE-ONLY DOWNLOAD + MULTI-NIGHT ROSTER + PAST-MONTH AGENT LOCK:
+    // 1. Proven Original AI Image Processor + Post-OCR Slashed-Zero Weight Fixer
+    // 2. Fast Cloud Sync (Pauses background read polls for 2.5s during data save)
+    // 3. Multi-Night Roster Support (1, 2, or 3 consecutive Night shifts before DO):
+    //    - Automatically scans consecutive Night shifts backwards from DO and links to the missing Night duty!
+    // 4. Past-Month Lock for Agents:
+    //    - When a new month starts (or when viewing a past month), Agents are View-Only for past months, while TLs/Admins retain full edit access!
+    // 5. Pure Value-Only Download (No Excel Formulas):
+    //    - Uses the clean value-only download without any `x:fmla` formulas so data values never shift or break!
+    // 6. Clean Single-Agent Monthly Performance Export & Agent View-Only in Leave/DO
+    // 7. Always open Dashboard by default on Login / Logout & prevent page shake
     // =========================================================================
     try {
       window._isDarkMonospaceOcrImage = false;
 
-      // 1. ORIGINAL PROVEN IMAGE NORMALIZER (NEVER DESTROYS TEXT OR AGENT NAMES!)
+      // -----------------------------------------------------------------------
+      // 1. ORIGINAL PROVEN IMAGE NORMALIZER + POST-OCR SLASHED-ZERO WEIGHT FIXER
+      // -----------------------------------------------------------------------
       normalizeImageBlobToDataUrl = function(fileOrBlob) {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -17462,17 +17466,13 @@ function renderChatHubView() {
         });
       };
 
-      // 2. SMART POST-OCR SLASHED-ZERO WEIGHT FIXER (Fixes 70.65 -> 70.05, 48 -> 40, 18.5 -> 10.5 without touching image pixels!)
       window.fixSlashedZeroProductWeight = function(val, rawLineText) {
         let num = Number(val) || 0;
         if (num <= 0) return 0;
         let str = num.toFixed(2);
-        // Fix .65 or .85 misread from .05 (e.g. Gawa Ghee 70.65 -> 70.05)
         if (str.endsWith('.65') || str.endsWith('.85')) {
           num = Number(str.replace(/\.(65|85)$/, '.05'));
         }
-        // In dark-mode monospace plain-text summaries (where lines have no pack size like "500gm" or "250g" or ERP code),
-        // slashed '0' in "10.5" or "40" is read by Tesseract as '8' ("18.5" or "48").
         const hasErpTableOrPackToken = /\b(500|250|200|400|100)\s*(gm|g|ml)\b|ghorer\s*bazar|\b[A4]00\d{3}\b/i.test(String(rawLineText || ''));
         if (window._isDarkMonospaceOcrImage && !hasErpTableOrPackToken) {
           const intPart = Math.floor(num);
@@ -17543,41 +17543,181 @@ function renderChatHubView() {
         return { cat, unitKg, qty, totalKg, itemSummary: `${sizeLabel} × ${qty} = ${totalKg}kg` };
       };
 
-      // 3. ALWAYS RESET TO DASHBOARD TAB ON LOGIN & LOGOUT
-      const _origHandleLoginV38 = handleLogin;
+      // -----------------------------------------------------------------------
+      // 2. MULTI-NIGHT ROSTER SUPPORT (Handles 1, 2, or 3 Consecutive Nights before DO!)
+      // -----------------------------------------------------------------------
+      window.getPrevDateAndShiftInfo = function(empId, dateStr) {
+        if (!empId || !dateStr) return null;
+        const cleanCurrDate = String(dateStr).replace(/^'/, '').trim();
+        const parts = cleanCurrDate.split('/');
+        if (parts.length !== 3) return null;
+        const currMonthYear = `${parts[1]}/${parts[2]}`;
+        const dObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        if (isNaN(dObj.getTime())) return null;
+
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const hasSalesOnDate = (dStr) => Boolean(allSales.find(s =>
+          String(s.userId).trim() === String(empId).trim() &&
+          String(s.date || '').replace(/^'/, '').trim() === dStr &&
+          (Number(s.amount || 0) > 0 || Number(s.orders || 0) > 0 || Number(s.leads || 0) > 0)
+        ));
+
+        // Check up to 3 consecutive preceding days in the same month for Night Shifts
+        const consecutiveNights = [];
+        for (let step = 1; step <= 3; step++) {
+          const checkObj = new Date(dObj.getTime());
+          checkObj.setDate(checkObj.getDate() - step);
+          const cD = String(checkObj.getDate()).padStart(2, '0');
+          const cM = String(checkObj.getMonth() + 1).padStart(2, '0');
+          const cY = checkObj.getFullYear();
+          const cDateStr = `${cD}/${cM}/${cY}`;
+          if (`${cM}/${cY}` !== currMonthYear) break; // Never cross month boundary!
+          const cShift = window.getAgentRosterShiftForDateStr(empId, cDateStr) || '3:00 PM';
+          const isNight = cShift.toUpperCase().includes('NIGHT') || cShift.includes('11:00');
+          if (isNight) {
+            consecutiveNights.push({
+              dateStr: cDateStr,
+              shift: cShift,
+              hasSubmitted: hasSalesOnDate(cDateStr)
+            });
+          } else {
+            break;
+          }
+        }
+
+        const prevDateObj = new Date(dObj.getTime());
+        prevDateObj.setDate(prevDateObj.getDate() - 1);
+        const prevD = String(prevDateObj.getDate()).padStart(2, '0');
+        const prevM = String(prevDateObj.getMonth() + 1).padStart(2, '0');
+        const prevY = prevDateObj.getFullYear();
+        const immediatePrevDateStr = `${prevD}/${prevM}/${prevY}`;
+        const prevMonthYear = `${prevM}/${prevY}`;
+        const isCrossMonthBoundary = (prevMonthYear !== currMonthYear);
+
+        if (consecutiveNights.length > 0) {
+          const missingNights = consecutiveNights.filter(n => !n.hasSubmitted);
+          const targetNight = missingNights.length > 0 ? missingNights[0] : consecutiveNights[0];
+          return {
+            prevDateStr: targetNight.dateStr,
+            prevShift: consecutiveNights.length > 1 ? `Night (${consecutiveNights.length} Nights in Roster)` : targetNight.shift,
+            isCrossMonthBoundary: false,
+            isPrevNightShift: true,
+            hasSubmittedPrevDate: missingNights.length === 0,
+            consecutiveNightCount: consecutiveNights.length,
+            missingNightDates: missingNights.map(n => n.dateStr)
+          };
+        }
+
+        const prevShift = window.getAgentRosterShiftForDateStr(empId, immediatePrevDateStr) || '3:00 PM';
+        const hasSubmittedPrevDate = isCrossMonthBoundary ? true : hasSalesOnDate(immediatePrevDateStr);
+
+        return {
+          prevDateStr: immediatePrevDateStr,
+          prevShift,
+          isCrossMonthBoundary,
+          isPrevNightShift: false,
+          hasSubmittedPrevDate,
+          consecutiveNightCount: 0,
+          missingNightDates: []
+        };
+      };
+
+      // -----------------------------------------------------------------------
+      // 3. PAST-MONTH LOCK FOR AGENTS (AGENTS VIEW-ONLY ON PREVIOUS MONTHS; TLs HAVE FULL ACCESS!)
+      // -----------------------------------------------------------------------
+      window.isMonthLockedForAgent = function(user, monthKeyToCheck) {
+        if (!user || canViewAll(user) || user.role === 'admin') return false;
+        const realCurrMonth = getCurrentMonthKeyStr(); // e.g. "11/2026"
+        const targetMk = String(monthKeyToCheck || selectedMonthKey).replace(/^'/, '').trim();
+        const [m1, y1] = targetMk.split('/').map(Number);
+        const [m2, y2] = realCurrMonth.split('/').map(Number);
+        if (!m1 || !y1 || !m2 || !y2) return false;
+        return (y1 < y2) || (y1 === y2 && m1 < m2);
+      };
+
+      const _origIsCurrentChannelReadOnlyV40 = isCurrentChannelReadOnlyForUser;
+      isCurrentChannelReadOnlyForUser = function(actor) {
+        if (_origIsCurrentChannelReadOnlyV40(actor)) return true;
+        if (window.isMonthLockedForAgent(actor, selectedMonthKey)) return true;
+        return false;
+      };
+
+      const _origOpenReportModalV40 = openReportModal;
+      openReportModal = function(agentId = null, dateStr = null) {
+        if (currentUser && !canViewAll(currentUser) && currentUser.role === 'agent') {
+          const checkMk = (dateStr && dateStr.length === 10) ? dateStr.substring(3) : selectedMonthKey;
+          if (window.isMonthLockedForAgent(currentUser, checkMk)) {
+            showPortalToast('Previous Month Locked 🔒', `Agents can only view past month (${checkMk}) reports. Contact your Team Leader for any changes.`, 'warning');
+            return;
+          }
+        }
+        return _origOpenReportModalV40(agentId, dateStr);
+      };
+
+      const _origHandleSalesSubmitV40 = handleSalesSubmit;
+      handleSalesSubmit = function(e) {
+        if (currentUser && !canViewAll(currentUser) && currentUser.role === 'agent') {
+          const rawDateVal = document.getElementById('subDate')?.value;
+          const subDateStr = inputValToDateStr(rawDateVal);
+          const subMonthKey = subDateStr.substring(3);
+          if (window.isMonthLockedForAgent(currentUser, subMonthKey)) {
+            if (e && typeof e.preventDefault === 'function') e.preventDefault();
+            showPortalToast('Previous Month Locked 🔒', `You cannot submit or edit data for a previous month (${subMonthKey}). Please contact your Team Leader!`, 'error');
+            return;
+          }
+        }
+        return _origHandleSalesSubmitV40(e);
+      };
+
+      const _origOpenDriveProdModalV40 = openDriveProductModal;
+      openDriveProductModal = function(agentId) {
+        if (currentUser && !canViewAll(currentUser) && currentUser.role === 'agent') {
+          if (window.isMonthLockedForAgent(currentUser, selectedMonthKey)) {
+            showPortalToast('Previous Month Locked 🔒', `Agents cannot edit Drive Product data for past month (${selectedMonthKey}). Contact your Team Leader.`, 'warning');
+            return;
+          }
+        }
+        return _origOpenDriveProdModalV40(agentId);
+      };
+
+      // -----------------------------------------------------------------------
+      // 4. ALWAYS RESET TO DASHBOARD TAB ON LOGIN & LOGOUT + FAST SYNC
+      // -----------------------------------------------------------------------
+      const _origHandleLoginV40 = handleLogin;
       handleLogin = function(e) {
         activeTab = 'dashboard';
         missingReportsSubView = 'MISSING';
-        return _origHandleLoginV38(e);
+        return _origHandleLoginV40(e);
       };
 
-      const _origExecuteInstantLogoutV38 = executeInstantLogout;
+      const _origExecuteInstantLogoutV40 = executeInstantLogout;
       executeInstantLogout = function() {
         activeTab = 'dashboard';
         missingReportsSubView = 'MISSING';
-        return _origExecuteInstantLogoutV38();
+        return _origExecuteInstantLogoutV40();
       };
 
-      // 4. FAST CLOUD SYNC: PAUSE BACKGROUND READ POLLS FOR 2.5s WHEN SUBMITTING DATA SO WRITE EXECUTES IMMEDIATELY!
       window._lastWritePostTimestamp = 0;
-      const _origPostToSheetV38 = postToSheet;
+      const _origPostToSheetV40 = postToSheet;
       postToSheet = async function(action, payload) {
         if (action === 'DAILY_SALES_SUBMIT' || action === 'DELETE_SALES_RECORD' || action === 'SAVE_ROSTER_ROW' || action === 'SAVE_USER' || action === 'SAVE_MONTHLY_CONFIG') {
           window._lastWritePostTimestamp = Date.now();
         }
-        return _origPostToSheetV38(action, payload);
+        return _origPostToSheetV40(action, payload);
       };
 
-      const _origFetchFromSheetV38 = fetchFromSheet;
+      const _origFetchFromSheetV40 = fetchFromSheet;
       fetchFromSheet = function(forceImmediate = false) {
         if (!forceImmediate && (Date.now() - (window._lastWritePostTimestamp || 0)) < 2500) {
           return;
         }
-        return _origFetchFromSheetV38(forceImmediate);
+        return _origFetchFromSheetV40(forceImmediate);
       };
 
-      // 5. CLEAN SINGLE-AGENT MONTHLY PERFORMANCE EXCEL/CSV DOWNLOAD (NO EMPTY SIDE COLUMNS!)
-      const _origExportMonthlyPerfMultiV38 = exportMonthlyPerformanceCsv;
+      // -----------------------------------------------------------------------
+      // 5. CLEAN VALUE-ONLY SINGLE-AGENT MONTHLY PERFORMANCE EXPORT & VIEW-ONLY LEAVE/DO
+      // -----------------------------------------------------------------------
+      const _origExportMonthlyPerfMultiV40 = exportMonthlyPerformanceCsv;
       exportMonthlyPerformanceCsv = function() {
         const u = currentUser;
         const shouldIncludeTLAsRows = canViewAll(u) && (window.showTlInSalesTables || (monthlyPerfAgentId !== 'ALL' && window.isUserTeamLeaderRecord(monthlyPerfAgentId)));
@@ -17630,13 +17770,12 @@ function renderChatHubView() {
           downloadPortalCsvFile(`Monthly_Performance_${ag.name.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, rows);
           return;
         }
-        return _origExportMonthlyPerfMultiV38();
+        return _origExportMonthlyPerfMultiV40();
       };
 
-      // 6. REMOVE EDIT/DELETE FOR AGENTS IN LEAVE LOG & DAY OFF SUBMISSIONS (SHOW "Contact with your Team Leader")
-      const _origRenderMissingV38 = renderMissingReportsAndLeaveView;
+      const _origRenderMissingV40 = renderMissingReportsAndLeaveView;
       renderMissingReportsAndLeaveView = function() {
-        let htmlOut = _origRenderMissingV38();
+        let htmlOut = _origRenderMissingV40();
         if (currentUser && !canViewAll(currentUser)) {
           if (missingReportsSubView === 'LEAVE_LOG') {
             htmlOut = htmlOut.replace(/<button type="button" onclick="openReportModal\([^)]+\)"[^>]*>[\s\S]*?<\/button>\s*<button type="button" onclick="openMarkLeaveModal\([^)]+\)"[^>]*>[\s\S]*?<\/button>\s*<button type="button" onclick="handleRevertLeaveRecord\([^)]+\)"[^>]*>[\s\S]*?<\/button>/g,
@@ -17651,7 +17790,6 @@ function renderChatHubView() {
         return htmlOut;
       };
 
-      // 7. PREVENT PAGE SHAKE / VERTICAL BOUNCE ON NOTIFICATIONS & BACKGROUND SYNC
       attachTopTableScrollHelpers = function() {
         const tables = document.querySelectorAll('main .card-dynamic.overflow-x-auto');
         tables.forEach((box) => {
@@ -17688,8 +17826,8 @@ function renderChatHubView() {
           }
         });
       };
-    } catch (patchV38Err) {
-      console.error('Non-fatal patch v38 warning:', patchV38Err);
+    } catch (patchV40Err) {
+      console.error('Non-fatal patch v40 warning:', patchV40Err);
     }
 
 window.addEventListener('load', init);
