@@ -15068,21 +15068,863 @@ function renderChatHubView() {
 
     
     // =========================================================================
-    // MASTER VERIFIED UPGRADE PATCH (v28) — 4 NEW FIXES & VISUAL UPGRADES:
-    // 1. Clear separation of TL Personal Reward (80% = ৳7,000 | 100% = ৳10,000) vs Team Agents' Earned Incentive in Dashboard
-    // 2. Real-Time Cloud Profile Picture Sync across all users' browsers (merges USER_AVATARS & updates local cache)
-    // 3. Vibrant Solid-Color Gradient Cards for Team Comparison in Ranking Tab
-    // 4. Fixed Missing & Leave Sidebar Badge Count when switching channels (e.g., FB Admin viewing WhatsApp channel)
+        // =========================================================================
+    // MASTER VERIFIED UPGRADE PATCH (v29) — COMPLETE INCENTIVE & UI UPGRADE:
+    // 1. Removed "Active Month Archive" box from all panels & extended "Earned Incentive" box to full width
+    // 2. Clean, organized Light-Themed TL Incentive Box (TL 80%=৳7,000 / 100%=৳10,000 + Team Agents' Total + Direct Button to Incentive Tab; NO cluttered agent list on TL Dashboard!)
+    // 3. Agent Dashboard Incentive Box shows Total Cash Bonus + Gift Count at top, and small item-by-item breakdown pills below
+    // 4. Supervisor Dashboard has NO Incentive Box (views everything in the dedicated Incentive Tab)
+    // 5. Dedicated "Incentive" Tab in Sidebar for TL & Supervisor with Channel, Team & Member filters + Excel/CSV export
+    // 6. Real-Time Profile Picture Sync across all portals + Vibrant Solid Team Comparison Cards + Fixed WhatsApp Missing Badge
     // =========================================================================
     try {
       // -----------------------------------------------------------------------
-      // FIX 1: REAL-TIME PROFILE PICTURE SYNC ACROSS ALL PORTALS
+      // A. REGISTER "tab_incentive" IN PERMISSIONS CATALOG (FOR TL & SUPERVISOR)
+      // -----------------------------------------------------------------------
+      if (!PORTAL_FEATURES_CATALOG.some(f => f.key === 'tab_incentive')) {
+        const dpIdx = PORTAL_FEATURES_CATALOG.findIndex(f => f.key === 'tab_drive_product');
+        const incItem = {
+          key: 'tab_incentive',
+          category: 'Sidebar Tabs',
+          label: 'Incentive Tab (TL & Supervisor)',
+          desc: 'View complete TL (80%/100%) & Agent-wise Sprint + Drive Product cash incentives & gifts by Channel and Team',
+          icon: 'fa-award',
+          color: 'text-amber-500'
+        };
+        if (dpIdx !== -1) PORTAL_FEATURES_CATALOG.splice(dpIdx + 1, 0, incItem);
+        else PORTAL_FEATURES_CATALOG.push(incItem);
+      }
+
+      const _origGetDefaultFeaturePermsV29 = getDefaultFeaturePermissionsForRole;
+      getDefaultFeaturePermissionsForRole = function(role) {
+        const base = _origGetDefaultFeaturePermsV29(role);
+        const r = String(role || 'agent').toLowerCase();
+        base.tab_incentive = (r === 'admin' || r === 'supervisor');
+        return base;
+      };
+
+      // Inject "Incentive" tab button into the Sidebar right after "Drive Product"
+      const _origRenderAppLayoutV29 = renderAppLayout;
+      renderAppLayout = function() {
+        _origRenderAppLayoutV29();
+        try {
+          if (currentUser && hasFeatureAccess(currentUser, 'tab_incentive')) {
+            const navEl = document.querySelector('aside nav.space-y-1');
+            if (navEl && !navEl.querySelector('[data-tab-btn="incentive"]')) {
+              const dpBtn = navEl.querySelector('button[onclick="setTab(\'drive_product\')"]');
+              const btnHtml = `
+                <button data-tab-btn="incentive" onclick="setTab('incentive')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'incentive' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <span class="flex items-center gap-3">
+                    <i class="fa-solid fa-award text-sm ${activeTab === 'incentive' ? 'text-amber-300' : 'text-amber-500'}"></i> Incentive
+                  </span>
+                  <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${activeTab === 'incentive' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}">BONUS</span>
+                </button>
+              `;
+              if (dpBtn) {
+                dpBtn.insertAdjacentHTML('afterend', btnHtml);
+              } else {
+                navEl.insertAdjacentHTML('beforeend', btnHtml);
+              }
+            }
+          }
+        } catch (navErr) {}
+      };
+
+      // State filters for the new Incentive Tab
+      window.incentiveTabTeamScope = (currentUser && currentUser.role === 'admin' && activeChannel !== 'ALL_CHANNELS')
+        ? normalizeTeamNameAlias(currentUser.team)
+        : 'ALL';
+      window.incentiveTabMemberFilter = 'ALL'; // 'ALL' | 'TLS_ONLY' | 'AGENTS_ONLY' | '<userId>'
+
+      window.setIncentiveTabTeamScope = function(scope) {
+        window.incentiveTabTeamScope = scope;
+        window.incentiveTabMemberFilter = 'ALL';
+        renderAppLayout();
+      };
+
+      window.setIncentiveTabMemberFilter = function(val) {
+        window.incentiveTabMemberFilter = val;
+        renderAppLayout();
+      };
+
+      const _origSwitchPortalChannelV29 = switchPortalChannel;
+      switchPortalChannel = function(chKey) {
+        _origSwitchPortalChannelV29(chKey);
+        const chTeams = CHANNEL_META[chKey] ? CHANNEL_META[chKey].teams : [];
+        window.incentiveTabTeamScope = (chKey !== 'ALL_CHANNELS' && currentUser && currentUser.role === 'admin' && chTeams.includes(normalizeTeamNameAlias(currentUser.team)))
+          ? normalizeTeamNameAlias(currentUser.team)
+          : 'ALL';
+        window.incentiveTabMemberFilter = 'ALL';
+        renderAppLayout();
+      };
+
+      const _origSetTabV29 = setTab;
+      setTab = function(tab) {
+        if (tab === 'incentive') {
+          if (activeChannel !== 'ALL_CHANNELS' && currentUser && currentUser.role === 'admin') {
+            const myT = normalizeTeamNameAlias(currentUser.team);
+            if (getActiveChannelMeta().teams.includes(myT)) window.incentiveTabTeamScope = myT;
+          } else if (activeChannel === 'ALL_CHANNELS') {
+            window.incentiveTabTeamScope = 'ALL';
+          }
+        }
+        _origSetTabV29(tab);
+      };
+
+      const _origRenderTabContentV29 = renderTabContent;
+      renderTabContent = function() {
+        if (activeTab === 'incentive' && hasFeatureAccess(currentUser, 'tab_incentive')) {
+          return window.renderIncentiveTabView();
+        }
+        return _origRenderTabContentV29();
+      };
+
+      // -----------------------------------------------------------------------
+      // B. HELPER: COMPUTE COMPLETE TL & AGENT INCENTIVE DATA FOR ANY MONTH/SCOPE
+      // -----------------------------------------------------------------------
+      window.computeFloorIncentiveBreakdown = function(mKey, teamScopeFilter = 'ALL', memberFilter = 'ALL') {
+        const mk = mKey || selectedMonthKey;
+        const allUsersInCh = getUsersForMonth(mk, activeChannel === 'ALL_CHANNELS');
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const monthSales = allSales.filter(s => String(s.date || '').endsWith(mk));
+        const dailyMonthSales = monthSales.filter(s => !String(s.date || '').startsWith('MONTHLY_PROD_'));
+        const activeProds = getActiveProductsForMonth(mk);
+        const chTeams = getActiveChannelMeta().teams;
+
+        const scopedTeams = (teamScopeFilter && teamScopeFilter !== 'ALL' && chTeams.includes(normalizeTeamNameAlias(teamScopeFilter)))
+          ? [normalizeTeamNameAlias(teamScopeFilter)]
+          : chTeams;
+
+        // 1. Compute TL Team Milestone Rewards (80% = ৳7,000 | 100% = ৳10,000)
+        const tlRows = [];
+        scopedTeams.forEach(tName => {
+          const cleanT = normalizeTeamNameAlias(tName);
+          const ch = getChannelForTeam(cleanT);
+          const tAgents = allUsersInCh.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u) && normalizeTeamNameAlias(u.team) === cleanT);
+          const tTLs = allUsersInCh.filter(u => u.role === 'admin' && normalizeTeamNameAlias(u.team) === cleanT);
+          const defaultTlBase = ch === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
+          const agentsBaseSum = tAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0);
+          const tlBaseSum = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || defaultTlBase), 0);
+          const totalBaseTgt = agentsBaseSum + tlBaseSum;
+          const totalWorkTgt = calcWorkingTargetFromBase(totalBaseTgt, ch);
+          const target80 = Math.round(totalWorkTgt * 0.80);
+          const target100 = totalWorkTgt;
+
+          const teamSalesList = dailyMonthSales.filter(s => normalizeTeamNameAlias(s.team) === cleanT);
+          const teamRev = teamSalesList.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+          const teamAchPct = totalWorkTgt > 0 ? Number(((teamRev / totalWorkTgt) * 100).toFixed(1)) : 0;
+
+          const hit100 = target100 > 0 && teamRev >= target100;
+          const hit80 = target80 > 0 && teamRev >= target80;
+          const tlRewardMoney = hit100 ? 10000 : (hit80 ? 7000 : 0);
+          const tlStatusLabel = hit100
+            ? '🏆 100% Target Hit (৳10,000 Unlocked)'
+            : (hit80 ? '🔥 80% Target Hit (৳7,000 Unlocked)' : `⏳ In Progress (${teamAchPct}% — Need ৳${Math.max(0, target80 - teamRev).toLocaleString()} for 80%)`);
+
+          tTLs.forEach(tlObj => {
+            if (memberFilter !== 'ALL' && memberFilter !== 'TLS_ONLY' && String(tlObj.id) !== String(memberFilter)) {
+              if (memberFilter === 'AGENTS_ONLY') return;
+              return;
+            }
+            const tlOwnSales = dailyMonthSales.filter(s => String(s.userId) === String(tlObj.id)).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+            tlRows.push({
+              user: tlObj,
+              team: cleanT,
+              channel: ch,
+              agentCount: tAgents.length,
+              tlOwnTarget: calcWorkingTargetFromBase(Number(tlObj.baseTarget) || defaultTlBase, ch),
+              tlOwnSales,
+              teamWorkTgt: totalWorkTgt,
+              target80,
+              target100,
+              teamRev,
+              teamAchPct,
+              hit80,
+              hit100,
+              tlRewardMoney,
+              tlStatusLabel
+            });
+          });
+        });
+
+        // 2. Compute Agent-Wise Sprint + Drive Product Cash & Gift Incentives
+        let candidateAgents = allUsersInCh.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u));
+        if (teamScopeFilter && teamScopeFilter !== 'ALL') {
+          candidateAgents = candidateAgents.filter(a => normalizeTeamNameAlias(a.team) === normalizeTeamNameAlias(teamScopeFilter));
+        }
+        if (memberFilter === 'TLS_ONLY') {
+          candidateAgents = [];
+        } else if (memberFilter !== 'ALL' && memberFilter !== 'AGENTS_ONLY') {
+          candidateAgents = candidateAgents.filter(a => String(a.id) === String(memberFilter));
+        }
+
+        const agentRows = candidateAgents.map(ag => {
+          const ch = getChannelForTeam(ag.team);
+          const workTgt = calcWorkingTargetFromBase(Number(ag.baseTarget) || 0, ch);
+          const agDailySales = dailyMonthSales.filter(s => String(s.userId) === String(ag.id));
+          const rev = agDailySales.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+          const achPct = workTgt > 0 ? Number(((rev / workTgt) * 100).toFixed(1)) : 0;
+
+          // Sprint Incentive
+          const spInfo = window.computeSingleAgentSprintIncentive(ag, monthSales, mk);
+          const sprintMoney = spInfo.sprintMoney || 0;
+          const sprintBadges = spInfo.sprintBadges || [];
+
+          // Drive Product Incentive
+          const dpStats = computeAgentDriveProductStats(ag, monthSales, mk);
+          let prodMoney = 0;
+          const prodCashBadges = [];
+          const prodGiftBadges = [];
+
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const soldKg = Number(dpStats.prodKg[k]) || 0;
+            const tgtKg = Number(p.targetKg) || 0;
+            const pct = tgtKg > 0 ? Math.round((soldKg / tgtKg) * 100) : 0;
+            if (pct >= 100) {
+              if (p.bonus100) {
+                prodMoney += Number(p.bonus100);
+                prodCashBadges.push(`${p.name} (100% — ${soldKg}kg: ৳${Number(p.bonus100).toLocaleString()})`);
+              }
+              if (p.item100) {
+                prodGiftBadges.push(`🎁 ${p.item100} (${p.name} 100% — ${soldKg}kg)`);
+              }
+            } else if (pct >= 90 && p.bonus90) {
+              prodMoney += Number(p.bonus90);
+              prodCashBadges.push(`${p.name} (90% — ${soldKg}kg: ৳${Number(p.bonus90).toLocaleString()})`);
+            }
+          });
+
+          const totalCash = sprintMoney + prodMoney;
+          return {
+            agent: ag,
+            team: normalizeTeamNameAlias(ag.team),
+            channel: ch,
+            grade: ag.grade || 'A',
+            workTgt,
+            rev,
+            achPct,
+            sprintMoney,
+            sprintBadges,
+            prodMoney,
+            prodCashBadges,
+            prodGiftBadges,
+            totalCash,
+            giftCount: prodGiftBadges.length,
+            allBreakdownBadges: [...sprintBadges, ...prodCashBadges, ...prodGiftBadges]
+          };
+        }).sort((a, b) => b.totalCash - a.totalCash || b.giftCount - a.giftCount || b.rev - a.rev);
+
+        const totalTlMoney = tlRows.reduce((s, r) => s + r.tlRewardMoney, 0);
+        const totalAgentSprintMoney = agentRows.reduce((s, r) => s + r.sprintMoney, 0);
+        const totalAgentProdMoney = agentRows.reduce((s, r) => s + r.prodMoney, 0);
+        const totalAgentCash = totalAgentSprintMoney + totalAgentProdMoney;
+        const totalAgentGifts = agentRows.reduce((s, r) => s + r.giftCount, 0);
+
+        return {
+          tlRows,
+          agentRows,
+          totalTlMoney,
+          totalAgentSprintMoney,
+          totalAgentProdMoney,
+          totalAgentCash,
+          totalAgentGifts,
+          grandTotalCash: totalTlMoney + totalAgentCash
+        };
+      };
+
+      window.exportIncentiveTabCsv = function() {
+        const data = window.computeFloorIncentiveBreakdown(selectedMonthKey, window.incentiveTabTeamScope, window.incentiveTabMemberFilter);
+        const headers = [
+          'Role', 'Emp ID', 'Name', 'Team', 'Grade',
+          'Monthly Working Target (BDT)', 'Achieved Sales (BDT)', 'Target Achieved (%)',
+          'TL Milestone Bonus (80%/100%)', 'Sprint Bonus (BDT)', 'Drive Product Cash Bonus (BDT)',
+          'Total Cash Incentive (BDT)', 'Product Gifts Earned', 'Incentive Breakdown (For What)'
+        ];
+        const rows = [];
+
+        data.tlRows.forEach(tl => {
+          rows.push([
+            'Team Leader (TL)',
+            tl.user.id,
+            tl.user.name,
+            tl.team,
+            tl.user.grade || 'TL',
+            tl.teamWorkTgt,
+            tl.teamRev,
+            tl.teamAchPct + '% (Team Total)',
+            tl.tlRewardMoney,
+            0,
+            0,
+            tl.tlRewardMoney,
+            '-',
+            tl.tlStatusLabel
+          ]);
+        });
+
+        data.agentRows.forEach(r => {
+          rows.push([
+            'Sales Agent',
+            r.agent.id,
+            r.agent.name,
+            r.team,
+            r.grade,
+            r.workTgt,
+            r.rev,
+            r.achPct + '%',
+            0,
+            r.sprintMoney,
+            r.prodMoney,
+            r.totalCash,
+            r.prodGiftBadges.length > 0 ? r.prodGiftBadges.join(' | ') : '0 Gifts',
+            r.allBreakdownBadges.length > 0 ? r.allBreakdownBadges.join(' | ') : 'No bonus unlocked yet'
+          ]);
+        });
+
+        rows.push([
+          'GRAND TOTAL',
+          'ALL',
+          `Total (${data.tlRows.length} TL + ${data.agentRows.length} Agents)`,
+          window.incentiveTabTeamScope,
+          '-',
+          '-',
+          '-',
+          '-',
+          data.totalTlMoney,
+          data.totalAgentSprintMoney,
+          data.totalAgentProdMoney,
+          data.grandTotalCash,
+          `${data.totalAgentGifts} Gift(s)`,
+          `Month: ${selectedMonthKey}`
+        ]);
+
+        const scopeSlug = window.incentiveTabTeamScope.replace(/\s+/g, '_');
+        downloadPortalCsvFile(`Incentive_Report_${scopeSlug}`, headers, rows);
+      };
+
+      // -----------------------------------------------------------------------
+      // C. RENDER DEDICATED "INCENTIVE" TAB VIEW (FOR TL & SUPERVISOR)
+      // -----------------------------------------------------------------------
+      window.renderIncentiveTabView = function() {
+        const u = currentUser;
+        const chMeta = getActiveChannelMeta();
+        const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || { label: selectedMonthKey }).label;
+        const allUsersInCh = getUsersForMonth(selectedMonthKey, activeChannel === 'ALL_CHANNELS');
+
+        const teamScopedUsers = allUsersInCh.filter(usr => {
+          if (usr.role === 'supervisor' || isPendingOrFloatingAgent(usr)) return false;
+          if (window.incentiveTabTeamScope !== 'ALL' && normalizeTeamNameAlias(usr.team) !== normalizeTeamNameAlias(window.incentiveTabTeamScope)) {
+            return false;
+          }
+          return true;
+        });
+
+        const data = window.computeFloorIncentiveBreakdown(selectedMonthKey, window.incentiveTabTeamScope, window.incentiveTabMemberFilter);
+
+        return `
+          <div class="space-y-5">
+            ${canViewAll(u) ? renderSupervisorQuickChannelTeamBar(window.incentiveTabTeamScope, 'setIncentiveTabTeamScope') : ''}
+
+            <!-- Top Header & Filter Controls -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 shadow-2xs">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">
+                    <i class="fa-solid fa-award mr-1"></i>TL & Agent Incentive Center
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700">
+                    Period: ${monthLabel}
+                  </span>
+                </div>
+                <h2 class="text-xl font-black text-slate-900 mt-1">
+                  ${chMeta.fullTitle} — Earned Cash Incentives & Product Gifts (${monthLabel})
+                </h2>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">
+                  Complete breakdown of Team Leader rewards (80% = ৳7,000 • 100% = ৳10,000) and Agent Sprint + Drive Product bonuses & gifts.
+                </p>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2.5">
+                <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
+                  <select onchange="setIncentiveTabTeamScope(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                    <option value="ALL" ${window.incentiveTabTeamScope === 'ALL' ? 'selected' : ''}>All ${chMeta.name} Teams</option>
+                    ${chMeta.teams.map(tn => `<option value="${tn}" ${window.incentiveTabTeamScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                  </select>
+                </div>
+
+                <div class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
+                  <i class="fa-solid fa-user-check text-amber-600 text-xs"></i>
+                  <span class="text-[10px] font-extrabold uppercase text-amber-800">Member:</span>
+                  <select onchange="setIncentiveTabMemberFilter(this.value)" class="bg-transparent text-xs font-extrabold text-amber-950 focus:outline-none cursor-pointer">
+                    <option value="ALL" ${window.incentiveTabMemberFilter === 'ALL' ? 'selected' : ''}>All TLs & Agents (${teamScopedUsers.length})</option>
+                    <option value="TLS_ONLY" ${window.incentiveTabMemberFilter === 'TLS_ONLY' ? 'selected' : ''}>👑 Team Leaders Only</option>
+                    <option value="AGENTS_ONLY" ${window.incentiveTabMemberFilter === 'AGENTS_ONLY' ? 'selected' : ''}>🎧 Sales Agents Only</option>
+                    <optgroup label="Select Specific TL or Agent">
+                      ${teamScopedUsers.map(usr => `<option value="${usr.id}" ${String(window.incentiveTabMemberFilter) === String(usr.id) ? 'selected' : ''}>${usr.role === 'admin' ? '👑 TL: ' : '🎧 '}${usr.name} (${usr.id})</option>`).join('')}
+                    </optgroup>
+                  </select>
+                </div>
+
+                <button onclick="exportIncentiveTabCsv()" class="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+                  <i class="fa-solid fa-file-excel"></i> Download Excel / CSV
+                </button>
+              </div>
+            </div>
+
+            <!-- 4 Summary KPI Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div class="p-4 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-md flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-black uppercase text-indigo-100">TL Milestone Bonus (80% / 100%)</span>
+                  <div class="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-xs"><i class="fa-solid fa-crown text-amber-300"></i></div>
+                </div>
+                <div class="mt-2.5">
+                  <p class="text-2xl font-black">৳${data.totalTlMoney.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-indigo-100 mt-0.5">80% Team Goal = ৳7,000 • 100% = ৳10,000</p>
+                </div>
+              </div>
+
+              <div class="p-4 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-md flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-black uppercase text-emerald-100">Agents' Total Cash Bonus</span>
+                  <div class="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-xs"><i class="fa-solid fa-sack-dollar text-amber-200"></i></div>
+                </div>
+                <div class="mt-2.5">
+                  <p class="text-2xl font-black">৳${data.totalAgentCash.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-emerald-100 mt-0.5">Sprint: ৳${data.totalAgentSprintMoney.toLocaleString()} • Product: ৳${data.totalAgentProdMoney.toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div class="p-4 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 text-white shadow-md flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-black uppercase text-rose-100">Earned Product Gifts</span>
+                  <div class="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-xs"><i class="fa-solid fa-gift text-amber-200"></i></div>
+                </div>
+                <div class="mt-2.5">
+                  <p class="text-2xl font-black">${data.totalAgentGifts} Gift(s)</p>
+                  <p class="text-[10px] font-bold text-rose-100 mt-0.5">Pink Salt: 2L Oil • Black Garlic: 400gm Ghee</p>
+                </div>
+              </div>
+
+              <div class="p-4 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-black uppercase text-amber-100">Grand Total Cash Payout</span>
+                  <div class="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-xs"><i class="fa-solid fa-trophy text-white"></i></div>
+                </div>
+                <div class="mt-2.5">
+                  <p class="text-2xl font-black">৳${data.grandTotalCash.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-amber-100 mt-0.5">TL + Agents Combined (${selectedMonthKey})</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section 1: Team Leader (TL) Milestone Incentive Table (80% = ৳7,000 | 100% = ৳10,000) -->
+            ${data.tlRows.length > 0 ? `
+            <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-indigo-200">
+              <div class="px-5 py-3 bg-gradient-to-r from-indigo-700 to-blue-700 text-white flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs font-black uppercase tracking-wider">
+                  <i class="fa-solid fa-crown text-amber-300 mr-1.5"></i>Team Leader (TL) Milestone Rewards (Team + TL Combined Target: 80% = ৳7,000 • 100% = ৳10,000)
+                </span>
+                <span class="text-[11px] font-bold text-indigo-100">${data.tlRows.length} Team Leader(s)</span>
+              </div>
+              <table class="w-full text-left text-xs whitespace-nowrap">
+                <thead class="table-header-light uppercase font-extrabold">
+                  <tr>
+                    <th class="p-3.5">TL Name & ID</th>
+                    <th class="p-3.5">Team</th>
+                    <th class="p-3.5">Total Team Target (+5%)</th>
+                    <th class="p-3.5">80% Goal (৳7,000)</th>
+                    <th class="p-3.5">100% Goal (৳10,000)</th>
+                    <th class="p-3.5">Team Achieved Revenue</th>
+                    <th class="p-3.5 text-center">Achievement %</th>
+                    <th class="p-3.5">Earned TL Bonus</th>
+                    <th class="p-3.5">Milestone Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-semibold">
+                  ${data.tlRows.map(tl => `
+                    <tr class="hover:bg-indigo-50/40">
+                      <td class="p-3.5 font-extrabold text-slate-900">
+                        <div class="flex items-center gap-2.5">
+                          ${renderUserAvatarHtml(tl.user, 'w-8 h-8 rounded-xl text-xs', 'bg-indigo-100 text-indigo-700', false)}
+                          <div>
+                            <span>👑 ${tl.user.name}</span>
+                            <span class="text-slate-400 text-[10px] block">ID: ${tl.user.id} • ${tl.agentCount} Agents</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(tl.team)}">${tl.team}</span></td>
+                      <td class="p-3.5 font-bold text-slate-700">৳${tl.teamWorkTgt.toLocaleString()}</td>
+                      <td class="p-3.5 font-bold text-amber-700">৳${tl.target80.toLocaleString()}</td>
+                      <td class="p-3.5 font-bold text-indigo-700">৳${tl.target100.toLocaleString()}</td>
+                      <td class="p-3.5 font-black text-emerald-600 text-sm">৳${tl.teamRev.toLocaleString()}</td>
+                      <td class="p-3.5 text-center">
+                        <span class="px-2.5 py-1 rounded-lg ${tl.hit100 ? 'bg-emerald-100 text-emerald-800' : (tl.hit80 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700')} font-black">${tl.teamAchPct}%</span>
+                      </td>
+                      <td class="p-3.5">
+                        <span class="px-3 py-1 rounded-xl ${tl.tlRewardMoney > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'} font-black text-sm">
+                          ৳${tl.tlRewardMoney.toLocaleString()}
+                        </span>
+                      </td>
+                      <td class="p-3.5 text-[11px] font-bold text-slate-700">${tl.tlStatusLabel}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+            ` : ''}
+
+            <!-- Section 2: Agent-Wise Earned Incentives & Product Gifts Breakdown Table -->
+            ${data.agentRows.length > 0 ? `
+            <div class="card-dynamic overflow-hidden overflow-x-auto">
+              <div class="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs font-black uppercase tracking-wider text-amber-400">
+                  <i class="fa-solid fa-users-viewfinder mr-1.5"></i>Agent-Wise Sprint & Drive Product Incentive Breakdown (${data.agentRows.length} Agents)
+                </span>
+                <span class="text-[11px] font-bold text-slate-300">Shows exact Sprint & Drive Product cash bonuses and physical gifts earned by each agent</span>
+              </div>
+              <table class="w-full text-left text-xs whitespace-nowrap">
+                <thead class="table-header-light uppercase font-extrabold">
+                  <tr>
+                    <th class="p-3.5">SL</th>
+                    <th class="p-3.5">Agent Name & ID</th>
+                    <th class="p-3.5">Team</th>
+                    <th class="p-3.5 text-center">Grade</th>
+                    <th class="p-3.5">Sales & Target %</th>
+                    <th class="p-3.5 text-center">Sprint Bonus</th>
+                    <th class="p-3.5 text-center">Drive Product Cash</th>
+                    <th class="p-3.5 text-center">Total Cash Bonus</th>
+                    <th class="p-3.5">Earned Product Gifts</th>
+                    <th class="p-3.5">What They Unlocked (Item-by-Item Breakdown)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-semibold">
+                  ${data.agentRows.map((r, idx) => `
+                    <tr class="hover:bg-slate-50/90 ${r.totalCash > 0 || r.giftCount > 0 ? 'bg-amber-50/20' : ''}">
+                      <td class="p-3.5 font-black text-slate-400">#${idx + 1}</td>
+                      <td class="p-3.5 font-extrabold text-slate-900">
+                        <div class="flex items-center gap-2.5">
+                          ${renderUserAvatarHtml(r.agent, 'w-8 h-8 rounded-xl text-xs', 'bg-amber-100 text-amber-800', false)}
+                          <div>
+                            <span>${r.agent.name}</span>
+                            <span class="text-slate-400 text-[10px] block">ID: ${r.agent.id}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(r.team)}">${r.team}</span></td>
+                      <td class="p-3.5 text-center font-black text-slate-700">${r.grade}</td>
+                      <td class="p-3.5">
+                        <span class="font-black text-slate-900">৳${r.rev.toLocaleString()}</span>
+                        <span class="text-[10px] font-extrabold text-blue-600 block">${r.achPct}% of ৳${r.workTgt.toLocaleString()}</span>
+                      </td>
+                      <td class="p-3.5 text-center font-black ${r.sprintMoney > 0 ? 'text-blue-600' : 'text-slate-400'}">৳${r.sprintMoney.toLocaleString()}</td>
+                      <td class="p-3.5 text-center font-black ${r.prodMoney > 0 ? 'text-emerald-600' : 'text-slate-400'}">৳${r.prodMoney.toLocaleString()}</td>
+                      <td class="p-3.5 text-center">
+                        <span class="px-3 py-1 rounded-xl ${r.totalCash > 0 ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-400'} font-black text-xs">
+                          ৳${r.totalCash.toLocaleString()}
+                        </span>
+                      </td>
+                      <td class="p-3.5">
+                        ${r.prodGiftBadges.length > 0
+                          ? `<div class="flex flex-wrap gap-1">${r.prodGiftBadges.map(g => `<span class="px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-extrabold">${g}</span>`).join('')}</div>`
+                          : `<span class="text-[11px] font-bold text-slate-400">0 Gifts</span>`
+                        }
+                      </td>
+                      <td class="p-3.5 whitespace-normal min-w-[260px]">
+                        ${r.allBreakdownBadges.length > 0
+                          ? `<div class="flex flex-wrap gap-1.5">
+                              ${r.sprintBadges.map(b => `<span class="px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-[10px] font-extrabold">${b}</span>`).join('')}
+                              ${r.prodCashBadges.map(b => `<span class="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-extrabold">💰 ${b}</span>`).join('')}
+                            </div>`
+                          : `<span class="text-[11px] font-semibold text-slate-400">No Sprint or Product bonus unlocked yet</span>`
+                        }
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+                <tfoot class="bg-slate-900 text-white font-black text-xs">
+                  <tr>
+                    <td colspan="5" class="p-4 uppercase tracking-wider text-amber-400">
+                      <i class="fa-solid fa-calculator mr-1.5"></i> Agents Total (${data.agentRows.length} Agents)
+                    </td>
+                    <td class="p-4 text-center text-blue-300">৳${data.totalAgentSprintMoney.toLocaleString()}</td>
+                    <td class="p-4 text-center text-emerald-300">৳${data.totalAgentProdMoney.toLocaleString()}</td>
+                    <td class="p-4 text-center text-amber-300 text-sm">৳${data.totalAgentCash.toLocaleString()}</td>
+                    <td class="p-4 text-rose-300">${data.totalAgentGifts} Gift(s)</td>
+                    <td class="p-4 text-slate-300">TL + Agents Grand Total: <strong class="text-emerald-400">৳${data.grandTotalCash.toLocaleString()}</strong></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            ` : ''}
+          </div>
+        `;
+      };
+
+      // -----------------------------------------------------------------------
+      // D. REDESIGNED FULL-WIDTH INCENTIVE WIDGET ON DASHBOARD:
+      //    - Active Month Archive Box REMOVED from all panels!
+      //    - Supervisor Dashboard: NO Incentive Box (views via Incentive Tab)
+      //    - TL Dashboard: Clean, Light-Themed Full-Width Card showing:
+      //        1) TL Personal Milestone Reward (80% = ৳7,000 | 100% = ৳10,000)
+      //        2) Team Agents' Combined Incentive Total + Gifts
+      //        3) Direct Button to open the "Incentive" Tab (no cluttered agent list!)
+      //    - Agent Dashboard: Full-Width Card (with compact Duty Timer) showing:
+      //        1) Total Cash Bonus & Product Gifts at top
+      //        2) Small item-by-item breakdown badges below
+      // -----------------------------------------------------------------------
+      renderCompactTopWidgets = function(incentiveSummary) {
+        const u = currentUser;
+        if (!u) return '';
+
+        // Supervisor has NO incentive box on Dashboard (views everything cleanly in the Incentive Tab)
+        if (isSupervisor(u)) {
+          return '';
+        }
+
+        // AGENT VIEW: Full-Width Extended Incentive Card + Compact Duty Timer Bar
+        if (!canViewAll(u)) {
+          const today = getTodayFormatted();
+          const attList = getStored('attendance_records', []);
+          const rec = attList.find(a => String(a.userId) === String(u.id) && a.date === today) || ensureAgentAttendanceSession(u);
+          const isBreak = rec && rec.status === 'On Break';
+
+          const myUsers = getUsersForMonth(selectedMonthKey, true);
+          const myObj = myUsers.find(x => String(x.id) === String(u.id)) || u;
+          const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(selectedMonthKey));
+          const spInfo = window.computeSingleAgentSprintIncentive(myObj, allMonthSales, selectedMonthKey);
+          const dpStats = computeAgentDriveProductStats(myObj, allMonthSales, selectedMonthKey);
+          const activeProds = getActiveProductsForMonth(selectedMonthKey);
+
+          let prodCash = 0;
+          const itemBreakdownPills = [];
+          const earnedGiftPills = [];
+
+          (spInfo.sprintBadges || []).forEach(b => {
+            itemBreakdownPills.push({ label: b, cls: 'bg-blue-50 border-blue-200 text-blue-800' });
+          });
+
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const soldKg = Number(dpStats.prodKg[k]) || 0;
+            const tgtKg = Number(p.targetKg) || 0;
+            const pct = tgtKg > 0 ? Math.round((soldKg / tgtKg) * 100) : 0;
+            if (pct >= 100) {
+              if (p.bonus100) {
+                prodCash += Number(p.bonus100);
+                itemBreakdownPills.push({ label: `💰 ${p.name} (100%): ৳${Number(p.bonus100).toLocaleString()}`, cls: 'bg-emerald-50 border-emerald-200 text-emerald-800' });
+              }
+              if (p.item100) {
+                earnedGiftPills.push(`🎁 ${p.item100} (${p.name} 100%)`);
+                itemBreakdownPills.push({ label: `🎁 ${p.name} (100%): ${p.item100}`, cls: 'bg-rose-50 border-rose-200 text-rose-700' });
+              }
+            } else if (pct >= 90 && p.bonus90) {
+              prodCash += Number(p.bonus90);
+              itemBreakdownPills.push({ label: `💰 ${p.name} (90%): ৳${Number(p.bonus90).toLocaleString()}`, cls: 'bg-emerald-50 border-emerald-200 text-emerald-800' });
+            }
+          });
+
+          const totalEarnedCash = (spInfo.sprintMoney || 0) + prodCash;
+
+          return `
+            <div class="space-y-3.5">
+              ${rec ? `
+              <div class="card-dynamic px-5 py-3 border-l-4 ${isBreak ? 'border-l-amber-500 bg-amber-50/30' : 'border-l-emerald-500'} flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-xl ${isBreak ? 'bg-amber-500' : 'bg-emerald-600'} text-white flex items-center justify-center text-sm shadow-sm shrink-0">
+                    <i class="fa-solid ${isBreak ? 'fa-mug-hot' : 'fa-user-clock'}"></i>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-4">
+                    <div>
+                      <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${isBreak ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+                        ${isBreak ? `Break: ${rec.breakReason}` : 'Duty Active'}
+                      </span>
+                      <span class="text-[11px] font-bold text-slate-400 ml-2">In: ${sanitizeTimeDisplay(rec.loginTime)}</span>
+                    </div>
+                    <div class="flex items-center gap-4 pl-4 border-l border-slate-200">
+                      <div>
+                        <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Working Time</span>
+                        <span id="live-work-timer" class="text-sm font-black font-mono text-emerald-600">${formatHMS(rec.activeSeconds)}</span>
+                      </div>
+                      <div class="pl-4 border-l border-slate-200">
+                        <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Break Time</span>
+                        <span id="live-break-timer" class="text-sm font-black font-mono text-amber-600">${formatHMS(rec.breakSeconds)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  ${isBreak ? `
+                    <button onclick="handleResumeWork()" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5 cursor-pointer">
+                      <i class="fa-solid fa-play"></i> Resume Work
+                    </button>
+                  ` : `
+                    <button onclick="openBreakModal()" class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5 cursor-pointer">
+                      <i class="fa-solid fa-mug-saucer"></i> Take Break
+                    </button>
+                  `}
+                </div>
+              </div>
+              ` : ''}
+
+              <!-- Full-Width Agent Earned Incentive & Product Gifts Box -->
+              <div class="incentive-banner p-5 rounded-2xl shadow-sm border border-amber-200/90 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div class="flex items-center gap-3.5">
+                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center text-lg shadow-md shrink-0">
+                      <i class="fa-solid fa-award"></i>
+                    </div>
+                    <div>
+                      <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block">My Earned Incentive & Product Gifts (${selectedMonthKey})</span>
+                      <div class="flex flex-wrap items-center gap-2.5 mt-0.5">
+                        <span class="text-xl font-black text-slate-900">💵 ৳${totalEarnedCash.toLocaleString()} Cash Bonus</span>
+                        <span class="px-2.5 py-1 rounded-lg bg-rose-500 text-white text-xs font-black shadow-2xs">
+                          🎁 ${earnedGiftPills.length} Product Gift(s)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="px-3 py-1 rounded-xl bg-white/90 border border-amber-200 text-[11px] font-extrabold text-slate-700">
+                      Sprint Bonus: <strong class="text-blue-700">৳${(spInfo.sprintMoney || 0).toLocaleString()}</strong>
+                    </span>
+                    <span class="px-3 py-1 rounded-xl bg-white/90 border border-amber-200 text-[11px] font-extrabold text-slate-700">
+                      Drive Product Bonus: <strong class="text-emerald-700">৳${prodCash.toLocaleString()}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Small Item-by-Item Breakdown Pills -->
+                <div class="pt-2.5 border-t border-amber-200/70 flex flex-wrap items-center gap-1.5">
+                  <span class="text-[10px] font-black uppercase text-amber-900 mr-1"><i class="fa-solid fa-list-check mr-1"></i>Earned Breakdown:</span>
+                  ${itemBreakdownPills.length > 0
+                    ? itemBreakdownPills.map(p => `<span class="px-2.5 py-0.5 rounded-lg border ${p.cls} text-[11px] font-extrabold shadow-2xs">${p.label}</span>`).join('')
+                    : `<span class="text-[11px] font-bold text-amber-800">Hit 100% in Sprints or 90%/100% in Drive Products (Pink Salt 100% = 2L Mustard Oil • Black Garlic 100% = 400gm Gawa Ghee) to unlock your rewards!</span>`
+                  }
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        // TEAM LEADER (ADMIN) VIEW: Full-Width, Clean Light-Themed Organized Incentive Banner (No Dark/Black Box, No Cluttered Agent Names!)
+        const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const channelSalesAll = activeChannel === 'ALL_CHANNELS'
+          ? allSales
+          : allSales.filter(s => getChannelForTeam(s.team) === activeChannel);
+        const scopedSales = (dashboardScope === 'ALL'
+          ? channelSalesAll
+          : channelSalesAll.filter(s => normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(dashboardScope))
+        ).filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+        const monthTotalAmount = scopedSales.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+        const target80 = Math.round(tInfo.workingTarget * 0.80);
+        const target100 = tInfo.workingTarget;
+        const hit100 = target100 > 0 && monthTotalAmount >= target100;
+        const hit80 = target80 > 0 && monthTotalAmount >= target80;
+        const tlPersonalEarned = hit100 ? 10000 : (hit80 ? 7000 : 0);
+        const exactPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
+        const scopeLabel = dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope;
+
+        const floorIncData = window.computeFloorIncentiveBreakdown(selectedMonthKey, dashboardScope, 'AGENTS_ONLY');
+        const agentsUnlockedCount = floorIncData.agentRows.filter(r => r.totalCash > 0 || r.giftCount > 0).length;
+
+        return `
+          <div class="card-dynamic p-5 bg-gradient-to-r from-amber-50/90 via-white to-indigo-50/70 border-2 border-amber-200/90 shadow-sm">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <!-- Left Title & Scope Info -->
+              <div class="flex items-center gap-3.5">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center text-xl shadow-md shrink-0">
+                  <i class="fa-solid fa-award"></i>
+                </div>
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-900 border border-amber-300">
+                      ${scopeLabel} — Incentive Overview (${selectedMonthKey})
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-800">
+                      Team Achievement: ${exactPct}%
+                    </span>
+                  </div>
+                  <h3 class="text-base font-black text-slate-900 mt-1">TL Milestone Reward & Team Agents' Incentive Summary</h3>
+                  <p class="text-[11px] font-bold text-slate-500">Clean summary of your TL milestone bonus and your team agents' combined earnings.</p>
+                </div>
+              </div>
+
+              <!-- Middle 2 Clean Light Cards: 1) TL Personal Reward (80% / 100%) & 2) Team Agents' Total Incentive -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 max-w-2xl">
+                <!-- Card 1: Clean Light Indigo Card for TL Personal Reward -->
+                <div class="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-blue-50 border-2 ${hit100 ? 'border-emerald-400' : (hit80 ? 'border-amber-400' : 'border-indigo-200')} shadow-2xs flex flex-col justify-between">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[10px] font-black uppercase text-indigo-800">
+                      <i class="fa-solid fa-crown text-amber-500 mr-1"></i>TL Personal Reward (${dashboardScope === 'ALL' ? 'Floor' : dashboardScope})
+                    </span>
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-black ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-indigo-100 text-indigo-800')}">
+                      ${hit100 ? '100% Unlocked' : (hit80 ? '80% Unlocked' : `${exactPct}% Achieved`)}
+                    </span>
+                  </div>
+                  <div class="flex items-baseline justify-between mt-1.5">
+                    <strong class="text-lg font-black ${tlPersonalEarned > 0 ? 'text-emerald-600' : 'text-indigo-950'}">৳${tlPersonalEarned.toLocaleString()} <span class="text-[11px] font-bold text-slate-500">Earned</span></strong>
+                    <span class="text-[10px] font-extrabold text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">80%: ৳7,000 • 100%: ৳10,000</span>
+                  </div>
+                </div>
+
+                <!-- Card 2: Clean Light Emerald/Amber Card for Team Agents' Combined Bonus -->
+                <div class="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 via-white to-amber-50 border-2 border-emerald-200 shadow-2xs flex flex-col justify-between">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[10px] font-black uppercase text-emerald-900">
+                      <i class="fa-solid fa-users text-emerald-600 mr-1"></i>Team Agents' Incentive (${tInfo.agentCount} Agents)
+                    </span>
+                    <span class="px-2 py-0.5 rounded-md bg-rose-500 text-white text-[10px] font-black">
+                      🎁 ${floorIncData.totalAgentGifts} Gift(s)
+                    </span>
+                  </div>
+                  <div class="flex items-baseline justify-between mt-1.5">
+                    <strong class="text-lg font-black text-emerald-700">৳${floorIncData.totalAgentCash.toLocaleString()} <span class="text-[11px] font-bold text-slate-500">Agents' Total</span></strong>
+                    <span class="text-[10px] font-extrabold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md">${agentsUnlockedCount} Agent(s) Unlocked</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Direct Action Button to Open Dedicated Incentive Tab -->
+              <div class="shrink-0">
+                <button type="button" onclick="incentiveTabTeamScope='${dashboardScope === 'ALL' ? 'ALL' : normalizeTeamNameAlias(dashboardScope)}'; setTab('incentive');" class="w-full lg:w-auto px-4 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs font-black shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer">
+                  <i class="fa-solid fa-award text-amber-300 text-sm"></i>
+                  <span>View Full Incentive Details</span>
+                  <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      };
+
+      // Also update the TL Milestone Banner text on Dashboard to clearly state 80% = ৳7,000 and 100% = ৳10,000
+      const _origRenderDashboardV29 = renderDashboard;
+      renderDashboard = function() {
+        let htmlOut = _origRenderDashboardV29();
+        htmlOut = htmlOut.replace(
+          '🎯 80% Reward Goal</span>',
+          '🎯 80% Goal (TL Reward: ৳7,000)</span>'
+        ).replace(
+          '🏆 100% Full Target</span>',
+          '🏆 100% Goal (TL Reward: ৳10,000)</span>'
+        ).replace(
+          '80% & 100% Milestones',
+          '80% = ৳7,000 • 100% = ৳10,000 TL Reward'
+        );
+        return htmlOut;
+      };
+
+      // -----------------------------------------------------------------------
+      // E. REAL-TIME PROFILE PICTURE SYNC ACROSS ALL PORTALS
       // -----------------------------------------------------------------------
       getUserAvatarUrl = function(userId) {
         if (!userId) return '';
         const uid = String(userId).trim();
         const store = getUserAvatarStore();
-        // Always prioritize cloud-synced USER_AVATARS store first so everyone sees the latest photo!
         if (store && store[uid]) {
           return store[uid];
         }
@@ -15099,7 +15941,7 @@ function renderChatHubView() {
           const img = new Image();
           img.onload = function() {
             const canvas = document.createElement('canvas');
-            const size = 84; // Compact 84x84 so 65+ user avatars fit well under Google Sheet's 50,000 char cell limit!
+            const size = 84;
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d');
@@ -15118,11 +15960,7 @@ function renderChatHubView() {
             setStored('monthly_configs', configs);
             markLocalUserOrConfigMutatedNow();
 
-            const logMeta = recordActivityLog(
-              'Updated Profile Picture',
-              `Updated profile picture for ID ${targetId}`
-            );
-
+            const logMeta = recordActivityLog('Updated Profile Picture', `Updated profile picture for ID ${targetId}`);
             closeModal('profilePicModal');
             renderAppLayout();
             showPortalToast('Profile Picture Synced!', 'Profile photo is now live across all user panels.', 'success');
@@ -15158,8 +15996,7 @@ function renderChatHubView() {
         showPortalToast('Profile Picture Removed', 'Reverted to default initial badge.', 'warning');
       };
 
-      // Also ensure cloud sync merges USER_AVATARS key-by-key so one user's upload never overwrites another's
-      const _origHandleCloudDataV28 = handleCloudData;
+      const _origHandleCloudDataV29 = handleCloudData;
       handleCloudData = function(res) {
         if (res && res.monthlyConfigs && res.monthlyConfigs['USER_AVATARS']) {
           const localCfg = getStored('monthly_configs', {});
@@ -15172,20 +16009,17 @@ function renderChatHubView() {
             if (combinedAv[uid]) localStorage.setItem('gb_avatar_' + uid, combinedAv[uid]);
           });
         }
-        _origHandleCloudDataV28(res);
+        _origHandleCloudDataV29(res);
       };
 
       // -----------------------------------------------------------------------
-      // FIX 2: MISSING & LEAVE SIDEBAR BADGE COUNT FOR ANY ACTIVE CHANNEL
-      // (Fixes FB Admin seeing "OK" when switching to WhatsApp channel!)
+      // F. MISSING & LEAVE SIDEBAR BADGE COUNT FOR ANY ACTIVE CHANNEL
       // -----------------------------------------------------------------------
       getQuickMissingReportBadgeCountForSidebar = function() {
         try {
           if (!currentUser) return 0;
           const myTeamClean = normalizeTeamNameAlias(currentUser.team);
           const chTeams = getActiveChannelMeta().teams;
-          // Only filter by currentUser.team if currentUser's team is actually in the currently viewed channel!
-          // If a Facebook TL switches to WhatsApp (or All Channels), show the total missing count for that channel ('ALL')!
           const defaultTeam = (currentUser.role === 'admin' && activeChannel !== 'ALL_CHANNELS' && chTeams.includes(myTeamClean))
             ? myTeamClean
             : 'ALL';
@@ -15197,124 +16031,7 @@ function renderChatHubView() {
       };
 
       // -----------------------------------------------------------------------
-      // FIX 3: CLEAR TL REWARD (80% = ৳7,000 | 100% = ৳10,000) vs TEAM AGENTS'
-      //        INCENTIVE IN DASHBOARD TOP BOX & MILESTONE BANNER
-      // -----------------------------------------------------------------------
-      const _origRenderCompactTopWidgetsV28 = renderCompactTopWidgets;
-      renderCompactTopWidgets = function(incentiveSummary) {
-        const u = currentUser;
-        if (!u || !canViewAll(u)) {
-          return _origRenderCompactTopWidgetsV28(incentiveSummary);
-        }
-
-        // Compute current scope's Total Team Target & Achieved Revenue to determine TL's 80% (৳7,000) / 100% (৳10,000) reward status
-        const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
-        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
-        const channelSalesAll = activeChannel === 'ALL_CHANNELS'
-          ? allSales
-          : allSales.filter(s => getChannelForTeam(s.team) === activeChannel);
-        const scopedSales = (dashboardScope === 'ALL'
-          ? channelSalesAll
-          : channelSalesAll.filter(s => normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(dashboardScope))
-        ).filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
-
-        const monthTotalAmount = scopedSales.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
-        const target80 = Math.round(tInfo.workingTarget * 0.80);
-        const target100 = tInfo.workingTarget;
-        const hit100 = target100 > 0 && monthTotalAmount >= target100;
-        const hit80 = target80 > 0 && monthTotalAmount >= target80;
-        const tlPersonalEarned = hit100 ? 10000 : (hit80 ? 7000 : 0);
-        const exactPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
-        const scopeTitle = dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Agents` : `${dashboardScope} Agents`;
-
-        return `
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="card-dynamic px-4 py-3 border-l-4 border-l-blue-600 flex items-center justify-between gap-3">
-              <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm shadow-sm shrink-0">
-                  <i class="fa-solid fa-calendar-check"></i>
-                </div>
-                <div>
-                  <span class="text-[10px] font-black uppercase text-blue-600 block">Active Month Archive</span>
-                  <h4 class="text-sm font-black text-slate-900">${(AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label}</h4>
-                  <p class="text-[11px] font-semibold text-slate-400">Switch month at top bar to view past reports or setup next month</p>
-                </div>
-              </div>
-              <div class="flex items-center gap-2 shrink-0">
-                <button onclick="setTab('monthly_perf')" class="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-extrabold">Monthly Summary</button>
-                <button onclick="setTab('activity_logs')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-extrabold">Activity Logs</button>
-              </div>
-            </div>
-
-            <div class="incentive-banner px-4 py-3 rounded-2xl shadow-sm flex flex-col justify-between gap-2">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <!-- Left Box: TL's Own Personal Reward (80% = ৳7,000 | 100% = ৳10,000) -->
-                <div class="p-2.5 rounded-xl bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white border border-indigo-400/40 flex flex-col justify-between shadow-xs">
-                  <div class="flex items-center justify-between gap-1">
-                    <span class="text-[9px] font-black uppercase tracking-wider text-amber-300">
-                      <i class="fa-solid fa-crown mr-1"></i>TL Personal Reward (${dashboardScope === 'ALL' ? 'Floor' : dashboardScope})
-                    </span>
-                    <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${hit100 ? 'bg-emerald-500 text-slate-950' : (hit80 ? 'bg-amber-400 text-slate-950' : 'bg-white/15 text-slate-200')}">
-                      ${exactPct}% Done
-                    </span>
-                  </div>
-                  <div class="flex items-baseline justify-between mt-1">
-                    <strong class="text-base font-black ${tlPersonalEarned > 0 ? 'text-emerald-400' : 'text-white'}">💵 ৳${tlPersonalEarned.toLocaleString()} Earned</strong>
-                    <span class="text-[9px] font-extrabold text-indigo-200">80%: ৳7,000 • 100%: ৳10,000</span>
-                  </div>
-                </div>
-
-                <!-- Right Box: Team Agents' Combined Sprint & Product Bonus (Clearly labeled as Agents' Bonus!) -->
-                <div class="p-2.5 rounded-xl bg-white/90 border border-amber-300 flex flex-col justify-between shadow-xs">
-                  <div class="flex items-center justify-between gap-1">
-                    <span class="text-[9px] font-black uppercase tracking-wider text-amber-900">
-                      <i class="fa-solid fa-users text-amber-600 mr-1"></i>${scopeTitle} Bonus (${tInfo.agentCount} Agents)
-                    </span>
-                    <span class="px-1.5 py-0.5 rounded bg-rose-500 text-white text-[9px] font-black">
-                      🎁 ${(incentiveSummary.earnedGiftItems || []).length} Gift(s)
-                    </span>
-                  </div>
-                  <div class="flex items-baseline justify-between mt-1">
-                    <strong class="text-base font-black text-slate-900">💵 ৳${incentiveSummary.totalMoney.toLocaleString()} <span class="text-[10px] font-extrabold text-amber-800">(Agents' Total)</span></strong>
-                  </div>
-                </div>
-              </div>
-
-              <div class="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-amber-200/70">
-                <span class="text-[10px] font-black text-amber-950 uppercase mr-1"><i class="fa-solid fa-user-check text-amber-600 mr-1"></i>Agents Who Unlocked Bonus:</span>
-                ${(incentiveSummary.earnedCashBadges && incentiveSummary.earnedCashBadges.length > 0)
-                  ? incentiveSummary.earnedCashBadges.map(c => `<span class="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-extrabold shadow-2xs">💰 ${c}</span>`).join('')
-                  : `<span class="text-[10px] font-bold text-amber-800">No agent sprint/product cash bonus unlocked yet</span>`
-                }
-                ${(incentiveSummary.earnedGiftItems && incentiveSummary.earnedGiftItems.length > 0)
-                  ? incentiveSummary.earnedGiftItems.map(g => `<span class="px-2 py-0.5 rounded-md bg-white border border-rose-300 text-rose-700 text-[10px] font-extrabold shadow-2xs">${g}</span>`).join('')
-                  : `<span class="text-[10px] font-bold text-slate-500 ml-auto">🎁 Agent Product Gifts: Salt 100% = 2L Oil • Garlic 100% = 400gm Ghee</span>`
-                }
-              </div>
-            </div>
-          </div>
-        `;
-      };
-
-      // Also enhance the TL 80% / 100% Milestone Banner in renderDashboard so it explicitly shows ৳7,000 at 80% and ৳10,000 at 100%!
-      const _origRenderDashboardV28 = renderDashboard;
-      renderDashboard = function() {
-        let htmlOut = _origRenderDashboardV28();
-        htmlOut = htmlOut.replace(
-          '🎯 80% Reward Goal</span>',
-          '🎯 80% Goal (TL Reward: ৳7,000)</span>'
-        ).replace(
-          '🏆 100% Full Target</span>',
-          '🏆 100% Goal (TL Reward: ৳10,000)</span>'
-        ).replace(
-          '80% & 100% Milestones',
-          '80% = ৳7,000 • 100% = ৳10,000 TL Reward'
-        );
-        return htmlOut;
-      };
-
-      // -----------------------------------------------------------------------
-      // FIX 4: VIBRANT SOLID-COLOR GRADIENT CARDS FOR TEAM COMPARISON IN RANKING TAB
+      // G. VIBRANT SOLID-COLOR GRADIENT CARDS FOR TEAM COMPARISON IN RANKING TAB
       // -----------------------------------------------------------------------
       renderRankingAndComparison = function() {
         const monthUsersAll = getUsersForMonth(selectedMonthKey);
@@ -15378,7 +16095,6 @@ function renderChatHubView() {
           return n + (s[(v - 20) % 10] || s[v] || s[0]);
         };
 
-        // Vibrant Solid Gradient Theme for each Team Card!
         function getVibrantSolidTeamCardTheme(teamName) {
           const t = normalizeTeamNameAlias(teamName);
           if (t === 'Team Samad') {
@@ -15470,7 +16186,6 @@ function renderChatHubView() {
                           </div>
                         </div>
 
-                        <!-- Solid Glassmorphic 2x2 Metric Grid -->
                         <div class="grid grid-cols-2 gap-2.5 mb-4">
                           <div class="${th.subBox} p-3 rounded-2xl border">
                             <span class="text-[9px] font-extrabold text-white/75 uppercase block tracking-wider">Achieved Revenue</span>
@@ -15608,8 +16323,455 @@ function renderChatHubView() {
           </div>
         `;
       };
-    } catch (patchV28Err) {
-      console.error('Non-fatal patch v28 warning:', patchV28Err);
+    } catch (patchV29Err) {
+      console.error('Non-fatal patch v29 warning:', patchV29Err);
+    }
+
+    
+    // =========================================================================
+    // MASTER VERIFIED UPGRADE PATCH (v30) — PREMIUM DAY OFF (DO) MOVE DATE
+    // MODAL & SMART NIGHT-SHIFT MISSING REPORT DETECTOR (NO BROWSER PROMPT!)
+    // =========================================================================
+    try {
+      window.pendingMoveDateContext = null;
+
+      window.getPrevDateAndShiftInfo = function(empId, dateStr) {
+        if (!empId || !dateStr) return null;
+        const parts = String(dateStr).replace(/^'/, '').trim().split('/');
+        if (parts.length !== 3) return null;
+        const dObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        if (isNaN(dObj.getTime())) return null;
+
+        // Calculate previous calendar day
+        const prevDateObj = new Date(dObj.getTime());
+        prevDateObj.setDate(prevDateObj.getDate() - 1);
+        const prevD = String(prevDateObj.getDate()).padStart(2, '0');
+        const prevM = String(prevDateObj.getMonth() + 1).padStart(2, '0');
+        const prevY = prevDateObj.getFullYear();
+        const prevDateStr = `${prevD}/${prevM}/${prevY}`;
+
+        const prevShift = window.getAgentRosterShiftForDateStr(empId, prevDateStr) || '3:00 PM';
+        const isPrevNightShift = prevShift.toUpperCase().includes('NIGHT') || prevShift.includes('11:00');
+
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const prevReport = allSales.find(s =>
+          String(s.userId).trim() === String(empId).trim() &&
+          String(s.date || '').replace(/^'/, '').trim() === prevDateStr
+        );
+        const hasSubmittedPrevDate = Boolean(prevReport);
+
+        return {
+          prevDateStr,
+          prevShift,
+          isPrevNightShift,
+          hasSubmittedPrevDate,
+          prevReport
+        };
+      };
+
+      // Ensure isAnyModalOpen knows about moveReportDateModal so background sync never closes it
+      const _origIsAnyModalOpenV30 = isAnyModalOpen;
+      isAnyModalOpen = function() {
+        if (_origIsAnyModalOpenV30()) return true;
+        const el = document.getElementById('moveReportDateModal');
+        return Boolean(el && !el.classList.contains('hidden'));
+      };
+
+      // Inject our custom Move Report Date Modal into the app DOM
+      const _origRenderAppLayoutV30 = renderAppLayout;
+      renderAppLayout = function() {
+        _origRenderAppLayoutV30();
+        try {
+          const appEl = document.getElementById('app');
+          if (appEl && !document.getElementById('moveReportDateModal')) {
+            appEl.insertAdjacentHTML('beforeend', window.renderMoveReportDateModal());
+          }
+        } catch (err) {}
+      };
+
+      window.renderMoveReportDateModal = function() {
+        const ctx = window.pendingMoveDateContext;
+        if (!ctx) {
+          return `<div id="moveReportDateModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4"></div>`;
+        }
+
+        const prevInfo = ctx.prevInfo || {};
+        const showNightAlert = prevInfo.isPrevNightShift && !prevInfo.hasSubmittedPrevDate;
+        const showPrevMissingAlert = !prevInfo.isPrevNightShift && !prevInfo.hasSubmittedPrevDate && prevInfo.prevDateStr;
+        const defaultTargetDate = (!prevInfo.hasSubmittedPrevDate && prevInfo.prevDateStr) ? prevInfo.prevDateStr : ctx.oldDateStr;
+
+        return `
+          <div id="moveReportDateModal" class="hidden fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border-2 border-amber-300 text-left space-y-4">
+              <!-- Modal Header -->
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-3">
+                  <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-lg shadow-md shrink-0">
+                    <i class="fa-solid fa-calendar-day"></i>
+                  </div>
+                  <div>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-900 border border-amber-300">
+                      Day Off (DO) Report Date Correction
+                    </span>
+                    <h3 class="text-base font-black text-slate-900 mt-0.5">Move Sales Report to Working Date</h3>
+                  </div>
+                </div>
+                <button type="button" onclick="closeModal('moveReportDateModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center cursor-pointer">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+
+              <!-- Agent & Current DO Report Summary Box -->
+              <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400 block">Agent Name & ID</span>
+                  <strong class="text-sm font-black text-slate-900">${ctx.userName} <span class="text-slate-400 font-bold">(${ctx.userId})</span></strong>
+                  <span class="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(ctx.team)}">${ctx.team}</span>
+                </div>
+                <div class="text-right">
+                  <span class="text-[10px] font-extrabold uppercase text-rose-500 block">Current Date (Roster: DO)</span>
+                  <strong class="text-sm font-black text-rose-600">${cleanDisplayDate(ctx.oldDateStr)} (${ctx.oldDateStr})</strong>
+                  <span class="block text-[11px] font-extrabold text-emerald-600">Sales: ৳${Number(ctx.amount || 0).toLocaleString()} (${ctx.orders || 0} Ord)</span>
+                </div>
+              </div>
+
+              <!-- Smart Night Shift Missing Alert Box -->
+              ${showNightAlert ? `
+                <div class="p-4 rounded-2xl bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white border-2 border-indigo-400 shadow-lg space-y-3">
+                  <div class="flex items-start gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-500/30 border border-indigo-400/40 text-amber-300 flex items-center justify-center text-base shrink-0 mt-0.5">
+                      <i class="fa-solid fa-moon"></i>
+                    </div>
+                    <div class="space-y-1">
+                      <span class="px-2 py-0.5 rounded bg-rose-500 text-white text-[9px] font-black uppercase tracking-wider">
+                        🌙 Unsubmitted Night Shift Detected!
+                      </span>
+                      <h4 class="text-xs font-black text-amber-300 leading-snug">
+                        This agent has NOT submitted a report on their Night Duty shift (${cleanDisplayDate(prevInfo.prevDateStr)} — ${prevInfo.prevDateStr})!
+                      </h4>
+                      <p class="text-[11px] font-semibold text-indigo-100 leading-relaxed">
+                        Since <strong>${cleanDisplayDate(ctx.oldDateStr)}</strong> is their <strong>Day Off (DO)</strong> right after a <strong>Night Shift (${prevInfo.prevDateStr})</strong>, they likely submitted their Night Shift sales after midnight. Do you want to move this report to their Night Shift date (<strong>${prevInfo.prevDateStr}</strong>)?
+                      </p>
+                    </div>
+                  </div>
+                  <button type="button" onclick="executeMoveReportDate('${ctx.userId}', '${ctx.userName.replace(/'/g, "\\'")}', '${ctx.oldDateStr}', '${prevInfo.prevDateStr}')" class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-black text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer">
+                    <i class="fa-solid fa-bolt"></i> Yes! 1-Click Move to Night Shift Date (${cleanDisplayDate(prevInfo.prevDateStr)} • ${prevInfo.prevDateStr})
+                  </button>
+                </div>
+              ` : (showPrevMissingAlert ? `
+                <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 space-y-2">
+                  <div class="flex items-start gap-2.5">
+                    <i class="fa-solid fa-circle-exclamation text-amber-600 text-sm mt-0.5"></i>
+                    <div>
+                      <h4 class="text-xs font-black text-amber-950">
+                        Missing Report on Previous Duty (${cleanDisplayDate(prevInfo.prevDateStr)} — Shift: ${prevInfo.prevShift})
+                      </h4>
+                      <p class="text-[11px] font-bold text-amber-800 mt-0.5">
+                        ${ctx.userName} has not submitted any sales report on <strong>${prevInfo.prevDateStr}</strong> (${prevInfo.prevShift} shift). Do you want to move this Day Off report to <strong>${prevInfo.prevDateStr}</strong>?
+                      </p>
+                    </div>
+                  </div>
+                  <button type="button" onclick="executeMoveReportDate('${ctx.userId}', '${ctx.userName.replace(/'/g, "\\'")}', '${ctx.oldDateStr}', '${prevInfo.prevDateStr}')" class="w-full py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-calendar-check"></i> Move to Previous Duty Date (${cleanDisplayDate(prevInfo.prevDateStr)} • ${prevInfo.prevDateStr})
+                  </button>
+                </div>
+              ` : (prevInfo.prevDateStr ? `
+                <div class="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-900 flex items-center justify-between">
+                  <span><i class="fa-solid fa-circle-info text-blue-600 mr-1.5"></i>Previous Day (${prevInfo.prevDateStr} • ${prevInfo.prevShift}):</span>
+                  <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-black text-[10px]">Already Submitted (৳${Number(prevInfo.prevReport?.amount || 0).toLocaleString()})</span>
+                </div>
+              ` : ''))}
+
+              <!-- Custom Calendar Date Picker Form -->
+              <form onsubmit="handleCustomMoveDateFormSubmit(event)" class="pt-2 border-t border-slate-100 space-y-3">
+                <div>
+                  <label class="block text-[11px] font-extrabold uppercase text-slate-600 mb-1.5">
+                    <i class="fa-regular fa-calendar-days text-blue-600 mr-1"></i>Or Select Any Target Date from Calendar:
+                  </label>
+                  <input
+                    type="date"
+                    id="moveModalTargetDateInput"
+                    required
+                    value="${dateToInputVal(defaultTargetDate)}"
+                    onchange="onMoveModalDateInputChange(this.value)"
+                    class="w-full px-3.5 py-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-black text-slate-900 focus:outline-none focus:border-blue-600 cursor-pointer"
+                  >
+                  <div id="moveModalTargetShiftPreview" class="mt-1.5 text-[11px] font-extrabold text-slate-500"></div>
+                </div>
+
+                <div class="flex justify-end items-center gap-2 pt-2">
+                  <button type="button" onclick="closeModal('moveReportDateModal')" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-extrabold text-slate-600 cursor-pointer">
+                    Cancel
+                  </button>
+                  <button type="submit" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-check-double"></i> Move Report to Selected Date
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      };
+
+      window.onMoveModalDateInputChange = function(val) {
+        const previewEl = document.getElementById('moveModalTargetShiftPreview');
+        const ctx = window.pendingMoveDateContext;
+        if (!previewEl || !ctx || !val) return;
+        const targetDateStr = inputValToDateStr(val);
+        const shiftOnTarget = window.getAgentRosterShiftForDateStr(ctx.userId, targetDateStr) || '3:00 PM';
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const existingOnTarget = allSales.find(s => String(s.userId) === String(ctx.userId) && String(s.date).replace(/^'/, '').trim() === targetDateStr);
+
+        let badgeHtml = `<span class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-black">Roster Shift on ${cleanDisplayDate(targetDateStr)}: ${shiftOnTarget}</span>`;
+        if (existingOnTarget && targetDateStr !== ctx.oldDateStr) {
+          badgeHtml += ` <span class="px-2 py-0.5 rounded bg-rose-100 text-rose-700 font-black ml-1">⚠️ Has existing report (৳${Number(existingOnTarget.amount).toLocaleString()}) — will overwrite</span>`;
+        } else if (!existingOnTarget) {
+          badgeHtml += ` <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-black ml-1">✅ No report submitted on ${cleanDisplayDate(targetDateStr)} yet</span>`;
+        }
+        previewEl.innerHTML = badgeHtml;
+      };
+
+      window.handleChangeReportDatePrompt = function(userId, userName, oldDateStr) {
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const targetUser = allUsers.find(u => String(u.id) === String(userId));
+        const targetTeam = targetUser ? targetUser.team : '';
+        if (!isSuperAdmin(currentUser) && !canEditTeamData(currentUser, targetTeam) && String(currentUser?.id) !== String(userId)) {
+          showPortalToast('Permission Denied', 'You can only edit or move reports for your own team.', 'error');
+          return;
+        }
+
+        const sales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const existingRec = sales.find(s => String(s.userId) === String(userId) && String(s.date).replace(/^'/, '').trim() === oldDateStr);
+        const prevInfo = window.getPrevDateAndShiftInfo(userId, oldDateStr);
+
+        window.pendingMoveDateContext = {
+          userId: String(userId),
+          userName: userName || (targetUser ? targetUser.name : userId),
+          team: targetTeam,
+          oldDateStr,
+          amount: existingRec ? existingRec.amount : 0,
+          orders: existingRec ? existingRec.orders : 0,
+          leads: existingRec ? existingRec.leads : 0,
+          prevInfo
+        };
+
+        renderAppLayout();
+        openModal('moveReportDateModal');
+        const dateInp = document.getElementById('moveModalTargetDateInput');
+        if (dateInp) window.onMoveModalDateInputChange(dateInp.value);
+      };
+
+      window.handleCustomMoveDateFormSubmit = function(e) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        const ctx = window.pendingMoveDateContext;
+        if (!ctx) return;
+        const inpVal = document.getElementById('moveModalTargetDateInput')?.value;
+        if (!inpVal) return;
+        const cleanNewDate = inputValToDateStr(inpVal);
+        if (cleanNewDate === ctx.oldDateStr) {
+          showPortalToast('Same Date Selected', 'Please select a different date to move this report.', 'warning');
+          return;
+        }
+        window.executeMoveReportDate(ctx.userId, ctx.userName, ctx.oldDateStr, cleanNewDate);
+      };
+
+      window.executeMoveReportDate = function(userId, userName, oldDateStr, cleanNewDate) {
+        closeModal('moveReportDateModal');
+        const targetShift = window.getAgentRosterShiftForDateStr(userId, cleanNewDate) || 'Working Shift';
+        openConfirmWarningModal(
+          `Confirm Move Report (${cleanDisplayDate(oldDateStr)} → ${cleanDisplayDate(cleanNewDate)})?`,
+          `Are you sure you want to move <strong>${userName} (${userId})</strong>'s sales report from <strong>${cleanDisplayDate(oldDateStr)} (Day Off)</strong> to <strong>${cleanDisplayDate(cleanNewDate)} (${cleanNewDate} — Shift: ${targetShift})</strong>?<br><br>This will immediately remove the report from the Day Off list and credit it to <strong>${cleanDisplayDate(cleanNewDate)}</strong> across all panels & Google Sheet.`,
+          'Confirm Date Correction',
+          async () => {
+            let sales = getStored('sales_records', []);
+            const existingRec = sales.find(s => String(s.userId) === String(userId) && String(s.date).replace(/^'/, '').trim() === oldDateStr);
+            if (!existingRec) return;
+
+            const updatedEntry = { ...existingRec, date: cleanNewDate };
+            sales = sales.filter(s => !(String(s.userId) === String(userId) && (String(s.date).replace(/^'/, '').trim() === oldDateStr || String(s.date).replace(/^'/, '').trim() === cleanNewDate)));
+            sales.unshift(updatedEntry);
+            setStored('sales_records', sales);
+            markLocalSalesMutatedNow();
+
+            const logMeta = recordActivityLog('Moved Day Off Report Date', `Moved ${userName} (${userId}) report from ${oldDateStr} (DO) to ${cleanNewDate} (${targetShift})`);
+            renderAppLayout();
+            showPortalToast('Report Moved Successfully!', `Moved ${userName}'s report to ${cleanDisplayDate(cleanNewDate)} (${targetShift}).`, 'success');
+
+            enqueueVerifiedSalesSubmission({ userId: String(userId), date: oldDateStr }, logMeta, true);
+            enqueueVerifiedSalesSubmission(updatedEntry, logMeta, false);
+            await postToSheet('DELETE_SALES_RECORD', { userId: String(userId), date: oldDateStr, ...logMeta }).catch(() => {});
+            await postToSheet('DAILY_SALES_SUBMIT', { ...updatedEntry, ...logMeta }).catch(() => {});
+          },
+          `Yes, Move to ${cleanDisplayDate(cleanNewDate)}`,
+          true
+        );
+      };
+
+      // Also upgrade the "⚠️ Day Off (DO) Submissions" table so each row shows if the previous Night Shift was missed!
+      const _origRenderMissingV30 = renderMissingReportsAndLeaveView;
+      renderMissingReportsAndLeaveView = function() {
+        let htmlOut = _origRenderMissingV30();
+        if (missingReportsSubView === 'DO_REPORTS') {
+          const u = currentUser;
+          const isAdminOrSup = canViewAll(u);
+          const myTeamNorm = u ? normalizeTeamNameAlias(u.team) : '';
+          const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+            .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+          let doSubmissions = allMonthSales.filter(s => {
+            if (window.isUserTeamLeaderRecord && window.isUserTeamLeaderRecord(s.userId)) return false;
+            if (activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(s.team) !== activeChannel) return false;
+            if (!isAdminOrSup && String(s.userId) !== String(u.id)) return false;
+            if (isAdminOrSup && missingReportsTeamScope !== 'ALL' && normalizeTeamNameAlias(s.team) !== normalizeTeamNameAlias(missingReportsTeamScope)) return false;
+            if (isAdminOrSup && missingReportsAgentFilter !== 'ALL' && String(s.userId) !== String(missingReportsAgentFilter)) return false;
+            if (missingReportsDateFilter !== 'ALL' && s.date !== missingReportsDateFilter) return false;
+            return window.isDateAgentDayOff(s.userId, s.date);
+          });
+
+          doSubmissions.sort((a, b) => {
+            const aMy = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : 1;
+            const bMy = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : 1;
+            if (aMy !== bMy) return aMy - bMy;
+            return (parseInt(b.date.split('/')[0], 10) || 0) - (parseInt(a.date.split('/')[0], 10) || 0);
+          });
+
+          const doTableStartIdx = htmlOut.indexOf('<div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-amber-400">');
+          if (doTableStartIdx !== -1) {
+            const upgradedDoTable = `
+            <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-amber-400">
+              <div class="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs font-black uppercase tracking-wider text-amber-400">
+                  <i class="fa-solid fa-calendar-day mr-1.5"></i>Agent Sales Reports Submitted on Roster Day Off (DO) — ${selectedMonthKey} (${doSubmissions.length})
+                </span>
+                <span class="text-[11px] font-bold text-slate-300">
+                  🌙 Auto-detects if the agent missed submitting on their previous Night Shift!
+                </span>
+              </div>
+              <table class="w-full text-left text-xs whitespace-nowrap">
+                <thead class="table-header-light uppercase font-extrabold">
+                  <tr>
+                    <th class="p-3.5">SL</th>
+                    <th class="p-3.5">Submitted Date (DO)</th>
+                    <th class="p-3.5">Agent Name & ID</th>
+                    <th class="p-3.5">Team</th>
+                    <th class="p-3.5">Roster & Night Shift Check</th>
+                    <th class="p-3.5 text-center">Leads / Orders</th>
+                    <th class="p-3.5">Sales Amount</th>
+                    <th class="p-3.5 text-right">Actions (Move Date / Edit / Delete)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-semibold">
+                  ${doSubmissions.length === 0 ? `
+                    <tr>
+                      <td colspan="8" class="p-10 text-center text-emerald-700 font-extrabold">
+                        🎉 No agent sales reports were submitted on a Day Off (DO) for the selected filter in ${selectedMonthKey}!
+                      </td>
+                    </tr>
+                  ` : ''}
+                  ${doSubmissions.map((r, idx) => {
+                    const canManageRow = isSuperAdmin(u) || (u.role === 'admin' && canEditTeamData(u, r.team)) || (u.role === 'agent' && String(r.userId) === String(u.id));
+                    const pInfo = window.getPrevDateAndShiftInfo(r.userId, r.date) || {};
+                    const isMissedNight = pInfo.isPrevNightShift && !pInfo.hasSubmittedPrevDate;
+                    const isMissedPrevDay = !pInfo.isPrevNightShift && !pInfo.hasSubmittedPrevDate && pInfo.prevDateStr;
+
+                    return `
+                      <tr class="hover:bg-amber-50/50 ${isMissedNight ? 'bg-indigo-50/50' : (normalizeTeamNameAlias(r.team) === myTeamNorm ? 'bg-amber-50/30' : '')}">
+                        <td class="p-3.5 font-black text-slate-400">#${idx + 1}</td>
+                        <td class="p-3.5">
+                          <span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-black text-xs">${cleanDisplayDate(r.date)}</span>
+                          <span class="text-[10px] text-slate-400 ml-1">(${r.date})</span>
+                        </td>
+                        <td class="p-3.5 font-extrabold text-slate-900">${r.userName} <span class="text-slate-400 text-[10px]">(${r.userId})</span></td>
+                        <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(r.team)}">${r.team}</span></td>
+                        <td class="p-3.5">
+                          <div class="flex flex-col gap-1">
+                            <span class="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-black text-[10px] w-fit">⚠️ ${cleanDisplayDate(r.date)}: DO (Day Off)</span>
+                            ${isMissedNight ? `
+                              <span class="px-2.5 py-0.5 rounded-md bg-indigo-900 text-amber-300 font-black text-[10px] w-fit animate-pulse">
+                                🌙 Not submitted on Night Shift (${cleanDisplayDate(pInfo.prevDateStr)})!
+                              </span>
+                            ` : (isMissedPrevDay ? `
+                              <span class="px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[10px] w-fit">
+                                ⚠️ Not submitted on ${cleanDisplayDate(pInfo.prevDateStr)} (${pInfo.prevShift})
+                              </span>
+                            ` : `
+                              <span class="text-[10px] font-bold text-emerald-700">✅ Prev Day (${cleanDisplayDate(pInfo.prevDateStr || '')}) Submitted</span>
+                            `)}
+                          </div>
+                        </td>
+                        <td class="p-3.5 text-center font-bold">${r.leads} Leads / <strong class="text-blue-600">${r.orders} Ord</strong></td>
+                        <td class="p-3.5 font-black text-emerald-600 text-sm">৳${Number(r.amount || 0).toLocaleString()}</td>
+                        <td class="p-3.5 text-right space-x-1.5">
+                          ${canManageRow ? `
+                            ${isMissedNight ? `
+                              <button type="button" onclick="executeMoveReportDate('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}', '${pInfo.prevDateStr}')" class="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-black text-[11px] shadow-sm cursor-pointer" title="1-Click Move to Night Shift Date (${pInfo.prevDateStr})">
+                                <i class="fa-solid fa-moon text-amber-300 mr-1"></i>Move to Night (${cleanDisplayDate(pInfo.prevDateStr)})
+                              </button>
+                            ` : ''}
+                            <button type="button" onclick="handleChangeReportDatePrompt('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl font-black text-[11px] shadow-xs cursor-pointer">
+                              <i class="fa-solid fa-calendar-day mr-1"></i>Move Date
+                            </button>
+                            <button type="button" onclick="openReportModal('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl font-extrabold text-[11px] cursor-pointer">
+                              <i class="fa-solid fa-pen-to-square mr-1"></i>Edit
+                            </button>
+                            <button type="button" onclick="handleDirectDeleteReport('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-extrabold text-[11px] cursor-pointer">
+                              <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                          ` : `<span class="text-[11px] font-bold text-slate-400">View Only (${r.team})</span>`}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+            htmlOut = htmlOut.slice(0, doTableStartIdx) + upgradedDoTable;
+          }
+        }
+        return htmlOut;
+      };
+
+      // Also upgrade the Day Off warning inside handleSalesSubmit when an agent/admin tries to submit on DO right after an unsubmitted Night Shift!
+      const _origHandleSalesSubmitV30 = handleSalesSubmit;
+      handleSalesSubmit = function(e) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        const u = currentUser;
+        const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
+        const selectedAgId = isAdmin ? (document.getElementById('subAgentId')?.value || u.id) : u.id;
+        const dateStr = inputValToDateStr(document.getElementById('subDate')?.value);
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const targetAgent = allUsers.find(a => String(a.id) === String(selectedAgId)) || u;
+
+        if (!window.isUserTeamLeaderRecord(targetAgent.id) && window.isDateAgentDayOff(targetAgent.id, dateStr)) {
+          const pInfo = window.getPrevDateAndShiftInfo(targetAgent.id, dateStr) || {};
+          if (pInfo.isPrevNightShift && !pInfo.hasSubmittedPrevDate) {
+            openConfirmWarningModal(
+              `🌙 Night Shift Report Missing (${cleanDisplayDate(pInfo.prevDateStr)})!`,
+              `<div class="space-y-2.5 text-slate-800">
+                <p class="font-black text-xs text-indigo-900">
+                  <strong>${targetAgent.name} (${targetAgent.id})</strong> has NOT submitted a sales report on their <strong>Night Duty Shift (${cleanDisplayDate(pInfo.prevDateStr)} — ${pInfo.prevDateStr})</strong>, and <strong>${cleanDisplayDate(dateStr)}</strong> is their <strong>Day Off (DO)</strong>!
+                </p>
+                <p class="text-xs font-bold text-slate-600">
+                  Do you want to submit & move this report directly to their <strong>Night Shift date (${cleanDisplayDate(pInfo.prevDateStr)} • ${pInfo.prevDateStr})</strong> instead?
+                </p>
+              </div>`,
+              'Smart Night Shift Detector',
+              () => {
+                const subDateEl = document.getElementById('subDate');
+                if (subDateEl) subDateEl.value = dateToInputVal(pInfo.prevDateStr);
+                _origHandleSalesSubmitV30({ preventDefault: () => {} });
+              },
+              `🌙 Yes, Submit on Night Shift Date (${cleanDisplayDate(pInfo.prevDateStr)})`,
+              true
+            );
+            return;
+          }
+        }
+        _origHandleSalesSubmitV30(e);
+      };
+    } catch (patchV30Err) {
+      console.error('Non-fatal patch v30 warning:', patchV30Err);
     }
 
     window.addEventListener('load', init);
