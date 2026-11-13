@@ -14052,510 +14052,1079 @@ function renderChatHubView() {
     }
 
 
-    window.addEventListener('load', init);
-  
+    
     // =========================================================================
-    // MASTER OVERRIDE PATCH (v23) — ALL 6 FIXES INTEGRATED
-    // 1. Fixes \b regex bug in parseErpProductSummaryRow & 53.05 OCR decimal read
-    // 2. Stops Page Auto-Jumping / Scroll Bounce on tab switch & cloud sync
-    // 3. Fixes Browser Close still showing Online (75s strict heartbeat + beacon)
-    // 4. Adds 1-Click Day Off (DO) Submissions Filter (Own Team First + Edit/Delete/Move Date)
-    // 5. Adds Double Confirmation when an Agent submits a report on their Day Off (DO)
-    // 6. Upgrades CSV Download to Styled Excel Table (.xls) + Clean CSV
+    // CRASH-PROOF VERIFIED UPGRADE PATCH (v26) — PLACED BEFORE init()!
+    // 1. AI Dark-Mode & Decimal Product OCR Fix (53.05, 32.75, 29.5, 7.5, 10, 2.5)
+    // 2. Scroll Bounce / Page Jump Guard (No auto-jumping on tab switch or scroll)
+    // 3. Browser Tab Close Instant Offline Beacon + Strict 75s Heartbeat Timeout
+    // 4. Missing & Leave Tab -> 1-Click "⚠️ Day Off (DO) Submissions" Sub-Tab (Own Team First + Move Date/Edit/Delete)
+    // 5. Agent Day Off (DO) Double Confirmation Guard on handleSalesSubmit (subAgentId & subDate)
+    // 6. Dashboard Incentive Box: Combines Sprint 1/2/3 Cash Bonus + Drive Product Cash & Gift Items
+    // 7. Instant Login Data Pre-Loader (Eliminates 0/empty dashboard flash on login)
+    // 8. Organized Styled Table (.xls) Downloader
+    // 9. TL Personal Sales Entry + Admin Checkbox ("Include TL") in Daily & Monthly Reports + Strict Agent/Ranking/Missing Exclusion
     // =========================================================================
+    try {
+      // 1. FIXED AI PRODUCT SUMMARY LINE PARSER & DARK-MODE IMAGE PREPROCESSOR
+      normalizeImageBlobToDataUrl = function(fileOrBlob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = function(ev) {
+            const dataUrl = ev.target.result;
+            const img = new Image();
+            img.onload = function() {
+              try {
+                const origW = img.naturalWidth || img.width || 1200;
+                const origH = img.naturalHeight || img.height || 800;
+                const scale = origW < 1000 ? 3.0 : (origW < 1800 ? 2.2 : 1.25);
+                const w = Math.round(origW * scale);
+                const h = Math.round(origH * scale);
 
-    // 1. FIXED AI PRODUCT SUMMARY LINE PARSER & IMAGE PREPROCESSOR
-    normalizeImageBlobToDataUrl = function(fileOrBlob) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = function(ev) {
-          const dataUrl = ev.target.result;
-          const img = new Image();
-          img.onload = function() {
-            try {
-              const origW = img.naturalWidth || img.width || 1200;
-              const origH = img.naturalHeight || img.height || 800;
-              const scale = origW < 1000 ? 3.0 : (origW < 1800 ? 2.2 : 1.25);
-              const w = Math.round(origW * scale);
-              const h = Math.round(origH * scale);
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, w, h);
 
-              const canvas = document.createElement('canvas');
-              canvas.width = w;
-              canvas.height = h;
-              const ctx = canvas.getContext('2d');
-              ctx.fillStyle = '#ffffff';
-              ctx.fillRect(0, 0, w, h);
-              ctx.imageSmoothingEnabled = true;
-              ctx.imageSmoothingQuality = 'high';
-              ctx.drawImage(img, 0, 0, w, h);
-
-              const imgData = ctx.getImageData(0, 0, w, h);
-              const d = imgData.data;
-              let darkPixels = 0;
-              const sampleCount = Math.floor(d.length / 16);
-              for (let i = 0; i < d.length; i += 16) {
-                const lumSample = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-                if (lumSample < 95) darkPixels++;
-              }
-              const isDarkBgImage = (darkPixels / sampleCount) > 0.5;
-
-              for (let i = 0; i < d.length; i += 4) {
-                let r = d[i], g = d[i + 1], b = d[i + 2];
-                if (isDarkBgImage) {
-                  r = 255 - r; g = 255 - g; b = 255 - b;
+                const imgData = ctx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                let darkPixels = 0;
+                const sampleCount = Math.floor(d.length / 16);
+                for (let i = 0; i < d.length; i += 16) {
+                  const lumSample = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                  if (lumSample < 95) darkPixels++;
                 }
-                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                // Gentle contrast so '0' with a center dot is not misread as '8'
-                if (lum >= 210) {
-                  d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
-                } else {
-                  const v = Math.max(0, Math.round(lum * 0.55));
-                  d[i] = v; d[i + 1] = v; d[i + 2] = v;
+                const isDarkBgImage = (darkPixels / sampleCount) > 0.5;
+
+                for (let i = 0; i < d.length; i += 4) {
+                  let r = d[i], g = d[i + 1], b = d[i + 2];
+                  if (isDarkBgImage) {
+                    r = 255 - r; g = 255 - g; b = 255 - b;
+                  }
+                  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                  if (lum >= 210) {
+                    d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
+                  } else {
+                    const v = Math.max(0, Math.round(lum * 0.55));
+                    d[i] = v; d[i + 1] = v; d[i + 2] = v;
+                  }
                 }
+                ctx.putImageData(imgData, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+              } catch (canvasErr) {
+                resolve(dataUrl);
               }
-              ctx.putImageData(imgData, 0, 0);
-              resolve(canvas.toDataURL('image/png'));
-            } catch (canvasErr) {
-              resolve(dataUrl);
-            }
-          };
-          img.onerror = function() { resolve(dataUrl); };
-          img.src = dataUrl;
-        };
-        reader.onerror = function(err) { reject(err); };
-        reader.readAsDataURL(fileOrBlob);
-      });
-    };
-
-    parseErpProductSummaryRow = function(lineText) {
-      const raw = String(lineText || '').trim();
-      const lower = raw.toLowerCase();
-      if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || /^total\s*:/i.test(lower) || /product\s*name.*quantity\s*sold/i.test(lower)) {
-        return null;
-      }
-
-      let matchedCodeInfo = null;
-      const codeMatch = raw.match(/\b[A4][0O]{1,5}\d{1,6}\b/i) || raw.match(/\b00[02]\d{3}\b/);
-      if (codeMatch) {
-        const digitsOnly = codeMatch[0].replace(/^[^0O\d]/i, '').replace(/[Oo]/g, '0');
-        const normCode = 'A' + digitsOnly.padStart(6, '0');
-        if (ERP_PRODUCT_CODE_MAP[normCode]) {
-          matchedCodeInfo = ERP_PRODUCT_CODE_MAP[normCode];
-        }
-      }
-
-      let cat = matchedCodeInfo ? matchedCodeInfo.cat : null;
-      if (!cat) {
-        if (/black\s*seed\s*honey|bs\.?\s*h|kalojira|150052|150205|150133/i.test(lower)) cat = 'bsHoney';
-        else if (/sundarban|sundorban|shunderban|sun\.?\s*h|000008|000009|000214|150229|150199|150236/i.test(lower)) cat = 'sunHoney';
-        else if (/gawa\s*ghee|\bghee\b|shosti\s*food|120048|120055|120068/i.test(lower)) cat = 'gawaGhee';
-        else if (/pink\s*salt|himalayan|\bsalt\b|180024/i.test(lower)) cat = 'pinkSalt';
-        else if (/black\s*garlic|\bgarlic\b|200054/i.test(lower)) cat = 'blackGarlic';
-        else if (/ajwa|khejuri|dates|130210/i.test(lower)) cat = 'ajwa';
-      }
-      if (!cat) return null;
-
-      const hasErpTableColumns = Boolean(matchedCodeInfo) || /ghorer\s*bazar|\b894\d{7,10}\b|[৳$]\s*\d/i.test(raw);
-      if (!hasErpTableColumns) {
-        const normalizedDec = lower
-          .replace(/(\d)\s*[\.,]\s*(\d)/g, '$1.$2')
-          .replace(/(\d)\.85\s*k/g, '$1.05 k');
-        const directWeightMatch = normalizedDec.match(/(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i) ||
-                                  normalizedDec.match(/(\d+(?:\.\d+)?)\s*$/);
-        if (directWeightMatch) {
-          const rawVal = parseFloat(directWeightMatch[1]) || 0;
-          const unitStr = (directWeightMatch[2] || 'kg').toLowerCase();
-          const finalKg = unitStr.startsWith('k') ? Number(rawVal.toFixed(2)) : Number((rawVal / 1000).toFixed(2));
-          if (finalKg > 0) {
-            return {
-              cat,
-              unitKg: finalKg,
-              qty: 1,
-              totalKg: finalKg,
-              itemSummary: `${finalKg}kg`
             };
+            img.onerror = function() { resolve(dataUrl); };
+            img.src = dataUrl;
+          };
+          reader.onerror = function(err) { reject(err); };
+          reader.readAsDataURL(fileOrBlob);
+        });
+      };
+
+      parseErpProductSummaryRow = function(lineText) {
+        const raw = String(lineText || '').trim();
+        const lower = raw.toLowerCase();
+        if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || /^total\s*:/i.test(lower) || /product\s*name.*quantity\s*sold/i.test(lower)) {
+          return null;
+        }
+
+        let matchedCodeInfo = null;
+        const codeMatch = raw.match(/\b[A4][0O]{1,5}\d{1,6}\b/i) || raw.match(/\b00[02]\d{3}\b/);
+        if (codeMatch) {
+          const digitsOnly = codeMatch[0].replace(/^[^0O\d]/i, '').replace(/[Oo]/g, '0');
+          const normCode = 'A' + digitsOnly.padStart(6, '0');
+          if (ERP_PRODUCT_CODE_MAP[normCode]) {
+            matchedCodeInfo = ERP_PRODUCT_CODE_MAP[normCode];
           }
         }
-      }
 
-      let unitKg = matchedCodeInfo ? matchedCodeInfo.unitKg : 1.0;
-      let sizeLabel = matchedCodeInfo ? matchedCodeInfo.label : '1kg';
-      let sizeEndIdx = 0;
-
-      const weightRegex = /(?<![.\d])(500|250|200|400|100|1|2|0\.5|0\.25)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i;
-      const wMatch = lower.match(weightRegex);
-      if (wMatch) {
-        const wNum = parseFloat(wMatch[1]) || 1;
-        const wUnit = wMatch[2].toLowerCase();
-        if (wUnit.startsWith('k') || wNum <= 5) {
-          unitKg = wNum;
-          sizeLabel = `${wNum}kg`;
-        } else {
-          unitKg = wNum / 1000;
-          sizeLabel = `${wNum}gm`;
+        let cat = matchedCodeInfo ? matchedCodeInfo.cat : null;
+        if (!cat) {
+          if (/black\s*seed\s*honey|bs\.?\s*h|kalojira|150052|150205|150133/i.test(lower)) cat = 'bsHoney';
+          else if (/sundarban|sundorban|shunderban|sun\.?\s*h|000008|000009|000214|150229|150199|150236/i.test(lower)) cat = 'sunHoney';
+          else if (/gawa\s*ghee|\bghee\b|shosti\s*food|120048|120055|120068/i.test(lower)) cat = 'gawaGhee';
+          else if (/pink\s*salt|himalayan|\bsalt\b|180024/i.test(lower)) cat = 'pinkSalt';
+          else if (/black\s*garlic|\bgarlic\b|200054/i.test(lower)) cat = 'blackGarlic';
+          else if (/ajwa|khejuri|dates|130210/i.test(lower)) cat = 'ajwa';
         }
-        sizeEndIdx = wMatch.index + wMatch[0].length;
-      }
+        if (!cat) return null;
 
-      let tail = sizeEndIdx > 0 ? raw.substring(sizeEndIdx) : raw;
-      tail = tail.replace(/\b894\d{7,10}\b/g, ' ').replace(/\d+\.\d{2}/g, ' ');
-      const intTokens = tail.match(/\b\d{1,4}\b/g) || [];
-      if (intTokens.length === 0) return null;
-      const qty = parseInt(intTokens[intTokens.length - 1], 10) || 0;
-      if (qty <= 0 || qty > 5000) return null;
+        const hasErpTableColumns = Boolean(matchedCodeInfo) || /ghorer\s*bazar|\b894\d{7,10}\b|[৳$]\s*\d/i.test(raw);
+        if (!hasErpTableColumns) {
+          const normalizedDec = lower
+            .replace(/(\d)\s*[\.,]\s*(\d)/g, '$1.$2')
+            .replace(/(\d)\.85\s*k/g, '$1.05 k');
+          const directWeightMatch = normalizedDec.match(/(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i) ||
+                                    normalizedDec.match(/(\d+(?:\.\d+)?)\s*$/);
+          if (directWeightMatch) {
+            const rawVal = parseFloat(directWeightMatch[1]) || 0;
+            const unitStr = (directWeightMatch[2] || 'kg').toLowerCase();
+            const finalKg = unitStr.startsWith('k') ? Number(rawVal.toFixed(2)) : Number((rawVal / 1000).toFixed(2));
+            if (finalKg > 0) {
+              return {
+                cat,
+                unitKg: finalKg,
+                qty: 1,
+                totalKg: finalKg,
+                itemSummary: `${finalKg}kg`
+              };
+            }
+          }
+        }
 
-      const totalKg = Number((unitKg * qty).toFixed(2));
-      return {
-        cat,
-        unitKg,
-        qty,
-        totalKg,
-        itemSummary: `${sizeLabel} × ${qty} = ${totalKg}kg`
+        let unitKg = matchedCodeInfo ? matchedCodeInfo.unitKg : 1.0;
+        let sizeLabel = matchedCodeInfo ? matchedCodeInfo.label : '1kg';
+        let sizeEndIdx = 0;
+
+        const weightRegex = /(?<![.\d])(500|250|200|400|100|1|2|0\.5|0\.25)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i;
+        const wMatch = lower.match(weightRegex);
+        if (wMatch) {
+          const wNum = parseFloat(wMatch[1]) || 1;
+          const wUnit = wMatch[2].toLowerCase();
+          if (wUnit.startsWith('k') || wNum <= 5) {
+            unitKg = wNum;
+            sizeLabel = `${wNum}kg`;
+          } else {
+            unitKg = wNum / 1000;
+            sizeLabel = `${wNum}gm`;
+          }
+          sizeEndIdx = wMatch.index + wMatch[0].length;
+        }
+
+        let tail = sizeEndIdx > 0 ? raw.substring(sizeEndIdx) : raw;
+        tail = tail.replace(/\b894\d{7,10}\b/g, ' ').replace(/\d+\.\d{2}/g, ' ');
+        const intTokens = tail.match(/\b\d{1,4}\b/g) || [];
+        if (intTokens.length === 0) return null;
+        const qty = parseInt(intTokens[intTokens.length - 1], 10) || 0;
+        if (qty <= 0 || qty > 5000) return null;
+
+        const totalKg = Number((unitKg * qty).toFixed(2));
+        return {
+          cat,
+          unitKg,
+          qty,
+          totalKg,
+          itemSummary: `${sizeLabel} × ${qty} = ${totalKg}kg`
+        };
       };
-    };
 
-    // 2. STOP PAGE JUMPING / AUTO-SCROLL BOUNCE ON TAB SWITCH & CLOUD SYNC
-    let lastUserScrollOrTouchMs = 0;
-    window.addEventListener('scroll', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true, capture: true });
-    window.addEventListener('wheel', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
-    window.addEventListener('touchmove', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
-    window.addEventListener('mousedown', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
+      // 2. STOP PAGE JUMPING / AUTO-SCROLL BOUNCE ON TAB SWITCH & CLOUD SYNC
+      let lastUserScrollOrTouchMs = 0;
+      window.addEventListener('scroll', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true, capture: true });
+      window.addEventListener('wheel', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
+      window.addEventListener('touchmove', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
+      window.addEventListener('mousedown', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
 
-    const _origSetTab = setTab;
-    setTab = function(tab) {
-      lastUserScrollOrTouchMs = 0;
-      _origSetTab(tab);
-      const mainEl = document.getElementById('mainScrollContainer');
-      if (mainEl) mainEl.scrollTop = 0;
-    };
+      const _origSetTabSafe = setTab;
+      setTab = function(tab) {
+        lastUserScrollOrTouchMs = 0;
+        _origSetTabSafe(tab);
+        const mainEl = document.getElementById('mainScrollContainer');
+        if (mainEl) mainEl.scrollTop = 0;
+      };
 
-    const _origHandleCloudDataV23 = handleCloudData;
-    handleCloudData = function(res) {
-      if ((Date.now() - lastUserScrollOrTouchMs) < 2800 || isAnyModalOpen() || isUserInteractingWithControl()) {
-        if (res && Array.isArray(res.onlineUsers)) {
-          const nowClient = Date.now();
-          setStored('online_users', res.onlineUsers.map(o => ({
-            ...o,
-            clientReceivedAt: (o && o.state !== 'Offline' && Number(o.lastSeen) > 0) ? nowClient : 0
-          })));
+      const _origHandleCloudDataSafe = handleCloudData;
+      handleCloudData = function(res) {
+        if ((Date.now() - lastUserScrollOrTouchMs) < 2800 || isAnyModalOpen() || isUserInteractingWithControl()) {
+          if (res && Array.isArray(res.onlineUsers)) {
+            const nowClient = Date.now();
+            setStored('online_users', res.onlineUsers.map(o => ({
+              ...o,
+              clientReceivedAt: (o && o.state !== 'Offline' && Number(o.lastSeen) > 0) ? nowClient : 0
+            })));
+          }
+          return;
         }
-        return;
-      }
-      _origHandleCloudDataV23(res);
-    };
+        _origHandleCloudDataSafe(res);
+      };
 
-    // 3. FIX BROWSER CLOSE STILL SHOWING ONLINE (Instant Offline Beacon + Strict 75s Expiry)
-    window.addEventListener('beforeunload', () => {
-      if (!currentUser || isHardRefreshing) return;
-      try {
-        const payload = JSON.stringify({
-          action: 'USER_LOGOUT',
-          userId: String(currentUser.id),
-          userName: currentUser.name,
-          team: currentUser.team,
-          pingUserId: String(currentUser.id),
-          pingName: currentUser.name,
-          pingRole: currentUser.role,
-          pingTeam: currentUser.team,
-          pingState: 'Offline'
-        });
-        if (navigator.sendBeacon) {
-          const params = new URLSearchParams();
-          params.append('action', 'USER_LOGOUT');
-          params.append('payload', payload);
-          navigator.sendBeacon(webhookUrl, params);
+      // 3. FIX BROWSER CLOSE STILL SHOWING ONLINE (Instant Offline Beacon + Strict 75s Expiry)
+      window.addEventListener('beforeunload', () => {
+        if (!currentUser || isHardRefreshing) return;
+        try {
+          const payload = JSON.stringify({
+            action: 'USER_LOGOUT',
+            userId: String(currentUser.id),
+            userName: currentUser.name,
+            team: currentUser.team,
+            pingUserId: String(currentUser.id),
+            pingName: currentUser.name,
+            pingRole: currentUser.role,
+            pingTeam: currentUser.team,
+            pingState: 'Offline'
+          });
+          if (navigator.sendBeacon) {
+            const params = new URLSearchParams();
+            params.append('action', 'USER_LOGOUT');
+            params.append('payload', payload);
+            navigator.sendBeacon(webhookUrl, params);
+          }
+        } catch (e) {}
+      });
+
+      getUserOnlineStatus = function(userId) {
+        const uid = String(userId).trim();
+        if (currentUser && String(currentUser.id).trim() === uid) {
+          if (currentUser.role === 'agent') {
+            const today = getTodayFormatted();
+            const myAtt = getStored('attendance_records', []).find(a => String(a.userId).trim() === uid && a.date === today);
+            if (myAtt && myAtt.status === 'On Break') return 'On Break';
+          }
+          return 'Online';
         }
-      } catch (e) {}
-    });
-
-    getUserOnlineStatus = function(userId) {
-      const uid = String(userId).trim();
-      if (currentUser && String(currentUser.id).trim() === uid) {
-        if (currentUser.role === 'agent') {
-          const today = getTodayFormatted();
-          const myAtt = getStored('attendance_records', []).find(a => String(a.userId).trim() === uid && a.date === today);
-          if (myAtt && myAtt.status === 'On Break') return 'On Break';
+        const now = Date.now();
+        const onlineList = getStored('online_users', []);
+        const oRec = onlineList.find(o => String(o.id).trim() === uid);
+        if (oRec && oRec.state !== 'Offline' && Number(oRec.lastSeen) > 0) {
+          const refTs = Number(oRec.clientReceivedAt || oRec.lastSeen || 0);
+          if ((now - refTs) < 75000) {
+            return oRec.state === 'On Break' ? 'On Break' : 'Online';
+          }
         }
-        return 'Online';
-      }
-      const now = Date.now();
-      const onlineList = getStored('online_users', []);
-      const oRec = onlineList.find(o => String(o.id).trim() === uid);
-      if (oRec && oRec.state !== 'Offline' && Number(oRec.lastSeen) > 0) {
-        const refTs = Number(oRec.clientReceivedAt || oRec.lastSeen || 0);
-        if ((now - refTs) < 75000) {
-          return oRec.state === 'On Break' ? 'On Break' : 'Online';
+        return 'Offline';
+      };
+
+      // 4 & 5. ROSTER DAY OFF (DO) CHECKER, DOUBLE CONFIRMATION (ON handleSalesSubmit!) & MISSING/LEAVE TAB SUB-TAB
+      window.showOnlyDayOffReportsFilter = false;
+
+      window.getAgentRosterShiftForDateStr = function(empId, dateStr) {
+        if (!empId || !dateStr || String(dateStr).startsWith('MONTHLY_PROD_')) return '';
+        const parts = String(dateStr).replace(/^'/, '').trim().split('/');
+        if (parts.length !== 3) return '';
+        const dObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        if (isNaN(dObj.getTime())) return '';
+        const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+        const dayKey = dayKeys[dObj.getDay()];
+        const mKey = `${parts[1]}/${parts[2]}`;
+        const rosterList = getRosterForMonth(mKey);
+        const rRow = rosterList.find(r => String(r.id).trim() === String(empId).trim());
+        if (!rRow) return '';
+        return String(rRow[dayKey] || '').trim();
+      };
+
+      window.isDateAgentDayOff = function(empId, dateStr) {
+        return window.getAgentRosterShiftForDateStr(empId, dateStr).toUpperCase() === 'DO';
+      };
+
+      window.toggleDayOffReportsFilter = function() {
+        window.showOnlyDayOffReportsFilter = !window.showOnlyDayOffReportsFilter;
+        if (window.showOnlyDayOffReportsFilter) {
+          reportsDateFilter = 'ALL';
         }
-      }
-      return 'Offline';
-    };
+        renderAppLayout();
+      };
 
-    // 4 & 5. 1-CLICK DAY OFF (DO) REPORT FILTER, TEAM-FIRST SORT, DATE EDIT & DOUBLE CONFIRMATION
-    let showOnlyDayOffReportsFilter = false;
+      window.handleChangeReportDatePrompt = function(userId, userName, oldDateStr) {
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const targetUser = allUsers.find(u => String(u.id) === String(userId));
+        const targetTeam = targetUser ? targetUser.team : '';
+        if (!isSuperAdmin(currentUser) && !canEditTeamData(currentUser, targetTeam)) {
+          showPortalToast('Permission Denied', 'You can only edit or move reports for your own team.', 'error');
+          return;
+        }
+        const newDateInput = prompt(`Move report date for ${userName} (${userId}):\nCurrent Date (Day Off): ${oldDateStr}\n\nEnter new date (DD/MM/YYYY):`, oldDateStr);
+        if (!newDateInput || newDateInput.trim() === oldDateStr) return;
+        const cleanNewDate = newDateInput.trim();
+        if (!/^\d{2}\/\d{2}\/20\d{2}$/.test(cleanNewDate)) {
+          showPortalToast('Invalid Date Format', 'Please enter date as DD/MM/YYYY (e.g. 11/11/2026).', 'error');
+          return;
+        }
 
-    function getAgentRosterShiftForDateStr(empId, dateStr) {
-      if (!empId || !dateStr || String(dateStr).startsWith('MONTHLY_PROD_')) return '';
-      const parts = String(dateStr).replace(/^'/, '').trim().split('/');
-      if (parts.length !== 3) return '';
-      const dObj = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
-      if (isNaN(dObj.getTime())) return '';
-      const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-      const dayKey = dayKeys[dObj.getDay()];
-      const mKey = `${parts[1]}/${parts[2]}`;
-      const rosterList = getRosterForMonth(mKey);
-      const rRow = rosterList.find(r => String(r.id).trim() === String(empId).trim());
-      if (!rRow) return '';
-      return String(rRow[dayKey] || '').trim();
-    }
-
-    function isDateAgentDayOff(empId, dateStr) {
-      return getAgentRosterShiftForDateStr(empId, dateStr).toUpperCase() === 'DO';
-    }
-
-    function toggleDayOffReportsFilter() {
-      showOnlyDayOffReportsFilter = !showOnlyDayOffReportsFilter;
-      if (showOnlyDayOffReportsFilter) {
-        reportsDateFilter = 'ALL';
-      }
-      renderAppLayout();
-    }
-
-    function handleChangeReportDatePrompt(userId, userName, oldDateStr) {
-      const allUsers = getUsersForMonth(selectedMonthKey, true);
-      const targetUser = allUsers.find(u => String(u.id) === String(userId));
-      const targetTeam = targetUser ? targetUser.team : '';
-      if (!isSuperAdmin(currentUser) && !canEditTeamData(currentUser, targetTeam)) {
-        showPortalToast('Permission Denied', 'You can only edit or move reports for your own team.', 'error');
-        return;
-      }
-      const newDateInput = prompt(`Change report date for ${userName} (${userId}):\nCurrent Date (Day Off): ${oldDateStr}\n\nEnter new date (DD/MM/YYYY):`, oldDateStr);
-      if (!newDateInput || newDateInput.trim() === oldDateStr) return;
-      const cleanNewDate = newDateInput.trim();
-      if (!/^\d{2}\/\d{2}\/20\d{2}$/.test(cleanNewDate)) {
-        showPortalToast('Invalid Date Format', 'Please enter date as DD/MM/YYYY (e.g. 11/11/2026).', 'error');
-        return;
-      }
-
-      openConfirmWarningModal(
-        `Move Report Date (${oldDateStr} → ${cleanNewDate})?`,
-        `Are you sure you want to move <strong>${userName} (${userId})</strong>'s sales report from <strong>${oldDateStr} (Day Off)</strong> to <strong>${cleanNewDate}</strong>?`,
-        'Confirm Date Correction',
-        async () => {
-          let sales = getStored('sales_records', []);
-          const existingRec = sales.find(s => String(s.userId) === String(userId) && String(s.date).replace(/^'/, '').trim() === oldDateStr);
-          if (!existingRec) return;
-
-          const updatedEntry = { ...existingRec, date: cleanNewDate };
-          sales = sales.filter(s => !(String(s.userId) === String(userId) && (s.date === oldDateStr || s.date === cleanNewDate)));
-          sales.unshift(updatedEntry);
-          setStored('sales_records', sales);
-          markLocalSalesMutatedNow();
-
-          const logMeta = recordActivityLog('Moved Day Off Report Date', `Moved ${userName} (${userId}) report from ${oldDateStr} (DO) to ${cleanNewDate}`);
-          renderAppLayout();
-          showPortalToast('Report Date Updated!', `Moved ${userName}'s report to ${cleanNewDate}.`, 'success');
-
-          await postToSheet('DELETE_SALES_RECORD', { userId: String(userId), date: oldDateStr, ...logMeta }).catch(() => {});
-          await postToSheet('DAILY_SALES_SUBMIT', { ...updatedEntry, ...logMeta }).catch(() => {});
-        },
-        'Yes, Move Date & Sync',
-        true
-      );
-    }
-
-    const _origHandleReportSubmitV23 = handleReportSubmit;
-    handleReportSubmit = function(e) {
-      e.preventDefault();
-      const u = currentUser;
-      const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
-      const selectedAgId = isAdmin ? document.getElementById('modalAgentSelect').value : u.id;
-      const dateStr = inputValToDateStr(document.getElementById('modalDate').value);
-      const allUsers = getUsersForMonth(selectedMonthKey, true);
-      const targetAgent = allUsers.find(a => String(a.id) === String(selectedAgId)) || u;
-
-      if (isDateAgentDayOff(targetAgent.id, dateStr)) {
         openConfirmWarningModal(
-          `⚠️ Day Off (DO) Warning — ${cleanDisplayDate(dateStr)}!`,
-          `<div class="space-y-2 text-rose-900">
-            <p class="font-black text-xs">According to the Duty Roster, <strong>${cleanDisplayDate(dateStr)} (${dateStr})</strong> is <strong>${targetAgent.name} (${targetAgent.id})</strong>'s weekly <strong>Day Off (DO)</strong>!</p>
-            <p class="text-[11px] font-bold text-slate-700">💡 <strong>Night Shift Check:</strong> If this report is from a Night Shift duty before the Day Off, please cancel and select the previous working date.</p>
-            <p class="text-[11px] font-extrabold text-amber-800">Did ${targetAgent.name} actually work on their Day Off?</p>
-          </div>`,
-          'Day Off (DO) Protection — Step 1 of 2',
-          () => {
-            setTimeout(() => {
-              openConfirmWarningModal(
-                `🔒 Final Confirmation (2/2): Submit on Day Off?`,
-                `Please confirm a 2nd time: Are you 100% sure you want to save this sales report for <strong>${targetAgent.name}</strong> on their <strong>Day Off (${cleanDisplayDate(dateStr)})</strong>?`,
-                'Double Confirmation — Step 2 of 2',
-                () => {
-                  _origHandleReportSubmitV23(e);
-                },
-                'Yes, Confirm Day Off Report',
-                true
-              );
-            }, 200);
+          `Move Report Date (${oldDateStr} → ${cleanNewDate})?`,
+          `Are you sure you want to move <strong>${userName} (${userId})</strong>'s sales report from <strong>${oldDateStr} (Day Off)</strong> to <strong>${cleanNewDate}</strong>?`,
+          'Confirm Date Correction',
+          async () => {
+            let sales = getStored('sales_records', []);
+            const existingRec = sales.find(s => String(s.userId) === String(userId) && String(s.date).replace(/^'/, '').trim() === oldDateStr);
+            if (!existingRec) return;
+
+            const updatedEntry = { ...existingRec, date: cleanNewDate };
+            sales = sales.filter(s => !(String(s.userId) === String(userId) && (s.date === oldDateStr || s.date === cleanNewDate)));
+            sales.unshift(updatedEntry);
+            setStored('sales_records', sales);
+            markLocalSalesMutatedNow();
+
+            const logMeta = recordActivityLog('Moved Day Off Report Date', `Moved ${userName} (${userId}) report from ${oldDateStr} (DO) to ${cleanNewDate}`);
+            renderAppLayout();
+            showPortalToast('Report Date Updated!', `Moved ${userName}'s report to ${cleanNewDate}.`, 'success');
+
+            await postToSheet('DELETE_SALES_RECORD', { userId: String(userId), date: oldDateStr, ...logMeta }).catch(() => {});
+            await postToSheet('DAILY_SALES_SUBMIT', { ...updatedEntry, ...logMeta }).catch(() => {});
           },
-          'Proceed to 2nd Confirmation',
+          'Yes, Move Date & Sync',
           true
         );
-        return;
-      }
-      _origHandleReportSubmitV23(e);
-    };
+      };
 
-    const _origRenderReportsV23 = renderReports;
-    renderReports = function() {
-      const baseHtml = _origRenderReportsV23();
-      const u = currentUser;
-      const myTeamNorm = u ? normalizeTeamNameAlias(u.team) : '';
-      const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
-        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+      // FIXED: Wrap handleSalesSubmit (using subAgentId & subDate!) for Day Off Double Confirmation
+      const _origHandleSalesSubmitSafe = handleSalesSubmit;
+      handleSalesSubmit = function(e) {
+        e.preventDefault();
+        const u = currentUser;
+        const isAdmin = hasFeatureAccess(u, 'feat_manage_all_sales');
+        const selectedAgId = isAdmin ? (document.getElementById('subAgentId')?.value || u.id) : u.id;
+        const dateStr = inputValToDateStr(document.getElementById('subDate')?.value);
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const targetAgent = allUsers.find(a => String(a.id) === String(selectedAgId)) || u;
 
-      let doReports = allMonthSales.filter(s => {
-        if (activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(s.team) !== activeChannel) return false;
-        if (!canViewAll(u) && String(s.userId) !== String(u.id)) return false;
-        if (logsFilterScope !== 'ALL' && logsFilterScope !== 'ALL_OMNI' && logsFilterScope !== 'ALL_FB' && logsFilterScope !== 'ALL_WA' && logsFilterScope !== 'MINE') {
-          if (normalizeTeamNameAlias(s.team) !== normalizeTeamNameAlias(logsFilterScope)) return false;
+        if (window.isDateAgentDayOff(targetAgent.id, dateStr)) {
+          openConfirmWarningModal(
+            `⚠️ Day Off (DO) Warning — ${cleanDisplayDate(dateStr)}!`,
+            `<div class="space-y-2 text-rose-900">
+              <p class="font-black text-xs">According to the Duty Roster, <strong>${cleanDisplayDate(dateStr)} (${dateStr})</strong> is <strong>${targetAgent.name} (${targetAgent.id})</strong>'s weekly <strong>Day Off (DO)</strong>!</p>
+              <p class="text-[11px] font-bold text-slate-700">💡 <strong>Night Shift Check:</strong> If this report is from a Night Shift duty before the Day Off, please cancel and select the previous working date.</p>
+              <p class="text-[11px] font-extrabold text-amber-800">Did ${targetAgent.name} actually work on their Day Off?</p>
+            </div>`,
+            'Day Off (DO) Protection — Step 1 of 2',
+            () => {
+              setTimeout(() => {
+                openConfirmWarningModal(
+                  `🔒 Final Confirmation (2/2): Submit on Day Off?`,
+                  `Please confirm a 2nd time: Are you 100% sure you want to save this sales report for <strong>${targetAgent.name}</strong> on their <strong>Day Off (${cleanDisplayDate(dateStr)})</strong>?`,
+                  'Double Confirmation — Step 2 of 2',
+                  () => {
+                    _origHandleSalesSubmitSafe(e);
+                  },
+                  'Yes, Confirm Day Off Report',
+                  true
+                );
+              }, 200);
+            },
+            'Proceed to 2nd Confirmation',
+            true
+          );
+          return;
         }
-        return isDateAgentDayOff(s.userId, s.date);
-      });
+        _origHandleSalesSubmitSafe(e);
+      };
 
-      doReports.sort((a, b) => {
-        const aMyTeam = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : 1;
-        const bMyTeam = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : 1;
-        if (aMyTeam !== bMyTeam) return aMyTeam - bMyTeam;
-        return (parseInt(b.date.split('/')[0], 10) || 0) - (parseInt(a.date.split('/')[0], 10) || 0);
-      });
+      // Add 1-Click "⚠️ Day Off (DO) Submissions" Sub-Tab inside Missing & Leave Tab (Excludes TLs!)
+      const _origRenderMissingReportsAndLeaveViewSafe = renderMissingReportsAndLeaveView;
+      renderMissingReportsAndLeaveView = function() {
+        const u = currentUser;
+        const isAdminOrSup = canViewAll(u);
+        const myTeamNorm = u ? normalizeTeamNameAlias(u.team) : '';
+        const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+          .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
 
-      const doBannerHtml = `
-        <div class="card-dynamic p-4 border-2 ${showOnlyDayOffReportsFilter ? 'border-rose-500 bg-rose-50/70' : 'border-amber-300 bg-amber-50/50'} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-2xl ${doReports.length > 0 ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'} flex items-center justify-center text-sm font-black shadow-sm shrink-0">
-              <i class="fa-solid ${doReports.length > 0 ? 'fa-calendar-xmark' : 'fa-calendar-check'}"></i>
-            </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${doReports.length > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}">
-                  1-Click Day Off (DO) Report Checker
+        let doSubmissions = allMonthSales.filter(s => {
+          if (window.isUserTeamLeaderRecord && window.isUserTeamLeaderRecord(s.userId)) return false;
+          if (activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(s.team) !== activeChannel) return false;
+          if (!isAdminOrSup && String(s.userId) !== String(u.id)) return false;
+          if (isAdminOrSup && missingReportsTeamScope !== 'ALL' && normalizeTeamNameAlias(s.team) !== normalizeTeamNameAlias(missingReportsTeamScope)) return false;
+          if (isAdminOrSup && missingReportsAgentFilter !== 'ALL' && String(s.userId) !== String(missingReportsAgentFilter)) return false;
+          if (missingReportsDateFilter !== 'ALL' && s.date !== missingReportsDateFilter) return false;
+          return window.isDateAgentDayOff(s.userId, s.date);
+        });
+
+        doSubmissions.sort((a, b) => {
+          const aMy = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : 1;
+          const bMy = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : 1;
+          if (aMy !== bMy) return aMy - bMy;
+          return (parseInt(b.date.split('/')[0], 10) || 0) - (parseInt(a.date.split('/')[0], 10) || 0);
+        });
+
+        let htmlOut = _origRenderMissingReportsAndLeaveViewSafe();
+
+        const leaveBtnMarker = `<span>Leave & Absent Log (`;
+        const btnIdx = htmlOut.indexOf(leaveBtnMarker);
+        if (btnIdx !== -1) {
+          const closeBtnIdx = htmlOut.indexOf('</button>', btnIdx);
+          if (closeBtnIdx !== -1) {
+            const doSubTabBtn = `
+                <button type="button" onclick="setMissingReportsSubView('DO_REPORTS')" class="px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${missingReportsSubView === 'DO_REPORTS' ? 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-400' : 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'}">
+                  <i class="fa-solid fa-user-clock"></i>
+                  <span>⚠️ Day Off (DO) Submissions (${doSubmissions.length})</span>
+                </button>`;
+            htmlOut = htmlOut.slice(0, closeBtnIdx + 9) + doSubTabBtn + htmlOut.slice(closeBtnIdx + 9);
+          }
+        }
+
+        if (missingReportsSubView === 'DO_REPORTS') {
+          const tableMarker = `<div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between">`;
+          const tIdx = htmlOut.indexOf(tableMarker);
+          if (tIdx !== -1) {
+            const cardStartIdx = htmlOut.lastIndexOf('<div class="card-dynamic', tIdx);
+            if (cardStartIdx !== -1) {
+              const doTableHtml = `
+            <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-amber-400">
+              <div class="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs font-black uppercase tracking-wider text-amber-400">
+                  <i class="fa-solid fa-calendar-day mr-1.5"></i>Agent Sales Reports Submitted on Roster Day Off (DO) — ${selectedMonthKey} (${doSubmissions.length})
                 </span>
-                <span class="text-xs font-black text-slate-900">${doReports.length} Report(s) Found on Day Off (${selectedMonthKey})</span>
+                <span class="text-[11px] font-bold text-slate-300">
+                  ${u.role === 'admin' ? `${u.team} shown first • Move Date, Edit or Delete with confirmation` : 'Your Day Off (DO) Submissions'}
+                </span>
               </div>
-              <p class="text-[11px] font-bold text-slate-600 mt-0.5">
-                View who submitted reports on their weekly Day Off (such as Night Shift reports entered on DO). Your own team is listed first.
-              </p>
-            </div>
-          </div>
-          <button type="button" onclick="toggleDayOffReportsFilter()" class="px-4 py-2.5 rounded-xl text-xs font-black shadow-sm transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${showOnlyDayOffReportsFilter ? 'bg-slate-900 text-white' : 'bg-rose-600 hover:bg-rose-700 text-white'}">
-            <i class="fa-solid fa-filter"></i>
-            ${showOnlyDayOffReportsFilter ? 'Show All Daily Reports' : `View Day Off (DO) Reports (${doReports.length})`}
-          </button>
-        </div>
-
-        ${showOnlyDayOffReportsFilter ? `
-          <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-rose-300">
-            <div class="px-5 py-3 bg-rose-900 text-white flex items-center justify-between">
-              <span class="text-xs font-black uppercase tracking-wider"><i class="fa-solid fa-triangle-exclamation text-amber-300 mr-1.5"></i>Reports Submitted on Roster Day Off (DO) — ${selectedMonthKey}</span>
-              <span class="text-[11px] font-bold text-rose-200">${u.role === 'admin' ? `${u.team} listed first • Each TL can edit/delete their own team (Nazim can edit all)` : 'Your Day Off Submissions'}</span>
-            </div>
-            <table class="w-full text-left text-xs whitespace-nowrap">
-              <thead class="table-header-light uppercase font-extrabold">
-                <tr>
-                  <th class="p-3.5">Report Date</th>
-                  <th class="p-3.5">Roster Status</th>
-                  <th class="p-3.5">Agent Name & ID</th>
-                  <th class="p-3.5">Team</th>
-                  <th class="p-3.5 text-center">Leads</th>
-                  <th class="p-3.5 text-center">Orders</th>
-                  <th class="p-3.5">Sales Amount</th>
-                  <th class="p-3.5 text-right">Move Date / Edit / Delete</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100 font-semibold">
-                ${doReports.length === 0 ? `<tr><td colspan="8" class="p-8 text-center text-emerald-700 font-extrabold">🎉 No reports were submitted on a Day Off (DO) in ${selectedMonthKey}!</td></tr>` : ''}
-                ${doReports.map(r => {
-                  const canManageThisRow = isSuperAdmin(u) || (u.role === 'admin' && canEditTeamData(u, r.team)) || (u.role === 'agent' && String(r.userId) === String(u.id));
-                  return `
-                    <tr class="hover:bg-rose-50/50 ${normalizeTeamNameAlias(r.team) === myTeamNorm ? 'bg-amber-50/40' : ''}">
-                      <td class="p-3.5 font-extrabold text-rose-700">${cleanDisplayDate(r.date)} <span class="text-[10px] text-slate-400">(${r.date})</span></td>
-                      <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-black text-[10px]">⚠️ Roster: DO (Day Off)</span></td>
-                      <td class="p-3.5 font-extrabold text-slate-900">${r.userName} <span class="text-slate-400 text-[10px]">(${r.userId})</span></td>
-                      <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(r.team)}">${r.team}</span></td>
-                      <td class="p-3.5 text-center font-bold">${r.leads}</td>
-                      <td class="p-3.5 text-center font-black text-blue-600">${r.orders}</td>
-                      <td class="p-3.5 font-black text-emerald-600">৳${Number(r.amount || 0).toLocaleString()}</td>
-                      <td class="p-3.5 text-right space-x-1">
-                        ${canManageThisRow ? `
-                          <button onclick="handleChangeReportDatePrompt('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg font-extrabold text-[11px]" title="Change date (e.g. move Night shift report to previous date)">
-                            <i class="fa-solid fa-calendar-day mr-1"></i>Move Date
-                          </button>
-                          <button onclick="openReportModal('${r.userId}', '${r.date}')" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg font-extrabold text-[11px]">
-                            <i class="fa-solid fa-pen-to-square mr-1"></i>Edit Data
-                          </button>
-                          <button onclick="handleDirectDeleteReport('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-extrabold text-[11px]">
-                            <i class="fa-solid fa-trash-can mr-1"></i>Delete
-                          </button>
-                        ` : `<span class="text-[10px] font-bold text-slate-400">View Only (${r.team})</span>`}
+              <table class="w-full text-left text-xs whitespace-nowrap">
+                <thead class="table-header-light uppercase font-extrabold">
+                  <tr>
+                    <th class="p-3.5">SL</th>
+                    <th class="p-3.5">Submitted Date (DO)</th>
+                    <th class="p-3.5">Agent Name & ID</th>
+                    <th class="p-3.5">Team</th>
+                    <th class="p-3.5 text-center">Roster Status</th>
+                    <th class="p-3.5 text-center">Leads / Orders</th>
+                    <th class="p-3.5">Sales Amount</th>
+                    <th class="p-3.5 text-right">Actions (Move Date / Edit / Delete)</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-semibold">
+                  ${doSubmissions.length === 0 ? `
+                    <tr>
+                      <td colspan="8" class="p-10 text-center text-emerald-700 font-extrabold">
+                        🎉 No agent sales reports were submitted on a Day Off (DO) for the selected filter in ${selectedMonthKey}!
                       </td>
                     </tr>
-                  `;
+                  ` : ''}
+                  ${doSubmissions.map((r, idx) => {
+                    const canManageRow = isSuperAdmin(u) || (u.role === 'admin' && canEditTeamData(u, r.team)) || (u.role === 'agent' && String(r.userId) === String(u.id));
+                    return `
+                      <tr class="hover:bg-amber-50/50 ${normalizeTeamNameAlias(r.team) === myTeamNorm ? 'bg-amber-50/30' : ''}">
+                        <td class="p-3.5 font-black text-slate-400">#${idx + 1}</td>
+                        <td class="p-3.5">
+                          <span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-black text-xs">${cleanDisplayDate(r.date)}</span>
+                          <span class="text-[10px] text-slate-400 ml-1">(${r.date})</span>
+                        </td>
+                        <td class="p-3.5 font-extrabold text-slate-900">${r.userName} <span class="text-slate-400 text-[10px]">(${r.userId})</span></td>
+                        <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(r.team)}">${r.team}</span></td>
+                        <td class="p-3.5 text-center"><span class="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 font-black text-[10px]">⚠️ Roster: DO (Day Off)</span></td>
+                        <td class="p-3.5 text-center font-bold">${r.leads} Leads / <strong class="text-blue-600">${r.orders} Ord</strong></td>
+                        <td class="p-3.5 font-black text-emerald-600 text-sm">৳${Number(r.amount || 0).toLocaleString()}</td>
+                        <td class="p-3.5 text-right space-x-1.5">
+                          ${canManageRow ? `
+                            <button type="button" onclick="handleChangeReportDatePrompt('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl font-black text-[11px] shadow-xs cursor-pointer">
+                              <i class="fa-solid fa-calendar-day mr-1"></i>Move Date
+                            </button>
+                            <button type="button" onclick="openReportModal('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl font-extrabold text-[11px] cursor-pointer">
+                              <i class="fa-solid fa-pen-to-square mr-1"></i>Edit Data
+                            </button>
+                            <button type="button" onclick="handleDirectDeleteReport('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-extrabold text-[11px] cursor-pointer">
+                              <i class="fa-solid fa-trash-can mr-1"></i>Delete
+                            </button>
+                          ` : `<span class="text-[11px] font-bold text-slate-400">View Only (${r.team})</span>`}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+              htmlOut = htmlOut.slice(0, cardStartIdx) + doTableHtml;
+            }
+          }
+        }
+        return htmlOut;
+      };
+
+      // 6. SPRINT + DRIVE PRODUCT COMBINED INCENTIVES FOR DASHBOARD BOX
+      window.computeSingleAgentSprintIncentive = function(agentObj, monthSalesList, mKey) {
+        if (!agentObj || !isSprintSystemActiveForMonth(mKey || selectedMonthKey)) {
+          return { sprintMoney: 0, sprintBadges: [] };
+        }
+        const chKey = getChannelForTeam(agentObj.team) === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        const gradeKey = agentObj.role === 'admin' ? 'TL' : (agentObj.grade || 'A');
+        const rewardSpec = (SPRINT_REWARD_PROGRAM[chKey] && SPRINT_REWARD_PROGRAM[chKey][gradeKey])
+          ? SPRINT_REWARD_PROGRAM[chKey][gradeKey]
+          : SPRINT_REWARD_PROGRAM.FACEBOOK['A'];
+
+        const baseTgt = Number(agentObj.baseTarget) || 0;
+        const workTgt = calcWorkingTargetFromBase(baseTgt, chKey);
+        if (workTgt <= 0) return { sprintMoney: 0, sprintBadges: [] };
+
+        const s1Goal = Math.round(workTgt * 0.40);
+        const s2Goal = Math.round(workTgt * 0.35);
+        const s3Goal = Math.round(workTgt * 0.35);
+
+        const agSales = deduplicateSalesRecordsList(monthSalesList).filter(s =>
+          String(s.userId).trim() === String(agentObj.id).trim() &&
+          String(s.date || '').endsWith(mKey || selectedMonthKey) &&
+          !String(s.date || '').startsWith('MONTHLY_PROD_')
+        );
+
+        let s1Sales = 0, s2Sales = 0, s3Sales = 0;
+        agSales.forEach(s => {
+          const day = parseInt(String(s.date).split('/')[0], 10) || 0;
+          const amt = Number(s.amount) || 0;
+          if (day <= 10) s1Sales += amt;
+          else if (day <= 20) s2Sales += amt;
+          else s3Sales += amt;
+        });
+
+        const hitS1 = s1Goal > 0 && s1Sales >= s1Goal;
+        const hitS2 = s2Goal > 0 && s2Sales >= s2Goal;
+        const hitS3 = s3Goal > 0 && s3Sales >= s3Goal;
+        const hitCount = (hitS1 ? 1 : 0) + (hitS2 ? 1 : 0) + (hitS3 ? 1 : 0);
+
+        let sprintMoney = 0;
+        const sprintBadges = [];
+
+        if (hitCount === 3) {
+          sprintMoney = Number(rewardSpec.all3) || (rewardSpec.s1 + rewardSpec.s2 + rewardSpec.s3);
+          sprintBadges.push(`🏆 All 3 Sprints Hit: ৳${sprintMoney.toLocaleString()}`);
+        } else {
+          if (hitS1) {
+            sprintMoney += Number(rewardSpec.s1) || 0;
+            sprintBadges.push(`⚡ Sprint 1 (100%): ৳${Number(rewardSpec.s1).toLocaleString()}`);
+          }
+          if (hitS2) {
+            sprintMoney += Number(rewardSpec.s2) || 0;
+            sprintBadges.push(`⚡ Sprint 2 (100%): ৳${Number(rewardSpec.s2).toLocaleString()}`);
+          }
+          if (hitS3) {
+            sprintMoney += Number(rewardSpec.s3) || 0;
+            sprintBadges.push(`⚡ Sprint 3 (100%): ৳${Number(rewardSpec.s3).toLocaleString()}`);
+          }
+          if (hitCount === 2 && rewardSpec.any2Extra) {
+            sprintMoney += Number(rewardSpec.any2Extra);
+            sprintBadges.push(`🔥 2-Sprint Combo Bonus: +৳${Number(rewardSpec.any2Extra).toLocaleString()}`);
+          }
+        }
+        return { sprintMoney, sprintBadges };
+      };
+
+      let isInsideDriveProductStatsCalc = false;
+      const _origComputeAgentDriveProductStatsSafe = computeAgentDriveProductStats;
+      computeAgentDriveProductStats = function(agentObj, monthSalesList, mKey) {
+        isInsideDriveProductStatsCalc = true;
+        try {
+          return _origComputeAgentDriveProductStatsSafe(agentObj, monthSalesList, mKey);
+        } finally {
+          isInsideDriveProductStatsCalc = false;
+        }
+      };
+
+      calculateEarnedIncentives = function(pTotals, agentCount, mKey) {
+        const mk = mKey || selectedMonthKey;
+        let prodMoney = 0;
+        let earnedCashBadges = [];
+        let earnedGiftItems = [];
+        const activeProds = getActiveProductsForMonth(mk);
+
+        if (isInsideDriveProductStatsCalc) {
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const achieved = Number(pTotals[k]) || 0;
+            const target = (Number(p.targetKg) || 0) * (agentCount || 1);
+            const pct = target > 0 ? (achieved / target) * 100 : 0;
+            if (pct >= 100) {
+              if (p.bonus100) { prodMoney += Number(p.bonus100); earnedCashBadges.push(`${p.name} (100%: ৳${p.bonus100})`); }
+              if (p.item100) { earnedGiftItems.push(`🎁 ${p.item100} (${p.name} 100%)`); }
+            } else if (pct >= 90 && p.bonus90) {
+              prodMoney += Number(p.bonus90);
+              earnedCashBadges.push(`${p.name} (90%: ৳${p.bonus90})`);
+            }
+          });
+          return {
+            totalMoney: prodMoney,
+            earnedCashBadges,
+            earnedGiftItems,
+            earnedRewards: [...earnedCashBadges, ...earnedGiftItems]
+          };
+        }
+
+        const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(mk));
+        const monthUsers = getUsersForMonth(mk);
+        let sprintMoneyTotal = 0;
+        let sprintBadgesList = [];
+
+        if (currentUser && canViewAll(currentUser) && agentCount > 1) {
+          const scopedAgents = monthUsers.filter(usr => {
+            if (usr.role !== 'agent') return false;
+            if (dashboardScope === 'ALL') return true;
+            return normalizeTeamNameAlias(usr.team) === normalizeTeamNameAlias(dashboardScope);
+          });
+
+          scopedAgents.forEach(ag => {
+            const agDp = computeAgentDriveProductStats(ag, allMonthSales, mk);
+            Object.keys(activeProds).forEach(k => {
+              const p = activeProds[k];
+              const ach = Number(agDp.prodKg[k]) || 0;
+              const tgt = Number(p.targetKg) || 0;
+              const pct = tgt > 0 ? (ach / tgt) * 100 : 0;
+              if (pct >= 100) {
+                if (p.bonus100) {
+                  prodMoney += Number(p.bonus100);
+                  earnedCashBadges.push(`${ag.name.split(' ')[0]}: ${p.name} (100%: ৳${p.bonus100})`);
+                }
+                if (p.item100) {
+                  earnedGiftItems.push(`🎁 ${ag.name.split(' ')[0]}: ${p.item100} (${p.name} 100%)`);
+                }
+              } else if (pct >= 90 && p.bonus90) {
+                prodMoney += Number(p.bonus90);
+                earnedCashBadges.push(`${ag.name.split(' ')[0]}: ${p.name} (90%: ৳${p.bonus90})`);
+              }
+            });
+
+            const spRes = window.computeSingleAgentSprintIncentive(ag, allMonthSales, mk);
+            if (spRes.sprintMoney > 0) {
+              sprintMoneyTotal += spRes.sprintMoney;
+              spRes.sprintBadges.forEach(b => sprintBadgesList.push(`${ag.name.split(' ')[0]} (${b})`));
+            }
+          });
+        } else {
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const achieved = Number(pTotals[k]) || 0;
+            const target = (Number(p.targetKg) || 0) * (agentCount || 1);
+            const pct = target > 0 ? (achieved / target) * 100 : 0;
+
+            if (pct >= 100) {
+              if (p.bonus100) {
+                prodMoney += Number(p.bonus100);
+                earnedCashBadges.push(`${p.name} (100%: ৳${p.bonus100})`);
+              }
+              if (p.item100) {
+                earnedGiftItems.push(`🎁 ${p.item100} (${p.name} 100%)`);
+              }
+            } else if (pct >= 90 && p.bonus90) {
+              prodMoney += Number(p.bonus90);
+              earnedCashBadges.push(`${p.name} (90%: ৳${p.bonus90})`);
+            }
+          });
+
+          if (currentUser && !canViewAll(currentUser)) {
+            const myUserObj = monthUsers.find(u => String(u.id) === String(currentUser.id)) || currentUser;
+            const spRes = window.computeSingleAgentSprintIncentive(myUserObj, allMonthSales, mk);
+            sprintMoneyTotal = spRes.sprintMoney;
+            sprintBadgesList = spRes.sprintBadges;
+          }
+        }
+
+        const totalMoney = prodMoney + sprintMoneyTotal;
+        const combinedCashBadges = [...sprintBadgesList, ...earnedCashBadges];
+
+        return {
+          totalMoney,
+          prodMoney,
+          sprintMoney: sprintMoneyTotal,
+          earnedCashBadges: combinedCashBadges,
+          earnedGiftItems,
+          earnedRewards: [...combinedCashBadges, ...earnedGiftItems]
+        };
+      };
+
+      // 7. INSTANT LOGIN DATA PRE-LOAD (No empty/0 dashboard flash when an agent signs in!)
+      handleLogin = function(e) {
+        e.preventDefault();
+        let id = document.getElementById('loginId').value.trim();
+        if (id === '10160') id = '10175';
+        const pass = document.getElementById('loginPass').value.trim();
+        const rawUser = getStored('users', DEFAULT_USERS).map(normalizeUserRecord).find(u => String(u.id) === id && u.pass === pass);
+        if (!rawUser) { showPortalToast('Login Failed', 'Invalid Employee ID or Password! Please check and try again.', 'error'); return; }
+        if (isUserAccountDeactivated(rawUser) && String(rawUser.id) !== '10122') {
+          showPortalToast('Account Deactivated', 'This Employee ID is currently deactivated by your Team Leader / Admin.', 'error');
+          return;
+        }
+        const user = normalizeUserRecord(rawUser);
+        currentUser = user;
+        setStored('session_user', user);
+        activeChannel = user.role === 'supervisor' ? 'ALL_CHANNELS' : getChannelForTeam(user.team);
+        localStorage.setItem('gb_active_channel', activeChannel);
+        const loginTeamScope = (user.role === 'admin' || user.role === 'agent') ? normalizeTeamNameAlias(user.team) : 'ALL';
+        dashboardScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+        monthlyPerfTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+        driveProdTeamScope = loginTeamScope;
+        sprintTabTeamScope = loginTeamScope;
+        missingReportsTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+        monthlyPerfAgentId = 'ALL';
+        logsFilterScope = 'ALL';
+        reportsDateFilter = getTodayFormatted();
+
+        const cachedSales = getStored('sales_records', []);
+        const finishSignIn = () => {
+          init();
+          setTimeout(() => {
+            if (!currentUser) return;
+            recordActivityLog('User Login', `Signed in to the portal (${user.role.toUpperCase()})`, true);
+            if (user.role === 'agent') {
+              const today = getTodayFormatted();
+              const rec = getStored('attendance_records', []).find(a => String(a.userId) === String(user.id) && a.date === today);
+              if (rec) postToSheet('ATTENDANCE_SYNC', rec).catch(() => {});
+            }
+          }, 600);
+        };
+
+        if (cachedSales.length === 0) {
+          document.getElementById('app').innerHTML = `
+            <div class="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
+              <div class="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-2xl shadow-lg mb-3 animate-bounce">
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+              </div>
+              <h2 class="text-base font-black text-slate-900">Syncing ${user.name}'s Live Data...</h2>
+              <p class="text-xs font-bold text-slate-500 mt-1">Loading sales, sprint & product records from cloud...</p>
+            </div>
+          `;
+          fetch(`${webhookUrl}?t=${Date.now()}&monthKey=${encodeURIComponent(getCurrentMonthKeyStr())}`)
+            .then(r => r.json())
+            .then(res => {
+              if (res && res.status === 'success') _origHandleCloudDataSafe(res);
+            })
+            .catch(() => {})
+            .finally(finishSignIn);
+        } else {
+          finishSignIn();
+        }
+      };
+
+      // 8. ORGANIZED TABLE-READY EXCEL (.XLS) DOWNLOADER
+      downloadPortalCsvFile = function(filename, headersArr, rowsArr) {
+        const cleanTitle = filename.replace(/\.csv$/i, '').replace(/_/g, ' ');
+        const xlsFilename = filename.replace(/\.csv$/i, '.xls');
+        const tableHtml = `
+          <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+          <head><meta charset="UTF-8">
+          <style>
+            table { border-collapse: collapse; font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; }
+            th, td { border: 1px solid #cbd5e1; padding: 7px 12px; text-align: center; vertical-align: middle; }
+          </style>
+          </head>
+          <body>
+            <table>
+              <thead>
+                <tr>
+                  <th colspan="${headersArr.length}" style="background:#0f172a; color:#f8fafc; font-size:13pt; font-weight:bold; padding:10px; text-align:left;">
+                    Ghorerbazar Portal — ${cleanTitle} (${selectedMonthKey})
+                  </th>
+                </tr>
+                <tr>
+                  ${headersArr.map(h => `<th style="background:#1e3a8a; color:#ffffff; font-weight:bold;">${h}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsArr.map((row, rIdx) => {
+                  const isTotalRow = String(row[0] || '').toUpperCase().includes('TOTAL') || String(row[2] || '').toUpperCase().includes('TOTAL');
+                  const rowBg = isTotalRow ? '#0f172a' : (rIdx % 2 === 0 ? '#ffffff' : '#f8fafc');
+                  const rowFg = isTotalRow ? '#fde68a' : '#0f172a';
+                  const rowWeight = isTotalRow ? 'bold' : 'normal';
+                  return `<tr>${row.map((cell, cIdx) => `<td style="background:${rowBg}; color:${rowFg}; font-weight:${rowWeight}; text-align:${cIdx === 2 ? 'left' : 'center'};">${cell === null || cell === undefined ? '' : cell}</td>`).join('')}</tr>`;
                 }).join('')}
               </tbody>
             </table>
-          </div>
-        ` : ''}
-      `;
+          </body></html>
+        `;
+        const xlsBlob = new Blob(['\uFEFF' + tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+        const xlsUrl = URL.createObjectURL(xlsBlob);
+        const aXls = document.createElement('a');
+        aXls.href = xlsUrl;
+        aXls.download = xlsFilename;
+        document.body.appendChild(aXls);
+        aXls.click();
+        document.body.removeChild(aXls);
+        URL.revokeObjectURL(xlsUrl);
+        showPortalToast('Organized Excel Table Downloaded!', `Saved "${xlsFilename}" with full table formatting.`, 'success');
+      };
 
-      return baseHtml.replace('<div class="space-y-6">', '<div class="space-y-6">' + doBannerHtml);
-    };
+      // =========================================================================
+      // 9. TL PERSONAL SALES ENTRY, ADMIN CHECKBOX ("Include TL") & VISIBILITY
+      // =========================================================================
+      window.showTlInSalesTables = false;
 
-    // 6. ORGANIZED TABLE-READY EXCEL (.XLS) & CSV DOWNLOADER
-    downloadPortalCsvFile = function(filename, headersArr, rowsArr) {
-      const cleanTitle = filename.replace(/\.csv$/i, '').replace(/_/g, ' ');
-      const xlsFilename = filename.replace(/\.csv$/i, '.xls');
-      const tableHtml = `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head><meta charset="UTF-8">
-        <style>
-          table { border-collapse: collapse; font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; }
-          th, td { border: 1px solid #cbd5e1; padding: 7px 12px; text-align: center; vertical-align: middle; }
-        </style>
-        </head>
-        <body>
-          <table>
-            <thead>
-              <tr>
-                <th colspan="${headersArr.length}" style="background:#0f172a; color:#f8fafc; font-size:13pt; font-weight:bold; padding:10px; text-align:left;">
-                  Ghorerbazar Portal — ${cleanTitle} (${selectedMonthKey})
-                </th>
+      window.isUserTeamLeaderRecord = function(uOrId) {
+        if (!uOrId) return false;
+        if (typeof uOrId === 'object') {
+          return uOrId.role === 'admin' || ALL_TL_IDS_SET.has(String(uOrId.id).trim());
+        }
+        const uid = String(uOrId).trim();
+        if (ALL_TL_IDS_SET.has(uid)) return true;
+        const allU = getUsersForMonth(selectedMonthKey, true);
+        const found = allU.find(x => String(x.id).trim() === uid);
+        return Boolean(found && found.role === 'admin');
+      };
+
+      window.toggleShowTlInSalesTables = function(cbEl) {
+        window.showTlInSalesTables = Boolean(cbEl && cbEl.checked);
+        if (!window.showTlInSalesTables && monthlyPerfAgentId !== 'ALL' && window.isUserTeamLeaderRecord(monthlyPerfAgentId)) {
+          monthlyPerfAgentId = 'ALL';
+        }
+        renderAppLayout();
+      };
+
+      // Allow TLs in Daily Sales Add/Edit Modal (subAgentId), while keeping TLs OUT of Drive Product (dpModalAgentId)
+      window.getEditableSalesMembersWithTLForActor = function(mKey) {
+        const mk = mKey || selectedMonthKey;
+        const myTeamNorm = currentUser ? normalizeTeamNameAlias(currentUser.team) : '';
+        const channelMembers = getUsersForMonth(mk, false).filter(u => u.role === 'agent' || u.role === 'admin');
+        const allFloatingAgents = getUsersForMonth(mk, true).filter(u => u.role === 'agent' && isPendingOrFloatingAgent(u));
+        const map = new Map();
+        channelMembers.forEach(a => map.set(String(a.id), a));
+        allFloatingAgents.forEach(a => {
+          if (!map.has(String(a.id))) map.set(String(a.id), a);
+        });
+        return Array.from(map.values()).sort((a, b) => {
+          const aMyTeam = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : (isPendingOrFloatingAgent(a) ? 2 : 1);
+          const bMyTeam = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : (isPendingOrFloatingAgent(b) ? 2 : 1);
+          if (aMyTeam !== bMyTeam) return aMyTeam - bMyTeam;
+          const aIsTL = a.role === 'admin' ? 0 : 1;
+          const bIsTL = b.role === 'admin' ? 0 : 1;
+          return aIsTL - bIsTL;
+        });
+      };
+
+      const _origFilterAgentSelectBySearchSafe = filterAgentSelectBySearch;
+      filterAgentSelectBySearch = function(searchInputId, selectElId, onChangeFnName, teamSelectElId) {
+        if (selectElId !== 'subAgentId') {
+          return _origFilterAgentSelectBySearchSafe(searchInputId, selectElId, onChangeFnName, teamSelectElId);
+        }
+        const q = (document.getElementById(searchInputId)?.value || '').trim().toLowerCase();
+        const teamFilterVal = teamSelectElId ? (document.getElementById(teamSelectElId)?.value || 'ALL') : 'ALL';
+        const sel = document.getElementById(selectElId);
+        if (!sel) return;
+        const allMembers = window.getEditableSalesMembersWithTLForActor(selectedMonthKey);
+        const prevVal = sel.value;
+
+        const teamScoped = (q || teamFilterVal === 'ALL')
+          ? allMembers
+          : allMembers.filter(a => {
+              if (teamFilterVal === 'FLOATING_POOL') return isPendingOrFloatingAgent(a);
+              return normalizeTeamNameAlias(a.team) === normalizeTeamNameAlias(teamFilterVal);
+            });
+
+        const matched = !q
+          ? teamScoped
+          : teamScoped.filter(a => String(a.name || '').toLowerCase().includes(q) || String(a.id || '').toLowerCase().includes(q) || String(a.team || '').toLowerCase().includes(q));
+
+        const countBadgeEl = document.getElementById(selectElId + '_countBadge');
+        if (countBadgeEl) countBadgeEl.textContent = `${matched.length} Member(s)`;
+
+        if (matched.length === 0) {
+          sel.innerHTML = `<option value="">No member found</option>`;
+          return;
+        }
+        sel.innerHTML = matched.map(a => {
+          const roleTag = a.role === 'admin' ? '👑 TL • ' : '';
+          return `<option value="${a.id}">${roleTag}${a.name} (${a.id} • ${isPendingOrFloatingAgent(a) ? '🟣 Floating / Pending' : a.team})</option>`;
+        }).join('');
+        if (matched.some(a => String(a.id) === String(prevVal))) {
+          sel.value = prevVal;
+        } else {
+          sel.value = matched[0].id;
+          if (onChangeFnName && typeof window[onChangeFnName] === 'function') {
+            window[onChangeFnName]();
+          }
+        }
+      };
+
+      openReportModal = function(agentId, dateStr) {
+        if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales') && !hasFeatureAccess(currentUser, 'feat_submit_own_sales')) return;
+        let resolvedAgentId = currentUser ? currentUser.id : null;
+        if (hasFeatureAccess(currentUser, 'feat_manage_all_sales')) {
+          const teamFilterEl = document.getElementById('subModalTeamFilter');
+          const searchEl = document.getElementById('subAgentSearchInput');
+          if (searchEl) searchEl.value = '';
+
+          const allMembers = window.getEditableSalesMembersWithTLForActor(selectedMonthKey);
+          const targetAgObj = agentId ? allMembers.find(a => String(a.id) === String(agentId)) : null;
+          if (teamFilterEl) {
+            if (targetAgObj) {
+              teamFilterEl.value = isPendingOrFloatingAgent(targetAgObj) ? 'FLOATING_POOL' : normalizeTeamNameAlias(targetAgObj.team);
+            } else {
+              teamFilterEl.value = getDefaultModalTeamFilterForActor();
+            }
+          }
+          filterAgentSelectBySearch('subAgentSearchInput', 'subAgentId', null, 'subModalTeamFilter');
+
+          const selEl = document.getElementById('subAgentId');
+          const preferredId = (targetAgObj && targetAgObj.id) || (selEl && selEl.value) || (allMembers[0] && allMembers[0].id);
+          if (selEl && preferredId) {
+            selEl.value = preferredId;
+            lastSelectedAgentId = preferredId;
+            resolvedAgentId = preferredId;
+          }
+        }
+        const targetDate = (dateStr && dateStr !== 'ALL') ? dateStr : getEffectiveReportDateForAgent(resolvedAgentId);
+        document.getElementById('subDate').value = dateToInputVal(targetDate);
+        onModalChange();
+        openModal('submitModal');
+      };
+
+      const _origOnModalChangeSafe = onModalChange;
+      onModalChange = function() {
+        _origOnModalChangeSafe();
+        const u = currentUser;
+        const selectedId = hasFeatureAccess(u, 'feat_manage_all_sales') ? document.getElementById('subAgentId')?.value : u?.id;
+        const isTLSelected = window.isUserTeamLeaderRecord(selectedId);
+        const dpShortcutBox = document.querySelector('#submitModal .bg-amber-50\\/90');
+        if (dpShortcutBox) {
+          dpShortcutBox.style.display = isTLSelected ? 'none' : 'flex';
+        }
+      };
+
+      // Daily Sales Reports Tab: Hide TL rows from agents ALWAYS; show to Admins when `showTlInSalesTables` is ticked
+      const _origRenderReportsBase = renderReports;
+      renderReports = function() {
+        const u = currentUser;
+        const isAdminOrSup = canViewAll(u);
+        const allRawSales = getStored('sales_records', []);
+
+        const shouldHideTlRowsInTable = !isAdminOrSup || !window.showTlInSalesTables;
+        let htmlOut = '';
+        if (shouldHideTlRowsInTable) {
+          const filteredForTable = allRawSales.filter(s => !window.isUserTeamLeaderRecord(s.userId));
+          setStored('sales_records', filteredForTable);
+          try {
+            htmlOut = _origRenderReportsBase();
+          } finally {
+            setStored('sales_records', allRawSales);
+          }
+        } else {
+          htmlOut = _origRenderReportsBase();
+        }
+
+        if (isAdminOrSup) {
+          const tlSalesInScope = deduplicateSalesRecordsList(allRawSales).filter(s => {
+            if (String(s.date || '').startsWith('MONTHLY_PROD_')) return false;
+            if (!window.isUserTeamLeaderRecord(s.userId)) return false;
+            if (reportsDateFilter !== 'ALL' && s.date !== reportsDateFilter) return false;
+            if (reportsDateFilter === 'ALL' && !String(s.date || '').endsWith(selectedMonthKey)) return false;
+            if (logsFilterScope === 'ALL_FB') return getChannelForTeam(s.team) === 'FACEBOOK';
+            if (logsFilterScope === 'ALL_WA') return getChannelForTeam(s.team) === 'WHATSAPP';
+            if (logsFilterScope !== 'ALL' && logsFilterScope !== 'ALL_OMNI' && logsFilterScope !== 'MINE') {
+              return normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(logsFilterScope);
+            }
+            return activeChannel === 'ALL_CHANNELS' || getChannelForTeam(s.team) === activeChannel;
+          });
+          const tlLeadsSum = tlSalesInScope.reduce((a, c) => a + (Number(c.leads) || 0), 0);
+          const tlOrdersSum = tlSalesInScope.reduce((a, c) => a + (Number(c.orders) || 0), 0);
+          const tlAmountSum = tlSalesInScope.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+
+          const checkboxHtml = `
+            <label class="flex items-center gap-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-3 py-2 rounded-xl shadow-2xs cursor-pointer select-none transition-colors" title="Tick to show Team Leaders' personal sales entries in the table">
+              <input type="checkbox" ${window.showTlInSalesTables ? 'checked' : ''} onchange="toggleShowTlInSalesTables(this)" class="w-4 h-4 accent-orange-600 rounded cursor-pointer">
+              <span class="text-xs font-black text-orange-900"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>Include TL Sales ${tlSalesInScope.length > 0 ? `(${tlSalesInScope.length})` : ''}</span>
+            </label>
+          `;
+          htmlOut = htmlOut.replace('<div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">', checkboxHtml + '<div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">');
+
+          if (!window.showTlInSalesTables && tlAmountSum > 0) {
+            const tlFootRow = `
+              <tr class="bg-slate-800 text-amber-300 font-extrabold text-xs border-b border-slate-700">
+                <td colspan="4" class="p-3.5"><i class="fa-solid fa-crown mr-1.5"></i>+ Team Leader Personal Sales (${tlSalesInScope.map(x => x.userName).join(', ')}) — Tick "Include TL Sales" above to view row</td>
+                <td class="p-3.5 text-center">${tlLeadsSum.toLocaleString()}</td>
+                <td class="p-3.5 text-center text-blue-300">${tlOrdersSum.toLocaleString()}</td>
+                <td class="p-3.5 text-center">-</td>
+                <td class="p-3.5 text-emerald-400">৳${tlAmountSum.toLocaleString()}</td>
+                <td colspan="4" class="p-3.5 text-slate-300">Included in Dashboard & Team Totals</td>
               </tr>
-              <tr>
-                ${headersArr.map(h => `<th style="background:#1e3a8a; color:#ffffff; font-weight:bold;">${h}</th>`).join('')}
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsArr.map((row, rIdx) => {
-                const isTotalRow = String(row[0] || '').toUpperCase().includes('TOTAL') || String(row[2] || '').toUpperCase().includes('TOTAL');
-                const rowBg = isTotalRow ? '#0f172a' : (rIdx % 2 === 0 ? '#ffffff' : '#f8fafc');
-                const rowFg = isTotalRow ? '#fde68a' : '#0f172a';
-                const rowWeight = isTotalRow ? 'bold' : 'normal';
-                return `<tr>${row.map((cell, cIdx) => `<td style="background:${rowBg}; color:${rowFg}; font-weight:${rowWeight}; text-align:${cIdx === 2 ? 'left' : 'center'};">${cell === null || cell === undefined ? '' : cell}</td>`).join('')}</tr>`;
-              }).join('')}
-            </tbody>
-          </table>
-        </body></html>
-      `;
-      const xlsBlob = new Blob(['\uFEFF' + tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-      const xlsUrl = URL.createObjectURL(xlsBlob);
-      const aXls = document.createElement('a');
-      aXls.href = xlsUrl;
-      aXls.download = xlsFilename;
-      document.body.appendChild(aXls);
-      aXls.click();
-      document.body.removeChild(aXls);
-      URL.revokeObjectURL(xlsUrl);
-      showPortalToast('Organized Excel Table Downloaded!', `Saved "${xlsFilename}" with full table formatting.`, 'success');
-    };
+            `;
+            htmlOut = htmlOut.replace('<tfoot class="bg-slate-900 text-white font-black text-xs">', '<tfoot class="bg-slate-900 text-white font-black text-xs">' + tlFootRow);
+          }
+        }
+        return htmlOut;
+      };
+
+      // Monthly Performance Tab: Add "☑️ Include TL" checkbox + allow selecting any TL from the Agent dropdown to view their Date-Wise breakdown!
+      const _origRenderMonthlyPerformanceViewSafe = renderMonthlyPerformanceView;
+      renderMonthlyPerformanceView = function() {
+        const u = currentUser;
+        const isAdminOrSup = canViewAll(u);
+        if (!isAdminOrSup) {
+          return _origRenderMonthlyPerformanceViewSafe();
+        }
+
+        const allMonthUsers = getUsersForMonth(selectedMonthKey);
+        const allAgentsOnly = allMonthUsers.filter(usr => usr.role === 'agent');
+        const allTLsOnly = allMonthUsers.filter(usr => usr.role === 'admin');
+        const monthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+        const scopedTLs = allTLsOnly.filter(tl => monthlyPerfTeamScope === 'ALL' ? true : normalizeTeamNameAlias(tl.team) === normalizeTeamNameAlias(monthlyPerfTeamScope));
+        const scopedTlIds = new Set(scopedTLs.map(t => String(t.id)));
+        const tlMonthSales = monthSales.filter(s => scopedTlIds.has(String(s.userId)));
+        const tlLeadsTotal = tlMonthSales.reduce((a, c) => a + (Number(c.leads) || 0), 0);
+        const tlOrdersTotal = tlMonthSales.reduce((a, c) => a + (Number(c.orders) || 0), 0);
+        const tlRevTotal = tlMonthSales.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+
+        const shouldIncludeTLAsRows = window.showTlInSalesTables || (monthlyPerfAgentId !== 'ALL' && window.isUserTeamLeaderRecord(monthlyPerfAgentId));
+
+        let htmlOut = '';
+        const _origGetUsers = getUsersForMonth;
+        if (shouldIncludeTLAsRows) {
+          getUsersForMonth = function(mKey, includeAllCh) {
+            const list = _origGetUsers(mKey, includeAllCh);
+            return list.map(usr => usr.role === 'admin' ? { ...usr, role: 'agent', _isRealTL: true } : usr);
+          };
+        }
+        try {
+          htmlOut = _origRenderMonthlyPerformanceViewSafe();
+        } finally {
+          getUsersForMonth = _origGetUsers;
+        }
+
+        const checkboxHtml = `
+          <label class="h-8 inline-flex items-center gap-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-3 rounded-xl cursor-pointer select-none transition-colors" title="Tick to show Team Leaders in the Monthly Performance table">
+            <input type="checkbox" ${window.showTlInSalesTables ? 'checked' : ''} onchange="toggleShowTlInSalesTables(this)" class="w-4 h-4 accent-orange-600 rounded cursor-pointer">
+            <span class="text-[11px] font-black text-orange-900"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>Include TL (${scopedTLs.length})</span>
+          </label>
+        `;
+        htmlOut = htmlOut.replace('<div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl"', checkboxHtml + '<div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl"');
+
+        if (!shouldIncludeTLAsRows && scopedTLs.length > 0) {
+          const tlOptionsHtml = scopedTLs.map(tl => `<option value="${tl.id}" ${String(monthlyPerfAgentId) === String(tl.id) ? 'selected' : ''}>👑 ${tl.name} (${tl.id} • TL)</option>`).join('');
+          const selectEndIdx = htmlOut.indexOf('</select>', htmlOut.indexOf('onchange="setMonthlyPerfAgent(this.value)"'));
+          if (selectEndIdx !== -1) {
+            htmlOut = htmlOut.slice(0, selectEndIdx) + `<optgroup label="👑 Team Leaders (Date-Wise View)">${tlOptionsHtml}</optgroup>` + htmlOut.slice(selectEndIdx);
+          }
+        }
+
+        if (!shouldIncludeTLAsRows && monthlyPerfAgentId === 'ALL' && scopedTLs.length > 0) {
+          const agSalesOnly = monthSales.filter(s => !window.isUserTeamLeaderRecord(s.userId) && (monthlyPerfTeamScope === 'ALL' ? true : normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(monthlyPerfTeamScope)));
+          const agLeadsSum = agSalesOnly.reduce((a, c) => a + (Number(c.leads) || 0), 0);
+          const agOrdersSum = agSalesOnly.reduce((a, c) => a + (Number(c.orders) || 0), 0);
+          const agRevSum = agSalesOnly.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+
+          const combinedLeads = agLeadsSum + tlLeadsTotal;
+          const combinedOrders = agOrdersSum + tlOrdersTotal;
+          const combinedRev = agRevSum + tlRevTotal;
+
+          htmlOut = htmlOut.replace(
+            'Included in Team & Overall Target Total',
+            `TL Sales: Leads <strong>${tlLeadsTotal}</strong> • Orders <strong>${tlOrdersTotal}</strong> • Revenue <strong class="text-emerald-300">৳${tlRevTotal.toLocaleString()}</strong> (Included in Grand Total below)`
+          );
+          htmlOut = htmlOut.replace(
+            `<td class="p-4 text-center">${agLeadsSum.toLocaleString()}</td>`,
+            `<td class="p-4 text-center">${combinedLeads.toLocaleString()}</td>`
+          ).replace(
+            `<td class="p-4 text-center text-blue-300">${agOrdersSum.toLocaleString()}</td>`,
+            `<td class="p-4 text-center text-blue-300">${combinedOrders.toLocaleString()}</td>`
+          ).replace(
+            `<td class="p-4 text-emerald-400 text-sm">৳${agRevSum.toLocaleString()}</td>`,
+            `<td class="p-4 text-emerald-400 text-sm">৳${combinedRev.toLocaleString()}</td>`
+          );
+        }
+
+        return htmlOut;
+      };
+
+      const _origExportMonthlyPerformanceCsvSafe = exportMonthlyPerformanceCsv;
+      exportMonthlyPerformanceCsv = function() {
+        const shouldIncludeTLAsRows = canViewAll(currentUser) && (window.showTlInSalesTables || (monthlyPerfAgentId !== 'ALL' && window.isUserTeamLeaderRecord(monthlyPerfAgentId)));
+        const _origGetUsers = getUsersForMonth;
+        if (shouldIncludeTLAsRows) {
+          getUsersForMonth = function(mKey, includeAllCh) {
+            const list = _origGetUsers(mKey, includeAllCh);
+            return list.map(usr => usr.role === 'admin' ? { ...usr, role: 'agent', _isRealTL: true } : usr);
+          };
+        }
+        try {
+          _origExportMonthlyPerformanceCsvSafe();
+        } finally {
+          getUsersForMonth = _origGetUsers;
+        }
+      };
+    } catch (patchErr) {
+      console.error('Non-fatal patch warning:', patchErr);
+    }
+
+    window.addEventListener('load', init);
 
   </script>
 </body>
