@@ -16884,9 +16884,9 @@ function renderChatHubView() {
     
     // =========================================================================
     // MASTER VERIFIED UPGRADE PATCH (v31) — DAY OFF (DO) & ZERO-DATA FIXES:
-    // 1. Completely exclude & hide 0-Sales / 0-Orders / 0-Leads entries from Day Off (DO) Submissions list (and auto-clean them in background)
+    // 1. Auto-ignore & hide 0-Sales / 0-Orders / 0-Leads entries from Day Off (DO) Submissions list + 1-Click Clean All 0-Data Rows button
     // 2. Never show "Not submitted on 31 Oct 2026" (cross-month / pre-portal launch warning) when viewing Day 01 of the month
-    // 3. Added "✅ Day Off Duty" button on each Day Off submission row — clicking it marks that date as an Approved Day Off Duty in cloud config (DO_APPROVED_DUTIES_<monthKey>) and immediately removes it from the warning list!
+    // 3. Added "✅ Approve Day Off Duty" button on each Day Off submission row — clicking it marks that date as an Approved Day Off Duty in cloud config (DO_APPROVED_DUTIES_<monthKey>) and immediately removes it from the warning list!
     // 4. Verified 2-Step Day Off Confirmation when Agent or Admin submits a report on a Roster Day Off (DO)
     // =========================================================================
     try {
@@ -16967,13 +16967,6 @@ function renderChatHubView() {
         );
       };
 
-      // Helper: Automatically purge 0-Leads / 0-Orders / ৳0 daily records (that also have 0 product kg) from local cache
-      // and never allow 0-sales daily rows to clutter Day Off (DO) Submissions!
-      window.isRealNonZeroDailySalesRow = function(s) {
-        if (!s || String(s.date || '').startsWith('MONTHLY_PROD_')) return false;
-        return (Number(s.amount || 0) > 0 || Number(s.orders || 0) > 0 || Number(s.leads || 0) > 0);
-      };
-
       window.handleCleanAllZeroDayOffEntries = function() {
         if (!currentUser || !canViewAll(currentUser) || isCurrentChannelReadOnlyForUser(currentUser)) return;
         const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
@@ -16984,7 +16977,7 @@ function renderChatHubView() {
           if (activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(s.team) !== activeChannel) return false;
           if (missingReportsTeamScope !== 'ALL' && normalizeTeamNameAlias(s.team) !== normalizeTeamNameAlias(missingReportsTeamScope)) return false;
           if (!isSuperAdmin(currentUser) && !canEditTeamData(currentUser, s.team)) return false;
-          const isZero = !window.isRealNonZeroDailySalesRow(s);
+          const isZero = (Number(s.amount || 0) === 0 && Number(s.orders || 0) === 0 && Number(s.leads || 0) === 0);
           return isZero && window.isDateAgentDayOff(s.userId, s.date);
         });
 
@@ -16994,8 +16987,8 @@ function renderChatHubView() {
         }
 
         openConfirmWarningModal(
-          `🧹 Clean ${zeroDoRows.length} Empty (৳0) Day Off Entries from Google Sheet?`,
-          `Are you sure you want to permanently remove <strong>${zeroDoRows.length}</strong> empty Day Off entries (with <strong>0 Leads, 0 Orders & ৳0 Sales</strong>) from Google Sheet?`,
+          `🧹 Clean ${zeroDoRows.length} Empty (৳0) Day Off Entries?`,
+          `Are you sure you want to permanently remove <strong>${zeroDoRows.length}</strong> empty Day Off entries (with <strong>0 Leads, 0 Orders & ৳0 Sales</strong>)?<br><br>Since their sales are ৳0 and those dates are Roster Day Offs (DO), deleting them is <strong>100% safe</strong>—they will NOT go to Missing Reports and will NOT affect any sales targets!`,
           'Safe Zero-Data Cleanup',
           async () => {
             const removeKeySet = new Set(zeroDoRows.map(r => `${String(r.userId).trim()}_${String(r.date).replace(/^'/, '').trim()}`));
@@ -17067,7 +17060,7 @@ function renderChatHubView() {
         const prevReport = allSales.find(s =>
           String(s.userId).trim() === String(empId).trim() &&
           String(s.date || '').replace(/^'/, '').trim() === prevDateStr &&
-          window.isRealNonZeroDailySalesRow(s)
+          (Number(s.amount || 0) > 0 || Number(s.orders || 0) > 0 || Number(s.leads || 0) > 0)
         );
         const hasSubmittedPrevDate = isCrossMonthBoundary ? true : Boolean(prevReport);
 
@@ -17082,9 +17075,10 @@ function renderChatHubView() {
       };
 
       // Override renderMissingReportsAndLeaveView so:
-      // 1) 0-Leads / 0-Orders / ৳0 rows are STRICTLY EXCLUDED (never shown in the table!)
+      // 1) 0-Leads / 0-Orders / ৳0 rows are automatically hidden by default (with a toggle & 1-Click Clean button)
       // 2) Approved Day Off Duties are hidden from the Day Off warning list
       // 3) Each active Day Off submission has a green "✅ Day Off Duty" button right next to "Move Date"
+      const _origRenderMissingBaseV31 = _origRenderMissingReportsAndLeaveViewSafe;
       renderMissingReportsAndLeaveView = function() {
         const u = currentUser;
         const isAdminOrSup = canViewAll(u);
@@ -17103,10 +17097,10 @@ function renderChatHubView() {
           return window.isDateAgentDayOff(s.userId, s.date);
         });
 
-        const zeroDoCount = allRawDoRows.filter(s => !window.isRealNonZeroDailySalesRow(s)).length;
-        // STRICTLY ONLY SHOW NON-ZERO SALES SUBMISSIONS ON DAY OFF!
-        const realDoRows = allRawDoRows.filter(s => window.isRealNonZeroDailySalesRow(s));
-        let doSubmissions = [...realDoRows];
+        const zeroDoCount = allRawDoRows.filter(s => Number(s.amount || 0) === 0 && Number(s.orders || 0) === 0 && Number(s.leads || 0) === 0).length;
+        const realDoRows = allRawDoRows.filter(s => Number(s.amount || 0) > 0 || Number(s.orders || 0) > 0 || Number(s.leads || 0) > 0);
+
+        let doSubmissions = window.showZeroDataDoEntries ? [...allRawDoRows] : [...realDoRows];
 
         doSubmissions.sort((a, b) => {
           const aMy = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : 1;
@@ -17118,19 +17112,29 @@ function renderChatHubView() {
         const approvedStore = window.getApprovedDayOffDutiesStore(selectedMonthKey);
         const approvedCount = Object.values(approvedStore).filter(x => x && !x.isRemoved && (missingReportsTeamScope === 'ALL' || normalizeTeamNameAlias(x.team) === normalizeTeamNameAlias(missingReportsTeamScope))).length;
 
-        // Call v30 (which calls v27 -> base) so we get the base HTML, and then replace both the button count AND the table!
-        let htmlOut = _origRenderMissingV30();
+        let htmlOut = _origRenderMissingBaseV31();
 
-        // Update the DO_REPORTS button label so it shows ONLY real non-zero DO submissions count (not 0-data rows!)
-        htmlOut = htmlOut.replace(
-          /<span>⚠️ Day Off \(DO\) Submissions \(\d+\)<\/span>/g,
-          `<span>⚠️ Day Off (DO) Submissions (${realDoRows.length})</span>`
-        );
+        const leaveBtnMarker = `<span>Leave & Absent Log (`;
+        const btnIdx = htmlOut.indexOf(leaveBtnMarker);
+        if (btnIdx !== -1) {
+          const closeBtnIdx = htmlOut.indexOf('</button>', btnIdx);
+          if (closeBtnIdx !== -1) {
+            const doSubTabBtn = `
+                <button type="button" onclick="setMissingReportsSubView('DO_REPORTS')" class="px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${missingReportsSubView === 'DO_REPORTS' ? 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-400' : 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'}">
+                  <i class="fa-solid fa-user-clock"></i>
+                  <span>⚠️ Day Off (DO) Submissions (${realDoRows.length})</span>
+                </button>`;
+            htmlOut = htmlOut.slice(0, closeBtnIdx + 9) + doSubTabBtn + htmlOut.slice(closeBtnIdx + 9);
+          }
+        }
 
         if (missingReportsSubView === 'DO_REPORTS') {
-          const doTableStartIdx = htmlOut.indexOf('<div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-amber-400">');
-          if (doTableStartIdx !== -1) {
-            const doTableHtml = `
+          const tableMarker = `<div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between">`;
+          const tIdx = htmlOut.indexOf(tableMarker);
+          if (tIdx !== -1) {
+            const cardStartIdx = htmlOut.lastIndexOf('<div class="card-dynamic', tIdx);
+            if (cardStartIdx !== -1) {
+              const doTableHtml = `
             <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-amber-400">
               <div class="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3">
                 <div class="flex flex-wrap items-center gap-2">
@@ -17140,14 +17144,20 @@ function renderChatHubView() {
                   ${approvedCount > 0 ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black">✅ ${approvedCount} Approved as Day Off Duty</span>` : ''}
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-[11px] font-bold text-slate-300">
-                    Click "✅ Day Off Duty" if the agent worked on their Day Off, or "Move Date" to shift to Night/Working date
-                  </span>
-                  ${(zeroDoCount > 0 && isAdminOrSup && !isCurrentChannelReadOnlyForUser(u)) ? `
-                    <button type="button" onclick="handleCleanAllZeroDayOffEntries()" class="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black shadow-xs cursor-pointer transition-colors" title="Permanently delete ${zeroDoCount} hidden ৳0 rows from Google Sheet">
-                      <i class="fa-solid fa-broom mr-1"></i>Clean ${zeroDoCount} Empty (৳0) Sheet Rows
+                  ${zeroDoCount > 0 ? `
+                    <button type="button" onclick="toggleShowZeroDataDoEntries()" class="px-2.5 py-1 rounded-lg ${window.showZeroDataDoEntries ? 'bg-amber-400 text-slate-950' : 'bg-white/10 hover:bg-white/20 text-slate-200'} text-[10px] font-black cursor-pointer transition-colors">
+                      <i class="fa-solid ${window.showZeroDataDoEntries ? 'fa-eye-slash' : 'fa-eye'} mr-1"></i>${window.showZeroDataDoEntries ? `Hide ${zeroDoCount} Empty (৳0) Rows` : `Show ${zeroDoCount} Hidden Empty (৳0) Rows`}
                     </button>
-                  ` : ''}
+                    ${(isAdminOrSup && !isCurrentChannelReadOnlyForUser(u)) ? `
+                      <button type="button" onclick="handleCleanAllZeroDayOffEntries()" class="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black shadow-xs cursor-pointer transition-colors" title="Safely delete all 0-Leads / 0-Orders / ৳0 Day Off rows">
+                        <i class="fa-solid fa-broom mr-1"></i>1-Click Delete All ${zeroDoCount} Empty (৳0) Rows
+                      </button>
+                    ` : ''}
+                  ` : `
+                    <span class="text-[11px] font-bold text-slate-300">
+                      Click "✅ Day Off Duty" if the agent worked on their Day Off, or "Move Date" to shift to Night/Working date
+                    </span>
+                  `}
                 </div>
               </div>
               <table class="w-full text-left text-xs whitespace-nowrap">
@@ -17168,6 +17178,7 @@ function renderChatHubView() {
                     <tr>
                       <td colspan="8" class="p-10 text-center text-emerald-700 font-extrabold">
                         🎉 No pending Day Off (DO) sales submissions to review for ${selectedMonthKey}!
+                        ${zeroDoCount > 0 && !window.showZeroDataDoEntries ? `<span class="block text-xs text-slate-400 font-bold mt-1">(${zeroDoCount} empty ৳0 row(s) are automatically hidden — click "Show ${zeroDoCount} Hidden Empty (৳0) Rows" above if you wish to delete them)</span>` : ''}
                       </td>
                     </tr>
                   ` : ''}
@@ -17176,9 +17187,10 @@ function renderChatHubView() {
                     const pInfo = window.getPrevDateAndShiftInfo(r.userId, r.date) || {};
                     const isMissedNight = pInfo.isPrevNightShift && !pInfo.hasSubmittedPrevDate;
                     const isMissedPrevDay = !pInfo.isCrossMonthBoundary && !pInfo.isPrevNightShift && !pInfo.hasSubmittedPrevDate && pInfo.prevDateStr;
+                    const isZeroRow = Number(r.amount || 0) === 0 && Number(r.orders || 0) === 0 && Number(r.leads || 0) === 0;
 
                     return `
-                      <tr class="hover:bg-amber-50/50 ${isMissedNight ? 'bg-indigo-50/50' : (normalizeTeamNameAlias(r.team) === myTeamNorm ? 'bg-amber-50/30' : '')}">
+                      <tr class="hover:bg-amber-50/50 ${isZeroRow ? 'opacity-65 bg-slate-50' : (isMissedNight ? 'bg-indigo-50/50' : (normalizeTeamNameAlias(r.team) === myTeamNorm ? 'bg-amber-50/30' : ''))}">
                         <td class="p-3.5 font-black text-slate-400">#${idx + 1}</td>
                         <td class="p-3.5">
                           <span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-black text-xs">${cleanDisplayDate(r.date)}</span>
@@ -17189,7 +17201,11 @@ function renderChatHubView() {
                         <td class="p-3.5">
                           <div class="flex flex-col gap-1">
                             <span class="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-black text-[10px] w-fit">⚠️ ${cleanDisplayDate(r.date)}: DO (Day Off)</span>
-                            ${isMissedNight ? `
+                            ${isZeroRow ? `
+                              <span class="px-2.5 py-0.5 rounded-md bg-slate-200 text-slate-700 font-extrabold text-[10px] w-fit">
+                                🧹 Empty ৳0 Record (Safe to Delete)
+                              </span>
+                            ` : (isMissedNight ? `
                               <span class="px-2.5 py-0.5 rounded-md bg-indigo-900 text-amber-300 font-black text-[10px] w-fit animate-pulse">
                                 🌙 Not submitted on Night Shift (${cleanDisplayDate(pInfo.prevDateStr)})!
                               </span>
@@ -17201,17 +17217,19 @@ function renderChatHubView() {
                               <span class="text-[10px] font-bold text-slate-500">📅 First Day of Month (${cleanDisplayDate(r.date)})</span>
                             ` : `
                               <span class="text-[10px] font-bold text-emerald-700">✅ Prev Day (${cleanDisplayDate(pInfo.prevDateStr || '')}) Submitted</span>
-                            `))}
+                            `)))}
                           </div>
                         </td>
                         <td class="p-3.5 text-center font-bold">${r.leads} Leads / <strong class="text-blue-600">${r.orders} Ord</strong></td>
-                        <td class="p-3.5 font-black text-emerald-600 text-sm">৳${Number(r.amount || 0).toLocaleString()}</td>
+                        <td class="p-3.5 font-black ${isZeroRow ? 'text-slate-400' : 'text-emerald-600'} text-sm">৳${Number(r.amount || 0).toLocaleString()}</td>
                         <td class="p-3.5 text-right space-x-1.5">
                           ${canManageRow ? `
-                            <button type="button" onclick="handleApproveDayOffDuty('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[11px] shadow-xs cursor-pointer" title="Agent worked on their Day Off — approve & remove from this warning list">
-                              <i class="fa-solid fa-circle-check mr-1"></i>Day Off Duty
-                            </button>
-                            ${isMissedNight ? `
+                            ${!isZeroRow ? `
+                              <button type="button" onclick="handleApproveDayOffDuty('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-[11px] shadow-xs cursor-pointer" title="Agent worked on their Day Off — approve & remove from this warning list">
+                                <i class="fa-solid fa-circle-check mr-1"></i>Day Off Duty
+                              </button>
+                            ` : ''}
+                            ${isMissedNight && !isZeroRow ? `
                               <button type="button" onclick="executeMoveReportDate('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}', '${pInfo.prevDateStr}')" class="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-black text-[11px] shadow-sm cursor-pointer" title="1-Click Move to Night Shift Date (${pInfo.prevDateStr})">
                                 <i class="fa-solid fa-moon text-amber-300 mr-1"></i>Move to Night (${cleanDisplayDate(pInfo.prevDateStr)})
                               </button>
@@ -17234,7 +17252,8 @@ function renderChatHubView() {
               </table>
             </div>
           </div>`;
-            htmlOut = htmlOut.slice(0, doTableStartIdx) + doTableHtml;
+              htmlOut = htmlOut.slice(0, cardStartIdx) + doTableHtml;
+            }
           }
         }
         return htmlOut;
@@ -17243,6 +17262,8 @@ function renderChatHubView() {
       console.error('Non-fatal patch v31 warning:', patchV31Err);
     }
 
+    
+    // =========================================================================
     // MASTER VERIFIED UPGRADE PATCH (v33) — CROSS-CHANNEL RELOAD SCOPE FIX,
     // SIDEBAR BADGE CLEANUP & ALL-TAB 2-ROW EXECUTIVE UI POLISH
     // =========================================================================
