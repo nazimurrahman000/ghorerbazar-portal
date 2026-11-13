@@ -14052,19 +14052,21 @@ function renderChatHubView() {
     }
 
 
-    window.addEventListener('load', init);
+    
   
     // =========================================================================
-    // MASTER OVERRIDE PATCH (v23) — ALL 6 FIXES INTEGRATED
-    // 1. Fixes \b regex bug in parseErpProductSummaryRow & 53.05 OCR decimal read
-    // 2. Stops Page Auto-Jumping / Scroll Bounce on tab switch & cloud sync
-    // 3. Fixes Browser Close still showing Online (75s strict heartbeat + beacon)
-    // 4. Adds 1-Click Day Off (DO) Submissions Filter (Own Team First + Edit/Delete/Move Date)
-    // 5. Adds Double Confirmation when an Agent submits a report on their Day Off (DO)
-    // 6. Upgrades CSV Download to Styled Excel Table (.xls) + Clean CSV
+    // MASTER INTEGRATED UPGRADE PATCH (v24) — PLACED BEFORE init()!
+    // 1. AI Dark-Mode & Decimal Product OCR Fix (53.05, 32.75, 29.5, 7.5, 10, 2.5)
+    // 2. Scroll Bounce / Page Jump Guard (No auto-jumping on tab switch or scroll)
+    // 3. Browser Tab Close Instant Offline Beacon + Strict 75s Heartbeat Timeout
+    // 4. Missing & Leave Tab -> 1-Click "⚠️ Day Off (DO) Submissions" Sub-Tab (Own Team First + Move Date/Edit/Delete)
+    // 5. Agent Day Off (DO) Double Confirmation Guard when saving a report on DO
+    // 6. Dashboard Incentive Box: Combines Sprint 1/2/3 Cash Bonus + Drive Product Cash & Gift Items
+    // 7. Instant Login Data Pre-Loader (Eliminates 0/empty dashboard flash on login)
+    // 8. Organized Styled Table (.xls) + Clean CSV Downloader
     // =========================================================================
 
-    // 1. FIXED AI PRODUCT SUMMARY LINE PARSER & IMAGE PREPROCESSOR
+    // 1. FIXED AI PRODUCT SUMMARY LINE PARSER & DARK-MODE IMAGE PREPROCESSOR
     normalizeImageBlobToDataUrl = function(fileOrBlob) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -14105,7 +14107,6 @@ function renderChatHubView() {
                   r = 255 - r; g = 255 - g; b = 255 - b;
                 }
                 const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                // Gentle contrast so '0' with a center dot is not misread as '8'
                 if (lum >= 210) {
                   d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
                 } else {
@@ -14221,15 +14222,15 @@ function renderChatHubView() {
     window.addEventListener('touchmove', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
     window.addEventListener('mousedown', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
 
-    const _origSetTab = setTab;
+    const _origSetTabV24 = setTab;
     setTab = function(tab) {
       lastUserScrollOrTouchMs = 0;
-      _origSetTab(tab);
+      _origSetTabV24(tab);
       const mainEl = document.getElementById('mainScrollContainer');
       if (mainEl) mainEl.scrollTop = 0;
     };
 
-    const _origHandleCloudDataV23 = handleCloudData;
+    const _origHandleCloudDataV24 = handleCloudData;
     handleCloudData = function(res) {
       if ((Date.now() - lastUserScrollOrTouchMs) < 2800 || isAnyModalOpen() || isUserInteractingWithControl()) {
         if (res && Array.isArray(res.onlineUsers)) {
@@ -14241,7 +14242,7 @@ function renderChatHubView() {
         }
         return;
       }
-      _origHandleCloudDataV23(res);
+      _origHandleCloudDataV24(res);
     };
 
     // 3. FIX BROWSER CLOSE STILL SHOWING ONLINE (Instant Offline Beacon + Strict 75s Expiry)
@@ -14290,7 +14291,7 @@ function renderChatHubView() {
       return 'Offline';
     };
 
-    // 4 & 5. 1-CLICK DAY OFF (DO) REPORT FILTER, TEAM-FIRST SORT, DATE EDIT & DOUBLE CONFIRMATION
+    // 4 & 5. ROSTER DAY OFF (DO) CHECKER, DOUBLE CONFIRMATION & MISSING/LEAVE TAB INTEGRATION
     let showOnlyDayOffReportsFilter = false;
 
     function getAgentRosterShiftForDateStr(empId, dateStr) {
@@ -14328,7 +14329,7 @@ function renderChatHubView() {
         showPortalToast('Permission Denied', 'You can only edit or move reports for your own team.', 'error');
         return;
       }
-      const newDateInput = prompt(`Change report date for ${userName} (${userId}):\nCurrent Date (Day Off): ${oldDateStr}\n\nEnter new date (DD/MM/YYYY):`, oldDateStr);
+      const newDateInput = prompt(`Move report date for ${userName} (${userId}):\nCurrent Date (Day Off): ${oldDateStr}\n\nEnter new date (DD/MM/YYYY):`, oldDateStr);
       if (!newDateInput || newDateInput.trim() === oldDateStr) return;
       const cleanNewDate = newDateInput.trim();
       if (!/^\d{2}\/\d{2}\/20\d{2}$/.test(cleanNewDate)) {
@@ -14363,7 +14364,8 @@ function renderChatHubView() {
       );
     }
 
-    const _origHandleReportSubmitV23 = handleReportSubmit;
+    // Agent Double Confirmation when submitting a sales report on their Roster Day Off (DO)
+    const _origHandleReportSubmitV24 = handleReportSubmit;
     handleReportSubmit = function(e) {
       e.preventDefault();
       const u = currentUser;
@@ -14389,7 +14391,7 @@ function renderChatHubView() {
                 `Please confirm a 2nd time: Are you 100% sure you want to save this sales report for <strong>${targetAgent.name}</strong> on their <strong>Day Off (${cleanDisplayDate(dateStr)})</strong>?`,
                 'Double Confirmation — Step 2 of 2',
                 () => {
-                  _origHandleReportSubmitV23(e);
+                  _origHandleReportSubmitV24(e);
                 },
                 'Yes, Confirm Day Off Report',
                 true
@@ -14401,12 +14403,132 @@ function renderChatHubView() {
         );
         return;
       }
-      _origHandleReportSubmitV23(e);
+      _origHandleReportSubmitV24(e);
     };
 
-    const _origRenderReportsV23 = renderReports;
+    // Add 1-Click "⚠️ Day Off (DO) Submissions" Sub-Tab inside Missing & Leave Tab (Channel/Team-wise, Own Team First!)
+    const _v24OrigRenderMissingReportsAndLeaveView = renderMissingReportsAndLeaveView;
+    renderMissingReportsAndLeaveView = function() {
+      const u = currentUser;
+      const isAdminOrSup = canViewAll(u);
+      const myTeamNorm = u ? normalizeTeamNameAlias(u.team) : '';
+      const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+        .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+      let doSubmissions = allMonthSales.filter(s => {
+        if (activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(s.team) !== activeChannel) return false;
+        if (!isAdminOrSup && String(s.userId) !== String(u.id)) return false;
+        if (isAdminOrSup && missingReportsTeamScope !== 'ALL' && normalizeTeamNameAlias(s.team) !== normalizeTeamNameAlias(missingReportsTeamScope)) return false;
+        if (isAdminOrSup && missingReportsAgentFilter !== 'ALL' && String(s.userId) !== String(missingReportsAgentFilter)) return false;
+        if (missingReportsDateFilter !== 'ALL' && s.date !== missingReportsDateFilter) return false;
+        return isDateAgentDayOff(s.userId, s.date);
+      });
+
+      doSubmissions.sort((a, b) => {
+        const aMy = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : 1;
+        const bMy = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : 1;
+        if (aMy !== bMy) return aMy - bMy;
+        return (parseInt(b.date.split('/')[0], 10) || 0) - (parseInt(a.date.split('/')[0], 10) || 0);
+      });
+
+      let htmlOut = _v24OrigRenderMissingReportsAndLeaveView();
+
+      const leaveBtnMarker = `<span>Leave & Absent Log (`;
+      const btnIdx = htmlOut.indexOf(leaveBtnMarker);
+      if (btnIdx !== -1) {
+        const closeBtnIdx = htmlOut.indexOf('</button>', btnIdx);
+        if (closeBtnIdx !== -1) {
+          const doSubTabBtn = `
+              <button type="button" onclick="setMissingReportsSubView('DO_REPORTS')" class="px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${missingReportsSubView === 'DO_REPORTS' ? 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-400' : 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'}">
+                <i class="fa-solid fa-user-clock"></i>
+                <span>⚠️ Day Off (DO) Submissions (${doSubmissions.length})</span>
+              </button>`;
+          htmlOut = htmlOut.slice(0, closeBtnIdx + 9) + doSubTabBtn + htmlOut.slice(closeBtnIdx + 9);
+        }
+      }
+
+      if (missingReportsSubView === 'DO_REPORTS') {
+        const tableMarker = `<div class="px-5 py-3 bg-indigo-950 text-white flex items-center justify-between">`;
+        const tIdx = htmlOut.indexOf(tableMarker);
+        if (tIdx !== -1) {
+          const cardStartIdx = htmlOut.lastIndexOf('<div class="card-dynamic', tIdx);
+          if (cardStartIdx !== -1) {
+            const doTableHtml = `
+          <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-amber-400">
+            <div class="px-5 py-3 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs font-black uppercase tracking-wider text-amber-400">
+                <i class="fa-solid fa-calendar-day mr-1.5"></i>Sales Reports Submitted on Roster Day Off (DO) — ${selectedMonthKey} (${doSubmissions.length})
+              </span>
+              <span class="text-[11px] font-bold text-slate-300">
+                ${u.role === 'admin' ? `${u.team} shown first • Move Date, Edit or Delete with confirmation (Nazim can manage all)` : 'Your Day Off (DO) Submissions'}
+              </span>
+            </div>
+            <table class="w-full text-left text-xs whitespace-nowrap">
+              <thead class="table-header-light uppercase font-extrabold">
+                <tr>
+                  <th class="p-3.5">SL</th>
+                  <th class="p-3.5">Submitted Date (DO)</th>
+                  <th class="p-3.5">Agent Name & ID</th>
+                  <th class="p-3.5">Team</th>
+                  <th class="p-3.5 text-center">Roster Status</th>
+                  <th class="p-3.5 text-center">Leads / Orders</th>
+                  <th class="p-3.5">Sales Amount</th>
+                  <th class="p-3.5 text-right">Actions (Move Date / Edit / Delete)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-semibold">
+                ${doSubmissions.length === 0 ? `
+                  <tr>
+                    <td colspan="8" class="p-10 text-center text-emerald-700 font-extrabold">
+                      🎉 No sales reports were submitted on a Day Off (DO) for the selected filter in ${selectedMonthKey}!
+                    </td>
+                  </tr>
+                ` : ''}
+                ${doSubmissions.map((r, idx) => {
+                  const canManageRow = isSuperAdmin(u) || (u.role === 'admin' && canEditTeamData(u, r.team)) || (u.role === 'agent' && String(r.userId) === String(u.id));
+                  return `
+                    <tr class="hover:bg-amber-50/50 ${normalizeTeamNameAlias(r.team) === myTeamNorm ? 'bg-amber-50/30' : ''}">
+                      <td class="p-3.5 font-black text-slate-400">#${idx + 1}</td>
+                      <td class="p-3.5">
+                        <span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-black text-xs">${cleanDisplayDate(r.date)}</span>
+                        <span class="text-[10px] text-slate-400 ml-1">(${r.date})</span>
+                      </td>
+                      <td class="p-3.5 font-extrabold text-slate-900">${r.userName} <span class="text-slate-400 text-[10px]">(${r.userId})</span></td>
+                      <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(r.team)}">${r.team}</span></td>
+                      <td class="p-3.5 text-center"><span class="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 font-black text-[10px]">⚠️ Roster: DO (Day Off)</span></td>
+                      <td class="p-3.5 text-center font-bold">${r.leads} Leads / <strong class="text-blue-600">${r.orders} Ord</strong></td>
+                      <td class="p-3.5 font-black text-emerald-600 text-sm">৳${Number(r.amount || 0).toLocaleString()}</td>
+                      <td class="p-3.5 text-right space-x-1.5">
+                        ${canManageRow ? `
+                          <button type="button" onclick="handleChangeReportDatePrompt('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl font-black text-[11px] shadow-xs cursor-pointer" title="Move Night Shift report to previous working date">
+                            <i class="fa-solid fa-calendar-day mr-1"></i>Move Date
+                          </button>
+                          <button type="button" onclick="openReportModal('${r.userId}', '${r.date}')" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-xl font-extrabold text-[11px] cursor-pointer">
+                            <i class="fa-solid fa-pen-to-square mr-1"></i>Edit Data
+                          </button>
+                          <button type="button" onclick="handleDirectDeleteReport('${r.userId}', '${r.userName.replace(/'/g, "\\'")}', '${r.date}')" class="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-extrabold text-[11px] cursor-pointer">
+                            <i class="fa-solid fa-trash-can mr-1"></i>Delete
+                          </button>
+                        ` : `<span class="text-[11px] font-bold text-slate-400">View Only (${r.team})</span>`}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+            htmlOut = htmlOut.slice(0, cardStartIdx) + doTableHtml;
+          }
+        }
+      }
+      return htmlOut;
+    };
+
+    // Also keep the 1-Click Day Off Banner inside Daily Sales Reports Tab for convenience!
+    const _origRenderReportsV24 = renderReports;
     renderReports = function() {
-      const baseHtml = _origRenderReportsV23();
+      const baseHtml = _origRenderReportsV24();
       const u = currentUser;
       const myTeamNorm = u ? normalizeTeamNameAlias(u.team) : '';
       const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
@@ -14442,7 +14564,7 @@ function renderChatHubView() {
                 <span class="text-xs font-black text-slate-900">${doReports.length} Report(s) Found on Day Off (${selectedMonthKey})</span>
               </div>
               <p class="text-[11px] font-bold text-slate-600 mt-0.5">
-                View who submitted reports on their weekly Day Off (such as Night Shift reports entered on DO). Your own team is listed first.
+                View who submitted reports on their weekly Day Off (also available inside Missing & Leave tab). Your own team is listed first.
               </p>
             </div>
           </div>
@@ -14509,7 +14631,258 @@ function renderChatHubView() {
       return baseHtml.replace('<div class="space-y-6">', '<div class="space-y-6">' + doBannerHtml);
     };
 
-    // 6. ORGANIZED TABLE-READY EXCEL (.XLS) & CSV DOWNLOADER
+    // 6. SPRINT + DRIVE PRODUCT COMBINED INCENTIVES FOR DASHBOARD BOX
+    function computeSingleAgentSprintIncentive(agentObj, monthSalesList, mKey) {
+      if (!agentObj || !isSprintSystemActiveForMonth(mKey || selectedMonthKey)) {
+        return { sprintMoney: 0, sprintBadges: [] };
+      }
+      const chKey = getChannelForTeam(agentObj.team) === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+      const gradeKey = agentObj.role === 'admin' ? 'TL' : (agentObj.grade || 'A');
+      const rewardSpec = (SPRINT_REWARD_PROGRAM[chKey] && SPRINT_REWARD_PROGRAM[chKey][gradeKey])
+        ? SPRINT_REWARD_PROGRAM[chKey][gradeKey]
+        : SPRINT_REWARD_PROGRAM.FACEBOOK['A'];
+
+      const baseTgt = Number(agentObj.baseTarget) || 0;
+      const workTgt = calcWorkingTargetFromBase(baseTgt, chKey);
+      if (workTgt <= 0) return { sprintMoney: 0, sprintBadges: [] };
+
+      const s1Goal = Math.round(workTgt * 0.40);
+      const s2Goal = Math.round(workTgt * 0.35);
+      const s3Goal = Math.round(workTgt * 0.35);
+
+      const agSales = deduplicateSalesRecordsList(monthSalesList).filter(s =>
+        String(s.userId).trim() === String(agentObj.id).trim() &&
+        String(s.date || '').endsWith(mKey || selectedMonthKey) &&
+        !String(s.date || '').startsWith('MONTHLY_PROD_')
+      );
+
+      let s1Sales = 0, s2Sales = 0, s3Sales = 0;
+      agSales.forEach(s => {
+        const day = parseInt(String(s.date).split('/')[0], 10) || 0;
+        const amt = Number(s.amount) || 0;
+        if (day <= 10) s1Sales += amt;
+        else if (day <= 20) s2Sales += amt;
+        else s3Sales += amt;
+      });
+
+      const hitS1 = s1Goal > 0 && s1Sales >= s1Goal;
+      const hitS2 = s2Goal > 0 && s2Sales >= s2Goal;
+      const hitS3 = s3Goal > 0 && s3Sales >= s3Goal;
+      const hitCount = (hitS1 ? 1 : 0) + (hitS2 ? 1 : 0) + (hitS3 ? 1 : 0);
+
+      let sprintMoney = 0;
+      const sprintBadges = [];
+
+      if (hitCount === 3) {
+        sprintMoney = Number(rewardSpec.all3) || (rewardSpec.s1 + rewardSpec.s2 + rewardSpec.s3);
+        sprintBadges.push(`🏆 All 3 Sprints Hit: ৳${sprintMoney.toLocaleString()}`);
+      } else {
+        if (hitS1) {
+          sprintMoney += Number(rewardSpec.s1) || 0;
+          sprintBadges.push(`⚡ Sprint 1 (100%): ৳${Number(rewardSpec.s1).toLocaleString()}`);
+        }
+        if (hitS2) {
+          sprintMoney += Number(rewardSpec.s2) || 0;
+          sprintBadges.push(`⚡ Sprint 2 (100%): ৳${Number(rewardSpec.s2).toLocaleString()}`);
+        }
+        if (hitS3) {
+          sprintMoney += Number(rewardSpec.s3) || 0;
+          sprintBadges.push(`⚡ Sprint 3 (100%): ৳${Number(rewardSpec.s3).toLocaleString()}`);
+        }
+        if (hitCount === 2 && rewardSpec.any2Extra) {
+          sprintMoney += Number(rewardSpec.any2Extra);
+          sprintBadges.push(`🔥 2-Sprint Combo Bonus: +৳${Number(rewardSpec.any2Extra).toLocaleString()}`);
+        }
+      }
+      return { sprintMoney, sprintBadges };
+    }
+
+    let isInsideDriveProductStatsCalc = false;
+    const _origComputeAgentDriveProductStatsV24 = computeAgentDriveProductStats;
+    computeAgentDriveProductStats = function(agentObj, monthSalesList, mKey) {
+      isInsideDriveProductStatsCalc = true;
+      try {
+        return _origComputeAgentDriveProductStatsV24(agentObj, monthSalesList, mKey);
+      } finally {
+        isInsideDriveProductStatsCalc = false;
+      }
+    };
+
+    calculateEarnedIncentives = function(pTotals, agentCount, mKey) {
+      const mk = mKey || selectedMonthKey;
+      let prodMoney = 0;
+      let earnedCashBadges = [];
+      let earnedGiftItems = [];
+      const activeProds = getActiveProductsForMonth(mk);
+
+      // When called from inside computeAgentDriveProductStats, only calculate that single agent's product rewards
+      if (isInsideDriveProductStatsCalc) {
+        Object.keys(activeProds).forEach(k => {
+          const p = activeProds[k];
+          const achieved = Number(pTotals[k]) || 0;
+          const target = (Number(p.targetKg) || 0) * (agentCount || 1);
+          const pct = target > 0 ? (achieved / target) * 100 : 0;
+          if (pct >= 100) {
+            if (p.bonus100) { prodMoney += Number(p.bonus100); earnedCashBadges.push(`${p.name} (100%: ৳${p.bonus100})`); }
+            if (p.item100) { earnedGiftItems.push(`🎁 ${p.item100} (${p.name} 100%)`); }
+          } else if (pct >= 90 && p.bonus90) {
+            prodMoney += Number(p.bonus90);
+            earnedCashBadges.push(`${p.name} (90%: ৳${p.bonus90})`);
+          }
+        });
+        return {
+          totalMoney: prodMoney,
+          earnedCashBadges,
+          earnedGiftItems,
+          earnedRewards: [...earnedCashBadges, ...earnedGiftItems]
+        };
+      }
+
+      const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(mk));
+      const monthUsers = getUsersForMonth(mk);
+      let sprintMoneyTotal = 0;
+      let sprintBadgesList = [];
+
+      if (currentUser && canViewAll(currentUser) && agentCount > 1) {
+        const scopedAgents = monthUsers.filter(usr => {
+          if (usr.role !== 'agent') return false;
+          if (dashboardScope === 'ALL') return true;
+          return normalizeTeamNameAlias(usr.team) === normalizeTeamNameAlias(dashboardScope);
+        });
+
+        scopedAgents.forEach(ag => {
+          const agDp = computeAgentDriveProductStats(ag, allMonthSales, mk);
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const ach = Number(agDp.prodKg[k]) || 0;
+            const tgt = Number(p.targetKg) || 0;
+            const pct = tgt > 0 ? (ach / tgt) * 100 : 0;
+            if (pct >= 100) {
+              if (p.bonus100) {
+                prodMoney += Number(p.bonus100);
+                earnedCashBadges.push(`${ag.name.split(' ')[0]}: ${p.name} (100%: ৳${p.bonus100})`);
+              }
+              if (p.item100) {
+                earnedGiftItems.push(`🎁 ${ag.name.split(' ')[0]}: ${p.item100} (${p.name} 100%)`);
+              }
+            } else if (pct >= 90 && p.bonus90) {
+              prodMoney += Number(p.bonus90);
+              earnedCashBadges.push(`${ag.name.split(' ')[0]}: ${p.name} (90%: ৳${p.bonus90})`);
+            }
+          });
+
+          const spRes = computeSingleAgentSprintIncentive(ag, allMonthSales, mk);
+          if (spRes.sprintMoney > 0) {
+            sprintMoneyTotal += spRes.sprintMoney;
+            spRes.sprintBadges.forEach(b => sprintBadgesList.push(`${ag.name.split(' ')[0]} (${b})`));
+          }
+        });
+      } else {
+        Object.keys(activeProds).forEach(k => {
+          const p = activeProds[k];
+          const achieved = Number(pTotals[k]) || 0;
+          const target = (Number(p.targetKg) || 0) * (agentCount || 1);
+          const pct = target > 0 ? (achieved / target) * 100 : 0;
+
+          if (pct >= 100) {
+            if (p.bonus100) {
+              prodMoney += Number(p.bonus100);
+              earnedCashBadges.push(`${p.name} (100%: ৳${p.bonus100})`);
+            }
+            if (p.item100) {
+              earnedGiftItems.push(`🎁 ${p.item100} (${p.name} 100%)`);
+            }
+          } else if (pct >= 90 && p.bonus90) {
+            prodMoney += Number(p.bonus90);
+            earnedCashBadges.push(`${p.name} (90%: ৳${p.bonus90})`);
+          }
+        });
+
+        if (currentUser && !canViewAll(currentUser)) {
+          const myUserObj = monthUsers.find(u => String(u.id) === String(currentUser.id)) || currentUser;
+          const spRes = computeSingleAgentSprintIncentive(myUserObj, allMonthSales, mk);
+          sprintMoneyTotal = spRes.sprintMoney;
+          sprintBadgesList = spRes.sprintBadges;
+        }
+      }
+
+      const totalMoney = prodMoney + sprintMoneyTotal;
+      const combinedCashBadges = [...sprintBadgesList, ...earnedCashBadges];
+
+      return {
+        totalMoney,
+        prodMoney,
+        sprintMoney: sprintMoneyTotal,
+        earnedCashBadges: combinedCashBadges,
+        earnedGiftItems,
+        earnedRewards: [...combinedCashBadges, ...earnedGiftItems]
+      };
+    };
+
+    // 7. INSTANT LOGIN DATA PRE-LOAD (No empty/0 dashboard flash when an agent signs in!)
+    handleLogin = function(e) {
+      e.preventDefault();
+      let id = document.getElementById('loginId').value.trim();
+      if (id === '10160') id = '10175';
+      const pass = document.getElementById('loginPass').value.trim();
+      const rawUser = getStored('users', DEFAULT_USERS).map(normalizeUserRecord).find(u => String(u.id) === id && u.pass === pass);
+      if (!rawUser) { showPortalToast('Login Failed', 'Invalid Employee ID or Password! Please check and try again.', 'error'); return; }
+      if (isUserAccountDeactivated(rawUser) && String(rawUser.id) !== '10122') {
+        showPortalToast('Account Deactivated', 'This Employee ID is currently deactivated by your Team Leader / Admin.', 'error');
+        return;
+      }
+      const user = normalizeUserRecord(rawUser);
+      currentUser = user;
+      setStored('session_user', user);
+      activeChannel = user.role === 'supervisor' ? 'ALL_CHANNELS' : getChannelForTeam(user.team);
+      localStorage.setItem('gb_active_channel', activeChannel);
+      const loginTeamScope = (user.role === 'admin' || user.role === 'agent') ? normalizeTeamNameAlias(user.team) : 'ALL';
+      dashboardScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+      monthlyPerfTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+      driveProdTeamScope = loginTeamScope;
+      sprintTabTeamScope = loginTeamScope;
+      missingReportsTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+      monthlyPerfAgentId = 'ALL';
+      logsFilterScope = 'ALL';
+      reportsDateFilter = getTodayFormatted();
+
+      const cachedSales = getStored('sales_records', []);
+      const finishSignIn = () => {
+        init();
+        setTimeout(() => {
+          if (!currentUser) return;
+          recordActivityLog('User Login', `Signed in to the portal (${user.role.toUpperCase()})`, true);
+          if (user.role === 'agent') {
+            const today = getTodayFormatted();
+            const rec = getStored('attendance_records', []).find(a => String(a.userId) === String(user.id) && a.date === today);
+            if (rec) postToSheet('ATTENDANCE_SYNC', rec).catch(() => {});
+          }
+        }, 600);
+      };
+
+      if (cachedSales.length === 0) {
+        document.getElementById('app').innerHTML = `
+          <div class="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
+            <div class="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-2xl shadow-lg mb-3 animate-bounce">
+              <i class="fa-solid fa-cloud-arrow-down"></i>
+            </div>
+            <h2 class="text-base font-black text-slate-900">Syncing ${user.name}'s Live Data...</h2>
+            <p class="text-xs font-bold text-slate-500 mt-1">Loading sales, sprint & product records from cloud...</p>
+          </div>
+        `;
+        fetch(`${webhookUrl}?t=${Date.now()}&monthKey=${encodeURIComponent(getCurrentMonthKeyStr())}`)
+          .then(r => r.json())
+          .then(res => {
+            if (res && res.status === 'success') _origHandleCloudDataV24(res);
+          })
+          .catch(() => {})
+          .finally(finishSignIn);
+      } else {
+        finishSignIn();
+      }
+    };
+
+    // 8. ORGANIZED TABLE-READY EXCEL (.XLS) & CSV DOWNLOADER
     downloadPortalCsvFile = function(filename, headersArr, rowsArr) {
       const cleanTitle = filename.replace(/\.csv$/i, '').replace(/_/g, ' ');
       const xlsFilename = filename.replace(/\.csv$/i, '.xls');
@@ -14556,6 +14929,315 @@ function renderChatHubView() {
       URL.revokeObjectURL(xlsUrl);
       showPortalToast('Organized Excel Table Downloaded!', `Saved "${xlsFilename}" with full table formatting.`, 'success');
     };
+
+    
+
+  
+
+    // =========================================================================
+    // MASTER PATCH (v25) — TL PERSONAL SALES ENTRY, ADMIN CHECKBOX & STRICT VISIBILITY
+    // =========================================================================
+    let showTlInSalesTables = false;
+
+    function isUserTeamLeaderRecord(uOrId) {
+      if (!uOrId) return false;
+      if (typeof uOrId === 'object') {
+        return uOrId.role === 'admin' || ALL_TL_IDS_SET.has(String(uOrId.id).trim());
+      }
+      const uid = String(uOrId).trim();
+      if (ALL_TL_IDS_SET.has(uid)) return true;
+      const allU = getUsersForMonth(selectedMonthKey, true);
+      const found = allU.find(x => String(x.id).trim() === uid);
+      return Boolean(found && found.role === 'admin');
+    }
+
+    function toggleShowTlInSalesTables(cbEl) {
+      showTlInSalesTables = Boolean(cbEl && cbEl.checked);
+      if (!showTlInSalesTables && monthlyPerfAgentId !== 'ALL' && isUserTeamLeaderRecord(monthlyPerfAgentId)) {
+        monthlyPerfAgentId = 'ALL';
+      }
+      renderAppLayout();
+    }
+
+    // 1. Allow TLs in Daily Sales Add/Edit Modal (SubmitModal), but KEEP TLs OUT of Drive Product!
+    function getEditableSalesMembersWithTLForActor(mKey) {
+      const mk = mKey || selectedMonthKey;
+      const myTeamNorm = currentUser ? normalizeTeamNameAlias(currentUser.team) : '';
+      const channelMembers = getUsersForMonth(mk, false).filter(u => u.role === 'agent' || u.role === 'admin');
+      const allFloatingAgents = getUsersForMonth(mk, true).filter(u => u.role === 'agent' && isPendingOrFloatingAgent(u));
+      const map = new Map();
+      channelMembers.forEach(a => map.set(String(a.id), a));
+      allFloatingAgents.forEach(a => {
+        if (!map.has(String(a.id))) map.set(String(a.id), a);
+      });
+      return Array.from(map.values()).sort((a, b) => {
+        const aMyTeam = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : (isPendingOrFloatingAgent(a) ? 2 : 1);
+        const bMyTeam = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : (isPendingOrFloatingAgent(b) ? 2 : 1);
+        if (aMyTeam !== bMyTeam) return aMyTeam - bMyTeam;
+        const aIsTL = a.role === 'admin' ? 0 : 1;
+        const bIsTL = b.role === 'admin' ? 0 : 1;
+        return aIsTL - bIsTL;
+      });
+    }
+
+    // Override filterAgentSelectBySearch so subAgentId (Daily Sales Modal) includes TLs, while dpModalAgentId (Drive Product) stays Agents-Only!
+    const _v25OrigFilterAgentSelectBySearch = filterAgentSelectBySearch;
+    filterAgentSelectBySearch = function(searchInputId, selectElId, onChangeFnName, teamSelectElId) {
+      if (selectElId !== 'subAgentId') {
+        return _v25OrigFilterAgentSelectBySearch(searchInputId, selectElId, onChangeFnName, teamSelectElId);
+      }
+      const q = (document.getElementById(searchInputId)?.value || '').trim().toLowerCase();
+      const teamFilterVal = teamSelectElId ? (document.getElementById(teamSelectElId)?.value || 'ALL') : 'ALL';
+      const sel = document.getElementById(selectElId);
+      if (!sel) return;
+      const allMembers = getEditableSalesMembersWithTLForActor(selectedMonthKey);
+      const prevVal = sel.value;
+
+      const teamScoped = (q || teamFilterVal === 'ALL')
+        ? allMembers
+        : allMembers.filter(a => {
+            if (teamFilterVal === 'FLOATING_POOL') return isPendingOrFloatingAgent(a);
+            return normalizeTeamNameAlias(a.team) === normalizeTeamNameAlias(teamFilterVal);
+          });
+
+      const matched = !q
+        ? teamScoped
+        : teamScoped.filter(a => String(a.name || '').toLowerCase().includes(q) || String(a.id || '').toLowerCase().includes(q) || String(a.team || '').toLowerCase().includes(q));
+
+      const countBadgeEl = document.getElementById(selectElId + '_countBadge');
+      if (countBadgeEl) countBadgeEl.textContent = `${matched.length} Member(s)`;
+
+      if (matched.length === 0) {
+        sel.innerHTML = `<option value="">No member found</option>`;
+        return;
+      }
+      sel.innerHTML = matched.map(a => {
+        const roleTag = a.role === 'admin' ? '👑 TL • ' : '';
+        return `<option value="${a.id}">${roleTag}${a.name} (${a.id} • ${isPendingOrFloatingAgent(a) ? '🟣 Floating / Pending' : a.team})</option>`;
+      }).join('');
+      if (matched.some(a => String(a.id) === String(prevVal))) {
+        sel.value = prevVal;
+      } else {
+        sel.value = matched[0].id;
+        if (onChangeFnName && typeof window[onChangeFnName] === 'function') {
+          window[onChangeFnName]();
+        }
+      }
+    };
+
+    const _v25OrigOpenReportModal = openReportModal;
+    openReportModal = function(agentId, dateStr) {
+      if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales') && !hasFeatureAccess(currentUser, 'feat_submit_own_sales')) return;
+      let resolvedAgentId = currentUser ? currentUser.id : null;
+      if (hasFeatureAccess(currentUser, 'feat_manage_all_sales')) {
+        const teamFilterEl = document.getElementById('subModalTeamFilter');
+        const searchEl = document.getElementById('subAgentSearchInput');
+        if (searchEl) searchEl.value = '';
+
+        const allMembers = getEditableSalesMembersWithTLForActor(selectedMonthKey);
+        const targetAgObj = agentId ? allMembers.find(a => String(a.id) === String(agentId)) : null;
+        if (teamFilterEl) {
+          if (targetAgObj) {
+            teamFilterEl.value = isPendingOrFloatingAgent(targetAgObj) ? 'FLOATING_POOL' : normalizeTeamNameAlias(targetAgObj.team);
+          } else {
+            teamFilterEl.value = getDefaultModalTeamFilterForActor();
+          }
+        }
+        filterAgentSelectBySearch('subAgentSearchInput', 'subAgentId', null, 'subModalTeamFilter');
+
+        const selEl = document.getElementById('subAgentId');
+        const preferredId = (targetAgObj && targetAgObj.id) || (selEl && selEl.value) || (allMembers[0] && allMembers[0].id);
+        if (selEl && preferredId) {
+          selEl.value = preferredId;
+          lastSelectedAgentId = preferredId;
+          resolvedAgentId = preferredId;
+        }
+      }
+      const targetDate = (dateStr && dateStr !== 'ALL') ? dateStr : getEffectiveReportDateForAgent(resolvedAgentId);
+      document.getElementById('subDate').value = dateToInputVal(targetDate);
+      onModalChange();
+      openModal('submitModal');
+    };
+
+    // Hide Drive Product shortcut in Submit Modal when a TL is selected (since TLs don't have Drive Product targets)
+    const _v25OrigOnModalChange = onModalChange;
+    onModalChange = function() {
+      _v25OrigOnModalChange();
+      const u = currentUser;
+      const selectedId = hasFeatureAccess(u, 'feat_manage_all_sales') ? document.getElementById('subAgentId')?.value : u?.id;
+      const isTLSelected = isUserTeamLeaderRecord(selectedId);
+      const dpShortcutBox = document.querySelector('#submitModal .bg-amber-50\\/90');
+      if (dpShortcutBox) {
+        dpShortcutBox.style.display = isTLSelected ? 'none' : 'flex';
+      }
+    };
+
+    // 2. DAILY SALES REPORTS TAB: Hide TL sales from Agents ALWAYS; show to Admins when `showTlInSalesTables` is checked!
+    // Also include a Grand Total (Agents + TL) row in the footer so no TL sale is ever missed in totals!
+    const _v25OrigRenderReports = renderReports;
+    renderReports = function() {
+      const u = currentUser;
+      const isAdminOrSup = canViewAll(u);
+      const allRawSales = getStored('sales_records', []);
+
+      const shouldHideTlRowsInTable = !isAdminOrSup || !showTlInSalesTables;
+      let htmlOut = '';
+      if (shouldHideTlRowsInTable) {
+        const filteredForTable = allRawSales.filter(s => !isUserTeamLeaderRecord(s.userId));
+        setStored('sales_records', filteredForTable);
+        try {
+          htmlOut = _v25OrigRenderReports();
+        } finally {
+          setStored('sales_records', allRawSales);
+        }
+      } else {
+        htmlOut = _v25OrigRenderReports();
+      }
+
+      if (isAdminOrSup) {
+        const tlSalesInScope = deduplicateSalesRecordsList(allRawSales).filter(s => {
+          if (String(s.date || '').startsWith('MONTHLY_PROD_')) return false;
+          if (!isUserTeamLeaderRecord(s.userId)) return false;
+          if (reportsDateFilter !== 'ALL' && s.date !== reportsDateFilter) return false;
+          if (reportsDateFilter === 'ALL' && !String(s.date || '').endsWith(selectedMonthKey)) return false;
+          if (logsFilterScope === 'ALL_FB') return getChannelForTeam(s.team) === 'FACEBOOK';
+          if (logsFilterScope === 'ALL_WA') return getChannelForTeam(s.team) === 'WHATSAPP';
+          if (logsFilterScope !== 'ALL' && logsFilterScope !== 'ALL_OMNI' && logsFilterScope !== 'MINE') {
+            return normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(logsFilterScope);
+          }
+          return activeChannel === 'ALL_CHANNELS' || getChannelForTeam(s.team) === activeChannel;
+        });
+        const tlLeadsSum = tlSalesInScope.reduce((a, c) => a + (Number(c.leads) || 0), 0);
+        const tlOrdersSum = tlSalesInScope.reduce((a, c) => a + (Number(c.orders) || 0), 0);
+        const tlAmountSum = tlSalesInScope.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+
+        const checkboxHtml = `
+          <label class="flex items-center gap-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-3 py-2 rounded-xl shadow-2xs cursor-pointer select-none transition-colors" title="Tick to show Team Leaders' personal sales entries in the table">
+            <input type="checkbox" ${showTlInSalesTables ? 'checked' : ''} onchange="toggleShowTlInSalesTables(this)" class="w-4 h-4 accent-orange-600 rounded cursor-pointer">
+            <span class="text-xs font-black text-orange-900"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>Include TL Sales ${tlSalesInScope.length > 0 ? `(${tlSalesInScope.length})` : ''}</span>
+          </label>
+        `;
+        htmlOut = htmlOut.replace('<div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">', checkboxHtml + '<div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">');
+
+        if (!showTlInSalesTables && tlAmountSum > 0) {
+          const tlFootRow = `
+            <tr class="bg-slate-800 text-amber-300 font-extrabold text-xs border-b border-slate-700">
+              <td colspan="4" class="p-3.5"><i class="fa-solid fa-crown mr-1.5"></i>+ Team Leader Personal Sales (${tlSalesInScope.map(x => x.userName).join(', ')}) — Tick "Include TL Sales" above to view row</td>
+              <td class="p-3.5 text-center">${tlLeadsSum.toLocaleString()}</td>
+              <td class="p-3.5 text-center text-blue-300">${tlOrdersSum.toLocaleString()}</td>
+              <td class="p-3.5 text-center">-</td>
+              <td class="p-3.5 text-emerald-400">৳${tlAmountSum.toLocaleString()}</td>
+              <td colspan="4" class="p-3.5 text-slate-300">Included in Dashboard & Team Totals</td>
+            </tr>
+          `;
+          htmlOut = htmlOut.replace('<tfoot class="bg-slate-900 text-white font-black text-xs">', '<tfoot class="bg-slate-900 text-white font-black text-xs">' + tlFootRow);
+        }
+      }
+      return htmlOut;
+    };
+
+    // 3. MONTHLY PERFORMANCE TAB: Add "☑️ Include TL" checkbox + allow selecting any TL from the Agent dropdown to view their Date-Wise breakdown!
+    const _v25OrigRenderMonthlyPerformanceView = renderMonthlyPerformanceView;
+    renderMonthlyPerformanceView = function() {
+      const u = currentUser;
+      const isAdminOrSup = canViewAll(u);
+
+      if (!isAdminOrSup) {
+        return _v25OrigRenderMonthlyPerformanceView();
+      }
+
+      const allMonthUsers = getUsersForMonth(selectedMonthKey);
+      const allAgentsOnly = allMonthUsers.filter(usr => usr.role === 'agent');
+      const allTLsOnly = allMonthUsers.filter(usr => usr.role === 'admin');
+      const monthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+      const scopedTLs = allTLsOnly.filter(tl => monthlyPerfTeamScope === 'ALL' ? true : normalizeTeamNameAlias(tl.team) === normalizeTeamNameAlias(monthlyPerfTeamScope));
+      const scopedTlIds = new Set(scopedTLs.map(t => String(t.id)));
+      const tlMonthSales = monthSales.filter(s => scopedTlIds.has(String(s.userId)));
+      const tlLeadsTotal = tlMonthSales.reduce((a, c) => a + (Number(c.leads) || 0), 0);
+      const tlOrdersTotal = tlMonthSales.reduce((a, c) => a + (Number(c.orders) || 0), 0);
+      const tlRevTotal = tlMonthSales.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+
+      const shouldIncludeTLAsRows = showTlInSalesTables || (monthlyPerfAgentId !== 'ALL' && isUserTeamLeaderRecord(monthlyPerfAgentId));
+
+      let htmlOut = '';
+      const _origGetUsers = getUsersForMonth;
+      if (shouldIncludeTLAsRows) {
+        getUsersForMonth = function(mKey, includeAllCh) {
+          const list = _origGetUsers(mKey, includeAllCh);
+          return list.map(usr => usr.role === 'admin' ? { ...usr, role: 'agent', _isRealTL: true } : usr);
+        };
+      }
+      try {
+        htmlOut = _v25OrigRenderMonthlyPerformanceView();
+      } finally {
+        getUsersForMonth = _origGetUsers;
+      }
+
+      const checkboxHtml = `
+        <label class="h-8 inline-flex items-center gap-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-3 rounded-xl cursor-pointer select-none transition-colors" title="Tick to show Team Leaders in the Monthly Performance table">
+          <input type="checkbox" ${showTlInSalesTables ? 'checked' : ''} onchange="toggleShowTlInSalesTables(this)" class="w-4 h-4 accent-orange-600 rounded cursor-pointer">
+          <span class="text-[11px] font-black text-orange-900"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>Include TL (${scopedTLs.length})</span>
+        </label>
+      `;
+      htmlOut = htmlOut.replace('<div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl"', checkboxHtml + '<div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl"');
+
+      if (!shouldIncludeTLAsRows && scopedTLs.length > 0) {
+        const tlOptionsHtml = scopedTLs.map(tl => `<option value="${tl.id}" ${String(monthlyPerfAgentId) === String(tl.id) ? 'selected' : ''}>👑 ${tl.name} (${tl.id} • TL)</option>`).join('');
+        const selectEndIdx = htmlOut.indexOf('</select>', htmlOut.indexOf('onchange="setMonthlyPerfAgent(this.value)"'));
+        if (selectEndIdx !== -1) {
+          htmlOut = htmlOut.slice(0, selectEndIdx) + `<optgroup label="👑 Team Leaders (Date-Wise View)">${tlOptionsHtml}</optgroup>` + htmlOut.slice(selectEndIdx);
+        }
+      }
+
+      if (!shouldIncludeTLAsRows && monthlyPerfAgentId === 'ALL' && scopedTLs.length > 0) {
+        const agSalesOnly = monthSales.filter(s => !isUserTeamLeaderRecord(s.userId) && (monthlyPerfTeamScope === 'ALL' ? true : normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(monthlyPerfTeamScope)));
+        const agLeadsSum = agSalesOnly.reduce((a, c) => a + (Number(c.leads) || 0), 0);
+        const agOrdersSum = agSalesOnly.reduce((a, c) => a + (Number(c.orders) || 0), 0);
+        const agRevSum = agSalesOnly.reduce((a, c) => a + (Number(c.amount) || 0), 0);
+
+        const combinedLeads = agLeadsSum + tlLeadsTotal;
+        const combinedOrders = agOrdersSum + tlOrdersTotal;
+        const combinedRev = agRevSum + tlRevTotal;
+
+        htmlOut = htmlOut.replace(
+          'Included in Team & Overall Target Total',
+          `TL Sales: Leads <strong>${tlLeadsTotal}</strong> • Orders <strong>${tlOrdersTotal}</strong> • Revenue <strong class="text-emerald-300">৳${tlRevTotal.toLocaleString()}</strong> (Included in Grand Total below)`
+        );
+        htmlOut = htmlOut.replace(
+          `<td class="p-4 text-center">${agLeadsSum.toLocaleString()}</td>`,
+          `<td class="p-4 text-center">${combinedLeads.toLocaleString()}</td>`
+        ).replace(
+          `<td class="p-4 text-center text-blue-300">${agOrdersSum.toLocaleString()}</td>`,
+          `<td class="p-4 text-center text-blue-300">${combinedOrders.toLocaleString()}</td>`
+        ).replace(
+          `<td class="p-4 text-emerald-400 text-sm">৳${agRevSum.toLocaleString()}</td>`,
+          `<td class="p-4 text-emerald-400 text-sm">৳${combinedRev.toLocaleString()}</td>`
+        );
+      }
+
+      return htmlOut;
+    };
+
+    // 4. Also update exportMonthlyPerformanceCsv so if Include TL is checked (or a TL is selected), TLs are included in the CSV download too!
+    const _v25OrigExportMonthlyPerformanceCsv = exportMonthlyPerformanceCsv;
+    exportMonthlyPerformanceCsv = function() {
+      const shouldIncludeTLAsRows = canViewAll(currentUser) && (showTlInSalesTables || (monthlyPerfAgentId !== 'ALL' && isUserTeamLeaderRecord(monthlyPerfAgentId)));
+      const _origGetUsers = getUsersForMonth;
+      if (shouldIncludeTLAsRows) {
+        getUsersForMonth = function(mKey, includeAllCh) {
+          const list = _origGetUsers(mKey, includeAllCh);
+          return list.map(usr => usr.role === 'admin' ? { ...usr, role: 'agent', _isRealTL: true } : usr);
+        };
+      }
+      try {
+        _v25OrigExportMonthlyPerformanceCsv();
+      } finally {
+        getUsersForMonth = _origGetUsers;
+      }
+    };
+
+    window.addEventListener('load', init);
 
   </script>
 </body>
