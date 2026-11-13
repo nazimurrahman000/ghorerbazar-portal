@@ -14285,7 +14285,7 @@ function renderChatHubView() {
       window.addEventListener('scroll', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true, capture: true });
       window.addEventListener('wheel', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
       window.addEventListener('touchmove', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
-      window.addEventListener('mousedown', () => { lastUserScrollOrTouchMs = Date.now(); }, { passive: true });
+      // mousedown scroll-lock removed
 
       const _origSetTabSafe = setTab;
       setTab = function(tab) {
@@ -14598,6 +14598,7 @@ function renderChatHubView() {
 
       // Add 1-Click "⚠️ Day Off (DO) Submissions" Sub-Tab inside Missing & Leave Tab (Excludes TLs!)
       const _origRenderMissingReportsAndLeaveViewSafe = renderMissingReportsAndLeaveView;
+      window._baseRenderMissingReportsAndLeaveView = _origRenderMissingReportsAndLeaveViewSafe;
       renderMissingReportsAndLeaveView = function() {
         const u = currentUser;
         const isAdminOrSup = canViewAll(u);
@@ -16138,7 +16139,7 @@ function renderChatHubView() {
       };
 
       // -----------------------------------------------------------------------
-      // G. VIBRANT SOLID-COLOR GRADIENT CARDS FOR TEAM COMPARISON IN RANKING TAB
+      // G. VIBRANT SOLID-COLOR GRADIENT CARDS FOR TEAM COMPARISON + TOP 3 PODIUM & HIGHLIGHTED RANKING TABLE
       // -----------------------------------------------------------------------
       renderRankingAndComparison = function() {
         const monthUsersAll = getUsersForMonth(selectedMonthKey);
@@ -16333,95 +16334,140 @@ function renderChatHubView() {
                 <div>
                   <div class="flex flex-wrap items-center gap-2">
                     <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
-                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-800">
-                      ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'Sorted by Target Achievement Ratio (%)' : 'Sorted by Total Sales Amount (৳)'}
+                    <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}">
+                      ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'Sorted by Target Achievement Ratio (%)' : 'Sorted by Achieved Sales Revenue (৳)'}
                     </span>
                   </div>
                   <p class="text-xs font-bold text-slate-500 mt-0.5">
-                    Leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Agents) — use the Sort dropdown to switch between Achievement % Wise and Amount Wise anytime.
+                    Leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Agents) — use the Sort dropdown to switch between <strong>Achievement % Wise</strong> and <strong>Amount Wise</strong> anytime.
                   </p>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-2.5">
-                  <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-                    <i class="fa-solid fa-arrow-down-wide-short text-indigo-600 text-xs"></i>
+                <div class="flex flex-wrap items-center gap-2">
+                  ${myRankNum ? `
+                  <div class="h-8 px-3 rounded-xl my-rank-name-pill inline-flex items-center gap-2 text-[11px] font-black">
+                    <i class="fa-solid fa-star text-amber-300 animate-spin text-[10px]"></i>
+                    <span>Your Rank: <strong class="text-amber-300">#${myRankNum} (${getOrdinal(myRankNum)})</strong></span>
+                  </div>
+                  ` : ''}
+
+                  <div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl" title="Switch ranking sort order between Achievement % and Sales Amount">
+                    <i class="fa-solid fa-arrow-down-wide-short text-purple-600 text-[11px]"></i>
                     <span class="text-[10px] font-extrabold uppercase text-slate-400">Sort By:</span>
-                    <select onchange="setFloorRankingSortMode(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                    <select onchange="setFloorRankingSortMode(this.value)" class="bg-transparent text-[11px] font-extrabold text-slate-800 focus:outline-none cursor-pointer">
                       <option value="AUTO" ${floorRankingSortMode === 'AUTO' ? 'selected' : ''}>Default (${activeChannel === 'ALL_CHANNELS' ? 'Achievement %' : 'Sales Amount'})</option>
-                      <option value="ACHIEVEMENT" ${floorRankingSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Target Achievement Ratio (%)</option>
-                      <option value="AMOUNT" ${floorRankingSortMode === 'AMOUNT' ? 'selected' : ''}>Total Sales Amount (৳)</option>
+                      <option value="ACHIEVEMENT" ${floorRankingSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Achievement % Wise</option>
+                      <option value="AMOUNT" ${floorRankingSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
                     </select>
                   </div>
 
-                  <button onclick="exportFloorRankingCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download current Ranking table as Excel/CSV">
+                  <button type="button" onclick="exportOverallFloorRankingCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download Floor Ranking CSV according to selected Sort order">
                     <i class="fa-solid fa-file-csv text-xs"></i> Download CSV
                   </button>
-
-                  ${myRankNum ? `
-                  <div class="px-4 py-2 rounded-2xl my-rank-name-pill flex items-center gap-2.5">
-                    <i class="fa-solid fa-wand-magic-sparkles text-amber-300 text-sm animate-spin"></i>
-                    <div>
-                      <span class="text-[9px] font-extrabold uppercase tracking-wider text-blue-100 block">Your Current Floor Position</span>
-                      <span class="text-sm font-black text-white">You are Ranked #${myRankNum} (${getOrdinal(myRankNum)}) out of ${rankedAgents.length}!</span>
-                    </div>
-                  </div>
-                  ` : ''}
                 </div>
               </div>
+
+              ${rankedAgents.length >= 3 ? `
+              <!-- Clean, Executive Top 3 Champions Podium (Gold #1, Silver #2, Bronze #3) -->
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-4">
+                ${rankedAgents.slice(0, 3).map((topAg, tIdx) => {
+                  const podiumThemes = [
+                    { rankTitle: '🥇 1st Place • Champion', border: 'border-2 border-amber-300 bg-gradient-to-br from-amber-50/90 via-white to-yellow-50/60 shadow-sm', pill: 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-2xs', metricTxt: 'text-amber-700', ringCls: 'ring-2 ring-amber-400' },
+                    { rankTitle: '🥈 2nd Place • 1st Runner-Up', border: 'border-2 border-slate-300 bg-gradient-to-br from-slate-50/90 via-white to-slate-100/60 shadow-xs', pill: 'bg-gradient-to-r from-slate-600 to-slate-700 text-white', metricTxt: 'text-slate-700', ringCls: 'ring-2 ring-slate-300' },
+                    { rankTitle: '🥉 3rd Place • 2nd Runner-Up', border: 'border-2 border-orange-300 bg-gradient-to-br from-orange-50/80 via-white to-amber-50/50 shadow-xs', pill: 'bg-gradient-to-r from-orange-600 to-amber-700 text-white', metricTxt: 'text-orange-700', ringCls: 'ring-2 ring-orange-300' }
+                  ];
+                  const pt = podiumThemes[tIdx];
+                  return `
+                    <div class="rounded-2xl p-4 ${pt.border} flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-3 min-w-0">
+                        <div class="relative shrink-0">
+                          ${renderUserAvatarHtml(topAg, 'w-11 h-11 rounded-2xl text-sm ' + pt.ringCls, 'bg-slate-800 text-white', false)}
+                          <span class="w-5 h-5 rounded-full ${pt.pill} text-[10px] font-black flex items-center justify-center absolute -top-1.5 -left-1.5 shadow">#${tIdx + 1}</span>
+                        </div>
+                        <div class="min-w-0">
+                          <span class="px-2 py-0.5 rounded-md ${pt.pill} text-[9px] font-black uppercase tracking-wider inline-block">${pt.rankTitle}</span>
+                          <h4 class="text-sm font-black text-slate-900 truncate mt-1">${topAg.name} <span class="text-[10px] font-bold text-slate-400">(${topAg.id})</span></h4>
+                          <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="px-2 py-0.5 rounded-full text-[9px] font-black ${getTeamBadgeClasses(topAg.team)}">${topAg.team}</span>
+                            <span class="text-[10px] font-extrabold text-slate-500">Grade ${topAg.grade}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="text-right shrink-0 pl-2 border-l border-slate-200/80">
+                        <span class="text-lg font-black ${pt.metricTxt} block leading-tight">${topAg.pctDisplay}%</span>
+                        <strong class="text-xs font-black text-emerald-600 block mt-0.5">৳${topAg.revenue.toLocaleString()}</strong>
+                        <span class="text-[9px] font-bold text-slate-400 block">${topAg.orders} Ord (${topAg.conv}%)</span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+              ` : ''}
+
               <div class="card-dynamic overflow-hidden overflow-x-auto">
                 <table class="w-full text-left text-xs whitespace-nowrap">
                   <thead class="table-header-light uppercase font-extrabold">
                     <tr>
                       <th class="p-3.5">Rank</th>
                       <th class="p-3.5">Agent Name</th>
+                      <th class="p-3.5">Live Status</th>
                       <th class="p-3.5">Team</th>
-                      <th class="p-3.5">Grade</th>
-                      <th class="p-3.5 text-center">Leads</th>
-                      <th class="p-3.5 text-center">Orders</th>
-                      <th class="p-3.5 text-center">Conv. Ratio</th>
-                      <th class="p-3.5">Total Sales Revenue</th>
+                      <th class="p-3.5 text-center">Grade</th>
+                      ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? `<th class="p-3.5 bg-purple-50 text-purple-900 border-x border-purple-200">Achievement % (Rank Basis)</th>` : ''}
+                      <th class="p-3.5">Achieved Revenue</th>
                       <th class="p-3.5">Working Target (+5%)</th>
-                      <th class="p-3.5">Target Achieved</th>
+                      ${getEffectiveRankingSortBy() !== 'ACHIEVEMENT' ? `<th class="p-3.5">Achievement %</th>` : ''}
+                      <th class="p-3.5 text-center">Total Leads</th>
+                      <th class="p-3.5 text-center">Total Orders</th>
+                      <th class="p-3.5 text-center">Conv. Ratio</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100 font-semibold">
-                    ${rankedAgents.map((ag, i) => {
-                      const rank = i + 1;
-                      const isCurrentUser = currentUser && String(ag.id) === String(currentUser.id);
-                      const medal = rank === 1 ? '🥇 1st' : (rank === 2 ? '🥈 2nd' : (rank === 3 ? '🥉 3rd' : `#${rank}`));
-                      const rowHighlightClass = isCurrentUser
-                        ? 'my-rank-row-glow font-black'
-                        : (rank <= 3 ? 'bg-amber-50/30 hover:bg-slate-50/80' : 'hover:bg-slate-50/80');
-                      return `
-                        <tr class="${rowHighlightClass} transition-colors">
-                          <td class="p-3.5 font-black ${isCurrentUser ? 'text-blue-700 text-sm' : 'text-slate-800'}">${medal}</td>
-                          <td class="p-3.5 font-extrabold text-slate-900">
-                            <div class="flex items-center gap-2.5">
-                              ${renderUserAvatarHtml(ag, 'w-8 h-8 rounded-xl text-xs', 'bg-blue-100 text-blue-700', isCurrentUser || hasFeatureAccess(currentUser, 'feat_manage_users'))}
-                              <span class="${isCurrentUser ? 'px-3 py-1 rounded-xl my-rank-name-pill font-black inline-flex items-center gap-1.5' : ''}">
-                                ${isCurrentUser ? '<i class="fa-solid fa-star text-amber-300 text-[10px]"></i>' : ''}${ag.name}
-                              </span>
-                              <span class="text-slate-400 text-[10px]">(${ag.id})</span>
-                              ${isCurrentUser ? `<span class="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[9px] font-black uppercase tracking-wider shadow-xs">YOU (${getOrdinal(rank)})</span>` : ''}
-                            </div>
-                          </td>
-                          <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${getTeamBadgeClasses(ag.team)}">${ag.team}</span></td>
-                          <td class="p-3.5 font-black text-slate-700">${ag.grade}</td>
-                          <td class="p-3.5 text-center font-bold text-slate-600">${ag.leads.toLocaleString()}</td>
-                          <td class="p-3.5 text-center font-black text-blue-600">${ag.orders.toLocaleString()}</td>
-                          <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-black">${ag.conv}%</span></td>
-                          <td class="p-3.5 font-black text-emerald-600 text-sm">৳${ag.revenue.toLocaleString()}</td>
-                          <td class="p-3.5 font-bold text-slate-500">৳${ag.workTgt.toLocaleString()}</td>
-                          <td class="p-3.5">
-                            <div class="flex items-center gap-2">
-                              <div class="w-20 bg-slate-200 rounded-full h-2 overflow-hidden">
-                                <div class="bg-blue-600 h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div>
-                              </div>
-                              <span class="font-black ${ag.exactPct >= 100 ? 'text-emerald-600' : 'text-slate-800'}">${ag.pctDisplay}%</span>
-                            </div>
-                          </td>
-                        </tr>
-                      `;
+                    ${rankedAgents.map((ag, idx) => {
+                      const isMe = currentUser && String(currentUser.id) === String(ag.id);
+                      const posNum = idx + 1;
+                      let rankBadge = `<span class="w-7 h-7 rounded-full ${isMe ? 'bg-blue-600 text-white ring-4 ring-blue-300' : 'bg-slate-100 text-slate-700'} flex items-center justify-center font-black">${posNum}</span>`;
+                      if (idx === 0) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-400 text-white flex items-center justify-center font-black shadow ${isMe ? 'ring-4 ring-blue-400' : ''}"><i class="fa-solid fa-trophy text-[11px]"></i></span>`;
+                      else if (idx === 1) rankBadge = `<span class="w-7 h-7 rounded-full bg-slate-300 text-slate-800 flex items-center justify-center font-black ${isMe ? 'ring-4 ring-blue-400' : ''}">2</span>`;
+                      else if (idx === 2) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-700 text-white flex items-center justify-center font-black ${isMe ? 'ring-4 ring-blue-400' : ''}">3</span>`;
+
+                      const top3RowBg = idx === 0 ? 'bg-amber-50/60 border-l-4 border-l-amber-400' : (idx === 1 ? 'bg-slate-50/90 border-l-4 border-l-slate-400' : (idx === 2 ? 'bg-orange-50/40 border-l-4 border-l-orange-400' : 'hover:bg-slate-50/90'));
+                      return `<tr class="${isMe ? 'my-rank-row-glow' : top3RowBg} transition-colors">
+                        <td class="p-3.5">${rankBadge}</td>
+                        <td class="p-3.5 font-extrabold text-slate-900">
+                          <div class="inline-flex items-center gap-2.5 ${isMe ? 'my-rank-name-pill px-3 py-1.5 rounded-xl' : ''}">
+                            ${renderUserAvatarHtml(ag, 'w-8 h-8 rounded-xl text-xs', 'bg-blue-100 text-blue-700', isMe || hasFeatureAccess(currentUser, 'feat_manage_users'))}
+                            <span>${ag.name}</span>
+                            <span class="${isMe ? 'text-blue-100' : 'text-slate-400'} text-[10px]">(${ag.id})</span>
+                            ${isMe
+                              ? `<span class="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black uppercase shadow-sm"><i class="fa-solid fa-location-dot mr-1"></i>YOU • ${getOrdinal(posNum)}</span>`
+                              : `<button type="button" onclick="openDirectChatWithUser('${ag.id}')" title="Send Personal Message to ${ag.name}" class="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-[10px] font-extrabold transition-colors cursor-pointer"><i class="fa-regular fa-comment-dots mr-1"></i>Message</button>`
+                            }
+                          </div>
+                        </td>
+                        <td class="p-3.5">${renderOnlineStatusBadge(ag.id)}</td>
+                        <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(ag.team)}">${ag.team}</span></td>
+                        <td class="p-3.5 text-center font-black text-slate-700">${ag.grade}</td>
+                        ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? `
+                        <td class="p-3.5 bg-purple-50/50 border-x border-purple-100">
+                          <div class="flex items-center gap-2">
+                            <span class="px-2 py-0.5 rounded-md bg-purple-600 text-white font-black text-xs shadow-2xs">${ag.pctDisplay}%</span>
+                            <div class="w-16 progress-track h-2 bg-purple-200/70"><div class="bg-purple-600 h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
+                          </div>
+                        </td>` : ''}
+                        <td class="p-3.5 font-black text-emerald-600 text-sm">৳${ag.revenue.toLocaleString()}</td>
+                        <td class="p-3.5 font-bold text-slate-500">৳${ag.workTgt.toLocaleString()}</td>
+                        ${getEffectiveRankingSortBy() !== 'ACHIEVEMENT' ? `
+                        <td class="p-3.5">
+                          <div class="flex items-center gap-2">
+                            <div class="w-16 progress-track h-2"><div class="bg-blue-600 h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div></div>
+                            <span class="font-black text-slate-800">${ag.pctDisplay}%</span>
+                          </div>
+                        </td>` : ''}
+                        <td class="p-3.5 text-center font-bold text-slate-600">${ag.leads.toLocaleString()}</td>
+                        <td class="p-3.5 text-center font-black text-blue-600">${ag.orders.toLocaleString()}</td>
+                        <td class="p-3.5 text-center"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-black">${ag.conv}%</span></td>
+                      </tr>`;
                     }).join('')}
                   </tbody>
                 </table>
@@ -16906,11 +16952,35 @@ function renderChatHubView() {
 
       window.isDayOffDutyApproved = function(userId, dateStr) {
         if (!userId || !dateStr) return false;
+        const uid = String(userId).trim();
         const cleanD = String(dateStr).replace(/^'/, '').trim();
         const mk = cleanD.substring(3) || selectedMonthKey;
         const store = window.getApprovedDayOffDutiesStore(mk);
-        const item = store[`${String(userId).trim()}_${cleanD}`];
-        return Boolean(item && !item.isRemoved);
+        const item = store[`${uid}_${cleanD}`];
+        if (item && !item.isRemoved) return true;
+
+        // Also check if this agent has a "Swap / Extra Day Off" marked in LEAVE_RECORDS_<mk> within ±6 days (same week swap)
+        const leaveStore = (typeof getLeaveRecordsStoreForMonth === 'function') ? getLeaveRecordsStoreForMonth(mk) : {};
+        const directLeave = leaveStore[`${uid}_${cleanD}`];
+        if (directLeave && !directLeave.isRemoved) {
+          const lt = String(directLeave.leaveType || '').toLowerCase();
+          if (lt.includes('extra day off') || lt.includes('swap') || lt.includes('day off')) return true;
+        }
+        const targetDayNum = parseInt(cleanD.split('/')[0], 10) || 0;
+        if (targetDayNum > 0) {
+          for (const k of Object.keys(leaveStore)) {
+            if (!k.startsWith(uid + '_')) continue;
+            const lv = leaveStore[k];
+            if (!lv || lv.isRemoved) continue;
+            const lt = String(lv.leaveType || '').toLowerCase();
+            const rsn = String(lv.reason || '').toLowerCase();
+            if (lt.includes('extra day off') || lt.includes('swap') || rsn.includes('swap')) {
+              const lvDayNum = parseInt(String(lv.date || '').split('/')[0], 10) || 0;
+              if (lvDayNum > 0 && Math.abs(targetDayNum - lvDayNum) <= 6) return true;
+            }
+          }
+        }
+        return false;
       };
 
       window.handleApproveDayOffDuty = function(userId, userName, dateStr) {
@@ -17078,7 +17148,7 @@ function renderChatHubView() {
       // 1) 0-Leads / 0-Orders / ৳0 rows are automatically hidden by default (with a toggle & 1-Click Clean button)
       // 2) Approved Day Off Duties are hidden from the Day Off warning list
       // 3) Each active Day Off submission has a green "✅ Day Off Duty" button right next to "Move Date"
-      const _origRenderMissingBaseV31 = _origRenderMissingReportsAndLeaveViewSafe;
+      const _origRenderMissingBaseV31 = window._baseRenderMissingReportsAndLeaveView;
       renderMissingReportsAndLeaveView = function() {
         const u = currentUser;
         const isAdminOrSup = canViewAll(u);
@@ -17100,7 +17170,7 @@ function renderChatHubView() {
         const zeroDoCount = allRawDoRows.filter(s => Number(s.amount || 0) === 0 && Number(s.orders || 0) === 0 && Number(s.leads || 0) === 0).length;
         const realDoRows = allRawDoRows.filter(s => Number(s.amount || 0) > 0 || Number(s.orders || 0) > 0 || Number(s.leads || 0) > 0);
 
-        let doSubmissions = window.showZeroDataDoEntries ? [...allRawDoRows] : [...realDoRows];
+        let doSubmissions = [...realDoRows];
 
         doSubmissions.sort((a, b) => {
           const aMy = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : 1;
@@ -17265,7 +17335,7 @@ function renderChatHubView() {
     
     // =========================================================================
     // MASTER VERIFIED UPGRADE PATCH (v33) — CROSS-CHANNEL RELOAD SCOPE FIX,
-    // SIDEBAR BADGE CLEANUP & ALL-TAB 2-ROW EXECUTIVE UI POLISH
+    // SIDEBAR BADGE CLEANUP & ALL-TAB CHANNEL-SAFE NAVIGATION
     // =========================================================================
     try {
       window.ensureValidChannelScopeForActor = function() {
@@ -17308,6 +17378,13 @@ function renderChatHubView() {
       renderDashboard = function() {
         window.ensureValidChannelScopeForActor();
         return _origRenderDashboardV33();
+      };
+
+      const _origSetTabV33 = setTab;
+      setTab = function(tab) {
+        _origSetTabV33(tab);
+        window.ensureValidChannelScopeForActor();
+        renderAppLayout();
       };
     } catch (patchV33Err) {
       console.error('Non-fatal patch v33 warning:', patchV33Err);
