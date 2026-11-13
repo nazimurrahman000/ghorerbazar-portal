@@ -17390,6 +17390,203 @@ function renderChatHubView() {
       console.error('Non-fatal patch v33 warning:', patchV33Err);
     }
 
+    // =========================================================================
+    // MASTER VERIFIED UPGRADE PATCH (v36) — ALL 6 USER-REQUESTED FIXES:
+    // 1. Clean Single-Agent Monthly Performance Excel/CSV (No empty side columns!)
+    // 2. Agent View-Only in Leave Log & Day Off Submissions ("Contact with your Team Leader")
+    // 3. Always open Dashboard by default on Login / Logout
+    // 4. Eliminate page shake / vertical jump during notifications & background sync
+    // 5. Fix Dark-Mode Slashed-Zero OCR so "Ajwa 10.5 kg" is never misread as "18.5 kg"
+    // =========================================================================
+    try {
+      // 1. ALWAYS RESET TO DASHBOARD TAB ON LOGIN & LOGOUT
+      const _origHandleLoginV36 = handleLogin;
+      handleLogin = function(e) {
+        activeTab = 'dashboard';
+        missingReportsSubView = 'MISSING';
+        return _origHandleLoginV36(e);
+      };
+
+      const _origExecuteInstantLogoutV36 = executeInstantLogout;
+      executeInstantLogout = function() {
+        activeTab = 'dashboard';
+        missingReportsSubView = 'MISSING';
+        return _origExecuteInstantLogoutV36();
+      };
+
+      // 2. FIX AI OCR SLASHED-ZERO ("10.5 kg" -> "10.5 kg", NOT "18.5 kg")
+      normalizeImageBlobToDataUrl = function(fileOrBlob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = function(ev) {
+            const dataUrl = ev.target.result;
+            const img = new Image();
+            img.onload = function() {
+              try {
+                const origW = img.naturalWidth || img.width || 1200;
+                const origH = img.naturalHeight || img.height || 800;
+                const scale = origW < 1000 ? 2.5 : (origW < 1800 ? 2.0 : 1.25);
+                const w = Math.round(origW * scale);
+                const h = Math.round(origH * scale);
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, w, h);
+
+                const imgData = ctx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                let darkPixels = 0;
+                const sampleCount = Math.floor(d.length / 16);
+                for (let i = 0; i < d.length; i += 16) {
+                  const lumSample = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                  if (lumSample < 95) darkPixels++;
+                }
+                const isDarkBgImage = (darkPixels / sampleCount) > 0.5;
+                // Use threshold 165 so slashed zeros ('0' in 10.5) keep their hollow center and never merge into '8'!
+                for (let i = 0; i < d.length; i += 4) {
+                  let r = d[i], g = d[i + 1], b = d[i + 2];
+                  if (isDarkBgImage) { r = 255 - r; g = 255 - g; b = 255 - b; }
+                  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                  if (lum >= 165) {
+                    d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
+                  } else {
+                    const v = Math.max(0, Math.round(lum * 0.35));
+                    d[i] = v; d[i + 1] = v; d[i + 2] = v;
+                  }
+                }
+                ctx.putImageData(imgData, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+              } catch (canvasErr) { resolve(dataUrl); }
+            };
+            img.onerror = function() { resolve(dataUrl); };
+            img.src = dataUrl;
+          };
+          reader.onerror = function(err) { reject(err); };
+          reader.readAsDataURL(fileOrBlob);
+        });
+      };
+
+      // 3. CLEAN SINGLE-AGENT MONTHLY PERFORMANCE EXCEL/CSV DOWNLOAD (NO EMPTY SIDE COLUMNS!)
+      const _origExportMonthlyPerfMultiV36 = exportMonthlyPerformanceCsv;
+      exportMonthlyPerformanceCsv = function() {
+        const u = currentUser;
+        const shouldIncludeTLAsRows = canViewAll(u) && (window.showTlInSalesTables || (monthlyPerfAgentId !== 'ALL' && window.isUserTeamLeaderRecord(monthlyPerfAgentId)));
+        const allUsers = getUsersForMonth(selectedMonthKey).filter(usr => shouldIncludeTLAsRows ? (usr.role === 'agent' || usr.role === 'admin') : usr.role === 'agent');
+        let teamFiltered = allUsers;
+        if (canViewAll(u)) {
+          if (monthlyPerfTeamScope !== 'ALL') teamFiltered = allUsers.filter(a => normalizeTeamNameAlias(a.team) === normalizeTeamNameAlias(monthlyPerfTeamScope));
+        } else {
+          teamFiltered = allUsers.filter(a => String(a.id) === String(u.id));
+        }
+        let displayed = teamFiltered;
+        if (canViewAll(u) && monthlyPerfAgentId !== 'ALL') {
+          displayed = teamFiltered.filter(a => String(a.id) === String(monthlyPerfAgentId));
+        }
+
+        if (displayed.length === 1) {
+          const ag = displayed[0];
+          const monthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(selectedMonthKey));
+          const agSales = monthSales.filter(s => String(s.userId) === String(ag.id) && !String(s.date || '').startsWith('MONTHLY_PROD_'))
+            .sort((a, b) => (parseInt(a.date.split('/')[0], 10) || 0) - (parseInt(b.date.split('/')[0], 10) || 0));
+          const baseTgt = Number(ag.baseTarget) || 0;
+          const workTgt = calcWorkingTargetFromBase(baseTgt, getChannelForTeam(ag.team));
+          const dailyTgt = Math.round(workTgt / 26);
+
+          const headers = [
+            'Date', 'Emp ID', 'Agent Name', 'Team', 'Grade',
+            'Leads', 'Orders', 'Conv. Ratio (%)', 'Sales Amount (BDT)',
+            'Daily Target (BDT)', 'Daily Achieved (%)'
+          ];
+          let totL = 0, totO = 0, totAmt = 0;
+          const rows = agSales.map(dl => {
+            const l = Number(dl.leads) || 0;
+            const o = Number(dl.orders) || 0;
+            const amt = Number(dl.amount) || 0;
+            totL += l; totO += o; totAmt += amt;
+            const conv = l > 0 ? ((o / l) * 100).toFixed(2) + '%' : '0.00%';
+            const ach = dailyTgt > 0 ? Math.round((amt / dailyTgt) * 100) + '%' : '0%';
+            return [dl.date, ag.id, ag.name, ag.team, ag.grade, l, o, conv, amt, dailyTgt, ach];
+          });
+
+          const totConv = totL > 0 ? ((totO / totL) * 100).toFixed(2) + '%' : '0.00%';
+          const totRem = Math.max(0, workTgt - totAmt);
+          const totAch = workTgt > 0 ? ((totAmt / workTgt) * 100).toFixed(2) + '%' : '0.00%';
+
+          rows.push(['MONTHLY TOTAL (' + agSales.length + ' Days)', ag.id, ag.name, ag.team, ag.grade, totL, totO, totConv, totAmt, workTgt, totAch]);
+          rows.push(['', '', '', '', '', '', '', '', '', '', '']);
+          rows.push(['MONTHLY TARGET SUMMARY', 'Base Target: ' + baseTgt.toLocaleString(), 'Working Target (+5%): ' + workTgt.toLocaleString(), 'Achieved Revenue: ' + totAmt.toLocaleString(), 'Remaining Target: ' + totRem.toLocaleString(), 'Monthly Achievement: ' + totAch, 'Active Days: ' + agSales.length, '', '', '', '']);
+
+          const safeMonth = selectedMonthKey.replace('/', '-');
+          downloadPortalCsvFile(`Monthly_Performance_${ag.name.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, rows);
+          return;
+        }
+        return _origExportMonthlyPerfMultiV36();
+      };
+
+      // 4. REMOVE EDIT/DELETE FOR AGENTS IN LEAVE LOG & DAY OFF SUBMISSIONS (SHOW "Contact with your Team Leader")
+      const _origRenderMissingV36 = renderMissingReportsAndLeaveView;
+      renderMissingReportsAndLeaveView = function() {
+        let htmlOut = _origRenderMissingV36();
+        if (currentUser && !canViewAll(currentUser)) {
+          if (missingReportsSubView === 'LEAVE_LOG') {
+            htmlOut = htmlOut.replace(/<button type="button" onclick="openReportModal\([^)]+\)"[^>]*>[\s\S]*?<\/button>\s*<button type="button" onclick="openMarkLeaveModal\([^)]+\)"[^>]*>[\s\S]*?<\/button>\s*<button type="button" onclick="handleRevertLeaveRecord\([^)]+\)"[^>]*>[\s\S]*?<\/button>/g,
+              `<span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-extrabold text-[10px] inline-flex items-center gap-1"><i class="fa-solid fa-lock text-slate-400"></i> View Only • Contact with your Team Leader</span>`
+            );
+          } else if (missingReportsSubView === 'DO_REPORTS') {
+            htmlOut = htmlOut.replace(/<td class="p-3\.5 text-right space-x-1\.5">[\s\S]*?<\/td>/g,
+              `<td class="p-3.5 text-right"><span class="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-extrabold text-[11px] inline-flex items-center gap-1.5"><i class="fa-solid fa-user-shield text-amber-600"></i> Contact with your Team Leader to Approve / Move Date</span></td>`
+            );
+          }
+        }
+        return htmlOut;
+      };
+
+      // 5. PREVENT PAGE SHAKE / VERTICAL BOUNCE ON NOTIFICATIONS & BACKGROUND SYNC
+      attachTopTableScrollHelpers = function() {
+        const tables = document.querySelectorAll('main .card-dynamic.overflow-x-auto');
+        tables.forEach((box) => {
+          if (box.scrollWidth <= box.clientWidth + 8) return;
+          if (box.previousElementSibling && box.previousElementSibling.classList.contains('top-table-scroll-helper')) return;
+          const bar = document.createElement('div');
+          bar.className = 'top-table-scroll-helper h-9 flex items-center justify-between gap-3 px-3.5 mb-1.5 bg-white border border-slate-200 rounded-xl shadow-2xs';
+          bar.innerHTML = `
+            <div class="flex items-center gap-2 text-[11px] font-extrabold text-slate-600 shrink-0">
+              <i class="fa-solid fa-arrows-left-right text-blue-600"></i>
+              <span>Table Horizontal Scroll</span>
+            </div>
+            <div class="flex-1 max-w-md mx-2">
+              <input type="range" min="0" max="100" value="0" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 table-scroll-slider">
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" onclick="scrollTableContainerBy(this, -380)" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 text-slate-700 hover:text-white text-[10px] font-black transition-colors"><i class="fa-solid fa-chevron-left text-[9px]"></i> Left</button>
+              <button type="button" onclick="scrollTableContainerBy(this, 380)" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 text-slate-700 hover:text-white text-[10px] font-black transition-colors">Right <i class="fa-solid fa-chevron-right text-[9px]"></i></button>
+            </div>
+          `;
+          box.parentNode.insertBefore(bar, box);
+          const slider = bar.querySelector('.table-scroll-slider');
+          if (slider) {
+            const maxScrollInit = Math.max(0, box.scrollWidth - box.clientWidth);
+            if (maxScrollInit > 0) slider.value = Math.round((box.scrollLeft / maxScrollInit) * 100);
+            slider.addEventListener('input', (e) => {
+              const maxScroll = Math.max(1, box.scrollWidth - box.clientWidth);
+              box.scrollLeft = (Number(e.target.value) / 100) * maxScroll;
+            });
+            box.addEventListener('scroll', () => {
+              const maxScroll = box.scrollWidth - box.clientWidth;
+              if (maxScroll > 0) slider.value = Math.round((box.scrollLeft / maxScroll) * 100);
+            });
+          }
+        });
+      };
+    } catch (patchV36Err) {
+      console.error('Non-fatal patch v36 warning:', patchV36Err);
+    }
+
 window.addEventListener('load', init);
   </script>
 </body>
