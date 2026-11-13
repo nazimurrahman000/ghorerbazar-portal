@@ -4746,48 +4746,57 @@
       return `
         <div class="space-y-5">
           ${isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(driveProdTeamScope, "setDriveProdTeam") : ""}
-          <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">Date-Range Cumulative Totals</span>
-                <span class="text-xs font-bold text-slate-400">Month: ${monthLabel}</span>
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
+            <!-- Row 1: Title & Primary Action Buttons -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3.5 border-b border-slate-100">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200">
+                    <i class="fa-solid fa-box-open mr-1"></i>Date-Range Cumulative Totals
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-700">Month: ${monthLabel}</span>
+                </div>
+                <h2 class="text-xl font-black text-slate-900 mt-1">
+                  <i class="fa-solid fa-box-open text-amber-500 mr-2"></i>Drive Product Total Achievement (${monthLabel})
+                </h2>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">
+                  Select a date range to enter cumulative product totals, filter by team/agent, or download the selected data as an Excel/CSV spreadsheet.
+                </p>
               </div>
-              <h2 class="text-xl font-black text-slate-900 mt-1">
-                <i class="fa-solid fa-box-open text-amber-500 mr-2"></i>Drive Product Total Achievement (${monthLabel})
-              </h2>
-              <p class="text-xs font-bold text-slate-500 mt-0.5">
-                Select a date range to enter cumulative product totals, filter by team/agent, or download the selected data as a CSV spreadsheet.
-              </p>
+
+              <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                ${hasFeatureAccess(u, 'feat_edit_products') ? `
+                <button onclick="openProductConfigModal()" class="h-9 px-3.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-sliders"></i> Edit Product Targets
+                </button>
+                ` : ''}
+                ${!isCurrentChannelReadOnlyForUser(u) ? `
+                <button onclick="openDriveProductModal('${u.role === 'agent' ? u.id : (driveProdAgentId !== 'ALL' ? driveProdAgentId : '')}')" class="h-9 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs font-extrabold shadow-sm inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-calendar-plus"></i> Add / Update Drive Product (Date Range)
+                </button>
+                ` : ''}
+                <button onclick="exportDriveProductCsv()" class="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download filtered Drive Product table as Excel/CSV">
+                  <i class="fa-solid fa-file-excel text-xs"></i> Download CSV
+                </button>
+              </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2.5">
-              <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap items-center gap-1 border border-slate-200">
-                <button onclick="setDriveProdTeam('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (${allAgents.length})</button>
-                ${getActiveChannelMeta().teams.map(tn => `<button onclick="setDriveProdTeam('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors ${driveProdTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>`).join('')}
+            <!-- Row 2: Team Switcher (Left) & Agent Selector (Right) -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div class="inline-flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 self-start">
+                <span class="text-[10px] font-black uppercase text-slate-400 px-2 hidden sm:inline"><i class="fa-solid fa-filter mr-1"></i>Team:</span>
+                ${getActiveChannelMeta().teams.map(tn => `<button onclick="setDriveProdTeam('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${driveProdTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">${tn}</button>`).join('')}
+                <button onclick="setDriveProdTeam('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${driveProdTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">All (${allAgents.length})</button>
               </div>
 
-              <div class="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
+              <div class="h-9 inline-flex items-center gap-2 bg-amber-50 border border-amber-200 px-3.5 rounded-xl self-start sm:self-auto">
                 <i class="fa-solid fa-user-check text-amber-600 text-xs"></i>
-                <select onchange="setDriveProdAgent(this.value)" class="bg-transparent text-xs font-extrabold text-amber-900 focus:outline-none cursor-pointer">
+                <span class="text-[10px] font-extrabold uppercase text-amber-800">Agent:</span>
+                <select onchange="setDriveProdAgent(this.value)" class="bg-transparent text-xs font-extrabold text-amber-950 focus:outline-none cursor-pointer">
                   <option value="ALL" ${driveProdAgentId === 'ALL' ? 'selected' : ''}>All Agents (${teamFilteredAgents.length})</option>
                   ${teamFilteredAgents.map(ag => `<option value="${ag.id}" ${String(driveProdAgentId) === String(ag.id) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
                 </select>
               </div>
-
-              <button onclick="exportDriveProductCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download filtered Drive Product table as CSV">
-                <i class="fa-solid fa-file-csv text-xs"></i> Download CSV
-              </button>
-
-              ${hasFeatureAccess(u, 'feat_edit_products') ? `
-              <button onclick="openProductConfigModal()" class="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-extrabold">
-                <i class="fa-solid fa-sliders mr-1"></i> Edit Product Targets
-              </button>
-              ` : ''}
-              ${!isCurrentChannelReadOnlyForUser(u) ? `
-              <button onclick="openDriveProductModal('${u.role === 'agent' ? u.id : (driveProdAgentId !== 'ALL' ? driveProdAgentId : '')}')" class="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs font-extrabold shadow-md flex items-center gap-1.5">
-                <i class="fa-solid fa-calendar-plus"></i> Add / Update Drive Product (Date Range)
-              </button>
-              ` : ''}
             </div>
           </div>
 
@@ -5355,62 +5364,75 @@
       return `
         <div class="space-y-5">
           ${supBar}
-          <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
-            <div class="flex flex-wrap items-center justify-between gap-3 w-full lg:w-auto">
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
+            <!-- Row 1: Title & Primary Action Buttons -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 ${canViewAll(u) ? 'pb-3.5 border-b border-slate-100' : ''}">
               <div>
-                <h2 class="text-xl font-black text-slate-900">
-                  <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>${getActiveChannelMeta().fullTitle} — Monthly Performance Report (${monthLabel})
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-purple-100 text-purple-800 border border-purple-200">
+                    <i class="fa-solid fa-chart-column mr-1"></i>Monthly Summary & Date-Wise Archive
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-700">
+                    Period: ${monthLabel}
+                  </span>
+                </div>
+                <h2 class="text-xl font-black text-slate-900 mt-1">
+                  ${getActiveChannelMeta().fullTitle} — Monthly Performance Report (${monthLabel})
                 </h2>
                 <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  ${canViewAll(u) ? `Sorted by Sales Amount. Filter by Team/Agent and click Download CSV anytime.` : `View your complete monthly summary and date-wise performance table with CSV download.`}
+                  ${canViewAll(u) ? `Filter by Team or Agent, sort by Sales Amount or Achievement %, and download Excel/CSV reports anytime.` : `View your complete monthly summary and date-wise performance table with CSV download.`}
                 </p>
               </div>
-              ${!canViewAll(u) ? `
-              <button onclick="exportMonthlyPerformanceCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
-                <i class="fa-solid fa-file-csv text-xs"></i> CSV
-              </button>
-              ` : ''}
+
+              <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                ${hasFeatureAccess(u, 'feat_ai_erp_import') && canViewAll(u) ? `
+                <button onclick="openAiImportModal()" class="h-9 px-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-2 transition-colors cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> AI ERP Report Import
+                </button>
+                ` : ''}
+                ${isAdmin && canViewAll(u) ? `
+                <button onclick="openReportModal(monthlyPerfAgentId !== 'ALL' ? monthlyPerfAgentId : '')" class="h-9 px-3.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-plus-circle"></i> Add / Edit Daily Data
+                </button>
+                ` : ''}
+                <button onclick="exportMonthlyPerformanceCsv()" class="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download currently sorted & filtered Monthly Performance data as Excel/CSV">
+                  <i class="fa-solid fa-file-excel text-xs"></i> Download CSV
+                </button>
+              </div>
             </div>
 
+            <!-- Row 2: Clean Filter & Sort Control Bar -->
             ${canViewAll(u) ? `
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl" title="Choose sorting order for table & CSV download">
-                <i class="fa-solid fa-arrow-down-wide-short text-indigo-600 text-[11px]"></i>
-                <span class="text-[10px] font-extrabold uppercase text-slate-400">Sort:</span>
-                <select onchange="setMonthlyPerfSortMode(this.value)" class="bg-transparent text-[11px] font-extrabold text-slate-800 focus:outline-none cursor-pointer">
-                  <option value="AUTO" ${monthlyPerfSortMode === 'AUTO' ? 'selected' : ''}>Default (${activeChannel === 'ALL_CHANNELS' ? 'Achievement %' : 'Sales Amount'})</option>
-                  <option value="ACHIEVEMENT" ${monthlyPerfSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Achievement % Wise</option>
-                  <option value="AMOUNT" ${monthlyPerfSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
-                </select>
-              </div>
-              <button onclick="exportMonthlyPerformanceCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download currently sorted & filtered Monthly Performance data as CSV">
-                <i class="fa-solid fa-file-csv text-xs"></i> Download CSV
-              </button>
-              ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
-              <button onclick="openAiImportModal()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2 transition-colors">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Report Import
-              </button>
-              ` : ''}
-              ${isAdmin ? `
-              <button onclick="openReportModal(monthlyPerfAgentId !== 'ALL' ? monthlyPerfAgentId : '')" class="px-4 py-2 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5">
-                <i class="fa-solid fa-plus-circle"></i> Add / Edit Daily Data
-              </button>
-              ` : ''}
-              <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-                <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
-                <select onchange="setMonthlyPerfTeam(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
-                  <option value="ALL" ${monthlyPerfTeamScope === 'ALL' ? 'selected' : ''}>Overall All Teams (${allAgents.length} Agents)</option>
-                  ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${monthlyPerfTeamScope === tn ? 'selected' : ''}>${tn} (${allAgents.filter(a => a.team === tn).length} Agents)</option>`).join('')}
-                </select>
+            <div class="flex flex-wrap items-center justify-between gap-2.5">
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl" title="Choose sorting order for table & CSV download">
+                  <i class="fa-solid fa-arrow-down-wide-short text-indigo-600 text-[11px]"></i>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400">Sort:</span>
+                  <select onchange="setMonthlyPerfSortMode(this.value)" class="bg-transparent text-[11px] font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                    <option value="AUTO" ${monthlyPerfSortMode === 'AUTO' ? 'selected' : ''}>Default (${activeChannel === 'ALL_CHANNELS' ? 'Achievement %' : 'Sales Amount'})</option>
+                    <option value="ACHIEVEMENT" ${monthlyPerfSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Achievement % Wise</option>
+                    <option value="AMOUNT" ${monthlyPerfSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
+                  </select>
+                </div>
               </div>
 
-              <div class="flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-xl">
-                <i class="fa-solid fa-user-check text-purple-600 text-xs"></i>
-                <span class="text-[10px] font-extrabold uppercase text-purple-700">Agent:</span>
-                <select onchange="setMonthlyPerfAgent(this.value)" class="bg-transparent text-xs font-extrabold text-purple-900 focus:outline-none cursor-pointer">
-                  <option value="ALL" ${monthlyPerfAgentId === 'ALL' ? 'selected' : ''}>All Agents (${teamFilteredAgents.length})</option>
-                  ${teamFilteredAgents.map(ag => `<option value="${ag.id}" ${String(monthlyPerfAgentId) === String(ag.id) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
-                </select>
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="h-8 inline-flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 rounded-xl">
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
+                  <select onchange="setMonthlyPerfTeam(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                    <option value="ALL" ${monthlyPerfTeamScope === 'ALL' ? 'selected' : ''}>Overall All Teams (${allAgents.length} Agents)</option>
+                    ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${monthlyPerfTeamScope === tn ? 'selected' : ''}>${tn} (${allAgents.filter(a => a.team === tn).length} Agents)</option>`).join('')}
+                  </select>
+                </div>
+
+                <div class="h-8 inline-flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 rounded-xl">
+                  <i class="fa-solid fa-user-check text-purple-600 text-xs"></i>
+                  <span class="text-[10px] font-extrabold uppercase text-purple-700">Agent:</span>
+                  <select onchange="setMonthlyPerfAgent(this.value)" class="bg-transparent text-xs font-extrabold text-purple-900 focus:outline-none cursor-pointer">
+                    <option value="ALL" ${monthlyPerfAgentId === 'ALL' ? 'selected' : ''}>All Agents (${teamFilteredAgents.length})</option>
+                    ${teamFilteredAgents.map(ag => `<option value="${ag.id}" ${String(monthlyPerfAgentId) === String(ag.id) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
+                  </select>
+                </div>
               </div>
             </div>
             ` : ''}
@@ -7250,21 +7272,30 @@
       return `
         <div class="space-y-5">
           ${isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(logsFilterScope, "setLogsScope") : ""}
-          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h2 class="text-xl font-black text-slate-900"><i class="fa-regular fa-clock text-emerald-600 mr-2"></i>Attendance & Duty Logs (${selectedMonthKey})</h2>
-              <p class="text-xs font-bold text-slate-500">Live duty tracking from login to logout with break reasons and total duration</p>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <i class="fa-regular fa-clock mr-1"></i>Live Shift & Break Tracker
+                </span>
+                <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-700">Period: ${selectedMonthKey}</span>
+              </div>
+              <h2 class="text-xl font-black text-slate-900 mt-1"><i class="fa-regular fa-clock text-emerald-600 mr-2"></i>Attendance & Duty Logs (${selectedMonthKey})</h2>
+              <p class="text-xs font-bold text-slate-500 mt-0.5">Live duty tracking from login to logout with break reasons and total active duration.</p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2.5 shrink-0">
               ${canViewAll(u) ? `
-              <select onchange="setLogsScope(this.value)" class="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold">
-                <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Teams</option>
-                ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
-              </select>
+              <div class="h-9 inline-flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 rounded-xl">
+                <span class="text-[10px] font-extrabold uppercase text-slate-400">Team:</span>
+                <select onchange="setLogsScope(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                  <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Teams</option>
+                  ${getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                </select>
+              </div>
               ` : ''}
               ${hasFeatureAccess(u, 'feat_manage_attendance') ? `
-              <button onclick="openEditAttendanceModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm">
-                <i class="fa-solid fa-plus mr-1"></i> Add / Edit Attendance
+              <button onclick="openEditAttendanceModal()" class="h-9 px-4 tab-active text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-plus-circle"></i> Add / Edit Attendance
               </button>
               ` : ''}
             </div>
@@ -7534,70 +7565,76 @@
       return `
         <div class="space-y-5">
           ${isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(sprintTabTeamScope, "setSprintTabTeam") : ""}
-          <!-- Top Header & Controls -->
-          <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
-            <div>
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-600 text-white">
-                  <i class="fa-solid fa-bolt text-amber-300 mr-1"></i>Viewing: ${phaseInfo.name}
-                </span>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900">
-                  ${phaseInfo.pctLabel} • ${phaseInfo.dateRange}
-                </span>
-                ${mySprintRank ? `
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white shadow-xs">
-                    ⭐ Your ${phaseInfo.short} Rank: #${mySprintRank}
+          <!-- Top Header & Controls (2-Row Clean Executive Layout) -->
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
+            <!-- Row 1: Title & Sort/Export Actions -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3.5 border-b border-slate-100">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-blue-600 text-white shadow-2xs">
+                    <i class="fa-solid fa-bolt text-amber-300 mr-1"></i>Viewing: ${phaseInfo.name}
                   </span>
-                ` : ''}
-                ${!isSprintActive ? `
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white">
-                    <i class="fa-solid fa-eye-slash mr-1"></i>Deactivated for Agents (${selectedMonthKey})
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200">
+                    ${phaseInfo.pctLabel} • ${phaseInfo.dateRange}
                   </span>
-                ` : ''}
+                  ${mySprintRank ? `
+                    <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-emerald-600 text-white shadow-xs">
+                      ⭐ Your ${phaseInfo.short} Rank: #${mySprintRank}
+                    </span>
+                  ` : ''}
+                  ${!isSprintActive ? `
+                    <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-rose-600 text-white">
+                      <i class="fa-solid fa-eye-slash mr-1"></i>Deactivated for Agents (${selectedMonthKey})
+                    </span>
+                  ` : ''}
+                </div>
+                <h2 class="text-xl font-black text-slate-900 mt-1">
+                  <i class="fa-solid fa-bolt text-blue-600 mr-2"></i>Agent Sprint Target Competition (${monthLabel})
+                </h2>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">
+                  Switch between <strong>Sprint 1 (Days 1–10)</strong>, <strong>Sprint 2 (Days 11–20)</strong>, or <strong>Sprint 3 (Days 21–31)</strong> and filter by team anytime.
+                </p>
               </div>
-              <h2 class="text-xl font-black text-slate-900 mt-1">
-                <i class="fa-solid fa-bolt text-blue-600 mr-2"></i>Agent Sprint Target Competition (${monthLabel})
-              </h2>
-              <p class="text-xs font-bold text-slate-500 mt-0.5">
-                Click any of the 3 Sprint Slots below to inspect <strong>Sprint 1 (Days 1–10)</strong>, <strong>Sprint 2 (Days 11–20)</strong>, or <strong>Sprint 3 (Days 21–31)</strong> data anytime!
-              </p>
+
+              <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                <div class="h-9 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 rounded-xl" title="Choose sorting order for Sprint table & CSV download">
+                  <i class="fa-solid fa-arrow-down-wide-short text-blue-600 text-xs"></i>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400">Sort:</span>
+                  <select onchange="setSprintTabSortMode(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                    <option value="AUTO" ${sprintTabSortMode === 'AUTO' ? 'selected' : ''}>Default (Achievement %)</option>
+                    <option value="ACHIEVEMENT" ${sprintTabSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Achievement % Wise</option>
+                    <option value="AMOUNT" ${sprintTabSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
+                  </select>
+                </div>
+                <button onclick="exportSprintTargetCsv()" class="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+                  <i class="fa-solid fa-file-excel text-xs"></i> Download CSV
+                </button>
+              </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2.5">
-              <!-- Sprint Slot Selector Buttons -->
-              <div class="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-                <button onclick="setSprintTabPhase('AUTO')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabPhase === 'AUTO' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}" title="Automatically show current calendar sprint (${autoPhase})">
+            <!-- Row 2: Sprint Slot Selector Bar (Left) & Team Filter Bar (Right) -->
+            <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+              <div class="inline-flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 self-start">
+                <span class="text-[10px] font-black uppercase text-slate-400 px-2 hidden sm:inline"><i class="fa-solid fa-stopwatch mr-1"></i>Slot:</span>
+                <button onclick="setSprintTabPhase('AUTO')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${sprintTabPhase === 'AUTO' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}" title="Automatically show current calendar sprint (${autoPhase})">
                   Running Sprint (${autoPhase})
                 </button>
-                <button onclick="setSprintTabPhase('S1')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${effPhase === 'S1' && sprintTabPhase !== 'AUTO' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                <button onclick="setSprintTabPhase('S1')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${effPhase === 'S1' && sprintTabPhase !== 'AUTO' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">
                   Sprint 1 (1–10)
                 </button>
-                <button onclick="setSprintTabPhase('S2')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${effPhase === 'S2' && sprintTabPhase !== 'AUTO' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                <button onclick="setSprintTabPhase('S2')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${effPhase === 'S2' && sprintTabPhase !== 'AUTO' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">
                   Sprint 2 (11–20)
                 </button>
-                <button onclick="setSprintTabPhase('S3')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${effPhase === 'S3' && sprintTabPhase !== 'AUTO' ? 'bg-indigo-600 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                <button onclick="setSprintTabPhase('S3')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${effPhase === 'S3' && sprintTabPhase !== 'AUTO' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">
                   Sprint 3 (21–31)
                 </button>
               </div>
 
-              <!-- Team Filter -->
-              <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap items-center gap-1 border border-slate-200">
-                <button onclick="setSprintTabTeam('ALL')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">All (${allAgents.length})</button>
-                ${getActiveChannelMeta().teams.map(tn => `<button onclick="setSprintTabTeam('${tn}')" class="px-3 py-1.5 rounded-lg text-[11px] font-extrabold transition-colors ${sprintTabTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">${tn}</button>`).join('')}
+              <div class="inline-flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 self-start xl:self-auto">
+                <span class="text-[10px] font-black uppercase text-slate-400 px-2 hidden sm:inline"><i class="fa-solid fa-filter mr-1"></i>Team:</span>
+                ${getActiveChannelMeta().teams.map(tn => `<button onclick="setSprintTabTeam('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${sprintTabTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">${tn}</button>`).join('')}
+                <button onclick="setSprintTabTeam('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${sprintTabTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">All (${allAgents.length})</button>
               </div>
-
-              <div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl" title="Choose sorting order for Sprint table & CSV download">
-                <i class="fa-solid fa-arrow-down-wide-short text-blue-600 text-[11px]"></i>
-                <span class="text-[10px] font-extrabold uppercase text-slate-400">Sort:</span>
-                <select onchange="setSprintTabSortMode(this.value)" class="bg-transparent text-[11px] font-extrabold text-slate-800 focus:outline-none cursor-pointer">
-                  <option value="AUTO" ${sprintTabSortMode === 'AUTO' ? 'selected' : ''}>Default (Achievement %)</option>
-                  <option value="ACHIEVEMENT" ${sprintTabSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Achievement % Wise</option>
-                  <option value="AMOUNT" ${sprintTabSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
-                </select>
-              </div>
-              <button onclick="exportSprintTargetCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
-                <i class="fa-solid fa-file-csv text-xs"></i> Download CSV
-              </button>
             </div>
           </div>
 
@@ -8587,66 +8624,78 @@ function renderRankingAndComparison() {
         <div class="space-y-4">
           ${isSupervisor(u) || activeChannel === 'ALL_CHANNELS' ? renderSupervisorQuickChannelTeamBar(missingReportsTeamScope, 'setMissingReportsTeamScope') : ''}
 
-          <div class="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-            <div>
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-rose-100 text-rose-700 border border-rose-200">
-                  <i class="fa-solid fa-calendar-check mr-1"></i>Auto Roster-Linked Tracker
-                </span>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-50 text-indigo-700">
-                  🌙 Night Shift Auto-Matched to Start Date
-                </span>
-                <span class="text-xs font-bold text-slate-400">Period: ${monthLabel}</span>
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
+            <!-- Row 1: Title & Primary Action Buttons -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3.5 border-b border-slate-100">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-rose-100 text-rose-700 border border-rose-200">
+                    <i class="fa-solid fa-calendar-check mr-1"></i>Auto Roster-Linked Tracker
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+                    🌙 Night Shift Auto-Matched to Start Date
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-slate-100 text-slate-600">Period: ${monthLabel}</span>
+                </div>
+                <h2 class="text-xl font-black text-slate-900 mt-1">
+                  <i class="fa-solid fa-calendar-xmark text-rose-600 mr-2"></i>${isAdminOrSup ? `${missingReportsTeamScope === 'ALL' ? chMeta.fullTitle : missingReportsTeamScope} — Missing Reports & Leave Tracker` : 'My Missing Reports & Leave / Absent Log'}
+                </h2>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">
+                  ${isAdminOrSup
+                    ? 'Automatically checks the Duty Roster (excluding DO) to find who missed submitting their sales report. Submit directly in 1 click or mark as Leave/Absent!'
+                    : 'Checks your weekly Duty Roster (excluding DO). If any duty date is missing a report, click "+ Submit Report" to clear it immediately.'}
+                </p>
               </div>
-              <h2 class="text-xl font-black text-slate-900 mt-1">
-                <i class="fa-solid fa-calendar-xmark text-rose-600 mr-2"></i>${isAdminOrSup ? `${missingReportsTeamScope === 'ALL' ? chMeta.fullTitle : missingReportsTeamScope} — Missing Reports & Leave Tracker` : 'My Missing Reports & Leave / Absent Log'}
-              </h2>
-              <p class="text-xs font-bold text-slate-500 mt-0.5">
-                ${isAdminOrSup
-                  ? 'Automatically checks the Duty Roster (excluding DO) to find who missed submitting their sales report. Submit directly in 1 click or mark as Leave/Absent!'
-                  : 'Checks your weekly Duty Roster (excluding DO). If any duty date is missing a report, click "+ Submit Report" to clear it immediately.'}
-              </p>
+
+              <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                ${!isCurrentChannelReadOnlyForUser(u) ? `
+                <button type="button" onclick="openMarkLeaveModal('${u.role === 'agent' ? u.id : (missingReportsAgentFilter !== 'ALL' ? missingReportsAgentFilter : (teamFilteredAgents[0]?.id || u.id))}', '${missingReportsDateFilter !== 'ALL' ? missingReportsDateFilter : getTodayFormatted()}')" class="h-9 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-calendar-plus"></i> + Add Leave / Absent
+                </button>
+                ` : ''}
+                <button type="button" onclick="exportMissingAndLeaveCsv()" class="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-file-excel text-xs"></i> Download CSV
+                </button>
+              </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2">
+            <!-- Row 2: Team Switcher (Left) & Agent/Date Filters (Right) -->
+            <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5">
               ${isAdminOrSup ? `
-              <div class="bg-slate-100 p-1 rounded-xl flex flex-wrap items-center gap-1 border border-slate-200">
+              <div class="inline-flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 self-start">
+                <span class="text-[10px] font-black uppercase text-slate-400 px-2 hidden sm:inline"><i class="fa-solid fa-filter mr-1"></i>Team:</span>
                 ${chMeta.teams.map(tn => `
-                  <button type="button" onclick="setMissingReportsTeamScope('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${missingReportsTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                  <button type="button" onclick="setMissingReportsTeamScope('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${missingReportsTeamScope === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">
                     ${tn}${u.role === 'admin' && normalizeTeamNameAlias(u.team) === tn ? ' (My Team)' : ''}
                   </button>
                 `).join('')}
-                <button type="button" onclick="setMissingReportsTeamScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${missingReportsTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow' : 'text-slate-600 hover:bg-slate-200'}">
+                <button type="button" onclick="setMissingReportsTeamScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${missingReportsTeamScope === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">
                   All ${chMeta.name} (${allChannelAgents.length})
                 </button>
               </div>
+              ` : '<div></div>'}
 
-              <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-                <i class="fa-solid fa-user text-slate-400 text-xs"></i>
-                <select onchange="setMissingReportsAgentFilter(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
-                  <option value="ALL" ${missingReportsAgentFilter === 'ALL' ? 'selected' : ''}>All Agents (${teamFilteredAgents.length})</option>
-                  ${teamFilteredAgents.map(ag => `<option value="${ag.id}" ${String(missingReportsAgentFilter) === String(ag.id) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
-                </select>
+              <div class="flex flex-wrap items-center gap-2">
+                ${isAdminOrSup ? `
+                <div class="h-9 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 rounded-xl">
+                  <i class="fa-solid fa-user text-slate-400 text-xs"></i>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400">Agent:</span>
+                  <select onchange="setMissingReportsAgentFilter(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                    <option value="ALL" ${missingReportsAgentFilter === 'ALL' ? 'selected' : ''}>All Agents (${teamFilteredAgents.length})</option>
+                    ${teamFilteredAgents.map(ag => `<option value="${ag.id}" ${String(missingReportsAgentFilter) === String(ag.id) ? 'selected' : ''}>${ag.name} (${ag.id})</option>`).join('')}
+                  </select>
+                </div>
+                ` : ''}
+
+                <div class="h-9 inline-flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-3 rounded-xl">
+                  <i class="fa-regular fa-calendar text-rose-600 text-xs"></i>
+                  <span class="text-[10px] font-extrabold uppercase text-rose-700">Date:</span>
+                  <select onchange="setMissingReportsDateFilter(this.value)" class="bg-transparent text-xs font-extrabold text-rose-900 focus:outline-none cursor-pointer">
+                    <option value="ALL" ${missingReportsDateFilter === 'ALL' ? 'selected' : ''}>All Dates in ${selectedMonthKey}</option>
+                    ${allRelevantDates.map(dStr => `<option value="${dStr}" ${missingReportsDateFilter === dStr ? 'selected' : ''}>${cleanDisplayDate(dStr)}</option>`).join('')}
+                  </select>
+                </div>
               </div>
-              ` : ''}
-
-              <div class="flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
-                <i class="fa-regular fa-calendar text-rose-600 text-xs"></i>
-                <select onchange="setMissingReportsDateFilter(this.value)" class="bg-transparent text-xs font-extrabold text-rose-900 focus:outline-none cursor-pointer">
-                  <option value="ALL" ${missingReportsDateFilter === 'ALL' ? 'selected' : ''}>All Dates in ${selectedMonthKey}</option>
-                  ${allRelevantDates.map(dStr => `<option value="${dStr}" ${missingReportsDateFilter === dStr ? 'selected' : ''}>${cleanDisplayDate(dStr)}</option>`).join('')}
-                </select>
-              </div>
-
-              ${!isCurrentChannelReadOnlyForUser(u) ? `
-              <button type="button" onclick="openMarkLeaveModal('${u.role === 'agent' ? u.id : (missingReportsAgentFilter !== 'ALL' ? missingReportsAgentFilter : (teamFilteredAgents[0]?.id || u.id))}', '${missingReportsDateFilter !== 'ALL' ? missingReportsDateFilter : getTodayFormatted()}')" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5 cursor-pointer">
-                <i class="fa-solid fa-calendar-plus"></i> + Add Leave / Absent
-              </button>
-              ` : ''}
-
-              <button type="button" onclick="exportMissingAndLeaveCsv()" class="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
-                <i class="fa-solid fa-file-csv text-xs"></i> CSV
-              </button>
             </div>
           </div>
 
@@ -8953,59 +9002,70 @@ function renderRankingAndComparison() {
 
       return `
         <div class="space-y-6">
-          <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800"><i class="fa-solid fa-fire text-amber-500 mr-1"></i>Live Floor Competition</span>
-                <span class="text-xs font-extrabold text-emerald-600">${sales.length} Agent Entries (${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)})</span>
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
+            <!-- Row 1: Title & Primary Action Buttons -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3.5 border-b border-slate-100">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-blue-100 text-blue-800 border border-blue-200"><i class="fa-solid fa-fire text-amber-500 mr-1"></i>Live Floor Competition</span>
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">${sales.length} Entries (${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)})</span>
+                </div>
+                <h2 class="text-xl font-black text-slate-900 mt-1">
+                  <i class="fa-solid fa-file-invoice text-blue-600 mr-2"></i>
+                  Daily Sales & Conversion Leaderboard (${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)})
+                </h2>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">
+                  Showing daily sales reports for <strong>${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}</strong> sorted by highest achieved sales amount.
+                </p>
               </div>
-              <h2 class="text-xl font-black text-slate-900 mt-1">
-                <i class="fa-solid fa-file-invoice text-blue-600 mr-2"></i>
-                Daily Sales & Conversion Leaderboard (${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)})
-              </h2>
-              <p class="text-xs font-bold text-slate-500 mt-0.5">
-                Showing daily sales reports for <strong>${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}</strong> sorted by highest achieved sales amount!
-              </p>
+
+              <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
+                <button onclick="openAiImportModal()" class="h-9 px-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> AI ERP Import
+                </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
+                <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="h-9 px-4 tab-active text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-plus-circle"></i> ${u.role === 'agent' ? 'Submit My Report' : 'Add New Report'}
+                </button>
+                ` : ''}
+              </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2.5 bg-slate-50 p-2 rounded-2xl border border-slate-200/80">
-              <div class="flex items-center gap-2 bg-white border border-slate-200 px-3.5 py-2 rounded-xl shadow-2xs">
-                <i class="fa-solid fa-calendar-day text-blue-600 text-xs"></i>
-                <span class="text-[10px] font-extrabold uppercase text-slate-500">Date:</span>
-                <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer">
+            <!-- Row 2: Date Picker, Include TL Toggle & Team/Scope Filter -->
+            <div class="flex flex-wrap items-center justify-between gap-2.5">
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl shadow-2xs">
+                  <i class="fa-solid fa-calendar-day text-blue-600 text-xs"></i>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-500">Date:</span>
+                  <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer">
+                </div>
               </div>
 
-              <div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">
-                <i class="fa-solid fa-users-viewfinder text-indigo-600 text-xs"></i>
-                <select onchange="setLogsScope(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
-                  <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Agents (${allUsersActiveCh.filter(usr => usr.role === 'agent').length})</option>
-                  ${canViewAll(u) ? `
-                    <optgroup label="Facebook Channel">
-                      <option value="ALL_FB" ${logsFilterScope === 'ALL_FB' ? 'selected' : ''}>All Facebook Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'FACEBOOK').length})</option>
-                      ${CHANNEL_META.FACEBOOK.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
-                    </optgroup>
-                    <optgroup label="WhatsApp Channel">
-                      <option value="ALL_WA" ${logsFilterScope === 'ALL_WA' ? 'selected' : ''}>All WhatsApp Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'WHATSAPP').length})</option>
-                      ${CHANNEL_META.WHATSAPP.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
-                    </optgroup>
-                    <optgroup label="All Channels Combined">
-                      <option value="ALL_OMNI" ${logsFilterScope === 'ALL_OMNI' ? 'selected' : ''}>🌐 All Facebook + WhatsApp Teams (${allUsersOmni.filter(usr => usr.role === 'agent').length})</option>
-                    </optgroup>
-                  ` : getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
-                  ${u.role === 'agent' ? `<option value="MINE" ${logsFilterScope === 'MINE' ? 'selected' : ''}>Only My Reports</option>` : ''}
-                </select>
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">
+                  <i class="fa-solid fa-users-viewfinder text-indigo-600 text-xs"></i>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-400">Scope:</span>
+                  <select onchange="setLogsScope(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                    <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Agents (${allUsersActiveCh.filter(usr => usr.role === 'agent').length})</option>
+                    ${canViewAll(u) ? `
+                      <optgroup label="Facebook Channel">
+                        <option value="ALL_FB" ${logsFilterScope === 'ALL_FB' ? 'selected' : ''}>All Facebook Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'FACEBOOK').length})</option>
+                        ${CHANNEL_META.FACEBOOK.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                      </optgroup>
+                      <optgroup label="WhatsApp Channel">
+                        <option value="ALL_WA" ${logsFilterScope === 'ALL_WA' ? 'selected' : ''}>All WhatsApp Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'WHATSAPP').length})</option>
+                        ${CHANNEL_META.WHATSAPP.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                      </optgroup>
+                      <optgroup label="All Channels Combined">
+                        <option value="ALL_OMNI" ${logsFilterScope === 'ALL_OMNI' ? 'selected' : ''}>🌐 All Facebook + WhatsApp Teams (${allUsersOmni.filter(usr => usr.role === 'agent').length})</option>
+                      </optgroup>
+                    ` : getActiveChannelMeta().teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                    ${u.role === 'agent' ? `<option value="MINE" ${logsFilterScope === 'MINE' ? 'selected' : ''}>Only My Reports</option>` : ''}
+                  </select>
+                </div>
               </div>
-
-              ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
-              <button onclick="openAiImportModal()" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1.5 transition-colors">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> AI ERP Import
-              </button>
-              ` : ''}
-              ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
-              <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="px-4 py-2 tab-active text-white rounded-xl text-xs font-extrabold shadow-xs flex items-center gap-1.5">
-                <i class="fa-solid fa-plus"></i> ${u.role === 'agent' ? 'Submit My Report' : 'Add New Report'}
-              </button>
-              ` : ''}
             </div>
           </div>
 
@@ -9221,34 +9281,44 @@ function renderRankingAndComparison() {
 
       return `
         <div class="space-y-6">
-          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
-            <div>
-              <h2 class="text-xl font-black text-slate-900"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Target Setup, Grades & User IDs (${monthLabel})</h2>
-              <p class="text-xs font-bold text-slate-500">
-                ${isFullAdmin(u) ? `Create Agent or Supervisor IDs, check live online status (Online agents shown first), and customize monthly targets for ${monthLabel}` : `View registered Agent & Supervisor accounts, live online status & monthly targets for ${monthLabel}`}
-              </p>
-            </div>
-            <div class="flex flex-wrap items-center gap-2.5">
-              ${isSuperAdmin(u) ? `
-              <button onclick="setTab('role_management')" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
-                <i class="fa-solid fa-user-shield"></i> Role & Feature Access Control
-              </button>
-              ` : ''}
-              ${hasFeatureAccess(u, 'feat_edit_grades_targets') ? `
-              <button onclick="openGradeConfigModal()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
-                <i class="fa-solid fa-layer-group"></i> Edit Grade & TL Targets (${selectedMonthKey})
-              </button>
-              ` : ''}
-              ${hasFeatureAccess(u, 'feat_edit_products') ? `
-              <button onclick="openProductConfigModal()" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
-                <i class="fa-solid fa-gift"></i> Edit Product Incentives (${selectedMonthKey})
-              </button>
-              ` : ''}
-              ${hasFeatureAccess(u, 'feat_manage_users') ? `
-              <button onclick="openUserModal()" class="px-4 py-2.5 tab-active text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-2">
-                <i class="fa-solid fa-user-plus"></i> Create New ID (${isSuperAdmin(u) ? 'Agent / Supervisor / Admin' : 'Agent / Supervisor'})
-              </button>
-              ` : ''}
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-blue-100 text-blue-800 border border-blue-200">
+                    <i class="fa-solid fa-sliders mr-1"></i>Account & Target Configuration
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Active Period: ${monthLabel}
+                  </span>
+                </div>
+                <h2 class="text-xl font-black text-slate-900 mt-1"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Target Setup, Grades & User IDs (${monthLabel})</h2>
+                <p class="text-xs font-bold text-slate-500 mt-0.5">
+                  ${isFullAdmin(u) ? `Create Agent or Supervisor IDs, check live online status (Online agents shown first), and customize monthly targets for ${monthLabel}.` : `View registered Agent & Supervisor accounts, live online status & monthly targets for ${monthLabel}.`}
+                </p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 shrink-0">
+                ${isSuperAdmin(u) ? `
+                <button onclick="setTab('role_management')" class="h-9 px-3.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-user-shield"></i> Role & Feature Access
+                </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'feat_edit_grades_targets') ? `
+                <button onclick="openGradeConfigModal()" class="h-9 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-layer-group"></i> Grade & TL Targets (${selectedMonthKey})
+                </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'feat_edit_products') ? `
+                <button onclick="openProductConfigModal()" class="h-9 px-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-gift"></i> Product Incentives
+                </button>
+                ` : ''}
+                ${hasFeatureAccess(u, 'feat_manage_users') ? `
+                <button onclick="openUserModal()" class="h-9 px-4 tab-active text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-user-plus"></i> Create New ID
+                </button>
+                ` : ''}
+              </div>
             </div>
           </div>
 
