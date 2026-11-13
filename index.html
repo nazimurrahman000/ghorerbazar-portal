@@ -683,7 +683,7 @@
       }
       return localStorage.getItem('gb_selected_month') || realNowMonth;
     })();
-    let dashboardScope = (currentUser && currentUser.role === 'admin') ? currentUser.team : 'ALL';
+    let dashboardScope = (currentUser && currentUser.role === 'admin' && getChannelForTeam(currentUser.team) === activeChannel) ? normalizeTeamNameAlias(currentUser.team) : 'ALL';
     
     let logsFilterScope = 'ALL';
     let reportsDateFilter = getTodayFormatted();
@@ -694,7 +694,7 @@
     let driveProdTeamScope = 'ALL';
     let driveProdAgentId = 'ALL';
 
-    let missingReportsTeamScope = (currentUser && currentUser.role === 'admin') ? normalizeTeamNameAlias(currentUser.team) : 'ALL';
+    let missingReportsTeamScope = (currentUser && currentUser.role === 'admin' && getChannelForTeam(currentUser.team) === activeChannel) ? normalizeTeamNameAlias(currentUser.team) : 'ALL';
     let missingReportsAgentFilter = 'ALL';
     let missingReportsDateFilter = 'ALL';
     let missingReportsSubView = 'MISSING'; // 'MISSING' | 'LEAVE_LOG'
@@ -1987,7 +1987,9 @@
       
       if (canViewAll(user)) {
         const defaultTeam = (activeChannel === 'ALL_CHANNELS' || user.role !== 'admin') ? 'ALL' : user.team;
-        const scope = scopeOverride || dashboardScope || defaultTeam;
+        const rawScope = scopeOverride || dashboardScope || defaultTeam;
+        const chTeamsList = getActiveChannelMeta().teams || [];
+        const scope = (rawScope === 'ALL' || chTeamsList.includes(normalizeTeamNameAlias(rawScope))) ? rawScope : 'ALL';
         const agents = allUsers.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u) && (scope === 'ALL' ? true : normalizeTeamNameAlias(u.team) === normalizeTeamNameAlias(scope)));
         const tls = allUsers.filter(u => u.role === 'admin' && (scope === 'ALL' ? true : normalizeTeamNameAlias(u.team) === normalizeTeamNameAlias(scope)));
         const agentsTargetSum = agents.reduce((sum, a) => sum + (Number(a.baseTarget) || 0), 0);
@@ -2506,11 +2508,16 @@
           missingReportsTeamScope = 'ALL';
         } else if (currentUser.role === 'admin') {
           const myTeamClean = normalizeTeamNameAlias(currentUser.team);
-          dashboardScope = myTeamClean;
-          monthlyPerfTeamScope = myTeamClean;
-          driveProdTeamScope = myTeamClean;
-          sprintTabTeamScope = myTeamClean;
-          missingReportsTeamScope = myTeamClean;
+          const chTeamsNow = getActiveChannelMeta().teams || [];
+          const validScope = chTeamsNow.includes(myTeamClean) ? myTeamClean : 'ALL';
+          dashboardScope = validScope;
+          monthlyPerfTeamScope = validScope;
+          driveProdTeamScope = validScope;
+          sprintTabTeamScope = validScope;
+          missingReportsTeamScope = validScope;
+          if (typeof window.incentiveTabTeamScope !== 'undefined') {
+            window.incentiveTabTeamScope = validScope;
+          }
         } else if (currentUser.role === 'agent') {
           const myTeamClean = normalizeTeamNameAlias(currentUser.team);
           sprintTabTeamScope = myTeamClean;
@@ -2812,11 +2819,8 @@
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_sprint_target') ? `
-                <button onclick="setTab('sprint_target')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'sprint_target' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <span class="flex items-center gap-3">
-                    <i class="fa-solid fa-bolt text-sm ${activeTab === 'sprint_target' ? 'text-amber-300' : 'text-blue-600'}"></i> Sprint Target
-                  </span>
-                  <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${activeTab === 'sprint_target' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-700'}">LIVE</span>
+                <button onclick="setTab('sprint_target')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'sprint_target' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-bolt text-sm ${activeTab === 'sprint_target' ? 'text-amber-300' : 'text-blue-600'}"></i> Sprint Target
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'tab_drive_product') ? `
@@ -3761,6 +3765,10 @@
         : allSales.filter(s => (activeChannel === 'ALL_CHANNELS' || getChannelForTeam(s.team) === activeChannel));
       let mySales = [];
       if (canViewAll(u)) {
+        const chTeamsList = getActiveChannelMeta().teams || [];
+        if (dashboardScope !== 'ALL' && !chTeamsList.includes(normalizeTeamNameAlias(dashboardScope))) {
+          dashboardScope = 'ALL';
+        }
         mySales = dashboardScope === 'ALL' ? channelSalesAll : channelSalesAll.filter(s => normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(dashboardScope));
       } else {
         mySales = channelSalesAll.filter(s => String(s.userId) === String(u.id));
@@ -15215,11 +15223,8 @@ function renderChatHubView() {
             if (navEl && !navEl.querySelector('[data-tab-btn="incentive"]')) {
               const dpBtn = navEl.querySelector('button[onclick="setTab(\'drive_product\')"]');
               const btnHtml = `
-                <button data-tab-btn="incentive" onclick="setTab('incentive')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'incentive' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
-                  <span class="flex items-center gap-3">
-                    <i class="fa-solid fa-award text-sm ${activeTab === 'incentive' ? 'text-amber-300' : 'text-amber-500'}"></i> Incentive
-                  </span>
-                  <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${activeTab === 'incentive' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}">BONUS</span>
+                <button data-tab-btn="incentive" onclick="setTab('incentive')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'incentive' ? 'tab-active' : 'text-slate-600 hover:bg-slate-100'}">
+                  <i class="fa-solid fa-award text-sm ${activeTab === 'incentive' ? 'text-amber-300' : 'text-amber-500'}"></i> Incentive
                 </button>
               `;
               if (dpBtn) {
@@ -15233,7 +15238,7 @@ function renderChatHubView() {
       };
 
       // State filters for the new Incentive Tab
-      window.incentiveTabTeamScope = (currentUser && currentUser.role === 'admin' && activeChannel !== 'ALL_CHANNELS')
+      window.incentiveTabTeamScope = (currentUser && currentUser.role === 'admin' && activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(currentUser.team) === activeChannel)
         ? normalizeTeamNameAlias(currentUser.team)
         : 'ALL';
       window.incentiveTabMemberFilter = 'ALL'; // 'ALL' | 'TLS_ONLY' | 'AGENTS_ONLY' | '<userId>'
@@ -17257,7 +17262,58 @@ function renderChatHubView() {
       console.error('Non-fatal patch v31 warning:', patchV31Err);
     }
 
-    window.addEventListener('load', init);
+    
+    // =========================================================================
+    // MASTER VERIFIED UPGRADE PATCH (v33) — CROSS-CHANNEL RELOAD SCOPE FIX,
+    // SIDEBAR BADGE CLEANUP & ALL-TAB 2-ROW EXECUTIVE UI POLISH
+    // =========================================================================
+    try {
+      window.ensureValidChannelScopeForActor = function() {
+        if (!currentUser) return;
+        const chMeta = getActiveChannelMeta();
+        const validTeams = chMeta && Array.isArray(chMeta.teams) ? chMeta.teams : [];
+
+        if (activeChannel === 'ALL_CHANNELS' || currentUser.role === 'supervisor') {
+          dashboardScope = 'ALL';
+          return;
+        }
+        if (dashboardScope !== 'ALL' && !validTeams.includes(normalizeTeamNameAlias(dashboardScope))) {
+          dashboardScope = 'ALL';
+        }
+        if (monthlyPerfTeamScope !== 'ALL' && !validTeams.includes(normalizeTeamNameAlias(monthlyPerfTeamScope))) {
+          monthlyPerfTeamScope = 'ALL';
+        }
+        if (driveProdTeamScope !== 'ALL' && !validTeams.includes(normalizeTeamNameAlias(driveProdTeamScope))) {
+          driveProdTeamScope = 'ALL';
+        }
+        if (sprintTabTeamScope !== 'ALL' && !validTeams.includes(normalizeTeamNameAlias(sprintTabTeamScope))) {
+          sprintTabTeamScope = 'ALL';
+        }
+        if (missingReportsTeamScope !== 'ALL' && !validTeams.includes(normalizeTeamNameAlias(missingReportsTeamScope))) {
+          missingReportsTeamScope = 'ALL';
+        }
+        if (typeof window.incentiveTabTeamScope !== 'undefined' && window.incentiveTabTeamScope !== 'ALL' && !validTeams.includes(normalizeTeamNameAlias(window.incentiveTabTeamScope))) {
+          window.incentiveTabTeamScope = 'ALL';
+        }
+      };
+
+      const _origInitV33 = init;
+      init = function() {
+        _origInitV33();
+        window.ensureValidChannelScopeForActor();
+        if (currentUser) renderAppLayout();
+      };
+
+      const _origRenderDashboardV33 = renderDashboard;
+      renderDashboard = function() {
+        window.ensureValidChannelScopeForActor();
+        return _origRenderDashboardV33();
+      };
+    } catch (patchV33Err) {
+      console.error('Non-fatal patch v33 warning:', patchV33Err);
+    }
+
+window.addEventListener('load', init);
   </script>
 </body>
 </html>
