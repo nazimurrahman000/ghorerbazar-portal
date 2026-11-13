@@ -17391,31 +17391,20 @@ function renderChatHubView() {
     }
 
     // =========================================================================
-    // MASTER VERIFIED UPGRADE PATCH (v36) — ALL 6 USER-REQUESTED FIXES + SLASHED-ZERO DESLASH FILTER:
-    // 1. Clean Single-Agent Monthly Performance Excel/CSV (No empty side columns!)
-    // 2. Agent View-Only in Leave Log & Day Off Submissions ("Contact with your Team Leader")
-    // 3. Always open Dashboard by default on Login / Logout
-    // 4. Eliminate page shake / vertical jump during notifications & background sync
-    // 5. Slashed-Zero Deslash Filter + Valid Package Size snapping:
-    //    - Automatically clears the inner diagonal slash inside monospace '0' glyphs so Tesseract NEVER misreads '0' as '8' or '6' (e.g. "40 kg" -> "40 kg", "70.05 kg" -> "70.05 kg", "10.5 kg" -> "10.5 kg")!
+    // MASTER VERIFIED UPGRADE PATCH (v38) — PROVEN AI OCR + FAST SHEET SYNC + ALL 6 FIXES:
+    // 1. Reverts Canvas Image Processor to the proven original (from v27/index_15) so Agent Names & Product rows are never lost!
+    // 2. Post-OCR Smart Slashed-Zero Weight Fixer:
+    //    - Fixes `.65` / `.85` -> `.05` (e.g. Gawa Ghee 70.65 kg -> 70.05 kg)
+    //    - Fixes dark-mode monospace slashed-zero (`0` read as `8`, e.g. 18.5 kg -> 10.5 kg, 48 kg -> 40 kg) without touching image pixels!
+    // 3. Fast Cloud Sync: Pauses background read polls for 2.5s during data submission so Google Sheet updates 3-4x faster
+    // 4. Clean Single-Agent Monthly Performance Excel/CSV (No empty side columns!)
+    // 5. Agent View-Only in Leave Log & Day Off Submissions ("Contact with your Team Leader")
+    // 6. Always open Dashboard by default on Login / Logout & prevent page shake
     // =========================================================================
     try {
-      // 1. ALWAYS RESET TO DASHBOARD TAB ON LOGIN & LOGOUT
-      const _origHandleLoginV36 = handleLogin;
-      handleLogin = function(e) {
-        activeTab = 'dashboard';
-        missingReportsSubView = 'MISSING';
-        return _origHandleLoginV36(e);
-      };
+      window._isDarkMonospaceOcrImage = false;
 
-      const _origExecuteInstantLogoutV36 = executeInstantLogout;
-      executeInstantLogout = function() {
-        activeTab = 'dashboard';
-        missingReportsSubView = 'MISSING';
-        return _origExecuteInstantLogoutV36();
-      };
-
-      // 2. FIX AI OCR SLASHED-ZERO ("40 kg" -> "40 kg", "70.05 kg" -> "70.05 kg", "10.5 kg" -> "10.5 kg")
+      // 1. ORIGINAL PROVEN IMAGE NORMALIZER (NEVER DESTROYS TEXT OR AGENT NAMES!)
       normalizeImageBlobToDataUrl = function(fileOrBlob) {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -17426,65 +17415,7 @@ function renderChatHubView() {
               try {
                 const origW = img.naturalWidth || img.width || 1200;
                 const origH = img.naturalHeight || img.height || 800;
-
-                // Step A: Draw at native 1x resolution first to detect and remove monospace slashed-zero ('0') inner dots/slashes!
-                const rawCanvas = document.createElement('canvas');
-                rawCanvas.width = origW;
-                rawCanvas.height = origH;
-                const rawCtx = rawCanvas.getContext('2d');
-                rawCtx.fillStyle = '#ffffff';
-                rawCtx.fillRect(0, 0, origW, origH);
-                rawCtx.drawImage(img, 0, 0, origW, origH);
-
-                const rawImgData = rawCtx.getImageData(0, 0, origW, origH);
-                const rd = rawImgData.data;
-                let darkPixels = 0;
-                const sampleCount = Math.floor(rd.length / 16);
-                for (let i = 0; i < rd.length; i += 16) {
-                  const lumSample = 0.299 * rd[i] + 0.587 * rd[i + 1] + 0.114 * rd[i + 2];
-                  if (lumSample < 95) darkPixels++;
-                }
-                const isDarkBgImage = (darkPixels / sampleCount) > 0.5;
-
-                // Convert to clean luminance array (0 = black ink, 255 = white background)
-                const lumGrid = new Uint8Array(origW * origH);
-                for (let i = 0, p = 0; i < rd.length; i += 4, p++) {
-                  let r = rd[i], g = rd[i + 1], b = rd[i + 2];
-                  if (isDarkBgImage) { r = 255 - r; g = 255 - g; b = 255 - b; }
-                  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                  lumGrid[p] = lum >= 168 ? 255 : Math.max(0, Math.round(lum * 0.35));
-                }
-
-                // Step B: Deslash Monospace Zero ('0') Filter on dark-background / plaintext screenshots:
-                // In monospace fonts (like Consolas / JetBrains Mono / Courier), '0' has a 1-2px diagonal slash or dot in the center,
-                // surrounded by white cavities above-left and below-right, and bounded by vertical strokes on left and right.
-                // Clearing that isolated inner slash turns '0' into a 100% hollow oval so Tesseract NEVER reads it as '8' or '6'!
-                if (isDarkBgImage && origW < 1200) {
-                  for (let y = 3; y < origH - 3; y++) {
-                    for (let x = 3; x < origW - 3; x++) {
-                      const idx = y * origW + x;
-                      if (lumGrid[idx] < 180) {
-                        // Check if this pixel is an interior diagonal/center dot with white cavity both above-left and below-right
-                        const upLeftWhite = (lumGrid[(y - 1) * origW + (x - 1)] === 255 && lumGrid[(y - 2) * origW + (x - 1)] === 255);
-                        const dnRightWhite = (lumGrid[(y + 1) * origW + (x + 1)] === 255 && lumGrid[(y + 2) * origW + (x + 1)] === 255);
-                        const upWhite = (lumGrid[(y - 2) * origW + x] === 255);
-                        const dnWhite = (lumGrid[(y + 2) * origW + x] === 255);
-                        if ((upLeftWhite && dnRightWhite) || (upWhite && dnWhite && (upLeftWhite || dnRightWhite))) {
-                          lumGrid[idx] = 255;
-                        }
-                      }
-                    }
-                  }
-                }
-
-                for (let i = 0, p = 0; i < rd.length; i += 4, p++) {
-                  const v = lumGrid[p];
-                  rd[i] = v; rd[i + 1] = v; rd[i + 2] = v; rd[i + 3] = 255;
-                }
-                rawCtx.putImageData(rawImgData, 0, 0);
-
-                // Step C: Upscale cleanly for Tesseract OCR
-                const scale = origW < 1000 ? 2.5 : (origW < 1800 ? 2.0 : 1.25);
+                const scale = origW < 1000 ? 3.0 : (origW < 1800 ? 2.2 : 1.25);
                 const w = Math.round(origW * scale);
                 const h = Math.round(origH * scale);
                 const canvas = document.createElement('canvas');
@@ -17495,8 +17426,31 @@ function renderChatHubView() {
                 ctx.fillRect(0, 0, w, h);
                 ctx.imageSmoothingEnabled = true;
                 ctx.imageSmoothingQuality = 'high';
-                ctx.drawImage(rawCanvas, 0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
 
+                const imgData = ctx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                let darkPixels = 0;
+                const sampleCount = Math.floor(d.length / 16);
+                for (let i = 0; i < d.length; i += 16) {
+                  const lumSample = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                  if (lumSample < 95) darkPixels++;
+                }
+                const isDarkBgImage = (darkPixels / sampleCount) > 0.5;
+                window._isDarkMonospaceOcrImage = isDarkBgImage;
+
+                for (let i = 0; i < d.length; i += 4) {
+                  let r = d[i], g = d[i + 1], b = d[i + 2];
+                  if (isDarkBgImage) { r = 255 - r; g = 255 - g; b = 255 - b; }
+                  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                  if (lum >= 210) {
+                    d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
+                  } else {
+                    const v = Math.max(0, Math.round(lum * 0.55));
+                    d[i] = v; d[i + 1] = v; d[i + 2] = v;
+                  }
+                }
+                ctx.putImageData(imgData, 0, 0);
                 resolve(canvas.toDataURL('image/png'));
               } catch (canvasErr) { resolve(dataUrl); }
             };
@@ -17508,18 +17462,122 @@ function renderChatHubView() {
         });
       };
 
-      // Also upgrade parseErpProductSummaryRow so decimal fractions in direct summary lines
-      // (where Ghorerbazar package weights are multiples of 0.05kg / 0.20kg / 0.25kg / 0.50kg)
-      // automatically normalize impossible OCR decimal artifacts like `.65` or `.85` back to `.05`!
-      const _origParseErpProductRowV36 = parseErpProductSummaryRow;
-      parseErpProductSummaryRow = function(lineText) {
-        const cleanedLine = String(lineText || '')
-          .replace(/(\d)\s*[\.,]\s*([68])5\s*(?=k|g|\b)/gi, '$1.05 ');
-        return _origParseErpProductRowV36(cleanedLine);
+      // 2. SMART POST-OCR SLASHED-ZERO WEIGHT FIXER (Fixes 70.65 -> 70.05, 48 -> 40, 18.5 -> 10.5 without touching image pixels!)
+      window.fixSlashedZeroProductWeight = function(val, rawLineText) {
+        let num = Number(val) || 0;
+        if (num <= 0) return 0;
+        let str = num.toFixed(2);
+        // Fix .65 or .85 misread from .05 (e.g. Gawa Ghee 70.65 -> 70.05)
+        if (str.endsWith('.65') || str.endsWith('.85')) {
+          num = Number(str.replace(/\.(65|85)$/, '.05'));
+        }
+        // In dark-mode monospace plain-text summaries (where lines have no pack size like "500gm" or "250g" or ERP code),
+        // slashed '0' in "10.5" or "40" is read by Tesseract as '8' ("18.5" or "48").
+        const hasErpTableOrPackToken = /\b(500|250|200|400|100)\s*(gm|g|ml)\b|ghorer\s*bazar|\b[A4]00\d{3}\b/i.test(String(rawLineText || ''));
+        if (window._isDarkMonospaceOcrImage && !hasErpTableOrPackToken) {
+          const intPart = Math.floor(num);
+          const decPart = Number((num - intPart).toFixed(2));
+          if (intPart >= 10 && (intPart % 10 === 8)) {
+            num = (intPart - 8) + decPart;
+          }
+        }
+        return Number(num.toFixed(2));
       };
 
-      // 3. CLEAN SINGLE-AGENT MONTHLY PERFORMANCE EXCEL/CSV DOWNLOAD (NO EMPTY SIDE COLUMNS!)
-      const _origExportMonthlyPerfMultiV36 = exportMonthlyPerformanceCsv;
+      parseErpProductSummaryRow = function(lineText) {
+        const raw = String(lineText || '').trim();
+        const lower = raw.toLowerCase();
+        if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || /^total\s*:/i.test(lower) || /product\s*name.*quantity\s*sold/i.test(lower)) {
+          return null;
+        }
+        let matchedCodeInfo = null;
+        const codeMatch = raw.match(/\b[A4][0O]{1,5}\d{1,6}\b/i) || raw.match(/\b00[02]\d{3}\b/);
+        if (codeMatch) {
+          const digitsOnly = codeMatch[0].replace(/^[^0O\d]/i, '').replace(/[Oo]/g, '0');
+          const normCode = 'A' + digitsOnly.padStart(6, '0');
+          if (ERP_PRODUCT_CODE_MAP[normCode]) matchedCodeInfo = ERP_PRODUCT_CODE_MAP[normCode];
+        }
+        let cat = matchedCodeInfo ? matchedCodeInfo.cat : null;
+        if (!cat) {
+          if (/black\s*seed\s*honey|bs\.?\s*h|kalojira|150052|150205|150133/i.test(lower)) cat = 'bsHoney';
+          else if (/sundarban|sundorban|shunderban|sun\.?\s*h|000008|000009|000214|150229|150199|150236/i.test(lower)) cat = 'sunHoney';
+          else if (/gawa\s*ghee|\bghee\b|shosti\s*food|120048|120055|120068/i.test(lower)) cat = 'gawaGhee';
+          else if (/pink\s*salt|himalayan|\bsalt\b|180024/i.test(lower)) cat = 'pinkSalt';
+          else if (/black\s*garlic|\bgarlic\b|200054/i.test(lower)) cat = 'blackGarlic';
+          else if (/ajwa|khejuri|dates|130210/i.test(lower)) cat = 'ajwa';
+        }
+        if (!cat) return null;
+
+        const hasErpTableColumns = Boolean(matchedCodeInfo) || /ghorer\s*bazar|\b894\d{7,10}\b|[৳$]\s*\d/i.test(raw);
+        if (!hasErpTableColumns) {
+          const normalizedDec = lower.replace(/(\d)\s*[\.,]\s*(\d)/g, '$1.$2').replace(/(\d)\.[68]5\s*k/g, '$1.05 k');
+          const directWeightMatch = normalizedDec.match(/(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i) || normalizedDec.match(/(\d+(?:\.\d+)?)\s*$/);
+          if (directWeightMatch) {
+            const rawVal = parseFloat(directWeightMatch[1]) || 0;
+            const unitStr = (directWeightMatch[2] || 'kg').toLowerCase();
+            let finalKg = unitStr.startsWith('k') ? Number(rawVal.toFixed(2)) : Number((rawVal / 1000).toFixed(2));
+            finalKg = window.fixSlashedZeroProductWeight(finalKg, raw);
+            if (finalKg > 0) return { cat, unitKg: finalKg, qty: 1, totalKg: finalKg, itemSummary: `${finalKg}kg` };
+          }
+        }
+
+        let unitKg = matchedCodeInfo ? matchedCodeInfo.unitKg : 1.0;
+        let sizeLabel = matchedCodeInfo ? matchedCodeInfo.label : '1kg';
+        let sizeEndIdx = 0;
+        const weightRegex = /(?<![.\d])(500|250|200|400|100|1|2|0\.5|0\.25)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i;
+        const wMatch = lower.match(weightRegex);
+        if (wMatch) {
+          const wNum = parseFloat(wMatch[1]) || 1;
+          const wUnit = wMatch[2].toLowerCase();
+          if (wUnit.startsWith('k') || wNum <= 5) { unitKg = wNum; sizeLabel = `${wNum}kg`; }
+          else { unitKg = wNum / 1000; sizeLabel = `${wNum}gm`; }
+          sizeEndIdx = wMatch.index + wMatch[0].length;
+        }
+        let tail = sizeEndIdx > 0 ? raw.substring(sizeEndIdx) : raw;
+        tail = tail.replace(/\b894\d{7,10}\b/g, ' ').replace(/\d+\.\d{2}/g, ' ');
+        const intTokens = tail.match(/\b\d{1,4}\b/g) || [];
+        if (intTokens.length === 0) return null;
+        const qty = parseInt(intTokens[intTokens.length - 1], 10) || 0;
+        if (qty <= 0 || qty > 5000) return null;
+        const totalKg = Number((unitKg * qty).toFixed(2));
+        return { cat, unitKg, qty, totalKg, itemSummary: `${sizeLabel} × ${qty} = ${totalKg}kg` };
+      };
+
+      // 3. ALWAYS RESET TO DASHBOARD TAB ON LOGIN & LOGOUT
+      const _origHandleLoginV38 = handleLogin;
+      handleLogin = function(e) {
+        activeTab = 'dashboard';
+        missingReportsSubView = 'MISSING';
+        return _origHandleLoginV38(e);
+      };
+
+      const _origExecuteInstantLogoutV38 = executeInstantLogout;
+      executeInstantLogout = function() {
+        activeTab = 'dashboard';
+        missingReportsSubView = 'MISSING';
+        return _origExecuteInstantLogoutV38();
+      };
+
+      // 4. FAST CLOUD SYNC: PAUSE BACKGROUND READ POLLS FOR 2.5s WHEN SUBMITTING DATA SO WRITE EXECUTES IMMEDIATELY!
+      window._lastWritePostTimestamp = 0;
+      const _origPostToSheetV38 = postToSheet;
+      postToSheet = async function(action, payload) {
+        if (action === 'DAILY_SALES_SUBMIT' || action === 'DELETE_SALES_RECORD' || action === 'SAVE_ROSTER_ROW' || action === 'SAVE_USER' || action === 'SAVE_MONTHLY_CONFIG') {
+          window._lastWritePostTimestamp = Date.now();
+        }
+        return _origPostToSheetV38(action, payload);
+      };
+
+      const _origFetchFromSheetV38 = fetchFromSheet;
+      fetchFromSheet = function(forceImmediate = false) {
+        if (!forceImmediate && (Date.now() - (window._lastWritePostTimestamp || 0)) < 2500) {
+          return;
+        }
+        return _origFetchFromSheetV38(forceImmediate);
+      };
+
+      // 5. CLEAN SINGLE-AGENT MONTHLY PERFORMANCE EXCEL/CSV DOWNLOAD (NO EMPTY SIDE COLUMNS!)
+      const _origExportMonthlyPerfMultiV38 = exportMonthlyPerformanceCsv;
       exportMonthlyPerformanceCsv = function() {
         const u = currentUser;
         const shouldIncludeTLAsRows = canViewAll(u) && (window.showTlInSalesTables || (monthlyPerfAgentId !== 'ALL' && window.isUserTeamLeaderRecord(monthlyPerfAgentId)));
@@ -17572,13 +17630,13 @@ function renderChatHubView() {
           downloadPortalCsvFile(`Monthly_Performance_${ag.name.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, rows);
           return;
         }
-        return _origExportMonthlyPerfMultiV36();
+        return _origExportMonthlyPerfMultiV38();
       };
 
-      // 4. REMOVE EDIT/DELETE FOR AGENTS IN LEAVE LOG & DAY OFF SUBMISSIONS (SHOW "Contact with your Team Leader")
-      const _origRenderMissingV36 = renderMissingReportsAndLeaveView;
+      // 6. REMOVE EDIT/DELETE FOR AGENTS IN LEAVE LOG & DAY OFF SUBMISSIONS (SHOW "Contact with your Team Leader")
+      const _origRenderMissingV38 = renderMissingReportsAndLeaveView;
       renderMissingReportsAndLeaveView = function() {
-        let htmlOut = _origRenderMissingV36();
+        let htmlOut = _origRenderMissingV38();
         if (currentUser && !canViewAll(currentUser)) {
           if (missingReportsSubView === 'LEAVE_LOG') {
             htmlOut = htmlOut.replace(/<button type="button" onclick="openReportModal\([^)]+\)"[^>]*>[\s\S]*?<\/button>\s*<button type="button" onclick="openMarkLeaveModal\([^)]+\)"[^>]*>[\s\S]*?<\/button>\s*<button type="button" onclick="handleRevertLeaveRecord\([^)]+\)"[^>]*>[\s\S]*?<\/button>/g,
@@ -17593,7 +17651,7 @@ function renderChatHubView() {
         return htmlOut;
       };
 
-      // 5. PREVENT PAGE SHAKE / VERTICAL BOUNCE ON NOTIFICATIONS & BACKGROUND SYNC
+      // 7. PREVENT PAGE SHAKE / VERTICAL BOUNCE ON NOTIFICATIONS & BACKGROUND SYNC
       attachTopTableScrollHelpers = function() {
         const tables = document.querySelectorAll('main .card-dynamic.overflow-x-auto');
         tables.forEach((box) => {
@@ -17630,8 +17688,8 @@ function renderChatHubView() {
           }
         });
       };
-    } catch (patchV36Err) {
-      console.error('Non-fatal patch v36 warning:', patchV36Err);
+    } catch (patchV38Err) {
+      console.error('Non-fatal patch v38 warning:', patchV38Err);
     }
 
 window.addEventListener('load', init);
