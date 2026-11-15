@@ -19254,6 +19254,998 @@ function renderChatHubView() {
       console.error('Non-fatal patch v45 warning:', errV45);
     }
 
+    // =========================================================================
+    // PATCH v46 — INSTANT LOGIN DATA LOAD (ZERO "0" FLASH) &
+    //             ALL-CHANNELS EXECUTIVE DASHBOARD + COMBINED SUMMARY REDESIGN
+    // =========================================================================
+    try {
+      // -----------------------------------------------------------------------
+      // 1. CROSS-FILE & PRE-WARM INSTANT CACHE ENGINE (ZERO DELAY ON LOGIN!)
+      //    - Fixes bug where typing in #loginId / #loginPass caused
+      //      isUserInteractingWithControl() to return true and discard the
+      //      pre-warmed cloud data before login!
+      //    - Mirrors cache to window.name so opening a new local HTML file
+      //      version in the same tab has 100% of sales data in 0ms!
+      //    - If cache is still empty when "Sign In" is clicked (cold tab +
+      //      instant autofill), awaits the in-flight pre-warm cloud fetch
+      //      before rendering the Dashboard so it NEVER flashes 0 Leads / ৳0!
+      // -----------------------------------------------------------------------
+      const syncCacheToWindowName = function() {
+        try {
+          const sales = getStored('sales_records', []);
+          if (!Array.isArray(sales) || sales.length === 0) return;
+          const payload = {
+            _gbCacheV46: true,
+            ts: Date.now(),
+            sales_records: sales,
+            users: getStored('users', DEFAULT_USERS),
+            roster_records: getStored('roster_records', []),
+            monthly_configs: getStored('monthly_configs', {}),
+            attendance_records: getStored('attendance_records', [])
+          };
+          const serialized = JSON.stringify(payload);
+          if (serialized.length < 2500000) {
+            window.name = serialized;
+          }
+        } catch (e) {}
+      };
+
+      // Hydrate from window.name immediately if localStorage is empty for this file path
+      try {
+        if (getStored('sales_records', []).length === 0 && window.name && window.name.startsWith('{')) {
+          const parsed = JSON.parse(window.name);
+          if (parsed && parsed._gbCacheV46 && Array.isArray(parsed.sales_records) && parsed.sales_records.length > 0) {
+            setStored('sales_records', parsed.sales_records);
+            if (Array.isArray(parsed.users) && parsed.users.length > 0) setStored('users', parsed.users);
+            if (Array.isArray(parsed.roster_records) && parsed.roster_records.length > 0) setStored('roster_records', parsed.roster_records);
+            if (parsed.monthly_configs && typeof parsed.monthly_configs === 'object') setStored('monthly_configs', parsed.monthly_configs);
+            if (Array.isArray(parsed.attendance_records) && parsed.attendance_records.length > 0) setStored('attendance_records', parsed.attendance_records);
+          }
+        }
+      } catch (e) {}
+
+      // Never treat #loginId or #loginPass as a control that blocks background cloud data sync!
+      isUserInteractingWithControl = function() {
+        if (!currentUser) return false;
+        const active = document.activeElement;
+        if (!active) return false;
+        if (active.id === 'chatComposerInput' || active.id === 'loginId' || active.id === 'loginPass') return false;
+        const tag = (active.tagName || '').toUpperCase();
+        return tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA';
+      };
+
+      // Upgrade handleCloudData so it NEVER discards incoming sales/config data!
+      // Even if the user is scrolling or a modal is open, data is saved to localStorage
+      // immediately, and if sales_records was empty (or user just logged in), it renders right away!
+      window._lastLoginTimestampMs = 0;
+      handleCloudData = function(res) {
+        if (!res || res.status !== 'success') return;
+        const hadEmptySalesBefore = getStored('sales_records', []).length === 0;
+        let changed = false;
+
+        if (Array.isArray(res.salesRecords)) {
+          const local = getStored('sales_records', []);
+          const pendingQ = getPendingSalesOutboxQueue();
+          const nowMs = Date.now();
+          let queueModified = false;
+
+          const cloudMap = new Map();
+          res.salesRecords.forEach(r => {
+            if (r && r.userId && r.date) {
+              const cleanD = String(r.date).replace(/^'/, '').trim();
+              cloudMap.set(`${String(r.userId).trim()}_${cleanD}`, { ...r, date: cleanD });
+            }
+          });
+
+          const mergedList = [...res.salesRecords.map(r => ({ ...r, date: String(r.date || '').replace(/^'/, '').trim() }))];
+
+          Object.keys(pendingQ).forEach(k => {
+            const item = pendingQ[k];
+            if (!item || !item.entry) {
+              delete pendingQ[k];
+              queueModified = true;
+              return;
+            }
+            if ((nowMs - Number(item.queuedAt || 0)) > 86400000) {
+              delete pendingQ[k];
+              queueModified = true;
+              return;
+            }
+            const cloudMatch = cloudMap.get(k);
+            if (item.isDeletion) {
+              if (!cloudMatch) {
+                delete pendingQ[k];
+                queueModified = true;
+              } else {
+                const idxInMerged = mergedList.findIndex(m => `${String(m.userId).trim()}_${m.date}` === k);
+                if (idxInMerged !== -1) mergedList.splice(idxInMerged, 1);
+                if ((nowMs - Number(item.lastAttemptAt || 0)) > 6500) {
+                  item.lastAttemptAt = nowMs;
+                  item.attempts = (item.attempts || 1) + 1;
+                  queueModified = true;
+                  postToSheet('DELETE_SALES_RECORD', { userId: String(item.entry.userId), date: item.entry.date, ...(item.logMeta || {}) }).catch(() => {});
+                }
+              }
+            } else {
+              if (cloudMatch && doesCloudRecordMatchPending(cloudMatch, item.entry)) {
+                delete pendingQ[k];
+                queueModified = true;
+              } else {
+                const idxInMerged = mergedList.findIndex(m => `${String(m.userId).trim()}_${m.date}` === k);
+                if (idxInMerged !== -1) mergedList[idxInMerged] = item.entry;
+                else mergedList.unshift(item.entry);
+
+                if ((nowMs - Number(item.lastAttemptAt || 0)) > 6500) {
+                  item.lastAttemptAt = nowMs;
+                  item.attempts = (item.attempts || 1) + 1;
+                  queueModified = true;
+                  postToSheet('DAILY_SALES_SUBMIT', { ...item.entry, ...(item.logMeta || {}) }).catch(() => {});
+                }
+              }
+            }
+          });
+
+          if (queueModified) savePendingSalesOutboxQueue(pendingQ);
+
+          if (JSON.stringify(mergedList) !== JSON.stringify(local)) {
+            setStored('sales_records', mergedList);
+            changed = true;
+          }
+        }
+
+        if (Array.isArray(res.attendanceRecords)) {
+          const localAtt = getStored('attendance_records', []);
+          const today = getTodayFormatted();
+          const mergedAtt = res.attendanceRecords.map(cloudRec => {
+            cloudRec.loginTime = sanitizeTimeDisplay(cloudRec.loginTime);
+            cloudRec.logoutTime = sanitizeTimeDisplay(cloudRec.logoutTime);
+            if (currentUser && currentUser.role === 'agent' && String(cloudRec.userId) === String(currentUser.id) && cloudRec.date === today) {
+              const myLocal = localAtt.find(a => String(a.userId) === String(currentUser.id) && a.date === today);
+              if (myLocal && myLocal.status !== 'Completed' && (myLocal.activeSeconds > cloudRec.activeSeconds || myLocal.breakSeconds > cloudRec.breakSeconds)) {
+                return myLocal;
+              }
+            }
+            return cloudRec;
+          });
+          const stateChanged = hasAttendanceChanged(mergedAtt, localAtt);
+          setStored('attendance_records', mergedAtt);
+          if (stateChanged) changed = true;
+        }
+
+        if (Array.isArray(res.onlineUsers)) {
+          const nowClient = Date.now();
+          const stampedOnline = res.onlineUsers.map(o => ({
+            ...o,
+            clientReceivedAt: (o && o.state !== 'Offline' && Number(o.lastSeen) > 0) ? nowClient : 0
+          }));
+          const localOnline = getStored('online_users', []);
+          const onlineStateDiff = hasOnlineStateChanged(stampedOnline, localOnline);
+          setStored('online_users', stampedOnline);
+          if (onlineStateDiff) changed = true;
+        }
+
+        if (Array.isArray(res.activityLogs) && res.activityLogs.length > 0) {
+          const cleanCloudLogs = deduplicateActivityLogsList(res.activityLogs);
+          const localLogs = getStored('activity_logs', []);
+          if (JSON.stringify(cleanCloudLogs) !== JSON.stringify(localLogs)) {
+            const hadPreviousSync = localLogs.length > 0;
+            setStored('activity_logs', cleanCloudLogs);
+            if (currentUser && hasFeatureAccess(currentUser, 'feat_bell_floor_alerts')) {
+              syncAdminBellNotificationsFromActivityLogs(cleanCloudLogs, hadPreviousSync);
+            }
+            changed = true;
+          }
+        }
+
+        if (Array.isArray(res.rosterRecords) && res.rosterRecords.length > 0) {
+          if ((Date.now() - lastLocalUserOrConfigMutationMs) >= 10000) {
+            const localRoster = getStored('roster_records', []);
+            if (JSON.stringify(res.rosterRecords) !== JSON.stringify(localRoster)) {
+              setStored('roster_records', res.rosterRecords);
+              changed = true;
+            }
+          }
+        }
+
+        if (res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
+          const localCfg = getStored('monthly_configs', {});
+          const isRecentConfigEdit = (Date.now() - lastLocalUserOrConfigMutationMs) < 10000;
+          const mergedConfigs = isRecentConfigEdit ? { ...res.monthlyConfigs, ...localCfg } : { ...localCfg, ...res.monthlyConfigs };
+
+          // Preserve DO_APPROVED_DUTIES_* & USER_AVATARS & LEAVE_RECORDS_*
+          Object.keys({ ...localCfg, ...(res.monthlyConfigs || {}) }).forEach(cfgK => {
+            if (cfgK.startsWith('LEAVE_RECORDS_') || cfgK.startsWith('DO_APPROVED_DUTIES_')) {
+              const locLv = (localCfg[cfgK] && typeof localCfg[cfgK] === 'object') ? localCfg[cfgK] : {};
+              const cldLv = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
+              const combinedLv = { ...cldLv };
+              Object.keys(locLv).forEach(lk => {
+                const lItem = locLv[lk];
+                const cItem = cldLv[lk];
+                if (!cItem || Number(lItem.updatedTs || lItem.approvedAt || 0) >= Number(cItem.updatedTs || cItem.approvedAt || 0)) {
+                  if (lItem && lItem.isRemoved) delete combinedLv[lk];
+                  else combinedLv[lk] = lItem;
+                }
+              });
+              Object.keys(combinedLv).forEach(lk => {
+                if (combinedLv[lk] && combinedLv[lk].isRemoved) delete combinedLv[lk];
+              });
+              mergedConfigs[cfgK] = combinedLv;
+            }
+          });
+
+          if (localCfg['USER_AVATARS'] || res.monthlyConfigs['USER_AVATARS']) {
+            const locAv = (localCfg['USER_AVATARS'] && typeof localCfg['USER_AVATARS'] === 'object') ? localCfg['USER_AVATARS'] : {};
+            const cldAv = (res.monthlyConfigs['USER_AVATARS'] && typeof res.monthlyConfigs['USER_AVATARS'] === 'object') ? res.monthlyConfigs['USER_AVATARS'] : {};
+            mergedConfigs['USER_AVATARS'] = isRecentConfigEdit ? { ...cldAv, ...locAv } : { ...locAv, ...cldAv };
+            Object.keys(mergedConfigs['USER_AVATARS']).forEach(uidKey => {
+              if (mergedConfigs['USER_AVATARS'][uidKey]) {
+                try { localStorage.setItem('gb_avatar_' + uidKey, mergedConfigs['USER_AVATARS'][uidKey]); } catch (e) {}
+              }
+            });
+          }
+
+          if (localCfg['CHAT_AND_NOTICES'] || res.monthlyConfigs['CHAT_AND_NOTICES']) {
+            const locHub = localCfg['CHAT_AND_NOTICES'] || {};
+            const cldHub = res.monthlyConfigs['CHAT_AND_NOTICES'] || {};
+            const msgMap = new Map();
+            const nowMergeMs = Date.now();
+            (Array.isArray(cldHub.messages) ? cldHub.messages : []).forEach(m => { if (m && m.id) msgMap.set(m.id, m); });
+            (Array.isArray(locHub.messages) ? locHub.messages : []).forEach(m => {
+              if (!m || !m.id) return;
+              const sentRef = Number(m.localSentAt || m.ts || 0);
+              if (!msgMap.has(m.id) && (nowMergeMs - sentRef < 90000)) {
+                msgMap.set(m.id, { ...m, localSentAt: sentRef || nowMergeMs });
+              }
+            });
+            const mergedMsgs = Array.from(msgMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-220);
+
+            const noticeMap = new Map();
+            (Array.isArray(cldHub.notices) ? cldHub.notices : []).forEach(n => { if (n && n.id) noticeMap.set(n.id, n); });
+            (Array.isArray(locHub.notices) ? locHub.notices : []).forEach(n => {
+              if (n && n.id && !noticeMap.has(n.id) && (Date.now() - Number(n.ts || 0) < 20000)) {
+                noticeMap.set(n.id, n);
+              }
+            });
+            const mergedNotices = Array.from(noticeMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-40);
+
+            const mergedReads = {};
+            const locReads = (locHub.readReceipts && typeof locHub.readReceipts === 'object') ? locHub.readReceipts : {};
+            const cldReads = (cldHub.readReceipts && typeof cldHub.readReceipts === 'object') ? cldHub.readReceipts : {};
+            new Set([...Object.keys(locReads), ...Object.keys(cldReads)]).forEach(uid => {
+              mergedReads[uid] = {};
+              const uLoc = locReads[uid] || {};
+              const uCld = cldReads[uid] || {};
+              new Set([...Object.keys(uLoc), ...Object.keys(uCld)]).forEach(rId => {
+                mergedReads[uid][rId] = Math.max(Number(uLoc[rId] || 0), Number(uCld[rId] || 0));
+              });
+            });
+
+            const grpMap = new Map();
+            (Array.isArray(cldHub.customGroups) ? cldHub.customGroups : []).forEach(g => { if (g && g.id) grpMap.set(g.id, g); });
+            (Array.isArray(locHub.customGroups) ? locHub.customGroups : []).forEach(g => {
+              if (g && g.id && !grpMap.has(g.id)) grpMap.set(g.id, g);
+            });
+            const mergedCustomGroups = Array.from(grpMap.values());
+            mergedConfigs['CHAT_AND_NOTICES'] = { messages: mergedMsgs, notices: mergedNotices, readReceipts: mergedReads, customGroups: mergedCustomGroups };
+          }
+
+          if (JSON.stringify(mergedConfigs) !== JSON.stringify(localCfg)) {
+            const hadPrevCfg = Object.keys(localCfg).length > 0;
+            setStored('monthly_configs', mergedConfigs);
+            if (currentUser) {
+              syncIncomingChatAndNoticesFromConfigs(mergedConfigs, hadPrevCfg);
+            }
+            changed = true;
+          }
+        }
+
+        if (Array.isArray(res.customUsers) && res.customUsers.length > 0) {
+          if ((Date.now() - lastLocalUserOrConfigMutationMs) >= 10000) {
+            const currentUsers = getStored('users', DEFAULT_USERS);
+            const mergedMap = new Map();
+            DEFAULT_USERS.forEach(u => mergedMap.set(String(u.id), normalizeUserRecord(u)));
+            currentUsers.forEach(u => mergedMap.set(String(u.id), normalizeUserRecord(u)));
+            res.customUsers.forEach(u => mergedMap.set(String(u.id), normalizeUserRecord(u)));
+            const mergedArr = Array.from(mergedMap.values());
+            if (JSON.stringify(mergedArr) !== JSON.stringify(currentUsers)) {
+              setStored('users', mergedArr);
+              if (currentUser) {
+                const myUpdated = mergedArr.find(u => String(u.id) === String(currentUser.id));
+                if (myUpdated) {
+                  currentUser = normalizeUserRecord(myUpdated);
+                  setStored('session_user', currentUser);
+                }
+              }
+              changed = true;
+            }
+          }
+        }
+
+        // Mirror updated cache to window.name so local HTML reloads/switches have 0ms data
+        syncCacheToWindowName();
+
+        const isJustLoggedIn = (Date.now() - (window._lastLoginTimestampMs || 0)) < 6000;
+        if (currentUser && (hadEmptySalesBefore || isJustLoggedIn || (changed && !isAnyModalOpen() && !isUserInteractingWithControl()))) {
+          renderAppLayout();
+        }
+      };
+
+      // Make handleLogin wait for cloud data if localStorage is completely empty on a cold tab
+      // so the Dashboard NEVER flashes 0 Leads / 0 Orders / ৳0 Revenue on login!
+      handleLogin = async function(e) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        activeTab = 'dashboard';
+        missingReportsSubView = 'MISSING';
+
+        let id = (document.getElementById('loginId')?.value || '').trim();
+        if (id === '10160') id = '10175';
+        const pass = (document.getElementById('loginPass')?.value || '').trim();
+
+        // If local sales_records cache is empty on a brand-new tab, trigger & await cloud fetch first (up to 3.2s)
+        if (getStored('sales_records', []).length === 0) {
+          const submitBtn = e?.target?.querySelector('button[type="submit"]');
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin mr-2"></i>Loading Live Floor Data...`;
+          }
+          fetchFromSheet(true);
+          const waitStart = Date.now();
+          while (getStored('sales_records', []).length === 0 && (Date.now() - waitStart) < 3200) {
+            await new Promise(r => setTimeout(r, 90));
+          }
+        }
+
+        const rawUser = getStored('users', DEFAULT_USERS).map(normalizeUserRecord).find(u => String(u.id) === id && u.pass === pass);
+        if (!rawUser) {
+          const submitBtn = document.querySelector('#app form button[type="submit"]');
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `Sign In to Portal`;
+          }
+          showPortalToast('Login Failed', 'Invalid Employee ID or Password! Please check and try again.', 'error');
+          return;
+        }
+        if (isUserAccountDeactivated(rawUser) && String(rawUser.id) !== '10122') {
+          const submitBtn = document.querySelector('#app form button[type="submit"]');
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `Sign In to Portal`;
+          }
+          showPortalToast('Account Deactivated', 'This Employee ID is currently deactivated by your Team Leader / Admin.', 'error');
+          return;
+        }
+
+        const user = normalizeUserRecord(rawUser);
+        currentUser = user;
+        window._lastLoginTimestampMs = Date.now();
+        setStored('session_user', user);
+        activeChannel = user.role === 'supervisor' ? 'ALL_CHANNELS' : getChannelForTeam(user.team);
+        localStorage.setItem('gb_active_channel', activeChannel);
+        const loginTeamScope = (user.role === 'admin' || user.role === 'agent') ? normalizeTeamNameAlias(user.team) : 'ALL';
+        dashboardScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+        monthlyPerfTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+        driveProdTeamScope = loginTeamScope;
+        sprintTabTeamScope = loginTeamScope;
+        missingReportsTeamScope = user.role === 'admin' ? loginTeamScope : 'ALL';
+        monthlyPerfAgentId = 'ALL';
+        logsFilterScope = 'ALL';
+        reportsDateFilter = getTodayFormatted();
+
+        init();
+        setTimeout(() => {
+          if (!currentUser) return;
+          recordActivityLog('User Login', `Signed in to the portal (${user.role.toUpperCase()})`, true);
+          if (user.role === 'agent') {
+            const today = getTodayFormatted();
+            const rec = getStored('attendance_records', []).find(a => String(a.userId) === String(user.id) && a.date === today);
+            if (rec) postToSheet('ATTENDANCE_SYNC', rec).catch(() => {});
+          }
+        }, 600);
+      };
+
+      // -----------------------------------------------------------------------
+      // 2. SINGLE-LINE COMPACT CHANNEL & TEAM BAR (ZERO AWKWARD 2-LINE WRAPPING!)
+      // -----------------------------------------------------------------------
+      renderSupervisorQuickChannelTeamBar = function(activeTeamVal, onSelectFnName) {
+        const u = currentUser;
+        if (!canViewAll(u)) return '';
+        const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
+        const fbAgentsCount = allUsersOmni.filter(usr => usr.role === 'agent' && !isPendingOrFloatingAgent(usr) && getChannelForTeam(usr.team) === 'FACEBOOK').length;
+        const waAgentsCount = allUsersOmni.filter(usr => usr.role === 'agent' && !isPendingOrFloatingAgent(usr) && getChannelForTeam(usr.team) === 'WHATSAPP').length;
+        const totalAgentsCount = fbAgentsCount + waAgentsCount;
+        const chMeta = getActiveChannelMeta();
+        const chAgentsCount = activeChannel === 'ALL_CHANNELS'
+          ? totalAgentsCount
+          : (activeChannel === 'WHATSAPP' ? waAgentsCount : fbAgentsCount);
+
+        return `
+          <div class="bg-white px-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-2.5">
+            <!-- Left: Compact Channel View Switcher Pills -->
+            <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+              <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 whitespace-nowrap">
+                <i class="fa-solid fa-layer-group text-purple-600 mr-1"></i>Channel:
+              </span>
+              <button type="button" onclick="switchPortalChannel('ALL_CHANNELS')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-black inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'}">
+                <i class="fa-solid fa-layer-group text-[10px]"></i> All Channels (${totalAgentsCount})
+              </button>
+              <button type="button" onclick="switchPortalChannel('FACEBOOK')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-black inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeChannel === 'FACEBOOK' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'}">
+                <i class="fa-brands fa-facebook-f text-[10px]"></i> Facebook (${fbAgentsCount})
+              </button>
+              <button type="button" onclick="switchPortalChannel('WHATSAPP')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-black inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'}">
+                <i class="fa-brands fa-whatsapp text-xs"></i> WhatsApp (${waAgentsCount})
+              </button>
+            </div>
+
+            <!-- Right: Compact Single-Row Team Filter Pills -->
+            <div class="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/90">
+              <span class="text-[10px] font-black uppercase text-slate-400 px-1.5 hidden sm:inline whitespace-nowrap"><i class="fa-solid fa-filter mr-1"></i>Team:</span>
+              <button type="button" onclick="${onSelectFnName}('ALL')" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer whitespace-nowrap ${activeTeamVal === 'ALL' ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-600 hover:bg-white/80'}">
+                ${activeChannel === 'ALL_CHANNELS' ? `All Teams (${chAgentsCount})` : `All ${chMeta.name} (${chAgentsCount})`}
+              </button>
+              ${chMeta.teams.map(tn => {
+                const tCount = allUsersOmni.filter(usr => usr.role === 'agent' && !isPendingOrFloatingAgent(usr) && normalizeTeamNameAlias(usr.team) === tn).length;
+                return `
+                  <button type="button" onclick="${onSelectFnName}('${tn}')" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer whitespace-nowrap ${activeTeamVal === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow-2xs' : 'text-slate-600 hover:bg-white/80'}">
+                    ${tn} (${tCount})
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      };
+
+      // -----------------------------------------------------------------------
+      // 3. REDESIGNED ALL-CHANNEL COMBINED SALES SUMMARY BOX (SCREENSHOT 3)
+      //    - Pure white executive container (no muddy peach/orange tint!)
+      //    - Top 3 Channel Cards (Grand Total, Facebook Total, WhatsApp Total)
+      //      feature a spacious 2-row horizontal metric table instead of
+      //      3 cramped narrow gray boxes!
+      //    - Bottom 5 Team Cards have a clean top accent stripe, clear hierarchy,
+      //      and 3 separate specification rows (Target, Remaining, Orders/Conv)
+      //      so numbers never crowd into one line!
+      // -----------------------------------------------------------------------
+      renderOmniChannelTotalSalesBanner = function() {
+        const u = currentUser;
+        if (!canViewAll(u) || activeChannel !== 'ALL_CHANNELS') return '';
+        const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
+        const allSalesMonth = deduplicateSalesRecordsList(getStored('sales_records', []))
+          .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+        const knownTeamsOrdered = [
+          ...CHANNEL_META.FACEBOOK.teams,
+          ...CHANNEL_META.WHATSAPP.teams
+        ];
+        const dynamicExtraTeams = new Set();
+        allUsersOmni.forEach(usr => {
+          if (usr.role !== 'supervisor' && usr.team) {
+            const t = normalizeTeamNameAlias(usr.team);
+            if (!knownTeamsOrdered.includes(t) && t !== 'Floating' && t !== 'WA Floating' && t !== 'All Teams') {
+              dynamicExtraTeams.add(t);
+            }
+          }
+        });
+        allSalesMonth.forEach(s => {
+          if (s.team) {
+            const t = normalizeTeamNameAlias(s.team);
+            if (!knownTeamsOrdered.includes(t) && t !== 'Floating' && t !== 'WA Floating' && t !== 'All Teams') {
+              dynamicExtraTeams.add(t);
+            }
+          }
+        });
+        const allTeamsList = [...knownTeamsOrdered, ...Array.from(dynamicExtraTeams)];
+
+        let grandBaseTarget = 0;
+        let grandWorkingTarget = 0;
+        let grandLeads = 0;
+        let grandOrders = 0;
+        let grandRevenue = 0;
+
+        let fbRevenue = 0, fbWorkingTarget = 0, fbOrders = 0, fbLeads = 0;
+        let waRevenue = 0, waWorkingTarget = 0, waOrders = 0, waLeads = 0;
+
+        const teamBreakdowns = allTeamsList.map(tName => {
+          const ch = getChannelForTeam(tName);
+          const tMembers = allUsersOmni.filter(usr => usr.role !== 'supervisor' && !isPendingOrFloatingAgent(usr) && normalizeTeamNameAlias(usr.team) === tName);
+          const tBase = tMembers.reduce((sum, m) => sum + (Number(m.baseTarget) || 0), 0);
+          const tWork = calcWorkingTargetFromBase(tBase, ch);
+          const tSales = allSalesMonth.filter(s => normalizeTeamNameAlias(s.team) === tName);
+          const tLeads = tSales.reduce((sum, s) => sum + (Number(s.leads) || 0), 0);
+          const tOrders = tSales.reduce((sum, s) => sum + (Number(s.orders) || 0), 0);
+          const tRev = tSales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+          const tRem = Math.max(0, tWork - tRev);
+          const tPctNum = tWork > 0 ? Math.min(100, Math.round((tRev / tWork) * 100)) : 0;
+          const tPct = tWork > 0 ? ((tRev / tWork) * 100).toFixed(1) : '0.0';
+          const tConv = tLeads > 0 ? ((tOrders / tLeads) * 100).toFixed(1) : '0.0';
+
+          grandBaseTarget += tBase;
+          grandWorkingTarget += tWork;
+          grandLeads += tLeads;
+          grandOrders += tOrders;
+          grandRevenue += tRev;
+
+          if (ch === 'WHATSAPP') {
+            waRevenue += tRev; waWorkingTarget += tWork; waOrders += tOrders; waLeads += tLeads;
+          } else {
+            fbRevenue += tRev; fbWorkingTarget += tWork; fbOrders += tOrders; fbLeads += tLeads;
+          }
+
+          return { tName, ch, memberCount: tMembers.length, tWork, tLeads, tOrders, tRev, tRem, tPctNum, tPct, tConv };
+        });
+
+        allSalesMonth.forEach(s => {
+          const t = normalizeTeamNameAlias(s.team);
+          if (!allTeamsList.includes(t)) {
+            const amt = Number(s.amount) || 0;
+            const ord = Number(s.orders) || 0;
+            const lds = Number(s.leads) || 0;
+            grandRevenue += amt;
+            grandOrders += ord;
+            grandLeads += lds;
+            if (getChannelForTeam(t) === 'WHATSAPP') { waRevenue += amt; waOrders += ord; waLeads += lds; }
+            else { fbRevenue += amt; fbOrders += ord; fbLeads += lds; }
+          }
+        });
+
+        const grandRemaining = Math.max(0, grandWorkingTarget - grandRevenue);
+        const grandPctNum = grandWorkingTarget > 0 ? Math.min(100, Math.round((grandRevenue / grandWorkingTarget) * 100)) : 0;
+        const grandPct = grandWorkingTarget > 0 ? ((grandRevenue / grandWorkingTarget) * 100).toFixed(1) : '0.0';
+        const grandConv = grandLeads > 0 ? ((grandOrders / grandLeads) * 100).toFixed(2) : '0.00';
+
+        const fbPctNum = fbWorkingTarget > 0 ? Math.min(100, Math.round((fbRevenue / fbWorkingTarget) * 100)) : 0;
+        const fbPct = fbWorkingTarget > 0 ? ((fbRevenue / fbWorkingTarget) * 100).toFixed(1) : '0.0';
+        const fbConv = fbLeads > 0 ? ((fbOrders / fbLeads) * 100).toFixed(2) : '0.00';
+
+        const waPctNum = waWorkingTarget > 0 ? Math.min(100, Math.round((waRevenue / waWorkingTarget) * 100)) : 0;
+        const waPct = waWorkingTarget > 0 ? ((waRevenue / waWorkingTarget) * 100).toFixed(1) : '0.0';
+        const waConv = waLeads > 0 ? ((waOrders / waLeads) * 100).toFixed(2) : '0.00';
+
+        const monthLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+        const fbTeamCount = teamBreakdowns.filter(t => t.ch === 'FACEBOOK').length;
+        const waTeamCount = teamBreakdowns.filter(t => t.ch === 'WHATSAPP').length;
+
+        function getExecutiveTeamCardTheme(tName, ch) {
+          if (tName === 'Team Nazim') {
+            return { topBar: 'border-t-4 border-t-orange-500 border-slate-200/90 hover:border-orange-400', badge: 'bg-orange-500 text-white', pctPill: 'bg-orange-50 text-orange-800 border-orange-200', bar: 'bg-orange-500', rev: 'text-orange-600' };
+          }
+          if (tName === 'Team Samad') {
+            return { topBar: 'border-t-4 border-t-blue-600 border-slate-200/90 hover:border-blue-400', badge: 'bg-blue-600 text-white', pctPill: 'bg-blue-50 text-blue-800 border-blue-200', bar: 'bg-blue-600', rev: 'text-blue-700' };
+          }
+          if (tName === 'Team Saikat') {
+            return { topBar: 'border-t-4 border-t-cyan-600 border-slate-200/90 hover:border-cyan-400', badge: 'bg-cyan-700 text-white', pctPill: 'bg-cyan-50 text-cyan-900 border-cyan-200', bar: 'bg-cyan-600', rev: 'text-cyan-700' };
+          }
+          if (tName === 'Team Parvaj') {
+            return { topBar: 'border-t-4 border-t-teal-600 border-slate-200/90 hover:border-teal-400', badge: 'bg-teal-600 text-white', pctPill: 'bg-teal-50 text-teal-900 border-teal-200', bar: 'bg-teal-600', rev: 'text-teal-700' };
+          }
+          if (ch === 'WHATSAPP') {
+            return { topBar: 'border-t-4 border-t-emerald-600 border-slate-200/90 hover:border-emerald-400', badge: 'bg-emerald-600 text-white', pctPill: 'bg-emerald-50 text-emerald-900 border-emerald-200', bar: 'bg-emerald-600', rev: 'text-emerald-700' };
+          }
+          return { topBar: 'border-t-4 border-t-indigo-600 border-slate-200/90 hover:border-indigo-400', badge: 'bg-indigo-600 text-white', pctPill: 'bg-indigo-50 text-indigo-900 border-indigo-200', bar: 'bg-indigo-600', rev: 'text-indigo-700' };
+        }
+
+        return `
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-5">
+            <!-- Clean Executive Header Row -->
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3.5 border-b border-slate-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center text-sm shadow-xs shrink-0">
+                  <i class="fa-solid fa-chart-pie"></i>
+                </div>
+                <div>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                      All-Channel Executive Matrix
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
+                      ${allTeamsList.length} Active Teams (${fbTeamCount} Facebook + ${waTeamCount} WhatsApp)
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200/70">
+                      <i class="fa-regular fa-calendar mr-1"></i>${monthLabel}
+                    </span>
+                  </div>
+                  <h3 class="text-base font-black text-slate-900 mt-0.5">Ghorerbazar All-Channel Combined Sales Summary</h3>
+                </div>
+              </div>
+              <span class="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] font-bold text-slate-500">
+                <i class="fa-solid fa-hand-pointer text-indigo-500 mr-1"></i>Click any channel or team card to open its live dashboard
+              </span>
+            </div>
+
+            <!-- PART 1: Top 3 Spacious Channel Comparison Cards (Grand Total | Facebook Total | WhatsApp Total) -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <!-- Card 1: Grand Total (All 5 Teams Combined) -->
+              <div class="p-4 rounded-2xl bg-gradient-to-br from-amber-50/40 via-white to-orange-50/30 border-2 border-orange-300/90 shadow-2xs flex flex-col justify-between space-y-3">
+                <div>
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="px-2.5 py-1 rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 text-white text-[10px] font-black uppercase shadow-2xs inline-flex items-center gap-1.5">
+                      <i class="fa-solid fa-globe"></i> Grand Total (All ${allTeamsList.length} Teams)
+                    </span>
+                    <span class="px-2.5 py-1 rounded-lg bg-orange-100 text-orange-900 border border-orange-300 text-xs font-black">
+                      ${grandPct}%
+                    </span>
+                  </div>
+                  <div class="mt-3 flex items-baseline justify-between">
+                    <div>
+                      <span class="text-[10px] font-extrabold uppercase text-slate-400 block">Combined Achieved Revenue</span>
+                      <p class="text-2xl font-black text-slate-900 tracking-tight">৳${grandRevenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div class="w-full h-2 bg-orange-100 rounded-full overflow-hidden mt-2.5">
+                    <div class="bg-gradient-to-r from-orange-500 to-amber-500 h-2 rounded-full" style="width: ${grandPctNum}%"></div>
+                  </div>
+                </div>
+
+                <div class="p-3 rounded-xl bg-white border border-orange-200/70 space-y-1.5 text-xs">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-slate-500">Working Target (+5%):</span>
+                    <strong class="font-black text-slate-900">৳${grandWorkingTarget.toLocaleString()}</strong>
+                  </div>
+                  <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span class="font-bold text-slate-500">Remaining Target:</span>
+                    <strong class="font-black text-rose-600">৳${grandRemaining.toLocaleString()}</strong>
+                  </div>
+                  <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span class="font-bold text-slate-500">Total Orders / Conv:</span>
+                    <strong class="font-black text-emerald-700">${grandOrders.toLocaleString()} Ord (${grandConv}%)</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 2: Facebook Channel Total (2 Teams) -->
+              <div onclick="switchPortalChannel('FACEBOOK')" title="Click to switch to Facebook Channel" class="p-4 rounded-2xl bg-gradient-to-br from-blue-50/50 via-white to-indigo-50/30 border-2 border-blue-200 hover:border-blue-400 cursor-pointer transition-all shadow-2xs flex flex-col justify-between space-y-3">
+                <div>
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-black uppercase shadow-2xs inline-flex items-center gap-1.5">
+                      <i class="fa-brands fa-facebook-f"></i> Facebook Total (${fbTeamCount} Teams)
+                    </span>
+                    <span class="px-2.5 py-1 rounded-lg bg-blue-100 text-blue-900 border border-blue-300 text-xs font-black">
+                      ${fbPct}%
+                    </span>
+                  </div>
+                  <div class="mt-3 flex items-baseline justify-between">
+                    <div>
+                      <span class="text-[10px] font-extrabold uppercase text-slate-400 block">Facebook Achieved Revenue</span>
+                      <p class="text-2xl font-black text-blue-950 tracking-tight">৳${fbRevenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div class="w-full h-2 bg-blue-100 rounded-full overflow-hidden mt-2.5">
+                    <div class="bg-blue-600 h-2 rounded-full" style="width: ${fbPctNum}%"></div>
+                  </div>
+                </div>
+
+                <div class="p-3 rounded-xl bg-white border border-blue-200/70 space-y-1.5 text-xs">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-slate-500">FB Target (+5%):</span>
+                    <strong class="font-black text-slate-900">৳${fbWorkingTarget.toLocaleString()}</strong>
+                  </div>
+                  <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span class="font-bold text-slate-500">Remaining Target:</span>
+                    <strong class="font-black text-blue-700">৳${Math.max(0, fbWorkingTarget - fbRevenue).toLocaleString()}</strong>
+                  </div>
+                  <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span class="font-bold text-slate-500">FB Orders / Conv:</span>
+                    <strong class="font-black text-blue-700">${fbOrders.toLocaleString()} Ord (${fbConv}%)</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 3: WhatsApp Channel Total (3 Teams) -->
+              <div onclick="switchPortalChannel('WHATSAPP')" title="Click to switch to WhatsApp Channel" class="p-4 rounded-2xl bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/30 border-2 border-emerald-200 hover:border-emerald-400 cursor-pointer transition-all shadow-2xs flex flex-col justify-between space-y-3">
+                <div>
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase shadow-2xs inline-flex items-center gap-1.5">
+                      <i class="fa-brands fa-whatsapp"></i> WhatsApp Total (${waTeamCount} Teams)
+                    </span>
+                    <span class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-black">
+                      ${waPct}%
+                    </span>
+                  </div>
+                  <div class="mt-3 flex items-baseline justify-between">
+                    <div>
+                      <span class="text-[10px] font-extrabold uppercase text-slate-400 block">WhatsApp Achieved Revenue</span>
+                      <p class="text-2xl font-black text-emerald-950 tracking-tight">৳${waRevenue.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div class="w-full h-2 bg-emerald-100 rounded-full overflow-hidden mt-2.5">
+                    <div class="bg-emerald-600 h-2 rounded-full" style="width: ${waPctNum}%"></div>
+                  </div>
+                </div>
+
+                <div class="p-3 rounded-xl bg-white border border-emerald-200/70 space-y-1.5 text-xs">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-slate-500">WA Target (+5%):</span>
+                    <strong class="font-black text-slate-900">৳${waWorkingTarget.toLocaleString()}</strong>
+                  </div>
+                  <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span class="font-bold text-slate-500">Remaining Target:</span>
+                    <strong class="font-black text-emerald-700">৳${Math.max(0, waWorkingTarget - waRevenue).toLocaleString()}</strong>
+                  </div>
+                  <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <span class="font-bold text-slate-500">WA Orders / Conv:</span>
+                    <strong class="font-black text-emerald-700">${waOrders.toLocaleString()} Ord (${waConv}%)</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- PART 2: Labeled Sub-Header + 5 Individual Team Breakdown Cards -->
+            <div class="space-y-3 pt-1">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                  <i class="fa-solid fa-users-viewfinder text-indigo-600 mr-1.5"></i>Team-Wise Live Breakdown (${fbTeamCount} Facebook Teams & ${waTeamCount} WhatsApp Teams)
+                </span>
+                <span class="text-[10px] font-bold text-slate-400 hidden sm:inline">Click any team card to inspect its dedicated dashboard</span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                ${teamBreakdowns.map(tb => {
+                  const th = getExecutiveTeamCardTheme(tb.tName, tb.ch);
+                  return `
+                    <div onclick="if(activeChannel !== '${tb.ch}') switchPortalChannel('${tb.ch}'); setDashboardScope('${tb.tName}');" title="Click to view ${tb.tName} dashboard" class="p-3.5 rounded-2xl border ${th.topBar} cursor-pointer transition-all shadow-2xs hover:shadow-md flex flex-col justify-between bg-white space-y-2.5">
+                      <div>
+                        <div class="flex items-center justify-between gap-1.5">
+                          <span class="px-2 py-0.5 rounded-md ${th.badge} text-[10px] font-black uppercase truncate">
+                            <i class="${tb.ch === 'WHATSAPP' ? 'fa-brands fa-whatsapp' : 'fa-brands fa-facebook-f'} mr-1"></i>${tb.tName}
+                          </span>
+                          <span class="px-2 py-0.5 rounded-md border ${th.pctPill} text-[10px] font-black shrink-0">
+                            ${tb.tPct}%
+                          </span>
+                        </div>
+                        <div class="mt-2.5">
+                          <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Achieved Sales</span>
+                          <strong class="text-lg font-black ${th.rev} tracking-tight">৳${tb.tRev.toLocaleString()}</strong>
+                        </div>
+                        <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
+                          <div class="${th.bar} h-1.5 rounded-full" style="width: ${tb.tPctNum}%"></div>
+                        </div>
+                      </div>
+
+                      <div class="space-y-1 pt-2 border-t border-slate-100 text-[10px] font-bold text-slate-600">
+                        <div class="flex justify-between items-center">
+                          <span class="text-slate-400">Target (+5%):</span>
+                          <strong class="text-slate-800 font-black">৳${tb.tWork.toLocaleString()}</strong>
+                        </div>
+                        <div class="flex justify-between items-center">
+                          <span class="text-slate-400">Remaining:</span>
+                          <strong class="text-rose-600 font-extrabold">৳${tb.tRem.toLocaleString()}</strong>
+                        </div>
+                        <div class="flex justify-between items-center">
+                          <span class="text-slate-400">Orders / Conv:</span>
+                          <strong class="text-slate-800 font-black">${tb.tOrders.toLocaleString()} (${tb.tConv}%)</strong>
+                        </div>
+                        <div class="flex justify-between items-center">
+                          <span class="text-slate-400">Total Leads:</span>
+                          <strong class="text-slate-600">${tb.tLeads.toLocaleString()} Leads</strong>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      };
+
+      // -----------------------------------------------------------------------
+      // 4. ORGANIZE ALL-CHANNELS DASHBOARD HIERARCHY TO MATCH FB/WA DASHBOARD:
+      //    Section 1: Top Welcome Card + Integrated Single-Line Channel/Team Filter Bar
+      //    Section 2: 5 Core Vibrant KPI Cards (Immediately visible at the top!)
+      //    Section 3: Redesigned Ghorerbazar All-Channel Combined Sales Summary Box
+      //    Section 4: Drive Product Achievement Grid
+      // -----------------------------------------------------------------------
+      const _origRenderDashboardV45 = renderDashboard;
+      renderDashboard = function() {
+        window.ensureValidChannelScopeForActor();
+        const u = currentUser;
+        const isSup = isSupervisor(u);
+        if (!isSup && activeChannel !== 'ALL_CHANNELS') {
+          return _origRenderDashboardV45();
+        }
+
+        const allSales = getStored('sales_records', []);
+        const monthUsers = getUsersForMonth(selectedMonthKey);
+        const channelSalesAll = activeChannel === 'ALL_CHANNELS'
+          ? allSales
+          : allSales.filter(s => (activeChannel === 'ALL_CHANNELS' || getChannelForTeam(s.team) === activeChannel));
+
+        const chTeamsList = getActiveChannelMeta().teams || [];
+        if (dashboardScope !== 'ALL' && !chTeamsList.includes(normalizeTeamNameAlias(dashboardScope))) {
+          dashboardScope = 'ALL';
+        }
+        const mySales = dashboardScope === 'ALL'
+          ? channelSalesAll
+          : channelSalesAll.filter(s => normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(dashboardScope));
+
+        const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
+        const deduplicatedMySales = deduplicateSalesRecordsList(mySales);
+        const thisMonthSales = deduplicatedMySales.filter(s => s.date.endsWith(selectedMonthKey) && !String(s.date).startsWith('MONTHLY_PROD_'));
+
+        const monthTotalAmount = thisMonthSales.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+        const monthTotalOrders = thisMonthSales.reduce((acc, curr) => acc + Number(curr.orders || 0), 0);
+        const monthTotalLeads = thisMonthSales.reduce((acc, curr) => acc + Number(curr.leads || 0), 0);
+        const monthConvRatio = monthTotalLeads > 0 ? ((monthTotalOrders / monthTotalLeads) * 100).toFixed(2) : '0.00';
+        const monthPct = tInfo.workingTarget > 0 ? Math.min(100, Math.round((monthTotalAmount / tInfo.workingTarget) * 100)) : 0;
+
+        const activeProds = getActiveProductsForMonth(selectedMonthKey);
+        const pTotals = {};
+        Object.keys(activeProds).forEach(k => { pTotals[k] = 0; });
+
+        const allAgentsInScope = monthUsers.filter(usr => {
+          if (usr.role !== 'agent') return false;
+          return dashboardScope === 'ALL' ? true : normalizeTeamNameAlias(usr.team) === normalizeTeamNameAlias(dashboardScope);
+        });
+        const allMonthSales = deduplicateSalesRecordsList(allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey)));
+
+        allAgentsInScope.forEach(agObj => {
+          const agStats = computeAgentDriveProductStats(agObj, allMonthSales, selectedMonthKey);
+          Object.keys(activeProds).forEach(k => {
+            pTotals[k] = Number(((pTotals[k] || 0) + (agStats.prodKg[k] || 0)).toFixed(2));
+          });
+        });
+
+        const periodLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+        return `
+          <div class="space-y-4">
+            <!-- SECTION 1: Unified Top Executive Welcome & Channel/Team Scope Card -->
+            <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5 border-l-4 border-l-purple-600">
+              <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 pb-3.5 border-b border-slate-100">
+                <div class="flex items-center gap-3.5 min-w-0">
+                  <div class="relative shrink-0">
+                    ${renderUserAvatarHtml(u, 'w-12 h-12 rounded-2xl text-base', 'tab-active text-white', true)}
+                    <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-white absolute -bottom-0.5 -right-0.5" title="Online & Active"></span>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-600' : (activeChannel === 'WHATSAPP' ? 'bg-emerald-600' : 'bg-blue-600')} text-white shadow-2xs">
+                        <i class="${getActiveChannelMeta().icon} mr-1"></i>${activeChannel === 'ALL_CHANNELS' ? 'All Channels Executive Overview' : `${getActiveChannelMeta().fullTitle} Overview`}
+                      </span>
+                      <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
+                        <i class="fa-solid fa-users text-slate-400 mr-1"></i>${tInfo.agentCount} Active Agents
+                      </span>
+                      <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
+                        Active Period: ${periodLabel}
+                      </span>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-900 mt-1 truncate">Welcome, ${u.name}! 👋</h2>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                  <button onclick="setTab('monthly_perf')" class="h-9 px-3.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-extrabold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-chart-column"></i> Monthly Performance
+                  </button>
+                  <button onclick="setTab('reports')" class="h-9 px-3.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-extrabold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-file-invoice"></i> Daily Reports
+                  </button>
+                  <button onclick="setTab('ranking')" class="h-9 px-3.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-extrabold transition-colors inline-flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-trophy"></i> Floor Ranking
+                  </button>
+                </div>
+              </div>
+
+              <!-- Integrated Single-Line Channel & Team Scope Filter Bar -->
+              ${renderSupervisorQuickChannelTeamBar(dashboardScope, 'setDashboardScope').replace('bg-white px-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-2xs', 'bg-slate-50/70 px-3 py-2 rounded-xl border border-slate-200/70')}
+            </div>
+
+            <!-- SECTION 2: 5 Core Vibrant KPI Cards (Immediately visible at the top!) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              <div class="kpi-card-1 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-blue-100">${dashboardScope === 'ALL' ? getActiveChannelMeta().name : dashboardScope} Leads</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-users"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-2xl font-black text-white">${monthTotalLeads.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-blue-100 mt-0.5">${tInfo.agentCount} Active Agents</p>
+                </div>
+              </div>
+
+              <div class="kpi-card-2 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-emerald-100">Total Orders</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bag-shopping"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-2xl font-black text-white">${monthTotalOrders.toLocaleString()}</p>
+                  <div class="flex justify-between text-[10px] font-bold text-emerald-100 mt-0.5 pt-1 border-t border-white/20">
+                    <span>Conv. Ratio:</span>
+                    <span class="text-white font-black">${monthConvRatio}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="kpi-card-3 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-purple-100">Sales Revenue</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bangladeshi-taka-sign"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-xl font-black text-white">৳${monthTotalAmount.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-purple-100 mt-0.5">Achieved (${selectedMonthKey})</p>
+                </div>
+              </div>
+
+              <div class="kpi-card-4 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-indigo-100">Working Target (+5%)</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bullseye"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-xl font-black text-white">৳${tInfo.workingTarget.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-indigo-100 mt-0.5">Remaining: ৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div class="kpi-card-5 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-amber-100">Target Achieved</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-trophy"></i></div>
+                </div>
+                <div class="mt-3">
+                  <div class="flex items-baseline justify-between">
+                    <p class="text-2xl font-black text-white">${monthPct}%</p>
+                    <span class="text-[10px] font-bold text-amber-100">Daily: ৳${tInfo.dailyTarget.toLocaleString()}</span>
+                  </div>
+                  <div class="w-full bg-black/20 rounded-full h-1.5 mt-1.5">
+                    <div class="bg-white h-1.5 rounded-full" style="width: ${monthPct}%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SECTION 3: Redesigned All-Channel Combined 5-Team Executive Matrix -->
+            ${renderOmniChannelTotalSalesBanner()}
+
+            <!-- SECTION 4: Drive Product Summary Cards -->
+            <div class="pt-1">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h3 class="text-xs font-black text-slate-800 uppercase tracking-wide">
+                  <i class="fa-solid fa-box-open text-amber-500 mr-1.5"></i> 
+                  ${getActiveChannelMeta().name} Drive Product Achievement (${dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams • ${tInfo.agentCount} Agents` : `${dashboardScope} • ${tInfo.agentCount} Agents`})
+                </h3>
+                <button onclick="setTab('drive_product')" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer">
+                  <i class="fa-solid fa-table-list"></i> Open Full Agent-Wise Product Table
+                </button>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                ${Object.keys(activeProds).map(k => {
+                  const p = activeProds[k];
+                  const achieved = pTotals[k];
+                  const target = p.targetKg * tInfo.agentCount; 
+                  const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
+                  const isUnlocked = pct >= 90;
+                  return `
+                    <div onclick="setTab('drive_product')" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
+                      <div class="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 class="font-black text-sm text-slate-900">${p.name} ${isUnlocked ? '🔥' : ''}</h4>
+                          <p class="text-[11px] text-slate-500 font-bold">Target: <strong class="text-slate-800">${target.toFixed(2)} kg</strong></p>
+                        </div>
+                        <div class="w-8 h-8 rounded-xl ${p.badge} flex items-center justify-center shadow-sm text-xs">
+                          <i class="fa-solid ${p.icon}"></i>
+                        </div>
+                      </div>
+                      <div class="flex justify-between items-baseline mb-1.5">
+                        <span class="text-lg font-black text-slate-900">${achieved.toFixed(2)} <span class="text-[11px] font-bold text-slate-500">kg sold</span></span>
+                        <span class="px-2 py-0.5 rounded-md ${p.badge} text-[11px] font-black">${pct}%</span>
+                      </div>
+                      <div class="progress-track h-1.5 bg-white border border-slate-200/60">
+                        <div class="${p.bar} h-1.5 rounded-full" style="width: ${pct}%"></div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      };
+    } catch (errV46) {
+      console.error('Non-fatal patch v46 warning:', errV46);
+    }
+
 window.addEventListener('load', init);
   </script>
 </body>
