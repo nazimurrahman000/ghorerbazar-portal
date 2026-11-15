@@ -17868,10 +17868,10 @@ function renderChatHubView() {
                   <th class="p-3.5">Agent Name</th>`
         );
 
-        // 4) Center & compact the Single-Agent Date-Wise Table so there is zero empty right space
+        // 4) Full-width, balanced & executive look for Single-Agent Date-Wise Table (No max-w-5xl squeeze, zero horizontal scroll needed!)
         htmlOut = htmlOut.replace(
           /(s Date-Wise Monthly Performance[\s\S]*?<\/div>\s*<\/div>\s*)<div class="card-dynamic overflow-hidden overflow-x-auto">/,
-          `$1<div class="card-dynamic overflow-hidden overflow-x-auto max-w-5xl mx-auto shadow-sm">`
+          `$1<div class="card-dynamic overflow-hidden overflow-x-auto w-full shadow-sm border border-slate-200/90">`
         );
 
         return htmlOut;
