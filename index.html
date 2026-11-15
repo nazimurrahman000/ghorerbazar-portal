@@ -17930,42 +17930,25 @@ function renderChatHubView() {
       };
 
       // -----------------------------------------------------------------------
-      // 6. RELIABLE 1-CLICK FRAUD CHECKER (LIVE API + CLOUD PROXY + INSTANT E-COMMERCE RESOLVER)
+      // 6. STRICT 100% REAL FRAUD CHECKER (ZERO FAKE / ESTIMATED NUMBERS!)
+      //    Never invents fake parcel counts (like 21 orders on a new number).
+      //    Only shows verified data from Live Courier APIs / Cloud Proxy or 0 if no history/API key exists.
       // -----------------------------------------------------------------------
       buildEstimatedCourierHistoryForPhone = function(phone) {
         const clean = normalizeBdPhoneNumber(phone);
-        let hash = 2166136261;
-        for (let i = 0; i < clean.length; i++) {
-          hash ^= clean.charCodeAt(i);
-          hash = Math.imul(hash, 16777619);
-        }
-        const seed = Math.abs(hash);
-        const prefix = clean.substring(0, 3);
-        const mult = (prefix === '017' || prefix === '018' || prefix === '019') ? 1.35 : ((prefix === '016') ? 1.15 : 0.9);
-
-        const sfDel = Math.max(2, Math.round(((seed % 16) + 4) * mult));
-        const sfCan = (seed % 7 === 0) ? 2 : (seed % 4 === 0 ? 1 : 0);
-        const ptDel = Math.max(1, Math.round((((seed >> 3) % 11) + 2) * mult));
-        const ptCan = ((seed >> 2) % 6 === 0) ? 1 : 0;
-        const rxDel = Math.max(0, Math.round((((seed >> 5) % 7) + 1) * mult));
-        const rxCan = ((seed >> 5) % 8 === 0) ? 1 : 0;
-        const pfDel = ((seed >> 7) % 3 === 0) ? 2 : 0;
-        const pfCan = 0;
-
-        const totD = sfDel + ptDel + rxDel + pfDel;
-        const totC = sfCan + ptCan + rxCan + pfCan;
         return {
           phone: clean,
-          source: 'BD Courier Network History (Instant 1-Click Scan)',
+          source: 'Live Courier Scan (0 Prior Records / API Key Not Connected)',
+          isNewCustomer: true,
           couriers: {
-            steadfast: { name: 'Steadfast Courier', total: sfDel + sfCan, delivered: sfDel, cancelled: sfCan },
-            pathao: { name: 'Pathao Courier', total: ptDel + ptCan, delivered: ptDel, cancelled: ptCan },
-            redx: { name: 'RedX Courier', total: rxDel + rxCan, delivered: rxDel, cancelled: rxCan },
-            paperfly: { name: 'Paperfly Courier', total: pfDel + pfCan, delivered: pfDel, cancelled: pfCan }
+            steadfast: { name: 'Steadfast Courier', total: 0, delivered: 0, cancelled: 0 },
+            pathao: { name: 'Pathao Courier', total: 0, delivered: 0, cancelled: 0 },
+            redx: { name: 'RedX Courier', total: 0, delivered: 0, cancelled: 0 },
+            paperfly: { name: 'Paperfly Courier', total: 0, delivered: 0, cancelled: 0 }
           },
-          totalParcels: totD + totC,
-          totalDelivered: totD,
-          totalCancelled: totC
+          totalParcels: 0,
+          totalDelivered: 0,
+          totalCancelled: 0
         };
       };
 
@@ -17987,11 +17970,11 @@ function renderChatHubView() {
         let liveData = await fetchFreeCourierHistoryForPhone(cleanPhone);
         fraudCheckLoading = false;
 
-        if (liveData && Number(liveData.totalParcels) > 0) {
+        if (liveData && typeof liveData.totalParcels === 'number' && !liveData.isEstimated && liveData.totalParcels > 0) {
           fraudCheckResultData = { ...liveData, phone: cleanPhone, checkedAt: getNowTimeStr() };
         } else {
-          const fallbackData = buildEstimatedCourierHistoryForPhone(cleanPhone);
-          fraudCheckResultData = { ...fallbackData, phone: cleanPhone, checkedAt: getNowTimeStr() };
+          const zeroData = buildEstimatedCourierHistoryForPhone(cleanPhone);
+          fraudCheckResultData = { ...zeroData, phone: cleanPhone, checkedAt: getNowTimeStr() };
         }
 
         try {
@@ -18045,6 +18028,94 @@ function renderChatHubView() {
       };
     } catch (patchV41Err) {
       console.error('Non-fatal patch v41 warning:', patchV41Err);
+    }
+
+
+    // =========================================================================
+    // MID-MONTH RESIGNED AGENT HANDLER (PATCH v42):
+    // - Adds "Resigned" option to Leave/Status Modal & 1-Click Missing Row Actions
+    // - Hides Resigned agents ONLY from Missing Sales Reports & Sidebar Missing Counter
+    // - Keeps their status as "🚪 Resigned" in Leave & Absent Log
+    // - Preserves 100% of their worked Sales, Drive Product data & Excel/CSV exports for the month!
+    // =========================================================================
+    try {
+      if (Array.isArray(LEAVE_STATUS_TYPES) && !LEAVE_STATUS_TYPES.some(t => t.key === 'Resigned')) {
+        LEAVE_STATUS_TYPES.push({
+          key: 'Resigned',
+          label: '🚪 Resigned (Left Job — Hide from Missing)',
+          badge: 'bg-slate-900 text-amber-300 border-slate-700',
+          icon: 'fa-user-slash'
+        });
+      }
+
+      window.getAgentResignedInfoForMonth = function(userId, mKey) {
+        if (!userId) return null;
+        const uid = String(userId).trim();
+        const mk = mKey || selectedMonthKey;
+        const leaveStore = getLeaveRecordsStoreForMonth(mk);
+        const matches = Object.values(leaveStore).filter(
+          lv => lv && !lv.isRemoved && String(lv.userId).trim() === uid && lv.leaveType === 'Resigned'
+        );
+        if (matches.length > 0) {
+          return matches[matches.length - 1];
+        }
+        return null;
+      };
+
+      window.quickMarkAgentResigned = function(userId, dateStr) {
+        openMarkLeaveModal(userId, dateStr || getTodayFormatted(), 'Resigned', 'Resigned mid-month (Hidden from Missing Reports)');
+      };
+
+      const _origComputeMissingAndLeaveV42 = computeMissingAndLeaveDataForMonth;
+      computeMissingAndLeaveDataForMonth = function(mKey, teamScopeFilter = 'ALL', agentIdFilter = 'ALL') {
+        const mk = mKey || selectedMonthKey;
+        const baseRes = _origComputeMissingAndLeaveV42(mk, teamScopeFilter, agentIdFilter);
+
+        const leaveStore = getLeaveRecordsStoreForMonth(mk);
+        const resignedAgentIds = new Set();
+        Object.values(leaveStore).forEach(lv => {
+          if (lv && !lv.isRemoved && lv.leaveType === 'Resigned' && lv.userId) {
+            resignedAgentIds.add(String(lv.userId).trim());
+          }
+        });
+
+        if (resignedAgentIds.size === 0) return baseRes;
+
+        const removedMissingCount = baseRes.missingItems.filter(m => resignedAgentIds.has(String(m.userId).trim())).length;
+        const filteredMissingItems = baseRes.missingItems.filter(m => !resignedAgentIds.has(String(m.userId).trim()));
+
+        const seenResignedInLog = new Set();
+        const cleanedLeaveItems = [];
+        baseRes.leaveItems.forEach(item => {
+          const uid = String(item.userId).trim();
+          if (item.leaveType === 'Resigned') {
+            if (seenResignedInLog.has(uid)) return;
+            seenResignedInLog.add(uid);
+          }
+          cleanedLeaveItems.push(item);
+        });
+
+        return {
+          ...baseRes,
+          missingItems: filteredMissingItems,
+          leaveItems: cleanedLeaveItems,
+          totalScheduledDuties: Math.max(baseRes.totalSubmittedDuties, baseRes.totalScheduledDuties - removedMissingCount)
+        };
+      };
+
+      const _origRenderMissingV42 = renderMissingReportsAndLeaveView;
+      renderMissingReportsAndLeaveView = function() {
+        let htmlOut = _origRenderMissingV42();
+        if (currentUser && canViewAll(currentUser) && !isCurrentChannelReadOnlyForUser(currentUser)) {
+          htmlOut = htmlOut.replace(
+            /(<button type="button" onclick="openMarkLeaveModal\('([^']+)',\s*'([^']+)'\)"[^>]*>[\s\S]*?<\/button>)/g,
+            `$1\n                          <button type="button" onclick="quickMarkAgentResigned('$2', '$3')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-amber-300 rounded-xl font-extrabold text-[11px] inline-flex items-center gap-1 cursor-pointer shadow-2xs" title="Mark Agent as Resigned (Hides from Missing Reports, keeps all sales data)"><i class="fa-solid fa-user-slash text-[10px]"></i> Resigned</button>`
+          );
+        }
+        return htmlOut;
+      };
+    } catch (patchV42Err) {
+      console.error('Non-fatal patch v42 warning:', patchV42Err);
     }
 
 window.addEventListener('load', init);
