@@ -18270,6 +18270,102 @@ function renderChatHubView() {
       console.error('Non-fatal patch v43 warning:', patchV43Err);
     }
 
+    // =========================================================================
+    // PATCH v44:
+    // 1. Removes duplicate top-card "Download CSV" buttons so each table only
+    //    has its own "Download CSV" button right beside that table's header.
+    //    When a single agent is selected in Monthly Performance, only their
+    //    Date-Wise table shows "Download CSV" (no 3x duplicate buttons!).
+    // 2. Replaces black (bg-slate-900) table header bars with a vibrant
+    //    Royal Blue-to-Indigo gradient (#1d4ed8 -> #4338ca).
+    // 3. Fixes table header bar width (position: sticky; left: 0; width: 100%)
+    //    so it spans the full card width even when scrolling horizontally,
+    //    and gives sticky table footers (TOTAL SUM) a solid Royal Navy fill!
+    // =========================================================================
+    try {
+      const styleV44 = document.createElement('style');
+      styleV44.id = 'gb-patch-v44-styles';
+      styleV44.innerHTML = `
+        /* Keep table title banner full-width across the entire table card even on horizontal scroll */
+        main .card-dynamic.overflow-x-auto > div:first-child {
+          position: sticky !important;
+          left: 0 !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+          z-index: 18 !important;
+          margin: 0 !important;
+          border-top-left-radius: 14px;
+          border-top-right-radius: 14px;
+        }
+        /* Replace black (#0f172a / bg-slate-900) table header bars with vibrant Royal Blue-Indigo gradient */
+        main .card-dynamic.overflow-x-auto > div.bg-slate-900:first-child,
+        main .card-dynamic.overflow-x-auto > div.bg-indigo-950:first-child,
+        main .card-dynamic > div.bg-slate-900:first-child {
+          background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%) !important;
+          color: #ffffff !important;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.18) !important;
+        }
+        /* Solid Royal Indigo background on sticky table footer (TOTAL SUM) so rows never bleed through */
+        main .card-dynamic.overflow-x-auto tfoot.bg-slate-900,
+        main .card-dynamic.overflow-x-auto tfoot.bg-slate-900 tr,
+        main .card-dynamic.overflow-x-auto tfoot.bg-slate-900 td,
+        main .card-dynamic.overflow-x-auto tfoot.bg-slate-900 th {
+          background-color: #1e3a8a !important;
+          color: #ffffff !important;
+          border-top: 2px solid #3b82f6 !important;
+        }
+      `;
+      document.head.appendChild(styleV44);
+
+      const _origRenderMonthlyPerfV44 = renderMonthlyPerformanceView;
+      renderMonthlyPerformanceView = function() {
+        let htmlOut = _origRenderMonthlyPerfV44();
+
+        // 1) Remove the top page-header card's duplicate "Download CSV" button
+        htmlOut = htmlOut.replace(
+          /<button onclick="exportMonthlyPerformanceCsv\(\)" class="h-9 px-3\.5 bg-emerald-600[^>]*>[\s\S]*?Download CSV\s*<\/button>/,
+          ''
+        );
+
+        // 2) If a single agent is selected, hide the middle "Download CSV" button on the 1-row Agent-Wise summary table
+        //    so ONLY the single agent's Date-Wise table has the Download CSV button!
+        if (monthlyPerfAgentId !== 'ALL') {
+          htmlOut = htmlOut.replace(
+            /(Agent-Wise Monthly Performance Table \([^)]+\)<\/span>)\s*<button type="button" onclick="exportMonthlyPerformanceCsv\(\)"[^>]*>[\s\S]*?<\/button>/,
+            '$1<span class="text-[11px] font-bold text-blue-100">Single Agent Summary</span>'
+          );
+        }
+
+        // 3) Replace the dark black-slate background on the Single-Agent 5-metric summary banner with a vibrant Indigo-Blue gradient
+        htmlOut = htmlOut.replace(
+          'bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900',
+          'bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800'
+        );
+
+        return htmlOut;
+      };
+
+      // Also remove duplicate top-card "Download CSV" buttons in Drive Product & Missing Reports
+      // so the Download CSV button only sits right beside the table header!
+      const _origRenderDriveProdV44 = renderDriveProductView;
+      renderDriveProductView = function() {
+        return _origRenderDriveProdV44().replace(
+          /<button onclick="exportDriveProductCsv\(\)" class="h-9 px-3\.5 bg-emerald-600[^>]*>[\s\S]*?Download CSV\s*<\/button>/,
+          ''
+        );
+      };
+
+      const _origRenderMissingV44 = renderMissingReportsAndLeaveView;
+      renderMissingReportsAndLeaveView = function() {
+        return _origRenderMissingV44().replace(
+          /<button type="button" onclick="exportMissingAndLeaveCsv\(\)" class="h-9 px-3\.5 bg-emerald-600[^>]*>[\s\S]*?Download CSV\s*<\/button>/,
+          ''
+        );
+      };
+    } catch (errV44) {
+      console.error('Non-fatal patch v44 warning:', errV44);
+    }
+
 window.addEventListener('load', init);
   </script>
 </body>
