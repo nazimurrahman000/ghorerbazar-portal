@@ -9357,23 +9357,28 @@ function renderRankingAndComparison() {
                   const canEdit = canEditTargetUser(u, usr);
                   const canDel = canDeleteTargetUser(u, usr);
                   const canToggleAct = canToggleActiveTargetUser(u, usr);
+                  const canToggleResign = window.canToggleResignTargetUser ? window.canToggleResignTargetUser(u, usr) : canToggleAct;
+                  const isResigned = window.isUserAccountResigned ? window.isUserAccountResigned(usr) : false;
                   const isDeactivated = isUserAccountDeactivated(usr);
                   const canSeePass = canViewTargetPassword(u, usr);
                   const isPassRevealed = revealedPasswordUserIds.has(String(usr.id));
 
                   return `
-                  <tr class="${isDeactivated ? 'bg-rose-50/50 opacity-75' : 'hover:bg-slate-50'}">
+                  <tr class="${isResigned ? 'bg-amber-50/40 opacity-85' : (isDeactivated ? 'bg-rose-50/50 opacity-75' : 'hover:bg-slate-50')}">
                     <td class="p-3.5 font-black ${isDeactivated ? 'text-rose-600 line-through' : 'text-blue-600'}">${usr.id}</td>
                     <td class="p-3.5 font-extrabold text-slate-900">
                       <div class="flex items-center gap-2.5">
                         ${renderUserAvatarHtml(usr, 'w-8 h-8 rounded-xl text-xs', isDeactivated ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700', String(usr.id) === String(u.id) || hasFeatureAccess(u, 'feat_manage_users'))}
                         <div>
                           <span>${usr.name}</span>
-                          ${isDeactivated ? `<span class="ml-1.5 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-600 text-white">Deactivated</span>` : ''}
+                          ${isResigned ? `<span class="ml-1.5 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-slate-900 text-amber-300 border border-amber-400/50">🚪 Resigned</span>` : ''}
+                          ${isDeactivated ? `<span class="ml-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-600 text-white">Deactivated</span>` : ''}
                         </div>
                       </div>
                     </td>
-                    <td class="p-3.5">${isDeactivated ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700"><i class="fa-solid fa-ban text-[9px]"></i>Deactivated</span>` : renderOnlineStatusBadge(usr.id)}</td>
+                    <td class="p-3.5">${isResigned
+                      ? `<div class="inline-flex items-center gap-1"><span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-900 text-amber-300"><i class="fa-solid fa-user-slash text-[9px]"></i>Resigned</span><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-100 text-rose-700">ID Deactivated</span></div>`
+                      : (isDeactivated ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700"><i class="fa-solid fa-ban text-[9px]"></i>Deactivated</span>` : renderOnlineStatusBadge(usr.id))}</td>
                     <td class="p-3.5 uppercase"><span class="px-2 py-0.5 rounded text-[10px] font-black ${roleBadge}">${usr.role}</span></td>
                     <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-black ${getTeamBadgeClasses(usr.team)}">${usr.team}</span></td>
                     <td class="p-3.5 font-black ${usr.role === 'admin' ? 'text-purple-700' : (usr.role === 'supervisor' ? 'text-indigo-700' : 'text-slate-900')}">${displayGrade}</td>
@@ -9398,8 +9403,13 @@ function renderRankingAndComparison() {
                       ${canEdit ? `<button onclick="openUserModal('${usr.id}')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen-to-square mr-1"></i>Edit</button>` : `<span class="px-2.5 py-1 text-[10px] font-bold text-slate-400 bg-slate-100 rounded-lg"><i class="fa-solid fa-lock mr-1"></i>Protected</span>`}
                       ${(canEdit && usr.role === 'agent' && !isPendingOrFloatingAgent(usr)) ? `<button onclick="handleReleaseAgentToFloatingPool('${usr.id}')" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200 rounded-lg font-extrabold text-[10px] transition-colors cursor-pointer" title="Release ${usr.name} from ${usr.team} to Unassigned/Floating Pool"><i class="fa-solid fa-user-minus mr-1"></i>Release</button>` : ''}
                       ${canToggleAct ? `
-                        <button onclick="handleToggleUserActiveStatus('${usr.id}')" class="px-3 py-1.5 ${isDeactivated ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'} rounded-lg font-extrabold transition-colors">
+                        <button onclick="handleToggleUserActiveStatus('${usr.id}')" class="px-3 py-1.5 ${isDeactivated ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'} rounded-lg font-extrabold transition-colors cursor-pointer" title="${isDeactivated ? 'Activate Login ID' : 'Deactivate Login ID'}">
                           <i class="fa-solid ${isDeactivated ? 'fa-user-check' : 'fa-user-slash'} mr-1"></i>${isDeactivated ? 'Activate' : 'Deactivate'}
+                        </button>
+                      ` : ''}
+                      ${canToggleResign ? `
+                        <button onclick="handleToggleUserResignedStatus('${usr.id}')" class="px-3 py-1.5 ${isResigned ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs' : 'bg-slate-900 text-amber-300 hover:bg-slate-800 border border-slate-700 shadow-2xs'} rounded-lg font-extrabold transition-colors cursor-pointer" title="${isResigned ? 'Undo Resign & Re-Activate ID' : 'Mark as Resigned & Auto-Deactivate ID (Hides from Missing Reports, keeps full team target & sales)'}">
+                          <i class="fa-solid ${isResigned ? 'fa-rotate-left' : 'fa-door-open'} mr-1"></i>${isResigned ? 'Undo Resign' : 'Resign'}
                         </button>
                       ` : ''}
                       ${canDel ? `<button onclick="handleDeleteUser('${usr.id}')" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg font-extrabold hover:bg-red-100" title="Nazim Master Delete"><i class="fa-solid fa-trash-can mr-1"></i>Delete</button>` : ''}
@@ -18032,90 +18042,232 @@ function renderChatHubView() {
 
 
     // =========================================================================
-    // MID-MONTH RESIGNED AGENT HANDLER (PATCH v42):
-    // - Adds "Resigned" option to Leave/Status Modal & 1-Click Missing Row Actions
-    // - Hides Resigned agents ONLY from Missing Sales Reports & Sidebar Missing Counter
-    // - Keeps their status as "🚪 Resigned" in Leave & Absent Log
-    // - Preserves 100% of their worked Sales, Drive Product data & Excel/CSV exports for the month!
+    // MID-MONTH RESIGNED & AUTO-DEACTIVATE AGENT HANDLER (PATCH v43):
+    // - Removes Resign button/option from Missing & Leave tab
+    // - Places dedicated "🚪 Resign / Undo Resign" button in Target Setup & IDs tab
+    //   RIGHT NEXT TO the existing "Deactivate / Activate" button (BOTH buttons stay!)
+    // - Clicking "Resign" automatically Deactivates the User ID at the same time
+    //   (no 2nd click needed!), hides the agent from Missing Reports, shows "🚪 Resigned"
+    //   status, and keeps 100% of their sales, products, targets & Excel/CSV exports!
+    // - STRICT TEAM LOCK: Only Super Admin Nazim (10122) can Resign/Deactivate across all teams.
+    //   Other TLs can ONLY Resign/Deactivate agents in their OWN team!
     // =========================================================================
     try {
-      if (Array.isArray(LEAVE_STATUS_TYPES) && !LEAVE_STATUS_TYPES.some(t => t.key === 'Resigned')) {
-        LEAVE_STATUS_TYPES.push({
-          key: 'Resigned',
-          label: '🚪 Resigned (Left Job — Hide from Missing)',
-          badge: 'bg-slate-900 text-amber-300 border-slate-700',
-          icon: 'fa-user-slash'
-        });
+      // Ensure 'Resigned' is NOT in the Missing & Leave modal dropdown
+      if (Array.isArray(LEAVE_STATUS_TYPES)) {
+        const rIdx = LEAVE_STATUS_TYPES.findIndex(t => t.key === 'Resigned');
+        if (rIdx !== -1) LEAVE_STATUS_TYPES.splice(rIdx, 1);
       }
 
-      window.getAgentResignedInfoForMonth = function(userId, mKey) {
-        if (!userId) return null;
-        const uid = String(userId).trim();
-        const mk = mKey || selectedMonthKey;
-        const leaveStore = getLeaveRecordsStoreForMonth(mk);
-        const matches = Object.values(leaveStore).filter(
-          lv => lv && !lv.isRemoved && String(lv.userId).trim() === uid && lv.leaveType === 'Resigned'
-        );
-        if (matches.length > 0) {
-          return matches[matches.length - 1];
+      // Strict Team Permission Check:
+      // - Nazim (10122) can Resign/Deactivate any agent in any team
+      // - Other TLs can ONLY Resign/Deactivate agents in their OWN team!
+      canToggleActiveTargetUser = function(actor, targetUser) {
+        if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
+        if (String(targetUser.id) === String(actor.id) || String(targetUser.id) === '10122') return false;
+        if (isSuperAdmin(actor)) return true;
+        if (targetUser.role !== 'agent') return false;
+        if (isCurrentChannelReadOnlyForUser(actor)) return false;
+        return normalizeTeamNameAlias(actor.team) === normalizeTeamNameAlias(targetUser.team);
+      };
+
+      window.canToggleResignTargetUser = function(actor, targetUser) {
+        if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
+        if (targetUser.role !== 'agent' || String(targetUser.id) === '10122') return false;
+        if (isSuperAdmin(actor)) return true;
+        if (isCurrentChannelReadOnlyForUser(actor)) return false;
+        return normalizeTeamNameAlias(actor.team) === normalizeTeamNameAlias(targetUser.team);
+      };
+
+      window.getResignedUsersStore = function() {
+        const configs = getStored('monthly_configs', {});
+        return (configs['RESIGNED_USERS'] && typeof configs['RESIGNED_USERS'] === 'object')
+          ? configs['RESIGNED_USERS']
+          : {};
+      };
+
+      window.isUserAccountResigned = function(usr) {
+        if (!usr) return false;
+        const uid = String(usr.id || usr).trim();
+        const rMap = window.getResignedUsersStore();
+        if (rMap[uid] && !rMap[uid].isRemoved) return true;
+        return String(usr.accountStatus || '').toUpperCase() === 'RESIGNED';
+      };
+
+      const _origIsUserAccountDeactivatedV43 = isUserAccountDeactivated;
+      isUserAccountDeactivated = function(usr) {
+        if (!usr) return false;
+        if (window.isUserAccountResigned(usr)) return true;
+        return _origIsUserAccountDeactivatedV43(usr);
+      };
+
+      window.handleToggleUserResignedStatus = function(targetId) {
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+        const users = getUsersForMonth(selectedMonthKey, true);
+        const targetUser = users.find(u => String(u.id) === String(targetId));
+        if (!targetUser) return;
+
+        if (!window.canToggleResignTargetUser(currentUser, targetUser)) {
+          showPortalToast('Permission Denied', `You can only mark agents in your own team (${currentUser.team}) as Resigned!`, 'error');
+          return;
         }
-        return null;
+
+        const currentlyResigned = window.isUserAccountResigned(targetUser);
+        const nextResignedState = !currentlyResigned;
+
+        openConfirmWarningModal(
+          nextResignedState
+            ? `Mark ${targetUser.name} (${targetUser.id}) as Resigned & Auto-Deactivate ID?`
+            : `Undo Resignation & Re-Activate ${targetUser.name} (${targetUser.id})?`,
+          nextResignedState
+            ? `Are you sure you want to mark <strong>${targetUser.name} (${targetUser.id} • ${targetUser.team})</strong> as <strong>🚪 RESIGNED</strong>?<br><br>• <strong>Auto-Deactivate ID:</strong> Their login ID will be automatically deactivated right now (no need to click Deactivate separately).<br>• <strong>Hidden from Missing Tab:</strong> Their name will not show in Missing Sales Reports.<br>• <strong>Target & Sales Preserved:</strong> Their full monthly target and all previous sales/product records will remain 100% intact in the team & Excel/CSV downloads.`
+            : `Are you sure you want to remove the <strong>Resigned</strong> status for <strong>${targetUser.name} (${targetUser.id})</strong> and <strong>Re-Activate</strong> their User ID?`,
+          nextResignedState ? 'Resign & Auto-Deactivate' : 'Undo Resign & Activate',
+          async () => {
+            let storedUsers = getStored('users', DEFAULT_USERS);
+            const idx = storedUsers.findIndex(u => String(u.id) === String(targetId));
+            if (idx !== -1) {
+              storedUsers[idx].isActive = !nextResignedState;
+              storedUsers[idx].accountStatus = nextResignedState ? 'RESIGNED' : 'ACTIVE';
+              setStored('users', storedUsers);
+              markLocalUserOrConfigMutatedNow();
+            }
+
+            const configs = getStored('monthly_configs', {});
+            if (!configs['RESIGNED_USERS'] || typeof configs['RESIGNED_USERS'] !== 'object') {
+              configs['RESIGNED_USERS'] = {};
+            }
+            if (!configs['DEACTIVATED_USERS'] || typeof configs['DEACTIVATED_USERS'] !== 'object') {
+              configs['DEACTIVATED_USERS'] = {};
+            }
+
+            const nowStamp = getTodayFormatted() + ' ' + getNowTimeStr();
+            const uidStr = String(targetId).trim();
+
+            if (nextResignedState) {
+              configs['RESIGNED_USERS'][uidStr] = {
+                userId: uidStr,
+                userName: targetUser.name,
+                team: targetUser.team,
+                grade: targetUser.grade,
+                resignedDate: getTodayFormatted(),
+                markedBy: currentUser.name,
+                at: nowStamp,
+                updatedTs: Date.now()
+              };
+              // Automatically deactivate their login ID as well!
+              configs['DEACTIVATED_USERS'][uidStr] = {
+                deactivatedBy: currentUser.name + ' (Auto via Resigned)',
+                reason: 'Resigned',
+                at: nowStamp
+              };
+            } else {
+              delete configs['RESIGNED_USERS'][uidStr];
+              delete configs['DEACTIVATED_USERS'][uidStr];
+            }
+
+            setStored('monthly_configs', configs);
+            markLocalUserOrConfigMutatedNow();
+
+            const logMeta = recordActivityLog(
+              nextResignedState ? 'Marked Agent Resigned & Deactivated' : 'Reverted Agent Resignation',
+              `${currentUser.name} marked ${targetUser.name} (${targetUser.id} • ${targetUser.team}) as ${nextResignedState ? 'RESIGNED (Auto-Deactivated ID)' : 'ACTIVE (Reverted Resignation)'}`
+            );
+
+            renderAppLayout();
+            showPortalToast(
+              nextResignedState ? 'Agent Marked Resigned & Deactivated!' : 'Resignation Reverted & ID Activated!',
+              nextResignedState
+                ? `${targetUser.name} (${targetUser.id}) is now Resigned, auto-deactivated, and hidden from Missing Reports.`
+                : `${targetUser.name} (${targetUser.id}) is now Active again.`,
+              nextResignedState ? 'warning' : 'success'
+            );
+
+            postToSheet('SAVE_MONTHLY_CONFIG', {
+              monthKey: 'RESIGNED_USERS',
+              configJson: JSON.stringify(configs['RESIGNED_USERS']),
+              ...logMeta
+            }).catch(() => {});
+            postToSheet('SAVE_MONTHLY_CONFIG', {
+              monthKey: 'DEACTIVATED_USERS',
+              configJson: JSON.stringify(configs['DEACTIVATED_USERS'])
+            }).catch(() => {});
+          },
+          nextResignedState ? 'Yes, Mark Resigned & Deactivate' : 'Yes, Undo Resign & Activate',
+          true
+        );
       };
 
-      window.quickMarkAgentResigned = function(userId, dateStr) {
-        openMarkLeaveModal(userId, dateStr || getTodayFormatted(), 'Resigned', 'Resigned mid-month (Hidden from Missing Reports)');
+      // Also ensure that if an Admin clicks "Activate" on a Resigned user via the Deactivate/Activate button,
+      // it cleanly clears the Resigned lock too so the ID activates properly
+      const _origHandleToggleUserActiveV43 = handleToggleUserActiveStatus;
+      handleToggleUserActiveStatus = function(targetId) {
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+        const users = getUsersForMonth(selectedMonthKey, true);
+        const targetUser = users.find(u => String(u.id) === String(targetId));
+        if (!targetUser) return;
+        if (!canToggleActiveTargetUser(currentUser, targetUser)) {
+          showPortalToast('Permission Denied', `You can only activate or deactivate agents in your own team (${currentUser.team}).`, 'error');
+          return;
+        }
+        // If user is currently Resigned and admin clicks "Activate", clear RESIGNED_USERS entry too
+        if (window.isUserAccountResigned(targetUser)) {
+          window.handleToggleUserResignedStatus(targetId);
+          return;
+        }
+        return _origHandleToggleUserActiveV43(targetId);
       };
 
-      const _origComputeMissingAndLeaveV42 = computeMissingAndLeaveDataForMonth;
+      // Keep Leave & Absent Log showing a clean "🚪 Resigned" status row for Resigned agents,
+      // while completely hiding Resigned agents from Missing Sales Reports!
+      const _origComputeMissingAndLeaveV43 = computeMissingAndLeaveDataForMonth;
       computeMissingAndLeaveDataForMonth = function(mKey, teamScopeFilter = 'ALL', agentIdFilter = 'ALL') {
         const mk = mKey || selectedMonthKey;
-        const baseRes = _origComputeMissingAndLeaveV42(mk, teamScopeFilter, agentIdFilter);
+        const baseRes = _origComputeMissingAndLeaveV43(mk, teamScopeFilter, agentIdFilter);
 
-        const leaveStore = getLeaveRecordsStoreForMonth(mk);
-        const resignedAgentIds = new Set();
-        Object.values(leaveStore).forEach(lv => {
-          if (lv && !lv.isRemoved && lv.leaveType === 'Resigned' && lv.userId) {
-            resignedAgentIds.add(String(lv.userId).trim());
+        const rStore = window.getResignedUsersStore();
+        const resignedIds = new Set(Object.keys(rStore).filter(k => rStore[k] && !rStore[k].isRemoved));
+
+        // Filter out any missing items for resigned agents (already excluded by isUserAccountDeactivated, double-guarded here)
+        const cleanMissing = baseRes.missingItems.filter(m => !resignedIds.has(String(m.userId).trim()));
+
+        // Add a single clean "🚪 Resigned" status entry in Leave & Absent Log so their Resigned status is visible there too
+        const extraResignedLeaves = [];
+        const allUsersInCh = getUsersForMonth(mk, activeChannel === 'ALL_CHANNELS');
+        resignedIds.forEach(uid => {
+          const rInfo = rStore[uid];
+          const usrObj = allUsersInCh.find(u => String(u.id) === String(uid));
+          if (!usrObj) return;
+          if (teamScopeFilter && teamScopeFilter !== 'ALL' && normalizeTeamNameAlias(usrObj.team) !== normalizeTeamNameAlias(teamScopeFilter)) return;
+          if (agentIdFilter && agentIdFilter !== 'ALL' && String(usrObj.id) !== String(agentIdFilter)) return;
+          if (currentUser && currentUser.role === 'agent' && !canViewAll(currentUser) && String(usrObj.id) !== String(currentUser.id)) return;
+
+          const alreadyInLeave = baseRes.leaveItems.some(lv => String(lv.userId) === String(uid) && lv.leaveType === 'Resigned');
+          if (!alreadyInLeave) {
+            extraResignedLeaves.push({
+              userId: String(usrObj.id),
+              userName: usrObj.name,
+              team: usrObj.team,
+              grade: usrObj.grade || 'A',
+              date: rInfo.resignedDate || getTodayFormatted(),
+              dayName: 'RESIGNED',
+              shift: 'Resigned & ID Deactivated',
+              leaveType: 'Resigned',
+              reason: 'Resigned from team (Auto-Deactivated & Hidden from Missing Reports)',
+              markedBy: rInfo.markedBy || 'Admin',
+              markedAt: rInfo.at || ''
+            });
           }
-        });
-
-        if (resignedAgentIds.size === 0) return baseRes;
-
-        const removedMissingCount = baseRes.missingItems.filter(m => resignedAgentIds.has(String(m.userId).trim())).length;
-        const filteredMissingItems = baseRes.missingItems.filter(m => !resignedAgentIds.has(String(m.userId).trim()));
-
-        const seenResignedInLog = new Set();
-        const cleanedLeaveItems = [];
-        baseRes.leaveItems.forEach(item => {
-          const uid = String(item.userId).trim();
-          if (item.leaveType === 'Resigned') {
-            if (seenResignedInLog.has(uid)) return;
-            seenResignedInLog.add(uid);
-          }
-          cleanedLeaveItems.push(item);
         });
 
         return {
           ...baseRes,
-          missingItems: filteredMissingItems,
-          leaveItems: cleanedLeaveItems,
-          totalScheduledDuties: Math.max(baseRes.totalSubmittedDuties, baseRes.totalScheduledDuties - removedMissingCount)
+          missingItems: cleanMissing,
+          leaveItems: [...extraResignedLeaves, ...baseRes.leaveItems]
         };
       };
-
-      const _origRenderMissingV42 = renderMissingReportsAndLeaveView;
-      renderMissingReportsAndLeaveView = function() {
-        let htmlOut = _origRenderMissingV42();
-        if (currentUser && canViewAll(currentUser) && !isCurrentChannelReadOnlyForUser(currentUser)) {
-          htmlOut = htmlOut.replace(
-            /(<button type="button" onclick="openMarkLeaveModal\('([^']+)',\s*'([^']+)'\)"[^>]*>[\s\S]*?<\/button>)/g,
-            `$1\n                          <button type="button" onclick="quickMarkAgentResigned('$2', '$3')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-amber-300 rounded-xl font-extrabold text-[11px] inline-flex items-center gap-1 cursor-pointer shadow-2xs" title="Mark Agent as Resigned (Hides from Missing Reports, keeps all sales data)"><i class="fa-solid fa-user-slash text-[10px]"></i> Resigned</button>`
-          );
-        }
-        return htmlOut;
-      };
-    } catch (patchV42Err) {
-      console.error('Non-fatal patch v42 warning:', patchV42Err);
+    } catch (patchV43Err) {
+      console.error('Non-fatal patch v43 warning:', patchV43Err);
     }
 
 window.addEventListener('load', init);
