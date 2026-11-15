@@ -18366,6 +18366,894 @@ function renderChatHubView() {
       console.error('Non-fatal patch v44 warning:', errV44);
     }
 
+    // =========================================================================
+    // PATCH v45 — EXECUTIVE DASHBOARD ORGANIZATION & MILESTONE CARD REDESIGN:
+    // - Keeps 100% of all options, buttons, metrics, and numbers intact!
+    // - Fixes the cramped/cluttered ("hibi jibhi") "Overall Floor / Team Milestone (80% / 100%)"
+    //   box by organizing the 80% and 100% milestone sub-cards into a clean,
+    //   spacious 3-row layout (Header + Reward Pill -> Big Target Amount -> Remaining Status)
+    //   with zero text collision or duplicate number repetition.
+    // - Upgrades the companion "Monthly Total (+5% Return Buffer)" card to match
+    //   the exact same height, structure, and 2-box grid symmetry.
+    // - Re-organizes the Dashboard visual hierarchy so the 5 main KPI cards appear
+    //   immediately below the Welcome & Target header, followed by the 2-column
+    //   Milestone & Monthly Target row, the spacious Incentive Summary card
+    //   (with zero awkward text wrapping), and the Drive Product cards.
+    // =========================================================================
+    try {
+      renderCompactTopWidgets = function(incentiveSummary) {
+        const u = currentUser;
+        if (!u) return '';
+        if (isSupervisor(u)) return '';
+
+        // AGENT VIEW: Clean Duty Timer Bar + Organized Incentive Card
+        if (!canViewAll(u)) {
+          const today = getTodayFormatted();
+          const attList = getStored('attendance_records', []);
+          const rec = attList.find(a => String(a.userId) === String(u.id) && a.date === today) || ensureAgentAttendanceSession(u);
+          const isBreak = rec && rec.status === 'On Break';
+
+          const myUsers = getUsersForMonth(selectedMonthKey, true);
+          const myObj = myUsers.find(x => String(x.id) === String(u.id)) || u;
+          const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(selectedMonthKey));
+          const spInfo = window.computeSingleAgentSprintIncentive(myObj, allMonthSales, selectedMonthKey);
+          const dpStats = computeAgentDriveProductStats(myObj, allMonthSales, selectedMonthKey);
+          const activeProds = getActiveProductsForMonth(selectedMonthKey);
+
+          let prodCash = 0;
+          const itemBreakdownPills = [];
+          const earnedGiftPills = [];
+
+          (spInfo.sprintBadges || []).forEach(b => {
+            itemBreakdownPills.push({ label: b, cls: 'bg-blue-50 border-blue-200 text-blue-800' });
+          });
+
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const soldKg = Number(dpStats.prodKg[k]) || 0;
+            const tgtKg = Number(p.targetKg) || 0;
+            const pct = tgtKg > 0 ? Math.round((soldKg / tgtKg) * 100) : 0;
+            if (pct >= 100) {
+              if (p.bonus100) {
+                prodCash += Number(p.bonus100);
+                itemBreakdownPills.push({ label: `💰 ${p.name} (100%): ৳${Number(p.bonus100).toLocaleString()}`, cls: 'bg-emerald-50 border-emerald-200 text-emerald-800' });
+              }
+              if (p.item100) {
+                earnedGiftPills.push(`🎁 ${p.item100} (${p.name} 100%)`);
+                itemBreakdownPills.push({ label: `🎁 ${p.name} (100%): ${p.item100}`, cls: 'bg-rose-50 border-rose-200 text-rose-700' });
+              }
+            } else if (pct >= 90 && p.bonus90) {
+              prodCash += Number(p.bonus90);
+              itemBreakdownPills.push({ label: `💰 ${p.name} (90%): ৳${Number(p.bonus90).toLocaleString()}`, cls: 'bg-emerald-50 border-emerald-200 text-emerald-800' });
+            }
+          });
+
+          const totalEarnedCash = (spInfo.sprintMoney || 0) + prodCash;
+
+          return `
+            <div class="space-y-3.5">
+              ${rec ? `
+              <div class="card-dynamic px-5 py-3 border-l-4 ${isBreak ? 'border-l-amber-500 bg-amber-50/30' : 'border-l-emerald-500'} flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-xl ${isBreak ? 'bg-amber-500' : 'bg-emerald-600'} text-white flex items-center justify-center text-sm shadow-sm shrink-0">
+                    <i class="fa-solid ${isBreak ? 'fa-mug-hot' : 'fa-user-clock'}"></i>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-4">
+                    <div>
+                      <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${isBreak ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+                        ${isBreak ? `Break: ${rec.breakReason}` : 'Duty Active'}
+                      </span>
+                      <span class="text-[11px] font-bold text-slate-400 ml-2">In: ${sanitizeTimeDisplay(rec.loginTime)}</span>
+                    </div>
+                    <div class="flex items-center gap-4 pl-4 border-l border-slate-200">
+                      <div>
+                        <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Working Time</span>
+                        <span id="live-work-timer" class="text-sm font-black font-mono text-emerald-600">${formatHMS(rec.activeSeconds)}</span>
+                      </div>
+                      <div class="pl-4 border-l border-slate-200">
+                        <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Break Time</span>
+                        <span id="live-break-timer" class="text-sm font-black font-mono text-amber-600">${formatHMS(rec.breakSeconds)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  ${isBreak ? `
+                    <button onclick="handleResumeWork()" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5 cursor-pointer">
+                      <i class="fa-solid fa-play"></i> Resume Work
+                    </button>
+                  ` : `
+                    <button onclick="openBreakModal()" class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow flex items-center gap-1.5 cursor-pointer">
+                      <i class="fa-solid fa-mug-saucer"></i> Take Break
+                    </button>
+                  `}
+                </div>
+              </div>
+              ` : ''}
+
+              <div class="incentive-banner p-5 rounded-2xl shadow-sm border border-amber-200/90 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div class="flex items-center gap-3.5">
+                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center text-lg shadow-md shrink-0">
+                      <i class="fa-solid fa-award"></i>
+                    </div>
+                    <div>
+                      <span class="text-[10px] font-black uppercase tracking-wider text-amber-800 block">My Earned Incentive & Product Gifts (${selectedMonthKey})</span>
+                      <div class="flex flex-wrap items-center gap-2.5 mt-0.5">
+                        <span class="text-xl font-black text-slate-900">💵 ৳${totalEarnedCash.toLocaleString()} Cash Bonus</span>
+                        <span class="px-2.5 py-1 rounded-lg bg-rose-500 text-white text-xs font-black shadow-2xs">
+                          🎁 ${earnedGiftPills.length} Product Gift(s)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="px-3 py-1 rounded-xl bg-white/90 border border-amber-200 text-[11px] font-extrabold text-slate-700">
+                      Sprint Bonus: <strong class="text-blue-700">৳${(spInfo.sprintMoney || 0).toLocaleString()}</strong>
+                    </span>
+                    <span class="px-3 py-1 rounded-xl bg-white/90 border border-amber-200 text-[11px] font-extrabold text-slate-700">
+                      Drive Product Bonus: <strong class="text-emerald-700">৳${prodCash.toLocaleString()}</strong>
+                    </span>
+                  </div>
+                </div>
+                <div class="pt-2.5 border-t border-amber-200/70 flex flex-wrap items-center gap-1.5">
+                  <span class="text-[10px] font-black uppercase text-amber-900 mr-1"><i class="fa-solid fa-list-check mr-1"></i>Earned Breakdown:</span>
+                  ${itemBreakdownPills.length > 0
+                    ? itemBreakdownPills.map(p => `<span class="px-2.5 py-0.5 rounded-lg border ${p.cls} text-[11px] font-extrabold shadow-2xs">${p.label}</span>`).join('')
+                    : `<span class="text-[11px] font-bold text-amber-800">Hit 100% in Sprints or 90%/100% in Drive Products (Pink Salt 100% = 2L Mustard Oil • Black Garlic 100% = 400gm Gawa Ghee) to unlock your rewards!</span>`
+                  }
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        // TEAM LEADER (ADMIN) VIEW: Clean, Spacious, Non-Wrapping Executive Incentive Summary Banner
+        const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const channelSalesAll = activeChannel === 'ALL_CHANNELS'
+          ? allSales
+          : allSales.filter(s => getChannelForTeam(s.team) === activeChannel);
+        const scopedSales = (dashboardScope === 'ALL'
+          ? channelSalesAll
+          : channelSalesAll.filter(s => normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(dashboardScope))
+        ).filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+        const monthTotalAmount = scopedSales.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+        const target80 = Math.round(tInfo.workingTarget * 0.80);
+        const target100 = tInfo.workingTarget;
+        const hit100 = target100 > 0 && monthTotalAmount >= target100;
+        const hit80 = target80 > 0 && monthTotalAmount >= target80;
+        const tlPersonalEarned = hit100 ? 10000 : (hit80 ? 7000 : 0);
+        const exactPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
+        const scopeLabel = dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope;
+
+        const floorIncData = window.computeFloorIncentiveBreakdown(selectedMonthKey, dashboardScope, 'AGENTS_ONLY');
+        const agentsUnlockedCount = floorIncData.agentRows.filter(r => r.totalCash > 0 || r.giftCount > 0).length;
+
+        return `
+          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs">
+            <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 items-center">
+              <!-- Left 5 Cols: Title & Scope Info -->
+              <div class="xl:col-span-5 flex items-center gap-3.5">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center text-xl shadow-sm shrink-0">
+                  <i class="fa-solid fa-award"></i>
+                </div>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-amber-100 text-amber-900 border border-amber-200">
+                      ${scopeLabel} • Incentive (${selectedMonthKey})
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200/70">
+                      Achieved: ${exactPct}%
+                    </span>
+                  </div>
+                  <h3 class="text-base font-black text-slate-900 mt-1 truncate">TL Milestone & Team Agents' Incentive Summary</h3>
+                  <p class="text-xs font-semibold text-slate-500">Live overview of your TL milestone bonus and team agents' combined earnings.</p>
+                </div>
+              </div>
+
+              <!-- Middle 5 Cols: 2 Clean, Spacious Sub-Cards (Zero Cramped Wrapping!) -->
+              <div class="xl:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Sub-Card 1: TL Personal Reward -->
+                <div class="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200/80 flex flex-col justify-between gap-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[10px] font-black uppercase text-indigo-900 whitespace-nowrap">
+                      <i class="fa-solid fa-crown text-amber-500 mr-1"></i>TL Reward (${dashboardScope === 'ALL' ? 'Floor' : dashboardScope})
+                    </span>
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-black whitespace-nowrap ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-white text-indigo-700 border border-indigo-200')}">
+                      ${hit100 ? '100% Unlocked' : (hit80 ? '80% Unlocked' : `${exactPct}%`)}
+                    </span>
+                  </div>
+                  <div class="flex items-baseline justify-between gap-2 pt-1 border-t border-indigo-200/50">
+                    <div>
+                      <strong class="text-lg font-black ${tlPersonalEarned > 0 ? 'text-emerald-600' : 'text-slate-900'}">৳${tlPersonalEarned.toLocaleString()}</strong>
+                      <span class="text-[10px] font-bold text-slate-500 ml-1">Earned</span>
+                    </div>
+                    <span class="text-[10px] font-extrabold text-indigo-700 whitespace-nowrap">80%: ৳7k • 100%: ৳10k</span>
+                  </div>
+                </div>
+
+                <!-- Sub-Card 2: Team Agents' Incentive -->
+                <div class="p-3.5 rounded-2xl bg-emerald-50/50 border border-emerald-200/80 flex flex-col justify-between gap-2">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[10px] font-black uppercase text-emerald-950 whitespace-nowrap">
+                      <i class="fa-solid fa-users text-emerald-600 mr-1"></i>Agents' Bonus (${tInfo.agentCount})
+                    </span>
+                    <span class="px-2 py-0.5 rounded-md bg-rose-500 text-white text-[10px] font-black whitespace-nowrap">
+                      🎁 ${floorIncData.totalAgentGifts} Gift(s)
+                    </span>
+                  </div>
+                  <div class="flex items-baseline justify-between gap-2 pt-1 border-t border-emerald-200/50">
+                    <div>
+                      <strong class="text-lg font-black text-emerald-700">৳${floorIncData.totalAgentCash.toLocaleString()}</strong>
+                      <span class="text-[10px] font-bold text-slate-500 ml-1">Total</span>
+                    </div>
+                    <span class="text-[10px] font-extrabold text-emerald-800 whitespace-nowrap">${agentsUnlockedCount} Agent(s) Won</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right 2 Cols: Action Button -->
+              <div class="xl:col-span-2 flex justify-end">
+                <button type="button" onclick="incentiveTabTeamScope='${dashboardScope === 'ALL' ? 'ALL' : normalizeTeamNameAlias(dashboardScope)}'; setTab('incentive');" class="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs font-black shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
+                  <i class="fa-solid fa-medal text-amber-300"></i>
+                  <span>Full Incentive</span>
+                  <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      };
+
+      renderDashboard = function() {
+        window.ensureValidChannelScopeForActor();
+        const u = currentUser;
+        const isSup = isSupervisor(u);
+        const allSales = getStored('sales_records', []);
+        const monthUsers = getUsersForMonth(selectedMonthKey);
+        const myMonthUser = monthUsers.find(usr => String(usr.id) === String(u.id)) || u;
+
+        const channelSalesAll = activeChannel === 'ALL_CHANNELS'
+          ? allSales
+          : allSales.filter(s => (activeChannel === 'ALL_CHANNELS' || getChannelForTeam(s.team) === activeChannel));
+        let mySales = [];
+        if (canViewAll(u)) {
+          const chTeamsList = getActiveChannelMeta().teams || [];
+          if (dashboardScope !== 'ALL' && !chTeamsList.includes(normalizeTeamNameAlias(dashboardScope))) {
+            dashboardScope = 'ALL';
+          }
+          mySales = dashboardScope === 'ALL' ? channelSalesAll : channelSalesAll.filter(s => normalizeTeamNameAlias(s.team) === normalizeTeamNameAlias(dashboardScope));
+        } else {
+          mySales = channelSalesAll.filter(s => String(s.userId) === String(u.id));
+        }
+
+        const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
+        const deduplicatedMySales = deduplicateSalesRecordsList(mySales);
+        const thisMonthSales = deduplicatedMySales.filter(s => s.date.endsWith(selectedMonthKey) && !String(s.date).startsWith('MONTHLY_PROD_'));
+
+        const sprintSalesAmount = thisMonthSales.reduce((acc, curr) => {
+          const d = parseInt(curr.date.split('/')[0], 10);
+          if (tInfo.sprintName.includes('Sprint 1') && d <= 10) return acc + Number(curr.amount || 0);
+          if (tInfo.sprintName.includes('Sprint 2') && d > 10 && d <= 20) return acc + Number(curr.amount || 0);
+          if (tInfo.sprintName.includes('Sprint 3') && d > 20) return acc + Number(curr.amount || 0);
+          return acc;
+        }, 0);
+
+        const monthTotalAmount = thisMonthSales.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+        const monthTotalOrders = thisMonthSales.reduce((acc, curr) => acc + Number(curr.orders || 0), 0);
+        const monthTotalLeads = thisMonthSales.reduce((acc, curr) => acc + Number(curr.leads || 0), 0);
+        const monthConvRatio = monthTotalLeads > 0 ? ((monthTotalOrders / monthTotalLeads) * 100).toFixed(2) : '0.00';
+
+        const sprintPct = tInfo.sprintGoal > 0 ? Math.min(100, Math.round((sprintSalesAmount / tInfo.sprintGoal) * 100)) : 0;
+        const monthPct = tInfo.workingTarget > 0 ? Math.min(100, Math.round((monthTotalAmount / tInfo.workingTarget) * 100)) : 0;
+
+        const activeProds = getActiveProductsForMonth(selectedMonthKey);
+        const pTotals = {};
+        Object.keys(activeProds).forEach(k => { pTotals[k] = 0; });
+
+        const allAgentsInScope = monthUsers.filter(usr => {
+          if (usr.role !== 'agent') return false;
+          if (canViewAll(u)) return dashboardScope === 'ALL' ? true : normalizeTeamNameAlias(usr.team) === normalizeTeamNameAlias(dashboardScope);
+          return String(usr.id) === String(u.id);
+        });
+        const allMonthSales = deduplicateSalesRecordsList(allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey)));
+
+        allAgentsInScope.forEach(agObj => {
+          const agStats = computeAgentDriveProductStats(agObj, allMonthSales, selectedMonthKey);
+          Object.keys(activeProds).forEach(k => {
+            pTotals[k] = Number(((pTotals[k] || 0) + (agStats.prodKg[k] || 0)).toFixed(2));
+          });
+        });
+        const incentiveSummary = calculateEarnedIncentives(pTotals, tInfo.agentCount, selectedMonthKey);
+        const periodLabel = (AVAILABLE_MONTHS.find(m => m.key === selectedMonthKey) || {label: selectedMonthKey}).label;
+
+        // SUPERVISOR / ALL_CHANNELS EXECUTIVE VIEW
+        if (isSup || activeChannel === 'ALL_CHANNELS') {
+          return `
+            <div class="space-y-4">
+              <div class="banner-hero-light px-5 py-4 rounded-2xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 border-l-4 border-l-purple-600">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-600' : (activeChannel === 'WHATSAPP' ? 'bg-emerald-600' : 'bg-blue-600')} text-white">
+                      <i class="${getActiveChannelMeta().icon} mr-1"></i>${activeChannel === 'ALL_CHANNELS' ? 'All Channels Executive Overview' : `${getActiveChannelMeta().fullTitle} Overview`}
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
+                      Active Period: ${periodLabel}
+                    </span>
+                  </div>
+                  <h2 class="text-lg font-black text-slate-900 mt-1">Welcome, ${u.name}! 👋</h2>
+                  <p class="text-xs font-bold text-slate-500 mt-0.5">
+                    ${activeChannel === 'ALL_CHANNELS'
+                      ? 'Viewing combined performance across <strong>All Channels & All Teams</strong>. Click <strong>Facebook</strong> or <strong>WhatsApp</strong> to view only that specific channel.'
+                      : `Viewing dedicated performance for <strong>${getActiveChannelMeta().fullTitle}</strong> (${getActiveChannelMeta().teams.join(', ')}).`}
+                  </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button onclick="setTab('monthly_perf')" class="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-extrabold transition-colors">
+                    <i class="fa-solid fa-chart-column mr-1"></i> Monthly Performance
+                  </button>
+                  <button onclick="setTab('reports')" class="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-extrabold transition-colors">
+                    <i class="fa-solid fa-file-invoice mr-1"></i> Daily Reports
+                  </button>
+                  <button onclick="setTab('ranking')" class="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-extrabold transition-colors">
+                    <i class="fa-solid fa-trophy mr-1"></i> Floor Ranking
+                  </button>
+                </div>
+              </div>
+
+              ${renderOmniChannelTotalSalesBanner()}
+              ${renderSupervisorQuickChannelTeamBar(dashboardScope, 'setDashboardScope')}
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                <div class="kpi-card-1 p-4 rounded-2xl flex flex-col justify-between">
+                  <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-extrabold uppercase text-blue-100">${dashboardScope === 'ALL' ? getActiveChannelMeta().name : dashboardScope} Leads</span>
+                    <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-users"></i></div>
+                  </div>
+                  <div class="mt-3">
+                    <p class="text-2xl font-black text-white">${monthTotalLeads.toLocaleString()}</p>
+                    <p class="text-[10px] font-bold text-blue-100 mt-0.5">${tInfo.agentCount} Active Agents</p>
+                  </div>
+                </div>
+
+                <div class="kpi-card-2 p-4 rounded-2xl flex flex-col justify-between">
+                  <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-extrabold uppercase text-emerald-100">Total Orders</span>
+                    <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bag-shopping"></i></div>
+                  </div>
+                  <div class="mt-3">
+                    <p class="text-2xl font-black text-white">${monthTotalOrders.toLocaleString()}</p>
+                    <div class="flex justify-between text-[10px] font-bold text-emerald-100 mt-0.5 pt-1 border-t border-white/20">
+                      <span>Conv. Ratio:</span>
+                      <span class="text-white font-black">${monthConvRatio}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="kpi-card-3 p-4 rounded-2xl flex flex-col justify-between">
+                  <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-extrabold uppercase text-purple-100">Sales Revenue</span>
+                    <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bangladeshi-taka-sign"></i></div>
+                  </div>
+                  <div class="mt-3">
+                    <p class="text-xl font-black text-white">৳${monthTotalAmount.toLocaleString()}</p>
+                    <p class="text-[10px] font-bold text-purple-100 mt-0.5">Achieved (${selectedMonthKey})</p>
+                  </div>
+                </div>
+
+                <div class="kpi-card-4 p-4 rounded-2xl flex flex-col justify-between">
+                  <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-extrabold uppercase text-indigo-100">Working Target (+5%)</span>
+                    <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bullseye"></i></div>
+                  </div>
+                  <div class="mt-3">
+                    <p class="text-xl font-black text-white">৳${tInfo.workingTarget.toLocaleString()}</p>
+                    <p class="text-[10px] font-bold text-indigo-100 mt-0.5">Remaining: ৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div class="kpi-card-5 p-4 rounded-2xl flex flex-col justify-between">
+                  <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-extrabold uppercase text-amber-100">Target Achieved</span>
+                    <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-trophy"></i></div>
+                  </div>
+                  <div class="mt-3">
+                    <div class="flex items-baseline justify-between">
+                      <p class="text-2xl font-black text-white">${monthPct}%</p>
+                      <span class="text-[10px] font-bold text-amber-100">Daily: ৳${tInfo.dailyTarget.toLocaleString()}</span>
+                    </div>
+                    <div class="w-full bg-black/20 rounded-full h-1.5 mt-1.5">
+                      <div class="bg-white h-1.5 rounded-full" style="width: ${monthPct}%"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                  <h3 class="text-xs font-black text-slate-800 uppercase tracking-wide">
+                    <i class="fa-solid fa-box-open text-amber-500 mr-1.5"></i> 
+                    ${getActiveChannelMeta().name} Drive Product Achievement (${dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams • ${tInfo.agentCount} Agents` : `${dashboardScope} • ${tInfo.agentCount} Agents`})
+                  </h3>
+                  <button onclick="setTab('drive_product')" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
+                    <i class="fa-solid fa-table-list"></i> Open Full Agent-Wise Product Table
+                  </button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  ${Object.keys(activeProds).map(k => {
+                    const p = activeProds[k];
+                    const achieved = pTotals[k];
+                    const target = p.targetKg * tInfo.agentCount; 
+                    const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
+                    const isUnlocked = pct >= 90;
+                    return `
+                      <div onclick="setTab('drive_product')" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
+                        <div class="flex justify-between items-start mb-2">
+                          <div>
+                            <h4 class="font-black text-sm text-slate-900">${p.name} ${isUnlocked ? '🔥' : ''}</h4>
+                            <p class="text-[11px] text-slate-500 font-bold">Target: <strong class="text-slate-800">${target.toFixed(2)} kg</strong></p>
+                          </div>
+                          <div class="w-8 h-8 rounded-xl ${p.badge} flex items-center justify-center shadow-sm text-xs">
+                            <i class="fa-solid ${p.icon}"></i>
+                          </div>
+                        </div>
+                        <div class="flex justify-between items-baseline mb-1.5">
+                          <span class="text-lg font-black text-slate-900">${achieved.toFixed(2)} <span class="text-[11px] font-bold text-slate-500">kg sold</span></span>
+                          <span class="px-2 py-0.5 rounded-md ${p.badge} text-[11px] font-black">${pct}%</span>
+                        </div>
+                        <div class="progress-track h-1.5 bg-white border border-slate-200/60">
+                          <div class="${p.bar} h-1.5 rounded-full" style="width: ${pct}%"></div>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        // ===================================================================
+        // ORGANIZED, CLUTTER-FREE ADMIN / TL & AGENT DASHBOARD
+        // Order:
+        //  1. Top Welcome Header + 3-Metric Target Strip + Team Filter
+        //  2. 5 Vibrant Core KPI Cards (Front & Center!)
+        //  3. Symmetrical 2-Column Milestone (80%/100%) & Monthly Target Breakdown
+        //  4. Clean Incentive & Bonus Overview Banner
+        //  5. Product Incentive Targets Grid
+        // ===================================================================
+        return `
+          <div class="space-y-4">
+            <!-- SECTION 1: Top Welcome & Target Control Card -->
+            <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
+              <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3.5 border-b border-slate-100">
+                <div class="flex items-center gap-3.5 min-w-0">
+                  <div class="relative shrink-0">
+                    ${renderUserAvatarHtml(u, 'w-12 h-12 rounded-2xl text-base', 'tab-active text-white', true)}
+                    <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-white absolute -bottom-0.5 -right-0.5" title="Online & Active"></span>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600' : (dashboardScope === 'Team Nazim' ? 'bg-orange-500' : (dashboardScope === 'Team Samad' ? 'bg-blue-600' : 'bg-slate-800'))} text-white shadow-2xs">
+                        <i class="${getActiveChannelMeta().icon} mr-1"></i>${canViewAll(u) ? `${dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope}` : u.team}
+                      </span>
+                      <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200/80">
+                        <i class="fa-solid fa-users text-slate-400 mr-1"></i>${canViewAll(u) ? `${tInfo.agentCount} Active Agents` : `Grade: ${myMonthUser.grade}`}
+                      </span>
+                      <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200/60">
+                        <i class="fa-regular fa-calendar-check mr-1"></i>${periodLabel}
+                      </span>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-900 mt-1 truncate">Welcome, ${u.name}! 👋</h2>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                  ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
+                  <button onclick="openAiImportModal()" class="h-10 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm inline-flex items-center gap-2 transition-all cursor-pointer">
+                    <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i>
+                    <span>AI ERP Report Import</span>
+                  </button>
+                  ` : ''}
+                  ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
+                  <button onclick="openReportModal()" class="h-10 px-4 tab-active text-white rounded-xl text-xs font-extrabold shadow-sm inline-flex items-center gap-2 transition-all cursor-pointer">
+                    <i class="fa-solid fa-plus-circle"></i>
+                    <span>${hasFeatureAccess(u, 'feat_manage_all_sales') ? 'Add / Edit Agent Data' : 'Submit Daily Report'}</span>
+                  </button>
+                  ` : ''}
+                </div>
+              </div>
+
+              <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 flex-1 max-w-3xl">
+                  <div class="px-3.5 py-2 rounded-xl bg-slate-50/90 border border-slate-200/80 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      <span class="w-7 h-7 rounded-lg bg-slate-200/80 text-slate-700 flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-bullseye"></i></span>
+                      <span class="text-[10px] font-extrabold uppercase text-slate-500">Base Target</span>
+                    </div>
+                    <strong class="text-xs font-black text-slate-900">৳${tInfo.baseTarget.toLocaleString()}</strong>
+                  </div>
+
+                  <div class="px-3.5 py-2 rounded-xl bg-blue-50/60 border border-blue-200/80 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      <span class="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-chart-line"></i></span>
+                      <span class="text-[10px] font-extrabold uppercase text-blue-700">Working (+5%)</span>
+                    </div>
+                    <strong class="text-xs font-black text-blue-900">৳${tInfo.workingTarget.toLocaleString()}</strong>
+                  </div>
+
+                  <div class="px-3.5 py-2 rounded-xl bg-emerald-50/60 border border-emerald-200/80 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-calendar-day"></i></span>
+                      <span class="text-[10px] font-extrabold uppercase text-emerald-700">Daily Target (÷26)</span>
+                    </div>
+                    <strong class="text-xs font-black text-emerald-900">৳${tInfo.dailyTarget.toLocaleString()}</strong>
+                  </div>
+                </div>
+
+                ${canViewAll(u) ? `
+                <div class="inline-flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/90 self-start xl:self-auto shrink-0">
+                  <span class="text-[10px] font-black uppercase text-slate-400 px-2 hidden sm:inline"><i class="fa-solid fa-filter mr-1"></i>Team:</span>
+                  ${getActiveChannelMeta().teams.map((tn) => {
+                    const isSelected = normalizeTeamNameAlias(dashboardScope) === normalizeTeamNameAlias(tn);
+                    return `<button type="button" onclick="setDashboardScope('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${isSelected ? getTeamBannerHeaderColor(tn) + ' text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">${tn}</button>`;
+                  }).join('')}
+                  <button type="button" onclick="setDashboardScope('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${dashboardScope === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">All (${monthUsers.filter(usr => usr.role === 'agent' && !isPendingOrFloatingAgent(usr)).length})</button>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- SECTION 2: 5 Core Sales KPI Cards (Front & Center!) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              <div class="kpi-card-1 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-blue-100">Total Leads</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-users"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-2xl font-black text-white">${monthTotalLeads.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-blue-100 mt-0.5">${canViewAll(u) ? `${tInfo.agentCount} Active Agents` : `Grade ${myMonthUser.grade}`}</p>
+                </div>
+              </div>
+
+              <div class="kpi-card-2 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-emerald-100">Total Orders</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bag-shopping"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-2xl font-black text-white">${monthTotalOrders.toLocaleString()}</p>
+                  <div class="flex justify-between text-[10px] font-bold text-emerald-100 mt-0.5 pt-1 border-t border-white/20">
+                    <span>Conv. Ratio:</span>
+                    <span class="text-white font-black">${monthConvRatio}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="kpi-card-3 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-purple-100">Sales Revenue</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bangladeshi-taka-sign"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-xl font-black text-white">৳${monthTotalAmount.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-purple-100 mt-0.5">Achieved (${selectedMonthKey})</p>
+                </div>
+              </div>
+
+              <div class="kpi-card-4 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-indigo-100">Target (+5% Buffer)</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-bullseye"></i></div>
+                </div>
+                <div class="mt-3">
+                  <p class="text-xl font-black text-white">৳${tInfo.workingTarget.toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-indigo-100 mt-0.5">Daily: ৳${tInfo.dailyTarget.toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div class="kpi-card-5 p-4 rounded-2xl flex flex-col justify-between">
+                <div class="flex justify-between items-center">
+                  <span class="text-[10px] font-extrabold uppercase text-amber-100">Target Achieved</span>
+                  <div class="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-white text-xs"><i class="fa-solid fa-trophy"></i></div>
+                </div>
+                <div class="mt-3">
+                  <div class="flex items-baseline justify-between">
+                    <p class="text-2xl font-black text-white">${monthPct}%</p>
+                    <span class="text-[10px] font-bold text-amber-100">Rem: ৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</span>
+                  </div>
+                  <div class="w-full bg-black/20 rounded-full h-1.5 mt-1.5">
+                    <div class="bg-white h-1.5 rounded-full" style="width: ${monthPct}%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SECTION 3: Symmetrical 2-Column Milestone (80% & 100%) & Monthly Target Progress Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              ${canViewAll(u) ? (() => {
+                const target80 = Math.round(tInfo.workingTarget * 0.80);
+                const target100 = tInfo.workingTarget;
+                const rem80 = Math.max(0, target80 - monthTotalAmount);
+                const rem100 = Math.max(0, target100 - monthTotalAmount);
+                const hit80 = monthTotalAmount >= target80 && target80 > 0;
+                const hit100 = monthTotalAmount >= target100 && target100 > 0;
+                const rawPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
+                return `
+                <!-- Left Card: Redesigned Clean, Spacious TL / Floor Milestone Card (Zero Clutter!) -->
+                <div class="card-dynamic p-5 bg-gradient-to-br from-blue-50/70 via-white to-indigo-50/60 border-2 ${hit100 ? 'border-emerald-400' : (hit80 ? 'border-amber-400' : 'border-blue-200/90')} flex flex-col justify-between space-y-4">
+                  <!-- Top Header Row -->
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm shadow-xs shrink-0">
+                        <i class="fa-solid fa-flag-checkered"></i>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="flex items-center gap-1.5">
+                          <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-indigo-600 text-white">TL / Team Milestone</span>
+                          <span class="px-2 py-0.5 rounded-md text-[9px] font-extrabold ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-indigo-100 text-indigo-800')}">
+                            ${hit100 ? '🏆 100% Unlocked!' : (hit80 ? '🔥 80% Unlocked!' : `${rawPct}% Completed`)}
+                          </span>
+                        </div>
+                        <h3 class="text-base font-black text-slate-900 mt-0.5 truncate">
+                          ${dashboardScope === 'ALL' ? 'Overall Floor Milestone (80% & 100%)' : `${dashboardScope} — TL Reward Milestone`}
+                        </h3>
+                      </div>
+                    </div>
+                    <button onclick="setTab('sprint_target')" class="h-9 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer" title="View all agents' live 10-day Sprint performance">
+                      <i class="fa-solid fa-bolt text-amber-300"></i>
+                      <span>Agent Sprints</span>
+                    </button>
+                  </div>
+
+                  <!-- Middle 2 Structured Milestone Boxes (Clean 3-Row Stack inside each box — No Cramped Text!) -->
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- 80% Milestone Box -->
+                    <div class="p-3.5 rounded-2xl bg-white border ${hit80 ? 'border-emerald-400 ring-2 ring-emerald-400/15' : 'border-blue-200/90'} shadow-2xs space-y-1.5">
+                      <div class="flex items-center justify-between gap-1.5">
+                        <span class="text-[11px] font-black uppercase ${hit80 ? 'text-emerald-700' : 'text-blue-700'}">
+                          🎯 80% Milestone
+                        </span>
+                        <span class="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/70 text-[10px] font-black">
+                          Reward: ৳7,000
+                        </span>
+                      </div>
+                      <p class="text-lg font-black text-slate-900 tracking-tight">৳${target80.toLocaleString()}</p>
+                      <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] font-extrabold">
+                        <span class="text-slate-400">Status:</span>
+                        <span class="${hit80 ? 'text-emerald-600' : 'text-amber-600'}">${hit80 ? '✅ Achieved!' : `Need ৳${rem80.toLocaleString()}`}</span>
+                      </div>
+                    </div>
+
+                    <!-- 100% Full Target Box -->
+                    <div class="p-3.5 rounded-2xl bg-white border ${hit100 ? 'border-emerald-400 ring-2 ring-emerald-400/15' : 'border-indigo-200/90'} shadow-2xs space-y-1.5">
+                      <div class="flex items-center justify-between gap-1.5">
+                        <span class="text-[11px] font-black uppercase ${hit100 ? 'text-emerald-700' : 'text-indigo-700'}">
+                          🏆 100% Full Target
+                        </span>
+                        <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/70 text-[10px] font-black">
+                          Reward: ৳10,000
+                        </span>
+                      </div>
+                      <p class="text-lg font-black text-slate-900 tracking-tight">৳${target100.toLocaleString()}</p>
+                      <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] font-extrabold">
+                        <span class="text-slate-400">Status:</span>
+                        <span class="${hit100 ? 'text-emerald-600' : 'text-indigo-600'}">${hit100 ? '✅ Achieved!' : `Need ৳${rem100.toLocaleString()}`}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Bottom Progress Bar & Clean Single-Line Summary -->
+                  <div class="space-y-1.5">
+                    <div class="relative progress-track h-2.5 bg-white border border-blue-200/80">
+                      <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 h-2.5 rounded-full transition-all" style="width: ${monthPct}%"></div>
+                      <div class="absolute top-0 bottom-0 w-0.5 bg-amber-500" style="left: 80%" title="80% Milestone Mark"></div>
+                    </div>
+                    <div class="flex justify-between items-center text-[11px] font-extrabold text-slate-600">
+                      <span>Achieved Revenue: <strong class="text-indigo-700">৳${monthTotalAmount.toLocaleString()} (${rawPct}%)</strong></span>
+                      <span class="text-amber-700">│ 80% Milestone Marker</span>
+                    </div>
+                  </div>
+                </div>
+                `;
+              })() : (isSprintSystemActiveForMonth(selectedMonthKey) ? (() => {
+                const s1Goal = Math.round(tInfo.workingTarget * 0.40);
+                const s2Goal = Math.round(tInfo.workingTarget * 0.35);
+                const s3Goal = Math.round(tInfo.workingTarget * 0.35);
+                let s1Amt = 0, s2Amt = 0, s3Amt = 0;
+                thisMonthSales.forEach(s => {
+                  const day = parseInt(String(s.date).split('/')[0], 10) || 0;
+                  const val = Number(s.amount) || 0;
+                  if (day <= 10) s1Amt += val;
+                  else if (day <= 20) s2Amt += val;
+                  else s3Amt += val;
+                });
+                const s1Pct = s1Goal > 0 ? Math.min(100, Math.round((s1Amt / s1Goal) * 100)) : 0;
+                const s2Pct = s2Goal > 0 ? Math.min(100, Math.round((s2Amt / s2Goal) * 100)) : 0;
+                const s3Pct = s3Goal > 0 ? Math.min(100, Math.round((s3Amt / s3Goal) * 100)) : 0;
+                return `
+                <div class="card-dynamic p-5 bg-gradient-to-br from-blue-50/70 via-white to-indigo-50/60 border-2 border-blue-200/90 flex flex-col justify-between space-y-4">
+                  <div class="flex justify-between items-center gap-2">
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm shadow-xs shrink-0">
+                        <i class="fa-solid fa-bolt"></i>
+                      </div>
+                      <div>
+                        <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-blue-600 text-white">Active 10-Day Sprint</span>
+                        <h3 class="text-base font-black text-slate-900 mt-0.5">${tInfo.sprintName} (${tInfo.sprintPct * 100}% Goal)</h3>
+                      </div>
+                    </div>
+                    <button onclick="setTab('sprint_target')" class="h-9 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+                      <i class="fa-solid fa-bolt text-amber-300"></i> View All 3 Sprints
+                    </button>
+                  </div>
+                  <div class="grid grid-cols-3 gap-2.5 text-center">
+                    <div onclick="sprintTabPhase='S1'; setTab('sprint_target');" class="p-2.5 rounded-xl bg-white hover:bg-blue-50/50 cursor-pointer border border-blue-200/80 shadow-2xs" title="Click to open Sprint 1 (Days 1–10) full leaderboard">
+                      <span class="text-[10px] font-black uppercase text-slate-500 block">Sprint 1 (1–10)</span>
+                      <strong class="text-xs font-black text-blue-700 block mt-0.5">৳${s1Amt.toLocaleString()}</strong>
+                      <span class="text-[10px] font-extrabold text-emerald-600">${s1Pct}%</span>
+                    </div>
+                    <div onclick="sprintTabPhase='S2'; setTab('sprint_target');" class="p-2.5 rounded-xl bg-white hover:bg-blue-50/50 cursor-pointer border border-blue-200/80 shadow-2xs" title="Click to open Sprint 2 (Days 11–20) full leaderboard">
+                      <span class="text-[10px] font-black uppercase text-slate-500 block">Sprint 2 (11–20)</span>
+                      <strong class="text-xs font-black text-blue-700 block mt-0.5">৳${s2Amt.toLocaleString()}</strong>
+                      <span class="text-[10px] font-extrabold text-emerald-600">${s2Pct}%</span>
+                    </div>
+                    <div onclick="sprintTabPhase='S3'; setTab('sprint_target');" class="p-2.5 rounded-xl bg-white hover:bg-blue-50/50 cursor-pointer border border-blue-200/80 shadow-2xs" title="Click to open Sprint 3 (Days 21–31) full leaderboard">
+                      <span class="text-[10px] font-black uppercase text-slate-500 block">Sprint 3 (21–31)</span>
+                      <strong class="text-xs font-black text-blue-700 block mt-0.5">৳${s3Amt.toLocaleString()}</strong>
+                      <span class="text-[10px] font-extrabold text-emerald-600">${s3Pct}%</span>
+                    </div>
+                  </div>
+                  <div class="space-y-1.5">
+                    <div class="progress-track h-2.5 bg-white border border-blue-200/80">
+                      <div class="bg-gradient-to-r from-blue-600 to-indigo-600 h-2.5 rounded-full transition-colors" style="width: ${sprintPct}%"></div>
+                    </div>
+                    <div class="flex justify-between items-center text-[11px] font-extrabold text-slate-600">
+                      <span>Sprint Goal: <strong class="text-slate-900">৳${tInfo.sprintGoal.toLocaleString()}</strong></span>
+                      <span>Remaining: <strong class="text-blue-700">৳${Math.max(0, tInfo.sprintGoal - sprintSalesAmount).toLocaleString()} (${sprintPct}%)</strong></span>
+                    </div>
+                  </div>
+                </div>
+                `;
+              })() : `
+              <div class="card-dynamic p-5 bg-gradient-to-br from-blue-50/70 via-white to-indigo-50/60 border-2 border-blue-200/90 flex flex-col justify-between">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">Monthly Pace Tracker</span>
+                    <h3 class="text-base font-black text-slate-900 mt-1">Daily Target (÷26 Days): ৳${tInfo.dailyTarget.toLocaleString()}</h3>
+                  </div>
+                  <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm shadow-xs">
+                    <i class="fa-solid fa-calendar-check"></i>
+                  </div>
+                </div>
+                <p class="text-xs font-bold text-slate-600 mt-2">
+                  Full Month Target Mode is active for ${selectedMonthKey}. Focus on hitting your daily target of <strong>৳${tInfo.dailyTarget.toLocaleString()}</strong>!
+                </p>
+              </div>
+              `)}
+
+              <!-- Right Card: Symmetrical Monthly Target (+5% Return Buffer) Card -->
+              <div class="card-dynamic p-5 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/60 border-2 border-emerald-200/90 flex flex-col justify-between space-y-4">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm shadow-xs shrink-0">
+                      <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-emerald-600 text-white">Monthly Total (+5% Buffer)</span>
+                        <span class="px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-emerald-100 text-emerald-800">${monthPct}% Achieved</span>
+                      </div>
+                      <h3 class="text-base font-black text-slate-900 mt-0.5 truncate">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</h3>
+                    </div>
+                  </div>
+                  <button onclick="setTab('monthly_perf')" class="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer">
+                    <i class="fa-solid fa-chart-column"></i>
+                    <span>Monthly Report</span>
+                  </button>
+                </div>
+
+                <!-- Middle 2 Sub-Boxes matching Left Card's exact height & layout -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="p-3.5 rounded-2xl bg-white border border-emerald-200/90 shadow-2xs space-y-1.5">
+                    <div class="flex items-center justify-between gap-1.5">
+                      <span class="text-[11px] font-black uppercase text-slate-600">📊 Base Target</span>
+                      <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-black">Excl. +5%</span>
+                    </div>
+                    <p class="text-lg font-black text-slate-900 tracking-tight">৳${tInfo.baseTarget.toLocaleString()}</p>
+                    <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] font-extrabold">
+                      <span class="text-slate-400">Daily Target (÷26):</span>
+                      <span class="text-slate-700">৳${tInfo.dailyTarget.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                  <div class="p-3.5 rounded-2xl bg-white border border-emerald-200/90 shadow-2xs space-y-1.5">
+                    <div class="flex items-center justify-between gap-1.5">
+                      <span class="text-[11px] font-black uppercase text-emerald-700">💰 Achieved Sales</span>
+                      <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/70 text-[10px] font-black">${monthTotalOrders.toLocaleString()} Orders</span>
+                    </div>
+                    <p class="text-lg font-black text-emerald-700 tracking-tight">৳${monthTotalAmount.toLocaleString()}</p>
+                    <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] font-extrabold">
+                      <span class="text-slate-400">Remaining:</span>
+                      <span class="text-rose-600">৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Bottom Progress Bar -->
+                <div class="space-y-1.5">
+                  <div class="progress-track h-2.5 bg-white border border-emerald-200/80">
+                    <div class="bg-gradient-to-r from-emerald-600 to-teal-500 h-2.5 rounded-full transition-all" style="width: ${monthPct}%"></div>
+                  </div>
+                  <div class="flex justify-between items-center text-[11px] font-extrabold text-slate-600">
+                    <span>Remaining to 100%: <strong class="text-slate-900">৳${Math.max(0, tInfo.workingTarget - monthTotalAmount).toLocaleString()}</strong></span>
+                    <span class="text-emerald-700 font-black">${monthPct}% of Working Target</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SECTION 4: Clean Incentive & Bonus Summary Banner -->
+            ${renderOmniChannelTotalSalesBanner()}
+            ${renderCompactTopWidgets(incentiveSummary)}
+
+            <!-- SECTION 5: Product Incentive Targets Grid -->
+            <div class="pt-1">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h3 class="text-xs font-black text-slate-800 uppercase tracking-wide">
+                  <i class="fa-solid fa-gift text-blue-600 mr-1.5"></i> 
+                  ${getActiveChannelMeta().name} Product Incentive Targets (${canViewAll(u) ? `${dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope} • ${tInfo.agentCount} Agents` : 'Individual Goal'})
+                </h3>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button onclick="setTab('drive_product')" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer">
+                    <i class="fa-solid fa-box-open"></i> Drive Product Details (Agent & Date-wise)
+                  </button>
+                  ${hasFeatureAccess(u, 'feat_edit_products') ? `<button onclick="openProductConfigModal()" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-[11px] font-extrabold hover:bg-blue-100 cursor-pointer"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
+                  <span class="px-2.5 py-1 rounded-full bg-white border border-slate-200 text-[10px] font-extrabold text-slate-600">90% = Entry Bonus | 100% = Full Bonus</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                ${Object.keys(activeProds).map(k => {
+                  const p = activeProds[k];
+                  const achieved = pTotals[k];
+                  const target = p.targetKg * tInfo.agentCount; 
+                  const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
+                  const isUnlocked = pct >= 90;
+                  return `
+                    <div onclick="setTab('drive_product')" title="Click to view agent-wise & date-wise Drive Product details" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
+                      <div class="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 class="font-black text-sm text-slate-900">${p.name} ${isUnlocked ? '🔥' : ''}</h4>
+                          <p class="text-[11px] text-slate-500 font-bold">Target: <strong class="text-slate-800">${target.toFixed(2)} kg</strong></p>
+                        </div>
+                        <div class="w-8 h-8 rounded-xl ${p.badge} flex items-center justify-center shadow-sm text-xs">
+                          <i class="fa-solid ${p.icon}"></i>
+                        </div>
+                      </div>
+                      <div class="flex justify-between items-baseline mb-1.5">
+                        <span class="text-lg font-black text-slate-900">${achieved.toFixed(2)} <span class="text-[11px] font-bold text-slate-500">kg sold</span></span>
+                        <span class="px-2 py-0.5 rounded-md ${p.badge} text-[11px] font-black">${pct}%</span>
+                      </div>
+                      <div class="progress-track h-1.5 bg-white border border-slate-200/60 mb-2">
+                        <div class="${p.bar} h-1.5 rounded-full" style="width: ${pct}%"></div>
+                      </div>
+                      <p class="text-[10px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `90%: ৳${p.bonus90} | ` : ''}${p.bonus100 ? `100%: ৳${p.bonus100}` : ''}${p.item100 ? `100%: ${p.item100}` : ''}</strong></p>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      };
+    } catch (errV45) {
+      console.error('Non-fatal patch v45 warning:', errV45);
+    }
+
 window.addEventListener('load', init);
   </script>
 </body>
