@@ -19659,33 +19659,18 @@ function renderChatHubView() {
           : (activeChannel === 'WHATSAPP' ? waAgentsCount : fbAgentsCount);
 
         return `
-          <div class="bg-white px-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-2.5">
-            <!-- Left: Compact Channel View Switcher Pills -->
-            <div class="flex flex-wrap items-center gap-1.5 shrink-0">
-              <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 whitespace-nowrap">
-                <i class="fa-solid fa-layer-group text-purple-600 mr-1"></i>Channel:
-              </span>
-              <button type="button" onclick="switchPortalChannel('ALL_CHANNELS')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-black inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'}">
-                <i class="fa-solid fa-layer-group text-[10px]"></i> All Channels (${totalAgentsCount})
-              </button>
-              <button type="button" onclick="switchPortalChannel('FACEBOOK')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-black inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeChannel === 'FACEBOOK' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'}">
-                <i class="fa-brands fa-facebook-f text-[10px]"></i> Facebook (${fbAgentsCount})
-              </button>
-              <button type="button" onclick="switchPortalChannel('WHATSAPP')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-black inline-flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${activeChannel === 'WHATSAPP' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'}">
-                <i class="fa-brands fa-whatsapp text-xs"></i> WhatsApp (${waAgentsCount})
-              </button>
-            </div>
-
-            <!-- Right: Compact Single-Row Team Filter Pills -->
-            <div class="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/90">
-              <span class="text-[10px] font-black uppercase text-slate-400 px-1.5 hidden sm:inline whitespace-nowrap"><i class="fa-solid fa-filter mr-1"></i>Team:</span>
-              <button type="button" onclick="${onSelectFnName}('ALL')" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer whitespace-nowrap ${activeTeamVal === 'ALL' ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-600 hover:bg-white/80'}">
+          <div class="bg-white px-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
+            <span class="text-[11px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5 whitespace-nowrap">
+              <i class="fa-solid fa-filter text-purple-600"></i> Team Filter:
+            </span>
+            <div class="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200/90">
+              <button type="button" onclick="${onSelectFnName}('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap ${activeTeamVal === 'ALL' ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-600 hover:bg-white/80'}">
                 ${activeChannel === 'ALL_CHANNELS' ? `All Teams (${chAgentsCount})` : `All ${chMeta.name} (${chAgentsCount})`}
               </button>
               ${chMeta.teams.map(tn => {
                 const tCount = allUsersOmni.filter(usr => usr.role === 'agent' && !isPendingOrFloatingAgent(usr) && normalizeTeamNameAlias(usr.team) === tn).length;
                 return `
-                  <button type="button" onclick="${onSelectFnName}('${tn}')" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer whitespace-nowrap ${activeTeamVal === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow-2xs' : 'text-slate-600 hover:bg-white/80'}">
+                  <button type="button" onclick="${onSelectFnName}('${tn}')" class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer whitespace-nowrap ${activeTeamVal === tn ? getTeamBannerHeaderColor(tn) + ' text-white shadow-2xs' : 'text-slate-600 hover:bg-white/80'}">
                     ${tn} (${tCount})
                   </button>
                 `;
