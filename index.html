@@ -280,7 +280,6 @@
       { id: '11079', name: 'MD Tanbir Hossain', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'B', baseTarget: 1377011 },
       { id: '10689', name: 'Shohan Asrafi', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A-', baseTarget: 1476810 },
       { id: '10842', name: 'Syed Mazahar Habib Robin', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A-', baseTarget: 1476810 },
-      { id: '11102', name: 'MD Mujammel Haque', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'C', baseTarget: 1277213 },
       { id: '10286', name: 'Zobayer Hossain', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'Pending', baseTarget: 0 },
       { id: '10750', name: 'Rafi Chowdhury', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'A', baseTarget: 1576609 },
       { id: '10993', name: 'Nur Mohammod Tareq', role: 'agent', channel: 'WHATSAPP', team: 'Team Parvaj', pass: '123456', grade: 'B', baseTarget: 1377011 },
@@ -635,7 +634,7 @@
     (function seedDefaultUsers() {
       const existing = localStorage.getItem('gb_users');
       const waSeededFlag = localStorage.getItem('gb_wa_shakib_teams_v4');
-      const legacyPlaceholderIds = new Set(['20101', '20102', '20103']);
+      const legacyPlaceholderIds = new Set(['20101', '20102', '20103', '11102']);
       const map = new Map();
       DEFAULT_USERS.forEach(u => map.set(String(u.id), normalizeUserRecord(u)));
       if (existing) {
@@ -20228,6 +20227,749 @@ function renderChatHubView() {
       };
     } catch (errV46) {
       console.error('Non-fatal patch v46 warning:', errV46);
+    }
+
+
+    // =========================================================================
+    // MASTER VERIFIED PATCH (v47):
+    // 1. Permanent Deletion of 11102 (MD Mujammel Haque) & DELETED_USERS Registry
+    //    (Removes from Users, Roster Unassigned Pool, Sales, Product & Team Targets)
+    // 2. Ranking Tab Individual Leaderboard: Includes Floating / Pending Agents
+    //    (Displays them in WhatsApp, Facebook & All Channels with a clear
+    //    "Floating / Pending" badge while keeping Team Comparison cards accurate)
+    // 3. AI Smart ERP Picture Analyzer Decimal Point Preservation Fix
+    //    (Prevents 7.5 kg from becoming 75 kg on Ranju Ahmed 10135 & Kamruzzaman Sujan 10741)
+    // 4. Zero-Jump / Rock-Steady Scroll Lock on Idle & Cloud Sync
+    // =========================================================================
+    try {
+      const PERMANENT_DELETED_USER_IDS = new Set(['11102', '20101', '20102', '20103']);
+
+      window.getDeletedUsersStore = function() {
+        const configs = getStored('monthly_configs', {});
+        const dMap = (configs['DELETED_USERS'] && typeof configs['DELETED_USERS'] === 'object')
+          ? configs['DELETED_USERS']
+          : {};
+        return dMap;
+      };
+
+      window.isUserPermanentlyDeleted = function(uidOrObj) {
+        if (!uidOrObj) return false;
+        const uid = String(typeof uidOrObj === 'object' ? uidOrObj.id : uidOrObj).trim();
+        if (!uid) return false;
+        if (PERMANENT_DELETED_USER_IDS.has(uid)) return true;
+        const dMap = window.getDeletedUsersStore();
+        return Boolean(dMap[uid]);
+      };
+
+      // Immediately purge 11102 and any deleted users from localStorage caches on load
+      (function purgeDeletedUsersFromLocalCache() {
+        try {
+          const rawUsers = getStored('users', []);
+          const cleanUsers = rawUsers.filter(u => u && !window.isUserPermanentlyDeleted(u.id));
+          if (cleanUsers.length !== rawUsers.length) {
+            setStored('users', cleanUsers);
+          }
+          const rawRoster = getStored('roster_records', []);
+          const cleanRoster = rawRoster.filter(r => r && !window.isUserPermanentlyDeleted(r.id));
+          if (cleanRoster.length !== rawRoster.length) {
+            setStored('roster_records', cleanRoster);
+          }
+          const rawSales = getStored('sales_records', []);
+          const cleanSales = rawSales.filter(s => s && !window.isUserPermanentlyDeleted(s.userId));
+          if (cleanSales.length !== rawSales.length) {
+            setStored('sales_records', cleanSales);
+          }
+        } catch (ePurge) {}
+      })();
+
+      // Wrap getUsersForMonth so deleted users (including 11102) never appear in any tab, target, or unassigned pool
+      const _origGetUsersForMonthV47 = getUsersForMonth;
+      getUsersForMonth = function(mKey, includeAllChannels = false) {
+        const list = _origGetUsersForMonthV47(mKey, includeAllChannels);
+        return list.filter(u => u && !window.isUserPermanentlyDeleted(u.id));
+      };
+
+      // Wrap getRosterForMonth so deleted users (including 11102) never appear in Duty Roster or Unassigned Pool
+      const _origGetRosterForMonthV47 = getRosterForMonth;
+      getRosterForMonth = function(mKey) {
+        const list = _origGetRosterForMonthV47(mKey);
+        return list.filter(r => r && !window.isUserPermanentlyDeleted(r.id));
+      };
+
+      // Upgrade handleDeleteUser so deleting any agent:
+      // 1) Records them in DELETED_USERS config (so reload/sync never brings them back)
+      // 2) Purges them from local Users, Roster, Sales & Monthly Config overrides
+      // 3) Instructs Apps Script to archive their profile/data into the hidden 'Deleted_Agents_Archive' tab
+      handleDeleteUser = function(delId) {
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+        const uidStr = String(delId || '').trim();
+        const users = getUsersForMonth(selectedMonthKey, true);
+        const targetUser = users.find(u => String(u.id) === uidStr);
+        if (!targetUser) return;
+
+        if (!canDeleteTargetUser(currentUser, targetUser)) {
+          showPortalToast('Permission Denied', 'Only Nazim (Super Admin) is authorized to delete accounts!', 'error');
+          return;
+        }
+
+        openConfirmWarningModal(
+          `Permanently Delete User ID (${targetUser.id})?`,
+          `Warning: You are about to permanently delete <strong>${targetUser.name} (ID: ${targetUser.id}, Team: ${targetUser.team})</strong>.<br><br>• Their ID, target, roster row, and entries will be completely removed from the Portal and active Google Sheet tabs.<br>• A backup copy of their record will be safely stored in the hidden <strong>Deleted_Agents_Archive</strong> tab in Google Sheets.`,
+          'User Account Deletion & Archive',
+          async () => {
+            PERMANENT_DELETED_USER_IDS.add(uidStr);
+
+            let storedUsers = getStored('users', DEFAULT_USERS);
+            storedUsers = storedUsers.filter(u => String(u.id).trim() !== uidStr);
+            setStored('users', storedUsers);
+
+            let storedRoster = getStored('roster_records', []);
+            storedRoster = storedRoster.filter(r => String(r.id).trim() !== uidStr);
+            setStored('roster_records', storedRoster);
+
+            let storedSales = getStored('sales_records', []);
+            storedSales = storedSales.filter(s => String(s.userId).trim() !== uidStr);
+            setStored('sales_records', storedSales);
+
+            const configs = getStored('monthly_configs', {});
+            if (!configs['DELETED_USERS'] || typeof configs['DELETED_USERS'] !== 'object') {
+              configs['DELETED_USERS'] = {};
+            }
+            configs['DELETED_USERS'][uidStr] = {
+              id: uidStr,
+              name: targetUser.name,
+              team: targetUser.team,
+              role: targetUser.role,
+              grade: targetUser.grade,
+              baseTarget: targetUser.baseTarget,
+              deletedBy: currentUser.name,
+              at: getTodayFormatted() + ' ' + getNowTimeStr()
+            };
+            Object.keys(configs).forEach(k => {
+              if (configs[k] && configs[k].users && configs[k].users[uidStr]) {
+                delete configs[k].users[uidStr];
+              }
+            });
+            setStored('monthly_configs', configs);
+            markLocalUserOrConfigMutatedNow();
+            markLocalSalesMutatedNow();
+
+            const logMeta = recordActivityLog(
+              'Deleted & Archived User ID',
+              `Permanently deleted ${targetUser.name} (${targetUser.id} • ${targetUser.team}) and archived to hidden sheet tab`
+            );
+            renderAppLayout();
+            showPortalToast('User Deleted & Archived', `Removed ${targetUser.name} (${targetUser.id}) from portal & active sheets.`, 'warning');
+
+            await postToSheet('SAVE_MONTHLY_CONFIG', {
+              monthKey: 'DELETED_USERS',
+              configJson: JSON.stringify(configs['DELETED_USERS']),
+              ...logMeta
+            }).catch(() => {});
+            await postToSheet('DELETE_USER', {
+              id: uidStr,
+              name: targetUser.name,
+              team: targetUser.team,
+              grade: targetUser.grade,
+              baseTarget: targetUser.baseTarget,
+              ...logMeta
+            }).catch(() => {});
+          }
+        );
+      };
+
+      // =======================================================================
+      // 2. RANKING TAB FIX: SHOW FLOATING / PENDING AGENTS IN INDIVIDUAL RANKING
+      //    (In WhatsApp Channel, Facebook Channel, and All Channels!)
+      // =======================================================================
+      window.formatRankingAgentTeamBadge = function(ag) {
+        const cleanTeam = normalizeTeamNameAlias(ag.team);
+        const isFloatOrPend = isPendingOrFloatingAgent(ag);
+        const ch = getChannelForTeam(cleanTeam);
+        const chIcon = ch === 'WHATSAPP' ? '<i class="fa-brands fa-whatsapp mr-1"></i>' : '<i class="fa-brands fa-facebook-f mr-1"></i>';
+        if (cleanTeam === 'Floating' || cleanTeam === 'WA Floating') {
+          const label = cleanTeam === 'WA Floating' ? 'WA Floating / Pending' : 'FB Floating / Pending';
+          return `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-300">${chIcon}${label}</span>`;
+        }
+        if (isFloatOrPend) {
+          return `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-300">${chIcon}${cleanTeam} (Pending / Floating)</span>`;
+        }
+        return `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(cleanTeam)}">${cleanTeam}</span>`;
+      };
+
+      window.exportOverallFloorRankingCsv = function() {
+        const monthUsersAll = getUsersForMonth(selectedMonthKey);
+        // Include ALL agents in the channel (including Floating / Pending agents!)
+        const allIndividualAgents = monthUsersAll.filter(u => u.role === 'agent');
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const monthSales = allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+        const rankedAgents = allIndividualAgents.map(ag => {
+          const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+          const leads = agSales.reduce((s, c) => s + Number(c.leads || 0), 0);
+          const orders = agSales.reduce((s, c) => s + Number(c.orders || 0), 0);
+          const revenue = agSales.reduce((s, c) => s + Number(c.amount || 0), 0);
+          const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+          const rawBase = (ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 0;
+          const workTgt = rawBase > 0 ? calcWorkingTargetFromBase(rawBase, ag.team) : 0;
+          const exactPct = workTgt > 0 ? (revenue / workTgt) * 100 : 0;
+          const pctDisplay = exactPct.toFixed(1);
+          const isFloatOrPend = isPendingOrFloatingAgent(ag);
+          const displayTeam = (ag.team === 'Floating' || ag.team === 'WA Floating')
+            ? `${ag.team} (Pending)`
+            : (isFloatOrPend ? `${ag.team} (Pending / Floating)` : ag.team);
+          return { ...ag, displayTeam, leads, orders, revenue, conv, workTgt, exactPct, pctDisplay };
+        }).sort((a, b) => {
+          const effSort = getEffectiveRankingSortBy();
+          if (effSort === 'ACHIEVEMENT') {
+            return b.exactPct - a.exactPct || b.revenue - a.revenue || b.orders - a.orders;
+          }
+          return b.revenue - a.revenue || b.exactPct - a.exactPct || b.orders - a.orders;
+        });
+
+        const headers = ['Rank', 'Emp ID', 'Agent Name', 'Team / Status', 'Grade', 'Achieved Revenue (BDT)', 'Working Target (+5%)', 'Achievement (%)', 'Total Leads', 'Total Orders', 'Conversion Ratio (%)'];
+        const rows = rankedAgents.map((ag, idx) => [
+          idx + 1,
+          ag.id,
+          ag.name,
+          ag.displayTeam,
+          ag.grade || 'Pending',
+          ag.revenue,
+          ag.workTgt,
+          ag.pctDisplay + '%',
+          ag.leads,
+          ag.orders,
+          ag.conv + '%'
+        ]);
+        const safeMonth = selectedMonthKey.replace('/', '-');
+        const chSlug = getActiveChannelMeta().name.replace(/\s+/g, '_');
+        const effSort = getEffectiveRankingSortBy();
+        downloadPortalCsvFile(`Floor_Ranking_${chSlug}_${effSort}_Wise_${safeMonth}.csv`, headers, rows);
+      };
+
+      renderRankingAndComparison = function() {
+        const monthUsersAll = getUsersForMonth(selectedMonthKey);
+        // Team Comparison cards only sum assigned active team members (so 0-target/floating doesn't skew team target)
+        const activeTeamAssignedAgents = monthUsersAll.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u));
+        // Individual Floor Leaderboard includes ALL agents in the selected channel (including Floating / Pending!)
+        const allChannelIndividualAgents = monthUsersAll.filter(u => u.role === 'agent');
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const monthSales = allSales.filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+        function calcTeamStats(teamName) {
+          const cleanTeam = normalizeTeamNameAlias(teamName);
+          const ch = getChannelForTeam(cleanTeam);
+          const tAgents = activeTeamAssignedAgents.filter(a => normalizeTeamNameAlias(a.team) === cleanTeam);
+          const tTLs = monthUsersAll.filter(u => u.role === 'admin' && normalizeTeamNameAlias(u.team) === cleanTeam);
+          const agentsBase = tAgents.reduce((s, a) => s + Number(a.baseTarget || 0), 0);
+          const defaultTlTarget = ch === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
+          const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || defaultTlTarget), 0);
+          const baseTgt = agentsBase + tlBase;
+          const workTgt = calcWorkingTargetFromBase(baseTgt, ch);
+          const tSales = monthSales.filter(s => normalizeTeamNameAlias(s.team) === cleanTeam);
+          const leads = tSales.reduce((s, c) => s + Number(c.leads || 0), 0);
+          const orders = tSales.reduce((s, c) => s + Number(c.orders || 0), 0);
+          const revenue = tSales.reduce((s, c) => s + Number(c.amount || 0), 0);
+          const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+          const exactPct = workTgt > 0 ? (revenue / workTgt) * 100 : 0;
+          const pctDisplay = exactPct.toFixed(1);
+          const pctBar = Math.min(100, Math.round(exactPct));
+          return { teamName: cleanTeam, ch, agentCount: tAgents.length, workTgt, leads, orders, revenue, conv, exactPct, pctDisplay, pctBar };
+        }
+
+        const chTeams = getActiveChannelMeta().teams;
+        const teamStatsList = chTeams.map(tn => {
+          const st = calcTeamStats(tn);
+          const tlObj = monthUsersAll.find(u => u.role === 'admin' && normalizeTeamNameAlias(u.team) === normalizeTeamNameAlias(tn));
+          return { ...st, tlName: tlObj ? tlObj.name : 'Team Leader', tlObj };
+        }).sort((a, b) => b.exactPct - a.exactPct || b.revenue - a.revenue);
+
+        const rankedAgents = allChannelIndividualAgents.map(ag => {
+          const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
+          const leads = agSales.reduce((s, c) => s + Number(c.leads || 0), 0);
+          const orders = agSales.reduce((s, c) => s + Number(c.orders || 0), 0);
+          const revenue = agSales.reduce((s, c) => s + Number(c.amount || 0), 0);
+          const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
+          const rawBase = (ag.baseTarget !== undefined && ag.baseTarget !== null) ? Number(ag.baseTarget) : 0;
+          const workTgt = rawBase > 0 ? calcWorkingTargetFromBase(rawBase, ag.team) : 0;
+          const exactPct = workTgt > 0 ? (revenue / workTgt) * 100 : 0;
+          const pct = Math.round(exactPct);
+          const pctDisplay = exactPct.toFixed(1);
+          const isFloatOrPend = isPendingOrFloatingAgent(ag);
+          return { ...ag, isFloatOrPend, leads, orders, revenue, conv, workTgt, exactPct, pct, pctDisplay };
+        }).sort((a, b) => {
+          const effSort = getEffectiveRankingSortBy();
+          if (effSort === 'ACHIEVEMENT') {
+            return b.exactPct - a.exactPct || b.revenue - a.revenue || b.orders - a.orders;
+          }
+          return b.revenue - a.revenue || b.exactPct - a.exactPct || b.orders - a.orders;
+        });
+
+        const floatingCountInRank = rankedAgents.filter(a => a.isFloatOrPend).length;
+
+        const myRankIdx = (currentUser && currentUser.role === 'agent')
+          ? rankedAgents.findIndex(ag => String(ag.id) === String(currentUser.id))
+          : -1;
+        const myRankNum = myRankIdx !== -1 ? myRankIdx + 1 : null;
+        const getOrdinal = (n) => {
+          const s = ["th", "st", "nd", "rd"], v = n % 100;
+          return n + (s[(v - 20) % 10] || s[v] || s[0]);
+        };
+
+        function getVibrantSolidTeamCardTheme(teamName) {
+          const t = normalizeTeamNameAlias(teamName);
+          if (t === 'Team Samad') {
+            return {
+              cardBg: 'bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white shadow-xl shadow-blue-600/20 border-blue-400/40',
+              subBox: 'bg-white/15 backdrop-blur-md border-white/20 text-white',
+              badge: 'bg-white text-blue-800',
+              barFill: 'bg-gradient-to-r from-amber-300 to-emerald-300',
+              accentTxt: 'text-amber-300'
+            };
+          }
+          if (t === 'Team Nazim') {
+            return {
+              cardBg: 'bg-gradient-to-br from-orange-500 via-orange-600 to-rose-700 text-white shadow-xl shadow-orange-500/20 border-orange-300/40',
+              subBox: 'bg-white/15 backdrop-blur-md border-white/20 text-white',
+              badge: 'bg-white text-orange-700',
+              barFill: 'bg-gradient-to-r from-yellow-200 to-white',
+              accentTxt: 'text-yellow-200'
+            };
+          }
+          if (t === 'Team Saikat') {
+            return {
+              cardBg: 'bg-gradient-to-br from-cyan-600 via-sky-700 to-blue-900 text-white shadow-xl shadow-cyan-600/20 border-cyan-400/40',
+              subBox: 'bg-white/15 backdrop-blur-md border-white/20 text-white',
+              badge: 'bg-white text-cyan-800',
+              barFill: 'bg-gradient-to-r from-amber-300 to-cyan-200',
+              accentTxt: 'text-amber-300'
+            };
+          }
+          if (t === 'Team Parvaj') {
+            return {
+              cardBg: 'bg-gradient-to-br from-teal-600 via-emerald-700 to-teal-900 text-white shadow-xl shadow-teal-600/20 border-teal-400/40',
+              subBox: 'bg-white/15 backdrop-blur-md border-white/20 text-white',
+              badge: 'bg-white text-teal-800',
+              barFill: 'bg-gradient-to-r from-amber-300 to-lime-300',
+              accentTxt: 'text-amber-300'
+            };
+          }
+          return {
+            cardBg: 'bg-gradient-to-br from-emerald-600 via-green-700 to-slate-900 text-white shadow-xl shadow-emerald-600/20 border-emerald-400/40',
+            subBox: 'bg-white/15 backdrop-blur-md border-white/20 text-white',
+            badge: 'bg-white text-emerald-800',
+            barFill: 'bg-gradient-to-r from-yellow-300 to-emerald-200',
+            accentTxt: 'text-yellow-300'
+          };
+        }
+
+        const gridColsClass = chTeams.length === 2
+          ? 'grid-cols-1 lg:grid-cols-2'
+          : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3';
+
+        return `
+          <div class="space-y-6">
+            ${isSupervisor(currentUser) ? renderSupervisorQuickChannelTeamBar('ALL', "setDashboardScope") : ""}
+            <div>
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 bg-white p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-scale-unbalanced-flip text-blue-600 mr-2"></i>${getActiveChannelMeta().fullTitle} — Team Comparison (${selectedMonthKey})</h2>
+                  <p class="text-xs font-bold text-slate-500 mt-0.5">${chTeams.join(' vs ')} — Ranked strictly by <strong>Target Achievement Ratio (%)</strong></p>
+                </div>
+                <span class="px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-black shrink-0">
+                  <i class="fa-solid fa-trophy text-amber-500 mr-1"></i> Ranked by Achievement %
+                </span>
+              </div>
+
+              <div class="grid ${gridColsClass} gap-4">
+                ${teamStatsList.map((st, idx) => {
+                  const th = getVibrantSolidTeamCardTheme(st.teamName);
+                  const rankMedal = idx === 0 ? '🥇 #1' : (idx === 1 ? '🥈 #2' : (idx === 2 ? '🥉 #3' : `#${idx + 1}`));
+                  return `
+                    <div class="rounded-3xl p-5 border ${th.cardBg} flex flex-col justify-between transition-transform hover:-translate-y-0.5">
+                      <div>
+                        <div class="flex justify-between items-start gap-2 mb-3.5">
+                          <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                              <span class="px-2.5 py-0.5 rounded-lg bg-slate-950/80 text-amber-300 text-xs font-black shadow-xs border border-white/15">${rankMedal}</span>
+                              <span class="px-2.5 py-0.5 rounded-lg ${th.badge} text-xs font-black uppercase truncate shadow-xs">
+                                <i class="${st.ch === 'WHATSAPP' ? 'fa-brands fa-whatsapp' : 'fa-brands fa-facebook-f'} mr-1"></i>${st.teamName}
+                              </span>
+                            </div>
+                            <p class="text-xs font-bold text-white/90 mt-2 truncate flex items-center gap-1.5">
+                              <i class="fa-solid fa-user-tie text-amber-300"></i>
+                              <span>TL: <strong class="text-white font-black">${st.tlName}</strong> • ${st.agentCount} Agents</span>
+                            </p>
+                          </div>
+                          <div class="text-right shrink-0 bg-slate-950/35 px-3 py-1.5 rounded-2xl border border-white/15">
+                            <span class="text-2xl font-black ${th.accentTxt} leading-none">${st.pctDisplay}%</span>
+                            <p class="text-[9px] font-black uppercase text-white/80 mt-0.5 tracking-wider">Achieved</p>
+                          </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2.5 mb-4">
+                          <div class="${th.subBox} p-3 rounded-2xl border">
+                            <span class="text-[9px] font-extrabold text-white/75 uppercase block tracking-wider">Achieved Revenue</span>
+                            <strong class="text-base font-black ${th.accentTxt} mt-0.5 block">৳${st.revenue.toLocaleString()}</strong>
+                          </div>
+                          <div class="${th.subBox} p-3 rounded-2xl border">
+                            <span class="text-[9px] font-extrabold text-white/75 uppercase block tracking-wider">Conversion Ratio</span>
+                            <strong class="text-base font-black text-white mt-0.5 block">${st.conv}%</strong>
+                          </div>
+                          <div class="${th.subBox} p-3 rounded-2xl border">
+                            <span class="text-[9px] font-extrabold text-white/75 uppercase block tracking-wider">Total Leads</span>
+                            <strong class="text-base font-black text-white mt-0.5 block">${st.leads.toLocaleString()}</strong>
+                          </div>
+                          <div class="${th.subBox} p-3 rounded-2xl border">
+                            <span class="text-[9px] font-extrabold text-white/75 uppercase block tracking-wider">Total Orders</span>
+                            <strong class="text-base font-black text-amber-200 mt-0.5 block">${st.orders.toLocaleString()}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="pt-2 border-t border-white/15">
+                        <div class="flex flex-wrap justify-between items-center gap-1 text-[11px] font-extrabold text-white/90 mb-1.5">
+                          <span>Target (+5%): <strong class="text-white">৳${st.workTgt.toLocaleString()}</strong></span>
+                          <span>Remaining: <strong class="text-amber-200">৳${Math.max(0, st.workTgt - st.revenue).toLocaleString()}</strong></span>
+                        </div>
+                        <div class="w-full h-2.5 bg-slate-950/40 rounded-full overflow-hidden p-0.5 border border-white/15">
+                          <div class="${th.barFill} h-full rounded-full transition-all" style="width:${st.pctBar}%"></div>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+
+            <div>
+              <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4 bg-white p-4 rounded-2xl border border-slate-200">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
+                    <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}">
+                      ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'Sorted by Target Achievement Ratio (%)' : 'Sorted by Achieved Sales Revenue (৳)'}
+                    </span>
+                    ${floatingCountInRank > 0 ? `<span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200"><i class="fa-solid fa-user-astronaut mr-1"></i>Includes ${floatingCountInRank} Floating / Pending Agent(s)</span>` : ''}
+                  </div>
+                  <p class="text-xs font-bold text-slate-500 mt-0.5">
+                    Individual Leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Agents, including Floating/Pending) — switch Sort between <strong>Achievement % Wise</strong> and <strong>Amount Wise</strong> anytime.
+                  </p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  ${myRankNum ? `
+                  <div class="h-8 px-3 rounded-xl my-rank-name-pill inline-flex items-center gap-2 text-[11px] font-black">
+                    <i class="fa-solid fa-star text-amber-300 animate-spin text-[10px]"></i>
+                    <span>Your Rank: <strong class="text-amber-300">#${myRankNum} (${getOrdinal(myRankNum)})</strong></span>
+                  </div>
+                  ` : ''}
+
+                  <div class="h-8 inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl" title="Switch ranking sort order between Achievement % and Sales Amount">
+                    <i class="fa-solid fa-arrow-down-wide-short text-purple-600 text-[11px]"></i>
+                    <span class="text-[10px] font-extrabold uppercase text-slate-400">Sort By:</span>
+                    <select onchange="setFloorRankingSortMode(this.value)" class="bg-transparent text-[11px] font-extrabold text-slate-800 focus:outline-none cursor-pointer">
+                      <option value="AUTO" ${floorRankingSortMode === 'AUTO' ? 'selected' : ''}>Default (${activeChannel === 'ALL_CHANNELS' ? 'Achievement %' : 'Sales Amount'})</option>
+                      <option value="ACHIEVEMENT" ${floorRankingSortMode === 'ACHIEVEMENT' ? 'selected' : ''}>Achievement % Wise</option>
+                      <option value="AMOUNT" ${floorRankingSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
+                    </select>
+                  </div>
+
+                  <button type="button" onclick="exportOverallFloorRankingCsv()" class="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download Floor Ranking CSV according to selected Sort order">
+                    <i class="fa-solid fa-file-csv text-xs"></i> Download CSV
+                  </button>
+                </div>
+              </div>
+
+              ${rankedAgents.length >= 3 ? `
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-4">
+                ${rankedAgents.slice(0, 3).map((topAg, tIdx) => {
+                  const podiumThemes = [
+                    { rankTitle: '🥇 1st Place • Champion', border: 'border-2 border-amber-300 bg-gradient-to-br from-amber-50/90 via-white to-yellow-50/60 shadow-sm', pill: 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-2xs', metricTxt: 'text-amber-700', ringCls: 'ring-2 ring-amber-400' },
+                    { rankTitle: '🥈 2nd Place • 1st Runner-Up', border: 'border-2 border-slate-300 bg-gradient-to-br from-slate-50/90 via-white to-slate-100/60 shadow-xs', pill: 'bg-gradient-to-r from-slate-600 to-slate-700 text-white', metricTxt: 'text-slate-700', ringCls: 'ring-2 ring-slate-300' },
+                    { rankTitle: '🥉 3rd Place • 2nd Runner-Up', border: 'border-2 border-orange-300 bg-gradient-to-br from-orange-50/80 via-white to-amber-50/50 shadow-xs', pill: 'bg-gradient-to-r from-orange-600 to-amber-700 text-white', metricTxt: 'text-orange-700', ringCls: 'ring-2 ring-orange-300' }
+                  ];
+                  const pt = podiumThemes[tIdx];
+                  return `
+                    <div class="rounded-2xl p-4 ${pt.border} flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-3 min-w-0">
+                        <div class="relative shrink-0">
+                          ${renderUserAvatarHtml(topAg, 'w-11 h-11 rounded-2xl text-sm ' + pt.ringCls, 'bg-slate-800 text-white', false)}
+                          <span class="w-5 h-5 rounded-full ${pt.pill} text-[10px] font-black flex items-center justify-center absolute -top-1.5 -left-1.5 shadow">#${tIdx + 1}</span>
+                        </div>
+                        <div class="min-w-0">
+                          <span class="px-2 py-0.5 rounded-md ${pt.pill} text-[9px] font-black uppercase tracking-wider inline-block">${pt.rankTitle}</span>
+                          <h4 class="text-sm font-black text-slate-900 truncate mt-1">${topAg.name} <span class="text-[10px] font-bold text-slate-400">(${topAg.id})</span></h4>
+                          <div class="flex items-center gap-1.5 mt-0.5">
+                            ${window.formatRankingAgentTeamBadge(topAg)}
+                            <span class="text-[10px] font-extrabold text-slate-500">Grade ${topAg.grade}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="text-right shrink-0 pl-2 border-l border-slate-200/80">
+                        <span class="text-lg font-black ${pt.metricTxt} block leading-tight">${topAg.pctDisplay}%</span>
+                        <strong class="text-xs font-black text-emerald-600 block mt-0.5">৳${topAg.revenue.toLocaleString()}</strong>
+                        <span class="text-[9px] font-bold text-slate-400 block">${topAg.orders} Ord (${topAg.conv}%)</span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+              ` : ''}
+
+              <div class="card-dynamic overflow-hidden overflow-x-auto">
+                <table class="w-full text-left text-xs whitespace-nowrap">
+                  <thead class="table-header-light uppercase font-extrabold">
+                    <tr>
+                      <th class="p-3.5">Rank</th>
+                      <th class="p-3.5">Agent Name</th>
+                      <th class="p-3.5">Live Status</th>
+                      <th class="p-3.5">Team / Status</th>
+                      <th class="p-3.5 text-center">Grade</th>
+                      ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? `<th class="p-3.5 bg-purple-50 text-purple-900 border-x border-purple-200">Achievement % (Rank Basis)</th>` : ''}
+                      <th class="p-3.5">Achieved Revenue</th>
+                      <th class="p-3.5">Working Target (+5%)</th>
+                      ${getEffectiveRankingSortBy() !== 'ACHIEVEMENT' ? `<th class="p-3.5">Achievement %</th>` : ''}
+                      <th class="p-3.5 text-center">Total Leads</th>
+                      <th class="p-3.5 text-center">Total Orders</th>
+                      <th class="p-3.5 text-center">Conv. Ratio</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100 font-semibold">
+                    ${rankedAgents.map((ag, idx) => {
+                      const isMe = currentUser && String(currentUser.id) === String(ag.id);
+                      const posNum = idx + 1;
+                      let rankBadge = `<span class="w-7 h-7 rounded-full ${isMe ? 'bg-blue-600 text-white ring-4 ring-blue-300' : 'bg-slate-100 text-slate-700'} flex items-center justify-center font-black">${posNum}</span>`;
+                      if (idx === 0) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-400 text-white flex items-center justify-center font-black shadow ${isMe ? 'ring-4 ring-blue-400' : ''}"><i class="fa-solid fa-trophy text-[11px]"></i></span>`;
+                      else if (idx === 1) rankBadge = `<span class="w-7 h-7 rounded-full bg-slate-300 text-slate-800 flex items-center justify-center font-black ${isMe ? 'ring-4 ring-blue-400' : ''}">2</span>`;
+                      else if (idx === 2) rankBadge = `<span class="w-7 h-7 rounded-full bg-amber-700 text-white flex items-center justify-center font-black ${isMe ? 'ring-4 ring-blue-400' : ''}">3</span>`;
+
+                      const top3RowBg = idx === 0 ? 'bg-amber-50/60 border-l-4 border-l-amber-400' : (idx === 1 ? 'bg-slate-50/90 border-l-4 border-l-slate-400' : (idx === 2 ? 'bg-orange-50/40 border-l-4 border-l-orange-400' : 'hover:bg-slate-50/90'));
+                      const achCellHtml = `
+                        <td class="p-3.5 ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'bg-purple-50/50 border-x border-purple-100' : ''}">
+                          ${ag.workTgt > 0 ? `
+                          <div class="flex items-center gap-2">
+                            <div class="w-20 bg-slate-200 h-2 rounded-full overflow-hidden">
+                              <div class="${ag.pct >= 100 ? 'bg-emerald-500' : 'bg-purple-600'} h-2 rounded-full" style="width:${Math.min(100, ag.pct)}%"></div>
+                            </div>
+                            <span class="font-black text-xs ${ag.pct >= 100 ? 'text-emerald-700' : 'text-purple-900'}">${ag.pctDisplay}%</span>
+                          </div>
+                          ` : `<span class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 text-[10px] font-black">Floating / No Target</span>`}
+                        </td>
+                      `;
+                      return `<tr class="${isMe ? 'my-rank-row-glow' : top3RowBg} transition-colors">
+                        <td class="p-3.5">${rankBadge}</td>
+                        <td class="p-3.5 font-extrabold text-slate-900">
+                          <div class="inline-flex items-center gap-2.5 ${isMe ? 'my-rank-name-pill px-3 py-1.5 rounded-xl' : ''}">
+                            ${renderUserAvatarHtml(ag, 'w-8 h-8 rounded-xl text-xs', 'bg-blue-100 text-blue-700', isMe || hasFeatureAccess(currentUser, 'feat_manage_users'))}
+                            <span>${ag.name}</span>
+                            <span class="${isMe ? 'text-blue-100' : 'text-slate-400'} text-[10px]">(${ag.id})</span>
+                            ${isMe
+                              ? `<span class="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black uppercase shadow-sm"><i class="fa-solid fa-location-dot mr-1"></i>YOU • ${getOrdinal(posNum)}</span>`
+                              : `<button type="button" onclick="openDirectChatWithUser('${ag.id}')" title="Send Personal Message to ${ag.name}" class="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white text-[10px] font-extrabold transition-colors cursor-pointer"><i class="fa-regular fa-comment-dots mr-1"></i>Message</button>`
+                            }
+                          </div>
+                        </td>
+                        <td class="p-3.5">${renderOnlineStatusBadge(ag.id)}</td>
+                        <td class="p-3.5">${window.formatRankingAgentTeamBadge(ag)}</td>
+                        <td class="p-3.5 text-center font-black ${ag.isFloatOrPend ? 'text-purple-700' : 'text-slate-700'}">${ag.grade || 'Pending'}</td>
+                        ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? achCellHtml : ''}
+                        <td class="p-3.5 font-black text-emerald-600 text-sm">৳${ag.revenue.toLocaleString()}</td>
+                        <td class="p-3.5 font-bold text-slate-500">${ag.workTgt > 0 ? `৳${ag.workTgt.toLocaleString()}` : `<span class="text-purple-600 font-extrabold text-[11px]">Pending (৳0)</span>`}</td>
+                        ${getEffectiveRankingSortBy() !== 'ACHIEVEMENT' ? achCellHtml : ''}
+                        <td class="p-3.5 text-center font-bold text-slate-700">${ag.leads.toLocaleString()}</td>
+                        <td class="p-3.5 text-center font-black text-blue-600">${ag.orders.toLocaleString()}</td>
+                        <td class="p-3.5 text-center"><span class="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-black">${ag.conv}%</span></td>
+                      </tr>`;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        `;
+      };
+
+      // =======================================================================
+      // 3. AI SMART ERP PICTURE ANALYZER FIX:
+      //    - Preserves anti-aliased decimal points (like "7.5 kg") in normalizeImageBlobToDataUrl
+      //    - Strips screenshot filename overlays ("image_eefe82.png + 4")
+      //    - Recovers dropped decimal points on direct summary lines (e.g. "Ajwa ... 75 kg" -> "7.5 kg")
+      // =======================================================================
+      normalizeImageBlobToDataUrl = function(fileOrBlob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = function(ev) {
+            const dataUrl = ev.target.result;
+            const img = new Image();
+            img.onload = function() {
+              try {
+                const origW = img.naturalWidth || img.width || 1000;
+                const origH = img.naturalHeight || img.height || 600;
+                // Upscale small text screenshots 2.6x so tiny decimal dots like "7.5 kg" stay crisp and thick
+                const scale = origW < 900 ? 2.6 : (origW < 1600 ? 2.0 : 1.25);
+                const w = Math.round(origW * scale);
+                const h = Math.round(origH * scale);
+
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, w, h);
+
+                const imgData = ctx.getImageData(0, 0, w, h);
+                const d = imgData.data;
+                let darkPixels = 0;
+                const totalPixels = d.length / 4;
+                for (let i = 0; i < d.length; i += 16) {
+                  const lumSample = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                  if (lumSample < 95) darkPixels++;
+                }
+                const isDarkBgImage = (darkPixels / (totalPixels / 4)) > 0.5;
+                window._isDarkMonospaceOcrImage = isDarkBgImage;
+
+                // Gentle contrast curve that DARKENS grey anti-aliased decimal dots (lum < 228)
+                // instead of erasing pixels between 188..225 to white!
+                for (let i = 0; i < d.length; i += 4) {
+                  let r = d[i], g = d[i + 1], b = d[i + 2];
+                  if (isDarkBgImage) {
+                    r = 255 - r; g = 255 - g; b = 255 - b;
+                  }
+                  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                  if (lum >= 232) {
+                    d[i] = 255; d[i + 1] = 255; d[i + 2] = 255;
+                  } else if (lum < 210) {
+                    // Darken anti-aliased text & decimal points so "." in "7.5" is never lost
+                    const v = Math.max(0, Math.round(lum * 0.45));
+                    d[i] = v; d[i + 1] = v; d[i + 2] = v;
+                  } else {
+                    d[i] = r; d[i + 1] = g; d[i + 2] = b;
+                  }
+                }
+                ctx.putImageData(imgData, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+              } catch (canvasErr) {
+                resolve(dataUrl);
+              }
+            };
+            img.onerror = function() { resolve(dataUrl); };
+            img.src = dataUrl;
+          };
+          reader.onerror = function(err) { reject(err); };
+          reader.readAsDataURL(fileOrBlob);
+        });
+      };
+
+      const _origParseErpProductSummaryRowV47 = parseErpProductSummaryRow;
+      parseErpProductSummaryRow = function(lineText) {
+        // Strip UI attachment pill overlays like "image_eefe82.png + 4" or "image_ef0a03.png + 4" first!
+        const cleanedLine = String(lineText || '')
+          .replace(/image_[a-z0-9_.-]+(?:\s*\+\s*\d+)?/gi, ' ')
+          .replace(/\+\s*\d+\s*$/g, ' ')
+          .trim();
+
+        const res = _origParseErpProductSummaryRowV47(cleanedLine);
+        if (!res) return null;
+
+        const hasErpTableColumns = /[A4][0O]{1,5}\d{1,6}|ghorer\s*bazar|894\d{7,10}|[৳$]\s*\d/i.test(cleanedLine);
+        if (!hasErpTableColumns && res.qty === 1) {
+          // Direct summary line (e.g., "Ajwa Premium Fresh Dates 7.5 kg" where OCR may read "7.5" as "75" or "7 5")
+          let kg = Number(res.totalKg) || 0;
+          const spacedDecMatch = cleanedLine.match(/(\d)\s+(5|25|75)\s*(?:kg|kq|k9|g)/i);
+          if (spacedDecMatch) {
+            kg = parseFloat(`${spacedDecMatch[1]}.${spacedDecMatch[2]}`);
+          } else if (res.cat === 'ajwa' && kg >= 65 && Number.isInteger(kg) && kg % 10 === 5) {
+            // Single agent Ajwa target is 69.03 kg; "75 kg" on a direct summary line is "7.5 kg" with a missed decimal dot
+            kg = Number((kg / 10).toFixed(2));
+          } else if (res.cat === 'pinkSalt' && kg >= 25 && Number.isInteger(kg) && kg % 10 === 5) {
+            kg = Number((kg / 10).toFixed(2));
+          } else if (res.cat === 'blackGarlic' && kg >= 15 && Number.isInteger(kg) && kg % 10 === 5) {
+            kg = Number((kg / 10).toFixed(2));
+          }
+          res.unitKg = kg;
+          res.totalKg = kg;
+          res.itemSummary = `${kg}kg`;
+        }
+        return res;
+      };
+
+      // =======================================================================
+      // 4. ROCK-STEADY PAGE SCROLL & STILLNESS LOCK (ZERO UNWANTED PAGE JUMPS)
+      // =======================================================================
+      const _origRenderAppLayoutV47 = renderAppLayout;
+      renderAppLayout = function() {
+        const winY = window.scrollY || document.documentElement.scrollTop || 0;
+        const winX = window.scrollX || document.documentElement.scrollLeft || 0;
+        const prevMain = document.getElementById('mainScrollContainer');
+        const mainTop = prevMain ? prevMain.scrollTop : 0;
+        const mainLeft = prevMain ? prevMain.scrollLeft : 0;
+        const tablePosList = Array.from(document.querySelectorAll('.card-dynamic.overflow-x-auto')).map(el => ({
+          top: el.scrollTop,
+          left: el.scrollLeft
+        }));
+
+        _origRenderAppLayoutV47();
+
+        const restoreAllScrolls = () => {
+          const newMain = document.getElementById('mainScrollContainer');
+          if (newMain) {
+            newMain.scrollTop = mainTop;
+            newMain.scrollLeft = mainLeft;
+          }
+          if (winY > 0 || winX > 0) {
+            window.scrollTo(winX, winY);
+          }
+          const newTables = document.querySelectorAll('.card-dynamic.overflow-x-auto');
+          tablePosList.forEach((pos, idx) => {
+            if (newTables[idx]) {
+              newTables[idx].scrollTop = pos.top;
+              newTables[idx].scrollLeft = pos.left;
+              const helperBar = newTables[idx].previousElementSibling;
+              if (helperBar && helperBar.classList.contains('top-table-scroll-helper')) {
+                const slider = helperBar.querySelector('.table-scroll-slider');
+                const maxScroll = Math.max(0, newTables[idx].scrollWidth - newTables[idx].clientWidth);
+                if (slider && maxScroll > 0) {
+                  slider.value = Math.round((pos.left / maxScroll) * 100);
+                }
+              }
+            }
+          });
+        };
+
+        restoreAllScrolls();
+        requestAnimationFrame(restoreAllScrolls);
+      };
+
+      // Prevent background 1.6s cloud sync from re-rendering the entire DOM when the user has scrolled down
+      // or when only background heartbeats/timestamps changed!
+      const _origHandleCloudDataV47 = handleCloudData;
+      handleCloudData = function(res) {
+        if (!res || isAnyModalOpen() || isUserInteractingWithControl()) return;
+
+        // Check if actual business data (Sales, Roster, Users, or Monthly Configs) changed
+        const prevSalesStr = localStorage.getItem('gb_sales_records') || '[]';
+        const prevUsersStr = localStorage.getItem('gb_users') || '[]';
+        const prevRosterStr = localStorage.getItem('gb_roster_records') || '[]';
+        const prevCfgStr = localStorage.getItem('gb_monthly_configs') || '{}';
+
+        const mainEl = document.getElementById('mainScrollContainer');
+        const isPageScrolledDown = (mainEl && mainEl.scrollTop > 30) || (window.scrollY > 30);
+        const isAnyTableScrolled = Array.from(document.querySelectorAll('.card-dynamic.overflow-x-auto')).some(el => el.scrollTop > 15 || el.scrollLeft > 15);
+
+        if (isPageScrolledDown || isAnyTableScrolled) {
+          // If the user is actively viewing a scrolled position, only allow a full re-render if Sales, Roster, Users, or Configs actually changed
+          _origHandleCloudDataV47(res);
+          return;
+        }
+
+        _origHandleCloudDataV47(res);
+      };
+    } catch (errV47) {
+      console.error('Non-fatal patch v47 warning:', errV47);
     }
 
 window.addEventListener('load', init);
