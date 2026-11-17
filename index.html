@@ -20616,6 +20616,373 @@ function renderChatHubView() {
       console.error('Non-fatal patch v48 warning:', errV48);
     }
 
+
+    // =========================================================================
+    // PATCH v49:
+    // 1. Real-Time Profile Picture Upload & Delete Sync Across All User Panels
+    // 2. Allow Floating / WA Floating Agents to Save Custom Grade & Base Target
+    // =========================================================================
+    try {
+      // -----------------------------------------------------------------------
+      // 1. PROFILE PICTURE UPLOAD & DELETE GLOBAL SYNC FIX
+      // -----------------------------------------------------------------------
+      getUserAvatarUrl = function(userId) {
+        if (!userId) return '';
+        const uid = String(userId).trim();
+        const store = getUserAvatarStore();
+        if (store && store[uid]) {
+          if (store[uid] === '__REMOVED__') {
+            try { localStorage.removeItem('gb_avatar_' + uid); } catch (e) {}
+            return '';
+          }
+          return store[uid];
+        }
+        const localAv = localStorage.getItem('gb_avatar_' + uid);
+        if (localAv && localAv !== '__REMOVED__') return localAv;
+        return '';
+      };
+
+      handleRemoveProfilePic = function(userId) {
+        const targetId = String(userId || profilePicTargetUserId || currentUser.id).trim();
+        try { localStorage.removeItem('gb_avatar_' + targetId); } catch (e) {}
+        const configs = { ...getStored('monthly_configs', {}) };
+        if (!configs['USER_AVATARS'] || typeof configs['USER_AVATARS'] !== 'object') {
+          configs['USER_AVATARS'] = {};
+        } else {
+          configs['USER_AVATARS'] = { ...configs['USER_AVATARS'] };
+        }
+        // Mark as __REMOVED__ so every other logged-in panel purges its local cache for this user!
+        configs['USER_AVATARS'][targetId] = '__REMOVED__';
+        setStored('monthly_configs', configs);
+        markLocalUserOrConfigMutatedNow();
+
+        const logMeta = recordActivityLog('Removed Profile Picture', 'Removed profile picture for ID ' + targetId);
+        closeModal('profilePicModal');
+        renderAppLayout();
+        showPortalToast('Profile Picture Removed', 'Removed across all user panels.', 'warning');
+
+        postToSheet('SAVE_MONTHLY_CONFIG', {
+          monthKey: 'USER_AVATARS',
+          configJson: JSON.stringify(configs['USER_AVATARS']),
+          ...logMeta
+        }).catch(() => {});
+      };
+
+      const _origHandleCloudDataV49 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && res.monthlyConfigs && typeof res.monthlyConfigs === 'object' && res.monthlyConfigs['USER_AVATARS']) {
+          const localCfg = getStored('monthly_configs', {});
+          const locAv = (localCfg['USER_AVATARS'] && typeof localCfg['USER_AVATARS'] === 'object') ? localCfg['USER_AVATARS'] : {};
+          const cldAv = (res.monthlyConfigs['USER_AVATARS'] && typeof res.monthlyConfigs['USER_AVATARS'] === 'object') ? res.monthlyConfigs['USER_AVATARS'] : {};
+          const isRecentEdit = (Date.now() - lastLocalUserOrConfigMutationMs) < 10000;
+
+          const syncedAv = {};
+          const allUids = new Set([...Object.keys(locAv), ...Object.keys(cldAv)]);
+          allUids.forEach(uidKey => {
+            const val = isRecentEdit
+              ? (locAv[uidKey] !== undefined ? locAv[uidKey] : cldAv[uidKey])
+              : (cldAv[uidKey] !== undefined ? cldAv[uidKey] : '__REMOVED__');
+
+            if (!val || val === '__REMOVED__') {
+              syncedAv[uidKey] = '__REMOVED__';
+              try { localStorage.removeItem('gb_avatar_' + uidKey); } catch (e) {}
+            } else {
+              syncedAv[uidKey] = val;
+              try { localStorage.setItem('gb_avatar_' + uidKey, val); } catch (e) {}
+            }
+          });
+          res.monthlyConfigs['USER_AVATARS'] = syncedAv;
+        }
+        return _origHandleCloudDataV49(res);
+      };
+
+      // -----------------------------------------------------------------------
+      // 2. FLOATING / PENDING AGENT GRADE & TARGET SAVE FIX
+      // -----------------------------------------------------------------------
+      autoFillGradeTarget = function() {
+        const g = document.getElementById('usrGrade')?.value || 'A-';
+        const selTeam = document.getElementById('usrTeam')?.value || currentUser?.team || '';
+        const teamCh = getChannelForTeam(selTeam);
+        const configs = getStored('monthly_configs', {});
+        const effKey = teamCh === 'WHATSAPP' ? ('WA_' + selectedMonthKey) : selectedMonthKey;
+        const mCfg = configs[effKey] || {};
+        const baseDefaults = teamCh === 'WHATSAPP' ? WA_DEFAULT_GRADE_TARGETS : DEFAULT_GRADE_TARGETS;
+        const map = { ...baseDefaults, ...(mCfg.gradeTargets || {}) };
+        if (map[g] !== undefined) {
+          document.getElementById('usrTarget').value = map[g];
+        }
+      };
+
+      openUserModal = function(editId) {
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+        const users = getUsersForMonth(selectedMonthKey, true);
+        const existing = users.find(u => String(u.id) === String(editId));
+        if (existing) {
+          if (!canEditTargetUser(currentUser, existing)) {
+            showPortalToast('Permission Denied', 'Only Nazim (Super Admin) can edit this account.', 'error');
+            return;
+          }
+          document.getElementById('usrId').value = existing.id;
+          document.getElementById('usrName').value = existing.name;
+          document.getElementById('usrRole').value = existing.role || 'agent';
+          const teamSel = document.getElementById('usrTeam');
+          if (teamSel) {
+            teamSel.value = existing.team;
+            if (!teamSel.value) {
+              teamSel.value = getChannelForTeam(currentUser.team) === 'WHATSAPP' ? 'WA Floating' : 'Floating';
+            }
+            teamSel.onchange = function() { autoFillGradeTarget(); };
+          }
+          document.getElementById('usrGrade').value = existing.role === 'supervisor' ? 'Supervisor' : (existing.grade || (existing.role === 'admin' ? 'TL' : 'A'));
+          document.getElementById('usrPass').value = existing.pass || '123456';
+          document.getElementById('usrTarget').value = existing.baseTarget ?? 0;
+        } else {
+          document.getElementById('usrId').value = '';
+          document.getElementById('usrName').value = '';
+          document.getElementById('usrRole').value = 'agent';
+          const teamSel = document.getElementById('usrTeam');
+          if (teamSel) {
+            teamSel.value = isSuperAdmin(currentUser) ? getActiveChannelMeta().teams[0] : currentUser.team;
+            teamSel.onchange = function() { autoFillGradeTarget(); };
+          }
+          document.getElementById('usrGrade').value = 'A-';
+          document.getElementById('usrPass').value = '123456';
+          autoFillGradeTarget();
+        }
+        openModal('userModal');
+      };
+
+      handleSaveUser = async function(e) {
+        e.preventDefault();
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+        const targetId = document.getElementById('usrId').value.trim();
+        const existingUser = getUsersForMonth(selectedMonthKey, true).find(u => String(u.id) === String(targetId));
+        if (existingUser && !canEditTargetUser(currentUser, existingUser)) {
+          showPortalToast('Permission Denied', 'You cannot overwrite a protected Admin ID.', 'error');
+          return;
+        }
+
+        const roleVal = document.getElementById('usrRole').value;
+        if (roleVal === 'admin' && !isSuperAdmin(currentUser) && String(targetId) !== String(currentUser.id)) {
+          showPortalToast('Permission Denied', 'Only Nazim (Super Admin) can create Admin accounts.', 'error');
+          return;
+        }
+
+        const gradeVal = roleVal === 'supervisor' ? 'Supervisor' : (document.getElementById('usrGrade').value || (roleVal === 'admin' ? 'TL' : 'A'));
+        const rawName = document.getElementById('usrName').value.trim();
+
+        const selectedTeamVal = normalizeTeamNameAlias(document.getElementById('usrTeam').value || currentUser.team);
+        const allowedNonSuperTeams = [normalizeTeamNameAlias(currentUser.team), 'Floating', 'WA Floating', 'All Teams'];
+        const finalTeamVal = isSuperAdmin(currentUser)
+          ? selectedTeamVal
+          : (allowedNonSuperTeams.includes(selectedTeamVal) ? selectedTeamVal : normalizeTeamNameAlias(currentUser.team));
+
+        // Allow Floating / WA Floating members to keep their selected Grade & Target!
+        // Only set target to 0 if Grade is explicitly 'Pending' or 'Supervisor'.
+        const finalGradeVal = gradeVal;
+        let rawTargetVal = Number(document.getElementById('usrTarget').value) || 0;
+        if (finalGradeVal !== 'Pending' && finalGradeVal !== 'Supervisor' && rawTargetVal === 0) {
+          const teamCh = getChannelForTeam(finalTeamVal);
+          const configs = getStored('monthly_configs', {});
+          const effKey = teamCh === 'WHATSAPP' ? ('WA_' + selectedMonthKey) : selectedMonthKey;
+          const mCfg = configs[effKey] || {};
+          const baseDefaults = teamCh === 'WHATSAPP' ? WA_DEFAULT_GRADE_TARGETS : DEFAULT_GRADE_TARGETS;
+          const gMap = { ...baseDefaults, ...(mCfg.gradeTargets || {}) };
+          rawTargetVal = Number(gMap[finalGradeVal] || 0);
+        }
+        const finalTargetVal = (finalGradeVal === 'Pending' || finalGradeVal === 'Supervisor') ? 0 : rawTargetVal;
+
+        const newUser = normalizeUserRecord({
+          id: targetId,
+          name: rawName,
+          team: finalTeamVal,
+          channel: getChannelForTeam(finalTeamVal),
+          grade: finalGradeVal,
+          role: roleVal,
+          pass: document.getElementById('usrPass').value.trim(),
+          baseTarget: finalTargetVal
+        });
+
+        let users = [...getStored('users', DEFAULT_USERS)];
+        const idx = users.findIndex(u => String(u.id) === String(newUser.id));
+        const isNewAccount = idx === -1;
+
+        openConfirmWarningModal(
+          (isNewAccount ? 'Create New' : 'Update') + ' User ID (' + newUser.id + ') for ' + selectedMonthKey + '?',
+          '<strong>Name:</strong> ' + newUser.name + ' (ID: ' + newUser.id + ')<br><strong>Assigned Team (' + selectedMonthKey + '):</strong> ' + newUser.team + ' • <strong>Grade:</strong> ' + newUser.grade + '<br><strong>Base Target (' + selectedMonthKey + '):</strong> ৳' + newUser.baseTarget.toLocaleString() + '<br><br>Confirm to save and sync this account for <strong>' + selectedMonthKey + '</strong>.',
+          'Confirm User Account Save',
+          async () => {
+            const isCurrentOrFutureMonth = selectedMonthKey >= getCurrentMonthKeyStr();
+            if (idx !== -1) {
+              if (isCurrentOrFutureMonth) {
+                users[idx] = newUser;
+              } else {
+                users[idx] = { ...users[idx], name: newUser.name, pass: newUser.pass };
+              }
+            } else {
+              users.push(newUser);
+            }
+            setStored('users', users);
+            markLocalUserOrConfigMutatedNow();
+
+            const { effKey, monthConfigObj, otherKey, otherConfigObj } = syncAgentTeamForSelectedMonthOnly(
+              newUser.id,
+              newUser.name,
+              newUser.team,
+              newUser.grade,
+              newUser.baseTarget
+            );
+
+            const logMeta = recordActivityLog(
+              isNewAccount ? 'Created User ID' : 'Updated User ID',
+              (isNewAccount ? 'Created' : 'Updated') + ' ' + newUser.role.toUpperCase() + ' ID for ' + selectedMonthKey + ': ' + newUser.name + ' (' + newUser.id + '), Team: ' + newUser.team + ', Grade: ' + newUser.grade + ', Target: ৳' + newUser.baseTarget.toLocaleString()
+            );
+
+            if (currentUser && String(currentUser.id) === String(newUser.id)) {
+              currentUser = normalizeUserRecord(newUser);
+              setStored('session_user', currentUser);
+            }
+
+            markLocalUserOrConfigMutatedNow();
+            closeModal('userModal');
+            renderAppLayout();
+            showPortalToast('User ID Saved & Synced!', newUser.name + ' (' + newUser.id + ') updated for ' + selectedMonthKey + ' across Portal & Google Sheet!', 'success');
+
+            await postToSheet('SAVE_USER', { ...users[idx !== -1 ? idx : users.length - 1], ...logMeta }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+            if (otherConfigObj) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+            }
+          },
+          'Yes, Confirm & Save',
+          true
+        );
+      };
+    } catch (errV49) {
+      console.error('Non-fatal patch v49 warning:', errV49);
+    }
+
+
+    // =========================================================================
+    // PATCH v50 — SMART AI OCR UPGRADE FOR 11.5 KG & 2-DECIMAL WEIGHTS (24.15, 50.15, 63.45):
+    // 1. Fixes "11.5 kg" being read as "1.5 kg" (converts OCR 'l1.5', 'I1.5', '|1.5', '1l.5', '1 1.5' -> '11.5')
+    // 2. Fixes 2-decimal weights losing their dot ('24.15' -> 2415, '50.15' -> 5015, '63.45' -> 6345 -> divides by 100)
+    // 3. Fixes spaced 2-decimal weights ('24 15 kg' -> '24.15 kg', '50 15 kg' -> '50.15 kg', '63 45 kg' -> '63.45 kg')
+    // =========================================================================
+    try {
+      window.cleanAndExtractDirectSummaryWeight = function(rawLineText, cat) {
+        let s = String(rawLineText || '');
+        const imgIdx = s.toLowerCase().indexOf('image_');
+        if (imgIdx !== -1) {
+          s = s.substring(0, imgIdx);
+        }
+        // Remove trailing "+ 4" badge text if present
+        s = s.replace(/\+\s*\d+\s*$/g, ' ').trim();
+
+        // 1. Fix OCR misreading '1' as 'l', 'I', '|', '!', '[' or ']' right before or inside numbers
+        // Examples: "Dates l1.5 kg", "Dates I1.5 kg", "Dates |1.5 kg", "Dates 1l.5 kg", "Dates ll.5 kg", "Dates [1.5 kg"
+        s = s.replace(/(^|\s)[lI|!\[\]]{2}(?=\s*[\.,]?\s*\d)/g, '$111');
+        s = s.replace(/(^|\s)[lI|!\[\]](?=\d)/g, '$11');
+        s = s.replace(/(\d)[lI|!\[\]](?=[\.,\s]|\d)/g, '$11');
+        s = s.replace(/([.,])[lI|!\[\]](\d)/g, '$11$2');
+
+        let lower = s.toLowerCase();
+
+        // 2. Fix space inside leading '1 1.5 kg' -> '11.5 kg' or 'Dates 1 1.5 kg' -> 'Dates 11.5 kg'
+        lower = lower.replace(/(\d)\s+(\d\s*[\.,]\s*\d+\s*(?:kg|kq|k9|gm|qm|9m|g|q)\b)/gi, '$1$2');
+
+        // 3. Fix spaced 2-decimal weights where dot was read as space (e.g. "24 15 kg" -> "24.15 kg", "50 15 kg" -> "50.15 kg", "63 45 kg" -> "63.45 kg")
+        lower = lower.replace(/(\d{1,3})\s+(05|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/gi, '$1.$2 $3');
+
+        // 4. Fix spaced 1-decimal weights where dot was read as space (e.g. "11 5 kg" -> "11.5 kg", "7 5 kg" -> "7.5 kg", "54 8 kg" -> "54.8 kg")
+        lower = lower.replace(/(\d{1,2})\s+([1-9])\s*(kg|kq|k9|gm|qm|9m|g|q)\b/gi, '$1.$2 $3');
+
+        // 5. Normalize comma or spaced dot into standard decimal point
+        const normalizedDec = lower.replace(/(\d)\s*[\.,]\s*(\d)/g, '$1.$2');
+
+        const directWeightMatch = normalizedDec.match(/(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|qm|9m|g|q)\b/i) || normalizedDec.match(/(\d+(?:\.\d+)?)\s*$/);
+        if (!directWeightMatch) return null;
+
+        const rawVal = parseFloat(directWeightMatch[1]) || 0;
+        const unitStr = (directWeightMatch[2] || 'kg').toLowerCase();
+        let num = unitStr.startsWith('k') ? Number(rawVal.toFixed(2)) : Number((rawVal / 1000).toFixed(2));
+        if (num <= 0) return null;
+
+        // 6. Smart Decimal Restoration if OCR completely omitted the decimal point:
+        if (Number.isInteger(num)) {
+          if (num >= 1000 && num <= 30000) {
+            // 4-digit or 5-digit integer on a single-agent summary line (e.g. 2415 -> 24.15, 5015 -> 50.15, 6345 -> 63.45, 9725 -> 97.25)
+            num = Number((num / 100).toFixed(2));
+          } else if (num >= 100 && num <= 999) {
+            // 3-digit integer: check if 2 decimals (e.g. 415 -> 4.15, 925 -> 9.25) or 1 decimal (e.g. 115 -> 11.5, 556 -> 55.6, 548 -> 54.8)
+            const lastTwo = num % 100;
+            if ((cat === 'sunHoney' || cat === 'bsHoney' || cat === 'gawaGhee') && (lastTwo === 15 || lastTwo === 25 || lastTwo === 35 || lastTwo === 45 || lastTwo === 65 || lastTwo === 75 || lastTwo === 85 || lastTwo === 95)) {
+              num = Number((num / 100).toFixed(2));
+            } else if (num >= 165) {
+              num = Number((num / 10).toFixed(2));
+            } else if ((cat === 'ajwa' || cat === 'pinkSalt' || cat === 'blackGarlic') && (num % 10 === 5)) {
+              num = Number((num / 10).toFixed(2));
+            }
+          } else if (num >= 15 && num < 100 && (num % 10 === 5)) {
+            if (cat === 'ajwa' && num >= 65) num = Number((num / 10).toFixed(2));
+            else if (cat === 'pinkSalt' && num >= 25) num = Number((num / 10).toFixed(2));
+            else if (cat === 'blackGarlic' && num >= 15) num = Number((num / 10).toFixed(2));
+          }
+        }
+
+        // Apply dark-mode slashed-zero fix ONLY if image is dark-mode monospace
+        if (window._isDarkMonospaceOcrImage) {
+          let str = num.toFixed(2);
+          if (str.endsWith('.65') || str.endsWith('.85')) {
+            num = Number(str.replace(/\.(65|85)$/, '.05'));
+          }
+          const intPart = Math.floor(num);
+          const decPart = Number((num - intPart).toFixed(2));
+          if (intPart >= 10 && (intPart % 10 === 8)) {
+            num = (intPart - 8) + decPart;
+          }
+        }
+
+        return Number(num.toFixed(2));
+      };
+
+      const _origParseErpRowV50 = parseErpProductSummaryRow;
+      parseErpProductSummaryRow = function(lineText) {
+        const raw = String(lineText || '').trim();
+        const lower = raw.toLowerCase();
+        if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || /^total\s*:/i.test(lower) || /product\s*name.*quantity\s*sold/i.test(lower)) {
+          return null;
+        }
+
+        const hasErpTableColumns = /\b[a4][0o]{1,5}\d{1,6}\b|ghorer\s*bazar|\b894\d{7,10}\b|[৳$]\s*\d/i.test(raw);
+        if (!hasErpTableColumns) {
+          let cat = null;
+          if (/black\s*seed\s*honey|bs\.?\s*h|kalojira/i.test(lower)) cat = 'bsHoney';
+          else if (/sundarban|sundorban|shunderban|sun\.?\s*h/i.test(lower)) cat = 'sunHoney';
+          else if (/gawa\s*ghee|\bghee\b|shosti\s*food/i.test(lower)) cat = 'gawaGhee';
+          else if (/pink\s*salt|himalayan|\bsalt\b/i.test(lower)) cat = 'pinkSalt';
+          else if (/black\s*garlic|\bgarlic\b/i.test(lower)) cat = 'blackGarlic';
+          else if (/ajwa|khejuri|dates/i.test(lower)) cat = 'ajwa';
+
+          if (cat) {
+            const finalKg = window.cleanAndExtractDirectSummaryWeight(raw, cat);
+            if (finalKg !== null && finalKg > 0) {
+              return {
+                cat,
+                unitKg: finalKg,
+                qty: 1,
+                totalKg: finalKg,
+                itemSummary: finalKg + 'kg'
+              };
+            }
+          }
+        }
+        return _origParseErpRowV50(lineText);
+      };
+    } catch (errV50) {
+      console.error('Non-fatal patch v50 warning:', errV50);
+    }
+
 window.addEventListener('load', init);
   </script>
 </body>
