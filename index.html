@@ -21905,6 +21905,723 @@ function renderChatHubView() {
       console.error('Non-fatal patch v51 warning:', errV51);
     }
 
+
+    // =========================================================================
+    // PATCH v52 — COMPLETE UPGRADE:
+    // 1. PORTAL (+5% WORKING TARGET) vs SHEETS / EXCEL-CSV (100% ACTUAL TARGET):
+    //    - Portal UI keeps +5% Working Target so agents aim higher without risk.
+    //    - All Sheet / Excel / CSV exports & Google Sheet sync payloads use the
+    //      exact Actual Target (baseTarget without +5%) for Target, Daily Target,
+    //      Sprint Target, Remaining, Achievement % and Grand Total Target!
+    // 2. SWAP MODAL AGENT PRE-SELECTION FIX & SAME-DAY SHIFT TIME SWAP (7 AM <-> 3 PM)
+    // 3. COMPLETE DARK MODE HIGH-CONTRAST FIX FOR ALL WHITE GRADIENT CARDS & PODIUMS
+    // =========================================================================
+    try {
+      // -----------------------------------------------------------------------
+      // PART 1: ACTUAL TARGET (NO +5%) IN ALL SHEETS / EXCEL-CSV EXPORTS & SYNC
+      // -----------------------------------------------------------------------
+      window._isExportingSheetWithActualTarget = false;
+
+      const _origCalcWorkingTargetV52 = calcWorkingTargetFromBase;
+      calcWorkingTargetFromBase = function(baseTargetVal, teamOrChannel) {
+        const base = Number(baseTargetVal) || 0;
+        if (window._isExportingSheetWithActualTarget) {
+          return Math.round(base);
+        }
+        return _origCalcWorkingTargetV52(baseTargetVal, teamOrChannel);
+      };
+
+      const _origDownloadPortalCsvFileV52 = downloadPortalCsvFile;
+      downloadPortalCsvFile = function(filename, headersArr, rowsArr) {
+        let cleanHeaders = Array.isArray(headersArr) ? [...headersArr] : [];
+        let cleanRows = Array.isArray(rowsArr) ? rowsArr.map(r => Array.isArray(r) ? [...r] : r) : [];
+
+        const baseColIdx = cleanHeaders.findIndex(h => /^Base Target/i.test(String(h || '').trim()));
+        const workColIdx = cleanHeaders.findIndex(h => /Working Target/i.test(String(h || '').trim()));
+        if (baseColIdx !== -1 && workColIdx !== -1 && workColIdx === baseColIdx + 1) {
+          cleanHeaders[baseColIdx] = 'Monthly Target (BDT)';
+          cleanHeaders.splice(workColIdx, 1);
+          cleanRows = cleanRows.map(row => {
+            if (!Array.isArray(row)) return row;
+            const copy = [...row];
+            if (copy.length > workColIdx) copy.splice(workColIdx, 1);
+            return copy;
+          });
+        }
+
+        cleanHeaders = cleanHeaders.map(h =>
+          String(h || '')
+            .replace(/Monthly Working Target \(\+5%\)/gi, 'Monthly Target (BDT)')
+            .replace(/Working Target \(\+5% BDT\)/gi, 'Monthly Target (BDT)')
+            .replace(/Working Target \(\+5%\)/gi, 'Monthly Target (BDT)')
+            .replace(/Monthly Working Target \(BDT\)/gi, 'Monthly Target (BDT)')
+            .replace(/\(\+5%\)/g, '')
+            .trim()
+        );
+
+        cleanRows = cleanRows.map(row => {
+          if (!Array.isArray(row)) return row;
+          return row.map(cell => {
+            if (typeof cell === 'string' && cell.includes('Working Target (+5%)')) {
+              return cell.replace(/Working Target \(\+5%\)/g, 'Actual Monthly Target');
+            }
+            return cell;
+          });
+        });
+
+        return _origDownloadPortalCsvFileV52(filename, cleanHeaders, cleanRows);
+      };
+
+      function wrapExportWithActualTarget(exportFn) {
+        return function() {
+          const prevFlag = window._isExportingSheetWithActualTarget;
+          window._isExportingSheetWithActualTarget = true;
+          try {
+            return exportFn.apply(this, arguments);
+          } finally {
+            window._isExportingSheetWithActualTarget = prevFlag;
+          }
+        };
+      }
+
+      if (typeof exportMonthlyPerformanceCsv === 'function') {
+        exportMonthlyPerformanceCsv = wrapExportWithActualTarget(exportMonthlyPerformanceCsv);
+      }
+      if (typeof exportDateWiseSummaryCsv === 'function') {
+        exportDateWiseSummaryCsv = wrapExportWithActualTarget(exportDateWiseSummaryCsv);
+      }
+      if (typeof exportSprintTargetCsv === 'function') {
+        exportSprintTargetCsv = wrapExportWithActualTarget(exportSprintTargetCsv);
+      }
+      if (typeof exportOverallFloorRankingCsv === 'function') {
+        exportOverallFloorRankingCsv = wrapExportWithActualTarget(exportOverallFloorRankingCsv);
+      }
+      if (typeof window.exportDailySalesLeaderboardCsv === 'function') {
+        window.exportDailySalesLeaderboardCsv = wrapExportWithActualTarget(window.exportDailySalesLeaderboardCsv);
+      }
+      if (typeof window.exportIncentiveTabCsv === 'function') {
+        window.exportIncentiveTabCsv = wrapExportWithActualTarget(window.exportIncentiveTabCsv);
+      }
+
+      const _origPostToSheetV52 = postToSheet;
+      postToSheet = async function(action, payload) {
+        const enhancedPayload = (payload && typeof payload === 'object') ? { ...payload } : {};
+        enhancedPayload.useActualTargetInSheet = true;
+        enhancedPayload.targetBufferMultiplier = 1.0;
+        if (enhancedPayload.baseTarget !== undefined) {
+          enhancedPayload.actualTarget = Number(enhancedPayload.baseTarget) || 0;
+          enhancedPayload.workingTarget = Number(enhancedPayload.baseTarget) || 0;
+        }
+        return _origPostToSheetV52(action, enhancedPayload);
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 2: HIGH-CONTRAST DARK MODE FIX FOR ALL WHITE GRADIENT CARDS & PODIUMS
+      // -----------------------------------------------------------------------
+      const darkFixStyleV52 = document.createElement('style');
+      darkFixStyleV52.id = 'gb-dark-mode-complete-fix-v52';
+      darkFixStyleV52.innerHTML = `
+        html.gb-dark-mode .from-white,
+        html.gb-dark-mode .via-white,
+        html.gb-dark-mode .to-white,
+        html.gb-dark-mode [class*="from-slate-50"],
+        html.gb-dark-mode [class*="from-blue-50"],
+        html.gb-dark-mode [class*="from-emerald-50"],
+        html.gb-dark-mode [class*="from-amber-50"],
+        html.gb-dark-mode [class*="from-orange-50"],
+        html.gb-dark-mode [class*="from-purple-50"],
+        html.gb-dark-mode [class*="from-indigo-50"],
+        html.gb-dark-mode [class*="from-rose-50"],
+        html.gb-dark-mode [class*="from-teal-50"],
+        html.gb-dark-mode [class*="from-cyan-50"],
+        html.gb-dark-mode [class*="via-slate-100"],
+        html.gb-dark-mode [class*="via-orange-50"],
+        html.gb-dark-mode [class*="via-indigo-50"],
+        html.gb-dark-mode [class*="to-amber-50"],
+        html.gb-dark-mode [class*="to-orange-50"],
+        html.gb-dark-mode [class*="to-indigo-50"],
+        html.gb-dark-mode [class*="to-blue-50"],
+        html.gb-dark-mode [class*="to-teal-50"],
+        html.gb-dark-mode [class*="to-yellow-50"],
+        html.gb-dark-mode [class*="to-slate-100"] {
+          background-image: none !important;
+          background-color: #1e293b !important;
+          border-color: #334155 !important;
+          color: #f8fafc !important;
+        }
+        html.gb-dark-mode [class*="bg-white/"],
+        html.gb-dark-mode [class*="bg-slate-50/"],
+        html.gb-dark-mode [class*="bg-blue-50/"],
+        html.gb-dark-mode [class*="bg-emerald-50/"],
+        html.gb-dark-mode [class*="bg-amber-50/"],
+        html.gb-dark-mode [class*="bg-orange-50/"],
+        html.gb-dark-mode [class*="bg-purple-50/"],
+        html.gb-dark-mode [class*="bg-indigo-50/"],
+        html.gb-dark-mode [class*="bg-rose-50/"],
+        html.gb-dark-mode [class*="bg-teal-50/"],
+        html.gb-dark-mode [class*="bg-cyan-50/"],
+        html.gb-dark-mode .bg-blue-50,
+        html.gb-dark-mode .bg-emerald-50,
+        html.gb-dark-mode .bg-amber-50,
+        html.gb-dark-mode .bg-orange-50,
+        html.gb-dark-mode .bg-purple-50,
+        html.gb-dark-mode .bg-indigo-50,
+        html.gb-dark-mode .bg-rose-50,
+        html.gb-dark-mode .bg-teal-50,
+        html.gb-dark-mode .bg-cyan-50,
+        html.gb-dark-mode .bg-red-50,
+        html.gb-dark-mode .bg-blue-100,
+        html.gb-dark-mode .bg-emerald-100,
+        html.gb-dark-mode .bg-amber-100,
+        html.gb-dark-mode .bg-orange-100,
+        html.gb-dark-mode .bg-purple-100,
+        html.gb-dark-mode .bg-indigo-100,
+        html.gb-dark-mode .bg-rose-100,
+        html.gb-dark-mode .bg-teal-100,
+        html.gb-dark-mode .bg-cyan-100 {
+          background-color: #0f172a !important;
+          border-color: #334155 !important;
+          color: #f1f5f9 !important;
+        }
+        html.gb-dark-mode .text-blue-950,
+        html.gb-dark-mode .text-emerald-950,
+        html.gb-dark-mode .text-amber-950,
+        html.gb-dark-mode .text-indigo-950,
+        html.gb-dark-mode .text-slate-950 {
+          color: #f8fafc !important;
+        }
+        html.gb-dark-mode .text-blue-900,
+        html.gb-dark-mode .text-blue-800,
+        html.gb-dark-mode .text-blue-700,
+        html.gb-dark-mode .text-blue-600 {
+          color: #60a5fa !important;
+        }
+        html.gb-dark-mode .text-emerald-900,
+        html.gb-dark-mode .text-emerald-800,
+        html.gb-dark-mode .text-emerald-700,
+        html.gb-dark-mode .text-emerald-600 {
+          color: #34d399 !important;
+        }
+        html.gb-dark-mode .text-amber-900,
+        html.gb-dark-mode .text-amber-800,
+        html.gb-dark-mode .text-amber-700,
+        html.gb-dark-mode .text-amber-600,
+        html.gb-dark-mode .text-orange-900,
+        html.gb-dark-mode .text-orange-800,
+        html.gb-dark-mode .text-orange-700,
+        html.gb-dark-mode .text-orange-600 {
+          color: #fbbf24 !important;
+        }
+        html.gb-dark-mode .text-purple-900,
+        html.gb-dark-mode .text-purple-800,
+        html.gb-dark-mode .text-purple-700,
+        html.gb-dark-mode .text-indigo-900,
+        html.gb-dark-mode .text-indigo-800,
+        html.gb-dark-mode .text-indigo-700 {
+          color: #c084fc !important;
+        }
+        html.gb-dark-mode .text-rose-900,
+        html.gb-dark-mode .text-rose-800,
+        html.gb-dark-mode .text-rose-700,
+        html.gb-dark-mode .text-red-800,
+        html.gb-dark-mode .text-red-700,
+        html.gb-dark-mode .text-red-600 {
+          color: #fb7185 !important;
+        }
+        html.gb-dark-mode .text-teal-900,
+        html.gb-dark-mode .text-teal-800,
+        html.gb-dark-mode .text-teal-700,
+        html.gb-dark-mode .text-cyan-900,
+        html.gb-dark-mode .text-cyan-800,
+        html.gb-dark-mode .text-cyan-700 {
+          color: #2dd4bf !important;
+        }
+      `;
+      document.head.appendChild(darkFixStyleV52);
+
+      // -----------------------------------------------------------------------
+      // PART 3: SWAP MODAL PRE-SELECTION FIX & SAME-DAY SHIFT TIME SWAP (7 AM <-> 3 PM)
+      // -----------------------------------------------------------------------
+      window.getSameDayShiftSwapsStoreForMonth = function(mKey) {
+        const mk = mKey || selectedMonthKey;
+        const configs = getStored('monthly_configs', {});
+        const storeKey = `SHIFT_TIME_SWAPS_${mk}`;
+        return (configs[storeKey] && typeof configs[storeKey] === 'object') ? configs[storeKey] : {};
+      };
+
+      window.onLeaveModalAgentOrDateChangeV52 = function() {
+        const agId = document.getElementById('leaveModalAgentSelect')?.value || pendingLeaveModalContext?.userId || currentUser?.id;
+        const rawDate = document.getElementById('leaveModalDateInput')?.value;
+        const dStr = inputValToDateStr(rawDate);
+        const origShift = (window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(agId, dStr)) || '7:00 AM';
+
+        const pNewSel = document.getElementById('leaveModalPrimaryNewShift');
+        const partNewSel = document.getElementById('leaveModalPartnerNewShift');
+        if (pNewSel && partNewSel) {
+          if (String(origShift).includes('7:00')) {
+            pNewSel.value = '3:00 PM';
+            partNewSel.value = '7:00 AM';
+          } else if (String(origShift).includes('3:00')) {
+            pNewSel.value = '7:00 AM';
+            partNewSel.value = '3:00 PM';
+          }
+        }
+      };
+
+      window.onLeaveModalSwapPartnerChangeV52 = function() {
+        const partnerId = document.getElementById('leaveModalSwapPartnerId')?.value;
+        const rawDate = document.getElementById('leaveModalDateInput')?.value;
+        const dStr = inputValToDateStr(rawDate);
+        if (!partnerId) return;
+        const partnerShift = (window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(partnerId, dStr)) || '';
+        const pNewSel = document.getElementById('leaveModalPrimaryNewShift');
+        if (partnerShift && partnerShift !== 'DO' && pNewSel) {
+          pNewSel.value = partnerShift;
+        }
+      };
+
+      window.onLeaveModalSwapModeChange = function() {
+        const modeVal = document.getElementById('leaveModalSwapMode')?.value || 'SAME_DAY_SHIFT';
+        const mateWrap = document.getElementById('leaveModalSwapPartnerWrap');
+        const sameDayFields = document.getElementById('leaveModalSameDayShiftFields');
+        const doDateFields = document.getElementById('leaveModalDoDateFields');
+        const helpBox = document.getElementById('leaveModalSwapExplainText');
+
+        if (modeVal === 'SAME_DAY_SHIFT') {
+          if (mateWrap) mateWrap.classList.remove('hidden');
+          if (sameDayFields) sameDayFields.classList.remove('hidden');
+          if (doDateFields) doDateFields.classList.add('hidden');
+          if (helpBox) {
+            helpBox.innerHTML = `<i class="fa-solid fa-bolt text-amber-500 mr-1"></i><strong>Same-Day Shift Swap:</strong> Both agents swap their shift times on this date (e.g., Abdullah Mahmud moves from <strong>7:00 AM → 3:00 PM</strong>, and Ranju Ahmed moves from <strong>3:00 PM → 7:00 AM</strong>). The 3:00 PM agent will immediately disappear from afternoon Missing Reports!`;
+          }
+        } else if (modeVal === 'TEAMMATE') {
+          if (mateWrap) mateWrap.classList.remove('hidden');
+          if (sameDayFields) sameDayFields.classList.add('hidden');
+          if (doDateFields) doDateFields.classList.remove('hidden');
+          if (helpBox) {
+            helpBox.innerHTML = `<i class="fa-solid fa-bolt text-amber-500 mr-1"></i><strong>Teammate DO Swap:</strong> Excuses the selected Off Date from Missing Reports and approves the Covered DO Date as an active Swapped Duty.`;
+          }
+        } else {
+          if (mateWrap) mateWrap.classList.add('hidden');
+          if (sameDayFields) sameDayFields.classList.add('hidden');
+          if (doDateFields) doDateFields.classList.remove('hidden');
+          if (helpBox) {
+            helpBox.innerHTML = `<i class="fa-solid fa-bolt text-amber-500 mr-1"></i><strong>Self DO Swap:</strong> Agent takes off on the Excused Date and works on their own Roster DO Date.`;
+          }
+        }
+      };
+
+      renderMarkLeaveModal = function() {
+        if (!currentUser) return '';
+        const ctx = pendingLeaveModalContext || { userId: currentUser.id, userName: currentUser.name, team: currentUser.team, date: getTodayFormatted() };
+        const allAgents = getEditableSalesAgentsForActor(selectedMonthKey);
+        const canManageAll = hasFeatureAccess(currentUser, 'feat_manage_all_sales');
+
+        return `
+          <div id="markLeaveModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+              <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-base shadow-xs">
+                    <i class="fa-solid fa-calendar-minus"></i>
+                  </div>
+                  <div>
+                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-700">Leave / Absent / Duty Swap</span>
+                    <h3 class="text-base font-black text-slate-900 mt-0.5">Mark Leave, Absent or Duty / Shift Swap</h3>
+                  </div>
+                </div>
+                <button type="button" onclick="closeModal('markLeaveModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+
+              <form onsubmit="handleSaveLeaveRecord(event)" class="space-y-3.5">
+                ${canManageAll ? `
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">1. Select Agent</label>
+                  <select id="leaveModalAgentSelect" onchange="onLeaveModalAgentOrDateChangeV52()" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                    ${allAgents.map(a => `<option value="${a.id}" ${String(a.id) === String(ctx.userId) ? 'selected' : ''}>${a.name} (${a.id} • ${a.team})</option>`).join('')}
+                  </select>
+                </div>
+                ` : `
+                <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
+                  <span>Agent: <strong class="text-slate-900">${ctx.userName}</strong></span>
+                  <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-mono font-black">ID: ${ctx.userId}</span>
+                </div>
+                `}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Date</label>
+                    <input type="date" id="leaveModalDateInput" required value="${dateToInputVal(ctx.date)}" onchange="onLeaveModalAgentOrDateChangeV52()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Leave / Swap Type</label>
+                    <select id="leaveModalTypeSelect" onchange="onLeaveModalTypeChange()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      ${LEAVE_STATUS_TYPES.map(lt => `<option value="${lt.key}">${lt.label}</option>`).join('')}
+                    </select>
+                  </div>
+                </div>
+
+                <!-- SMART DUTY & SHIFT SWAP SETUP BOX -->
+                <div id="leaveModalSmartSwapBox" class="hidden p-3.5 rounded-2xl bg-teal-50/80 border-2 border-teal-200 space-y-3">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-black uppercase text-teal-900">
+                      <i class="fa-solid fa-arrows-rotate text-teal-600 mr-1"></i>Smart Duty & Shift Swap Setup
+                    </span>
+                    <span class="px-2 py-0.5 rounded bg-teal-600 text-white text-[9px] font-black uppercase">Auto-Syncs Missing & DO</span>
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Swap Mode</label>
+                    <select id="leaveModalSwapMode" onchange="onLeaveModalSwapModeChange()" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      <option value="SAME_DAY_SHIFT">🔄 Same-Day Shift Time Swap (e.g. 7:00 AM ↔ 3:00 PM Today)</option>
+                      <option value="TEAMMATE">👥 Day-Off (DO) Swap With Teammate (Teammate Covers / Swaps DO)</option>
+                      <option value="SELF">📅 Self Day-Off (DO) Swap (Worked Own Roster DO, Taking Off Another Day)</option>
+                    </select>
+                  </div>
+
+                  <div id="leaveModalSwapPartnerWrap">
+                    <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Swap Partner (Teammate)</label>
+                    <select id="leaveModalSwapPartnerId" onchange="onLeaveModalSwapPartnerChangeV52()" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      <option value="">-- Select Swap Partner Teammate --</option>
+                      ${allAgents.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${a.team})</option>`).join('')}
+                    </select>
+                  </div>
+
+                  <!-- Same-Day Shift Time Swap Fields -->
+                  <div id="leaveModalSameDayShiftFields" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Agent's New Shift Today</label>
+                      <select id="leaveModalPrimaryNewShift" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                        <option value="3:00 PM">3:00 PM Shift (3 PM – 11 PM)</option>
+                        <option value="7:00 AM">7:00 AM Shift (7 AM – 3 PM)</option>
+                        <option value="9:00 AM">9:00 AM Shift (9 AM – 5 PM)</option>
+                        <option value="10:00 AM">10:00 AM Shift (10 AM – 6 PM)</option>
+                        <option value="Night">Night (11:00 PM) Shift</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Partner's New Shift Today</label>
+                      <select id="leaveModalPartnerNewShift" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                        <option value="7:00 AM">7:00 AM Shift (7 AM – 3 PM)</option>
+                        <option value="3:00 PM">3:00 PM Shift (3 PM – 11 PM)</option>
+                        <option value="9:00 AM">9:00 AM Shift (9 AM – 5 PM)</option>
+                        <option value="10:00 AM">10:00 AM Shift (10 AM – 6 PM)</option>
+                        <option value="Night">Night (11:00 PM) Shift</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- DO Date Swap Fields -->
+                  <div id="leaveModalDoDateFields" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Worked / Covered DO Date</label>
+                      <input type="date" id="leaveModalSwapCoveredDate" value="${dateToInputVal(ctx.date)}" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Covered Shift</label>
+                      <select id="leaveModalSwapShift" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                        <option value="3:00 PM">3:00 PM Shift</option>
+                        <option value="7:00 AM">7:00 AM Shift</option>
+                        <option value="9:00 AM">9:00 AM Shift</option>
+                        <option value="10:00 AM">10:00 AM Shift</option>
+                        <option value="Night">Night (11:00 PM) Shift</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <p id="leaveModalSwapExplainText" class="text-[10px] font-bold text-teal-800 leading-relaxed"></p>
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Reason / Note (Optional)</label>
+                  <input type="text" id="leaveModalReasonInput" placeholder="e.g. Swapped 7 AM & 3 PM shift with Ranju / Approved by TL..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onclick="closeModal('markLeaveModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
+                  <button type="submit" class="px-5 py-2.5 text-xs font-black text-white bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-700 hover:to-orange-700 rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-check-double"></i> Save Status & Sync
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      };
+
+      openMarkLeaveModal = function(userId, dateStr, existingLeaveType = 'Casual Leave', existingReason = '') {
+        if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const targetAg = allUsers.find(u => String(u.id).trim() === String(userId).trim()) || currentUser;
+
+        if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales') && String(targetAg.id) !== String(currentUser.id)) {
+          return;
+        }
+
+        pendingLeaveModalContext = {
+          userId: String(targetAg.id),
+          userName: targetAg.name,
+          team: targetAg.team,
+          date: dateStr || getTodayFormatted()
+        };
+
+        renderAppLayout();
+
+        const agSel = document.getElementById('leaveModalAgentSelect');
+        if (agSel) {
+          const uidStr = String(targetAg.id).trim();
+          if (!Array.from(agSel.options).some(o => String(o.value).trim() === uidStr)) {
+            const opt = document.createElement('option');
+            opt.value = uidStr;
+            opt.textContent = `${targetAg.name} (${targetAg.id} • ${targetAg.team})`;
+            agSel.prepend(opt);
+          }
+          agSel.value = uidStr;
+        }
+
+        const typeEl = document.getElementById('leaveModalTypeSelect');
+        const reasonEl = document.getElementById('leaveModalReasonInput');
+        const dateEl = document.getElementById('leaveModalDateInput');
+        if (typeEl) typeEl.value = existingLeaveType || 'Casual Leave';
+        if (reasonEl) reasonEl.value = existingReason && existingReason !== '-' ? existingReason : '';
+        if (dateEl) dateEl.value = dateToInputVal(pendingLeaveModalContext.date);
+
+        window.onLeaveModalAgentOrDateChangeV52();
+        window.onLeaveModalTypeChange();
+        window.onLeaveModalSwapModeChange();
+        openModal('markLeaveModal');
+      };
+
+      window.openQuickDutySwapModal = function(userId, dateStr, isFromDoTab = false) {
+        openMarkLeaveModal(userId, dateStr, 'Extra Day Off', '');
+        const modeEl = document.getElementById('leaveModalSwapMode');
+        if (modeEl) {
+          modeEl.value = isFromDoTab ? 'TEAMMATE' : 'SAME_DAY_SHIFT';
+        }
+        const covDateEl = document.getElementById('leaveModalSwapCoveredDate');
+        if (covDateEl && dateStr) covDateEl.value = dateToInputVal(dateStr);
+        window.onLeaveModalAgentOrDateChangeV52();
+        window.onLeaveModalTypeChange();
+        window.onLeaveModalSwapModeChange();
+      };
+
+      const _origHandleSaveLeaveRecordV51 = handleSaveLeaveRecord;
+      handleSaveLeaveRecord = function(e) {
+        e.preventDefault();
+        if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+        const leaveType = document.getElementById('leaveModalTypeSelect')?.value || 'Casual Leave';
+        const swapMode = document.getElementById('leaveModalSwapMode')?.value || 'SAME_DAY_SHIFT';
+
+        if (leaveType === 'Extra Day Off' && swapMode === 'SAME_DAY_SHIFT') {
+          const canManageAll = hasFeatureAccess(currentUser, 'feat_manage_all_sales');
+          const selectedAgId = canManageAll
+            ? (document.getElementById('leaveModalAgentSelect')?.value || pendingLeaveModalContext?.userId || currentUser.id)
+            : currentUser.id;
+          const allUsers = getUsersForMonth(selectedMonthKey, true);
+          const primaryAg = allUsers.find(u => String(u.id) === String(selectedAgId)) || currentUser;
+
+          const dateStr = inputValToDateStr(document.getElementById('leaveModalDateInput')?.value);
+          const mKey = dateStr.substring(3) || selectedMonthKey;
+          const partnerId = document.getElementById('leaveModalSwapPartnerId')?.value || '';
+          const partnerAg = partnerId ? allUsers.find(u => String(u.id) === String(partnerId)) : null;
+
+          const primaryOrigShift = (window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(primaryAg.id, dateStr)) || '7:00 AM';
+          const partnerOrigShift = (partnerAg && window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(partnerAg.id, dateStr)) || '3:00 PM';
+
+          const primaryNewShift = document.getElementById('leaveModalPrimaryNewShift')?.value || '3:00 PM';
+          const partnerNewShift = document.getElementById('leaveModalPartnerNewShift')?.value || primaryOrigShift;
+          const extraNote = (document.getElementById('leaveModalReasonInput')?.value || '').trim();
+
+          const configs = { ...getStored('monthly_configs', {}) };
+          const shiftSwapKey = `SHIFT_TIME_SWAPS_${mKey}`;
+          if (!configs[shiftSwapKey] || typeof configs[shiftSwapKey] !== 'object') configs[shiftSwapKey] = {};
+
+          const pNote = partnerAg
+            ? `🔄 Same-Day Shift Swap (${primaryOrigShift} → ${primaryNewShift}) with ${partnerAg.name} (${partnerOrigShift} → ${partnerNewShift})${extraNote ? ' — ' + extraNote : ''}`
+            : `🔄 Same-Day Shift Change (${primaryOrigShift} → ${primaryNewShift})${extraNote ? ' — ' + extraNote : ''}`;
+
+          configs[shiftSwapKey][`${primaryAg.id}_${dateStr}`] = {
+            userId: String(primaryAg.id),
+            userName: primaryAg.name,
+            team: primaryAg.team,
+            date: dateStr,
+            origShift: primaryOrigShift,
+            newShift: primaryNewShift,
+            partnerId: partnerAg ? String(partnerAg.id) : '',
+            partnerName: partnerAg ? partnerAg.name : '',
+            note: pNote,
+            markedBy: currentUser.name,
+            updatedTs: Date.now()
+          };
+
+          if (partnerAg && String(partnerAg.id) !== String(primaryAg.id)) {
+            configs[shiftSwapKey][`${partnerAg.id}_${dateStr}`] = {
+              userId: String(partnerAg.id),
+              userName: partnerAg.name,
+              team: partnerAg.team,
+              date: dateStr,
+              origShift: partnerOrigShift,
+              newShift: partnerNewShift,
+              partnerId: String(primaryAg.id),
+              partnerName: primaryAg.name,
+              note: `🔄 Same-Day Shift Swap (${partnerOrigShift} → ${partnerNewShift}) with ${primaryAg.name} (${primaryOrigShift} → ${primaryNewShift})`,
+              markedBy: currentUser.name,
+              updatedTs: Date.now()
+            };
+          }
+
+          setStored('monthly_configs', configs);
+          markLocalUserOrConfigMutatedNow();
+          postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: shiftSwapKey,
+            configJson: JSON.stringify(configs[shiftSwapKey])
+          }).catch(() => {});
+
+          recordActivityLog('Recorded Same-Day Shift Swap', `${primaryAg.name} (${primaryAg.id}) on ${dateStr}: ${pNote}`, true);
+          closeModal('markLeaveModal');
+          renderAppLayout();
+          showPortalToast(
+            '🔄 Same-Day Shift Swap Active!',
+            `${primaryAg.name} is now on ${primaryNewShift} shift${partnerAg ? ` & ${partnerAg.name} is on ${partnerNewShift} shift` : ''} for ${cleanDisplayDate(dateStr)}.`,
+            'success'
+          );
+          return;
+        }
+
+        return _origHandleSaveLeaveRecordV51(e);
+      };
+
+      const _origRemoveLeaveV52 = removeLeaveRecordEntry;
+      removeLeaveRecordEntry = function(mKey, userId, dateStr) {
+        const mk = mKey || selectedMonthKey;
+        const mapKey = `${String(userId).trim()}_${String(dateStr).trim()}`;
+        const configs = { ...getStored('monthly_configs', {}) };
+        const shiftSwapKey = `SHIFT_TIME_SWAPS_${mk}`;
+        if (configs[shiftSwapKey] && configs[shiftSwapKey][mapKey]) {
+          const sw = configs[shiftSwapKey][mapKey];
+          configs[shiftSwapKey][mapKey] = { isRemoved: true, updatedTs: Date.now() };
+          if (sw && sw.partnerId && configs[shiftSwapKey][`${sw.partnerId}_${dateStr}`]) {
+            configs[shiftSwapKey][`${sw.partnerId}_${dateStr}`] = { isRemoved: true, updatedTs: Date.now() };
+          }
+          setStored('monthly_configs', configs);
+          postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: shiftSwapKey, configJson: JSON.stringify(configs[shiftSwapKey]) }).catch(() => {});
+        }
+        return _origRemoveLeaveV52(mKey, userId, dateStr);
+      };
+
+      const _origComputeMissingV52 = computeMissingAndLeaveDataForMonth;
+      computeMissingAndLeaveDataForMonth = function(mKey, teamScopeFilter = 'ALL', agentIdFilter = 'ALL') {
+        const mk = mKey || selectedMonthKey;
+        const baseRes = _origComputeMissingV52(mk, teamScopeFilter, agentIdFilter);
+        const shiftSwaps = window.getSameDayShiftSwapsStoreForMonth(mk);
+        const activeShiftSwaps = Object.values(shiftSwaps).filter(s => s && !s.isRemoved && s.userId && s.date);
+        if (activeShiftSwaps.length === 0) return baseRes;
+
+        const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+          .filter(s => String(s.date || '').endsWith(mk) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+        const submittedKeySet = new Set(monthSales.map(s => `${String(s.userId).trim()}_${String(s.date).trim()}`));
+        const allUsersInCh = getUsersForMonth(mk, activeChannel === 'ALL_CHANNELS');
+        const dayShortNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        let updatedMissing = baseRes.missingItems.filter(item => {
+          const sw = shiftSwaps[`${item.userId}_${item.date}`];
+          if (!sw || sw.isRemoved) return true;
+          const dParts = item.date.split('/');
+          const dNum = parseInt(dParts[0], 10) || 1;
+          const mNum = parseInt(dParts[1], 10) || 11;
+          const yNum = parseInt(dParts[2], 10) || 2026;
+          if (!isRosterShiftDueForReportCheck(dNum, mNum, yNum, sw.newShift)) {
+            return false;
+          }
+          item.shift = `${sw.newShift} (🔄 Swapped from ${sw.origShift}${sw.partnerName ? ' w/ ' + sw.partnerName : ''})`;
+          return true;
+        });
+
+        const extraLeaves = [];
+        activeShiftSwaps.forEach(sw => {
+          const uid = String(sw.userId).trim();
+          const dStr = String(sw.date).trim();
+          const agObj = allUsersInCh.find(u => String(u.id) === uid);
+          if (!agObj) return;
+          if (teamScopeFilter && teamScopeFilter !== 'ALL' && normalizeTeamNameAlias(agObj.team) !== normalizeTeamNameAlias(teamScopeFilter)) return;
+          if (agentIdFilter && agentIdFilter !== 'ALL' && uid !== String(agentIdFilter)) return;
+          if (currentUser && currentUser.role === 'agent' && !canViewAll(currentUser) && uid !== String(currentUser.id)) return;
+
+          const dParts = dStr.split('/');
+          const dNum = parseInt(dParts[0], 10) || 1;
+          const mNum = parseInt(dParts[1], 10) || 11;
+          const yNum = parseInt(dParts[2], 10) || 2026;
+          const dObj = new Date(yNum, mNum - 1, dNum);
+          const dayName = dayShortNames[dObj.getDay()] || '';
+
+          if (!baseRes.leaveItems.some(lv => String(lv.userId) === uid && lv.date === dStr)) {
+            extraLeaves.push({
+              userId: uid,
+              userName: agObj.name,
+              team: agObj.team,
+              grade: agObj.grade || 'A',
+              date: dStr,
+              dayName,
+              shift: `${sw.origShift} → ${sw.newShift}`,
+              leaveType: 'Extra Day Off',
+              reason: sw.note || `🔄 Same-Day Shift Swap (${sw.origShift} → ${sw.newShift})`,
+              markedBy: sw.markedBy || 'Admin',
+              markedAt: dStr
+            });
+          }
+
+          if (!submittedKeySet.has(`${uid}_${dStr}`) && isRosterShiftDueForReportCheck(dNum, mNum, yNum, sw.newShift)) {
+            if (!updatedMissing.some(m => String(m.userId) === uid && m.date === dStr)) {
+              updatedMissing.unshift({
+                userId: uid,
+                userName: agObj.name,
+                team: agObj.team,
+                grade: agObj.grade || 'A',
+                date: dStr,
+                dayName,
+                shift: `${sw.newShift} (🔄 Swapped from ${sw.origShift}${sw.partnerName ? ' w/ ' + sw.partnerName : ''})`
+              });
+            }
+          }
+        });
+
+        return {
+          ...baseRes,
+          missingItems: updatedMissing,
+          leaveItems: [...extraLeaves, ...baseRes.leaveItems]
+        };
+      };
+
+      const _origHandleCloudDataV52 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
+          const localCfg = getStored('monthly_configs', {});
+          Object.keys({ ...localCfg, ...res.monthlyConfigs }).forEach(cfgK => {
+            if (cfgK.startsWith('SHIFT_TIME_SWAPS_')) {
+              const locSw = (localCfg[cfgK] && typeof localCfg[cfgK] === 'object') ? localCfg[cfgK] : {};
+              const cldSw = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
+              const combinedSw = { ...cldSw };
+              Object.keys(locSw).forEach(lk => {
+                const lItem = locSw[lk];
+                const cItem = cldSw[lk];
+                if (!cItem || Number(lItem.updatedTs || 0) >= Number(cItem.updatedTs || 0)) {
+                  if (lItem && lItem.isRemoved) delete combinedSw[lk];
+                  else combinedSw[lk] = lItem;
+                }
+              });
+              Object.keys(combinedSw).forEach(lk => {
+                if (combinedSw[lk] && combinedSw[lk].isRemoved) delete combinedSw[lk];
+              });
+              res.monthlyConfigs[cfgK] = combinedSw;
+            }
+          });
+        }
+        return _origHandleCloudDataV52(res);
+      };
+    } catch (errV52) {
+      console.error('Non-fatal patch v52 warning:', errV52);
+    }
+
 window.addEventListener('load', init);
   </script>
 </body>
