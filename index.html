@@ -7563,10 +7563,35 @@
       const mySprintRank = mySprintRankIdx !== -1 ? mySprintRankIdx + 1 : null;
       const overallCurPct = sumCurGoal > 0 ? ((sumCurSales / sumCurGoal) * 100).toFixed(1) : '0.0';
 
-      const slotCards = [
-        { key: 'S1', title: 'Slot 1 • Sprint 1 (Days 1–10)', share: '40% Goal', goal: sumS1Goal, achieved: sumS1, pct: sumS1Goal > 0 ? Math.round((sumS1 / sumS1Goal) * 100) : 0, isAutoNow: autoPhase === 'S1' },
-        { key: 'S2', title: 'Slot 2 • Sprint 2 (Days 11–20)', share: '35% Goal', goal: sumS2Goal, achieved: sumS2, pct: sumS2Goal > 0 ? Math.round((sumS2 / sumS2Goal) * 100) : 0, isAutoNow: autoPhase === 'S2' },
-        { key: 'S3', title: 'Slot 3 • Sprint 3 (Days 21–31)', share: '35% Goal', goal: sumS3Goal, achieved: sumS3, pct: sumS3Goal > 0 ? Math.round((sumS3 / sumS3Goal) * 100) : 0, isAutoNow: autoPhase === 'S3' }
+      const myOwnSprintRow = (!isAdminOrSup && u)
+        ? (rankedSprintAgents.find(a => String(a.id) === String(u.id)) || (() => {
+            const meObj = allUsers.find(x => String(x.id) === String(u.id)) || u;
+            const myWork = calcWorkingTargetFromBase(Number(meObj.baseTarget) || 0, meObj.team);
+            const g1 = Math.round(myWork * 0.40), g2 = Math.round(myWork * 0.35), g3 = Math.round(myWork * 0.35);
+            let a1 = 0, a2 = 0, a3 = 0;
+            monthSales.filter(s => String(s.userId) === String(u.id)).forEach(s => {
+              const d = parseInt(String(s.date).split('/')[0], 10) || 0;
+              const amt = Number(s.amount) || 0;
+              if (d <= 10) a1 += amt;
+              else if (d <= 20) a2 += amt;
+              else a3 += amt;
+            });
+            return {
+              s1Goal: g1, s1Sales: a1, s1Pct: g1 > 0 ? Math.round((a1 / g1) * 100) : 0,
+              s2Goal: g2, s2Sales: a2, s2Pct: g2 > 0 ? Math.round((a2 / g2) * 100) : 0,
+              s3Goal: g3, s3Sales: a3, s3Pct: g3 > 0 ? Math.round((a3 / g3) * 100) : 0
+            };
+          })())
+        : null;
+
+      const slotCards = myOwnSprintRow ? [
+        { key: 'S1', title: 'Slot 1 • My Sprint 1 (Days 1–10)', share: '👤 My 40% Goal', goal: myOwnSprintRow.s1Goal, achieved: myOwnSprintRow.s1Sales, pct: myOwnSprintRow.s1Pct, isAutoNow: autoPhase === 'S1' },
+        { key: 'S2', title: 'Slot 2 • My Sprint 2 (Days 11–20)', share: '👤 My 35% Goal', goal: myOwnSprintRow.s2Goal, achieved: myOwnSprintRow.s2Sales, pct: myOwnSprintRow.s2Pct, isAutoNow: autoPhase === 'S2' },
+        { key: 'S3', title: 'Slot 3 • My Sprint 3 (Days 21–31)', share: '👤 My 35% Goal', goal: myOwnSprintRow.s3Goal, achieved: myOwnSprintRow.s3Sales, pct: myOwnSprintRow.s3Pct, isAutoNow: autoPhase === 'S3' }
+      ] : [
+        { key: 'S1', title: 'Slot 1 • Sprint 1 (Days 1–10)', share: '👥 Team 40% Goal', goal: sumS1Goal, achieved: sumS1, pct: sumS1Goal > 0 ? Math.round((sumS1 / sumS1Goal) * 100) : 0, isAutoNow: autoPhase === 'S1' },
+        { key: 'S2', title: 'Slot 2 • Sprint 2 (Days 11–20)', share: '👥 Team 35% Goal', goal: sumS2Goal, achieved: sumS2, pct: sumS2Goal > 0 ? Math.round((sumS2 / sumS2Goal) * 100) : 0, isAutoNow: autoPhase === 'S2' },
+        { key: 'S3', title: 'Slot 3 • Sprint 3 (Days 21–31)', share: '👥 Team 35% Goal', goal: sumS3Goal, achieved: sumS3, pct: sumS3Goal > 0 ? Math.round((sumS3 / sumS3Goal) * 100) : 0, isAutoNow: autoPhase === 'S3' }
       ];
 
       return `
@@ -20981,6 +21006,903 @@ function renderChatHubView() {
       };
     } catch (errV50) {
       console.error('Non-fatal patch v50 warning:', errV50);
+    }
+
+
+    // =========================================================================
+    // PATCH v51 — 4 MAJOR UPGRADES:
+    // 1. Agent Personal Sprint 1/2/3 Top Cards (Shows Agent's own 110%, 45%, etc., while TLs/Supervisors see Team/Floor totals)
+    // 2. Full Dark Theme / Third-Party Dark Mode Software Optimization + 1-Click Dark Mode Toggle
+    // 3. Clear Channel Grade Target Scale (🔵 Facebook vs 🟢 WhatsApp) in Create/Edit User ID & Floating Agent Setup
+    // 4. Smart Duty / Day-Off Swap Engine in Missing & Leave Tab (Reflects across Missing Reports, Day Off Submissions & Leave Log)
+    // =========================================================================
+    try {
+      // -----------------------------------------------------------------------
+      // 1. DARK THEME & THIRD-PARTY DARK MODE SOFTWARE OPTIMIZATION
+      // -----------------------------------------------------------------------
+      window.portalDarkMode = localStorage.getItem('gb_portal_dark_mode') === '1';
+
+      window.applyPortalDarkModeState = function() {
+        if (window.portalDarkMode) {
+          document.documentElement.classList.add('gb-dark-mode');
+        } else {
+          document.documentElement.classList.remove('gb-dark-mode');
+        }
+      };
+
+      window.togglePortalDarkMode = function() {
+        window.portalDarkMode = !window.portalDarkMode;
+        localStorage.setItem('gb_portal_dark_mode', window.portalDarkMode ? '1' : '0');
+        window.applyPortalDarkModeState();
+        renderAppLayout();
+        showPortalToast(
+          window.portalDarkMode ? '🌙 Dark Theme Activated' : '☀️ Light Theme Activated',
+          window.portalDarkMode ? 'All cards, tables, buttons & dropdowns optimized for dark viewing.' : 'Switched back to standard light theme.',
+          'success'
+        );
+      };
+
+      window.applyPortalDarkModeState();
+
+      const darkThemeStyleEl = document.createElement('style');
+      darkThemeStyleEl.id = 'gb-dark-theme-optimization';
+      darkThemeStyleEl.innerHTML = `
+        /* Universal Select & Option Contrast Fix for Third-Party Dark Extensions (Dark Reader / Force Dark Mode) */
+        select option, select optgroup {
+          background-color: #ffffff;
+          color: #0f172a;
+        }
+        @media (prefers-color-scheme: dark) {
+          select option, select optgroup {
+            background-color: #1e293b;
+            color: #f8fafc;
+          }
+        }
+        html[data-darkreader-scheme="dark"] select option,
+        html[data-darkreader-scheme="dark"] select optgroup,
+        html.gb-dark-mode select option,
+        html.gb-dark-mode select optgroup {
+          background-color: #1e293b !important;
+          color: #f8fafc !important;
+        }
+
+        /* Built-in & Third-Party Synchronized Dark Mode Rules */
+        html.gb-dark-mode body {
+          background-color: #0b1120 !important;
+          color: #f1f5f9 !important;
+        }
+        html.gb-dark-mode .sidebar-light,
+        html.gb-dark-mode header.bg-white {
+          background-color: #0f172a !important;
+          border-color: #1e293b !important;
+          color: #f1f5f9 !important;
+        }
+        html.gb-dark-mode .card-dynamic,
+        html.gb-dark-mode .banner-hero-light,
+        html.gb-dark-mode .modal-card-anim,
+        html.gb-dark-mode .top-table-scroll-helper,
+        html.gb-dark-mode main .bg-white {
+          background-color: #1e293b !important;
+          border-color: #334155 !important;
+          color: #f1f5f9 !important;
+        }
+        html.gb-dark-mode .sprint-banner {
+          background: linear-gradient(135deg, #1e293b 0%, #1e1b4b 100%) !important;
+          border-color: #3b82f6 !important;
+        }
+        html.gb-dark-mode .monthly-banner {
+          background: linear-gradient(135deg, #1e293b 0%, #064e3b 100%) !important;
+          border-color: #10b981 !important;
+        }
+        html.gb-dark-mode .incentive-banner {
+          background: linear-gradient(135deg, #1e293b 0%, #451a03 100%) !important;
+          border-color: #f59e0b !important;
+        }
+        html.gb-dark-mode .prod-amber,
+        html.gb-dark-mode .prod-rose,
+        html.gb-dark-mode .prod-purple,
+        html.gb-dark-mode .prod-orange,
+        html.gb-dark-mode .prod-blue,
+        html.gb-dark-mode .prod-emerald {
+          background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+          border-color: #334155 !important;
+        }
+        html.gb-dark-mode .text-slate-900,
+        html.gb-dark-mode .text-slate-800 {
+          color: #f8fafc !important;
+        }
+        html.gb-dark-mode .text-slate-700,
+        html.gb-dark-mode .text-slate-600 {
+          color: #cbd5e1 !important;
+        }
+        html.gb-dark-mode .text-slate-500,
+        html.gb-dark-mode .text-slate-400 {
+          color: #94a3b8 !important;
+        }
+        html.gb-dark-mode .bg-slate-50,
+        html.gb-dark-mode .bg-slate-50\\/90,
+        html.gb-dark-mode .bg-slate-50\\/50,
+        html.gb-dark-mode .bg-slate-100 {
+          background-color: #0f172a !important;
+          border-color: #334155 !important;
+          color: #e2e8f0 !important;
+        }
+        html.gb-dark-mode .border-slate-100,
+        html.gb-dark-mode .border-slate-200,
+        html.gb-dark-mode .border-slate-200\\/90,
+        html.gb-dark-mode .border-slate-200\\/80,
+        html.gb-dark-mode .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+          border-color: #334155 !important;
+        }
+        html.gb-dark-mode .card-dynamic.overflow-x-auto thead.table-header-light th,
+        html.gb-dark-mode .table-header-light {
+          background-color: #0f172a !important;
+          color: #e2e8f0 !important;
+          box-shadow: 0 1px 0 #334155 !important;
+        }
+        html.gb-dark-mode tbody tr:hover {
+          background-color: rgba(51, 65, 85, 0.45) !important;
+        }
+        html.gb-dark-mode input:not([type="checkbox"]):not([type="range"]),
+        html.gb-dark-mode textarea,
+        html.gb-dark-mode select {
+          color: #f8fafc !important;
+        }
+        html.gb-dark-mode input.bg-white,
+        html.gb-dark-mode select.bg-white,
+        html.gb-dark-mode textarea.bg-white,
+        html.gb-dark-mode .bg-white\\/90,
+        html.gb-dark-mode .bg-white\\/80 {
+          background-color: #0f172a !important;
+          border-color: #334155 !important;
+          color: #f8fafc !important;
+        }
+        html.gb-dark-mode .roster-do {
+          background-color: rgba(154, 52, 18, 0.35) !important;
+          color: #fdba74 !important;
+        }
+        html.gb-dark-mode .roster-night {
+          background-color: rgba(30, 64, 175, 0.35) !important;
+          color: #93c5fd !important;
+        }
+        html.gb-dark-mode .my-rank-row-glow {
+          background: linear-gradient(90deg, rgba(30, 58, 138, 0.55) 0%, rgba(49, 46, 129, 0.65) 50%, rgba(30, 58, 138, 0.55) 100%) !important;
+          border-left: 5px solid #60a5fa !important;
+        }
+      `;
+      document.head.appendChild(darkThemeStyleEl);
+
+      // -----------------------------------------------------------------------
+      // 2. CHANNEL GRADE SCALE CLARITY (FACEBOOK VS WHATSAPP) IN USER MODAL & TABLE
+      // -----------------------------------------------------------------------
+      window.userModalSelectedScaleChannel = 'FACEBOOK';
+
+      window.getGradeMapForChannelScale = function(chKey, mKey) {
+        const mk = mKey || selectedMonthKey;
+        const configs = getStored('monthly_configs', {});
+        const effKey = chKey === 'WHATSAPP' ? ('WA_' + mk) : mk;
+        const mCfg = configs[effKey] || {};
+        const baseDefaults = chKey === 'WHATSAPP' ? WA_DEFAULT_GRADE_TARGETS : DEFAULT_GRADE_TARGETS;
+        return { ...baseDefaults, ...(mCfg.gradeTargets || {}) };
+      };
+
+      window.setUserModalChannelScale = function(chKey, shouldSyncFloatingTeam = true) {
+        window.userModalSelectedScaleChannel = (chKey === 'WHATSAPP') ? 'WHATSAPP' : 'FACEBOOK';
+        const teamSel = document.getElementById('usrTeam');
+        if (shouldSyncFloatingTeam && teamSel) {
+          const curTeam = teamSel.value;
+          if (curTeam === 'Floating' || curTeam === 'WA Floating') {
+            const targetFloatVal = window.userModalSelectedScaleChannel === 'WHATSAPP' ? 'WA Floating' : 'Floating';
+            if (Array.from(teamSel.options).some(o => o.value === targetFloatVal)) {
+              teamSel.value = targetFloatVal;
+            }
+          }
+        }
+        window.refreshUserModalGradeOptionsAndPreview(true);
+      };
+
+      window.refreshUserModalGradeOptionsAndPreview = function(updateTargetInput = false) {
+        const gradeSel = document.getElementById('usrGrade');
+        const targetInp = document.getElementById('usrTarget');
+        const teamSel = document.getElementById('usrTeam');
+        if (!gradeSel || !targetInp) return;
+
+        const chKey = window.userModalSelectedScaleChannel || 'FACEBOOK';
+        const chTag = chKey === 'WHATSAPP' ? '🟢 [WhatsApp]' : '🔵 [Facebook]';
+        const gMap = window.getGradeMapForChannelScale(chKey, selectedMonthKey);
+        const curGrade = gradeSel.value || 'A-';
+
+        const gradeSpecs = [
+          { val: 'A+', label: `${chTag} Grade A+ — ৳${Number(gMap['A+']).toLocaleString()}` },
+          { val: 'A',  label: `${chTag} Grade A — ৳${Number(gMap['A']).toLocaleString()}` },
+          { val: 'A-', label: `${chTag} Grade A- — ৳${Number(gMap['A-']).toLocaleString()}` },
+          { val: 'B',  label: `${chTag} Grade B — ৳${Number(gMap['B']).toLocaleString()}` },
+          { val: 'C',  label: `${chTag} Grade C — ৳${Number(gMap['C']).toLocaleString()}` },
+          { val: 'Pending', label: `⏳ Pending / Unassigned — ৳0` },
+          { val: 'Supervisor', label: `👁️ Supervisor — ৳0` },
+          { val: 'TL', label: `${chTag} Grade TL — ৳${Number(gMap['TL']).toLocaleString()}` }
+        ];
+
+        gradeSel.innerHTML = gradeSpecs.map(gs => `<option value="${gs.val}" ${gs.val === curGrade ? 'selected' : ''}>${gs.label}</option>`).join('');
+        gradeSel.value = curGrade;
+
+        if (updateTargetInput && gMap[curGrade] !== undefined) {
+          targetInp.value = gMap[curGrade];
+        }
+
+        // Update scale switcher buttons & live target preview banner inside #userModal
+        const fbScaleBtn = document.getElementById('usrModalScaleBtnFB');
+        const waScaleBtn = document.getElementById('usrModalScaleBtnWA');
+        if (fbScaleBtn && waScaleBtn) {
+          if (chKey === 'WHATSAPP') {
+            waScaleBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[11px] font-black bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+            fbScaleBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[11px] font-extrabold bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+          } else {
+            fbScaleBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[11px] font-black bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+            waScaleBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[11px] font-extrabold bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+          }
+        }
+
+        const livePreviewBox = document.getElementById('usrModalLiveScaleSummary');
+        if (livePreviewBox) {
+          const baseNum = Number(targetInp.value) || 0;
+          const workNum = calcWorkingTargetFromBase(baseNum, chKey);
+          const dailyNum = Math.round(workNum / 26);
+          livePreviewBox.className = chKey === 'WHATSAPP'
+            ? 'mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-900 flex flex-wrap items-center justify-between gap-2'
+            : 'mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-900 flex flex-wrap items-center justify-between gap-2';
+          livePreviewBox.innerHTML = `
+            <span><i class="${chKey === 'WHATSAPP' ? 'fa-brands fa-whatsapp text-emerald-600' : 'fa-brands fa-facebook text-blue-600'} mr-1"></i><strong>${chKey === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Scale (${curGrade}):</strong> Base ৳${baseNum.toLocaleString()}</span>
+            <span>Working (+5%): <strong>৳${workNum.toLocaleString()}</strong> • Daily: <strong>৳${dailyNum.toLocaleString()}</strong></span>
+          `;
+        }
+      };
+
+      renderUserModal = function() {
+        const isNazim = isSuperAdmin(currentUser);
+        const myTeamNorm = currentUser ? normalizeTeamNameAlias(currentUser.team) : 'Team Nazim';
+        const gMap = window.getGradeMapForChannelScale(window.userModalSelectedScaleChannel || 'FACEBOOK', selectedMonthKey);
+
+        return `
+          <div id="userModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+                <div>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-700">Account & Channel Target Setup</span>
+                  <h3 class="text-base font-black text-slate-900 mt-1">Create / Edit User ID (${selectedMonthKey})</h3>
+                  <p class="text-[11px] font-bold text-slate-400">
+                    Clearly select Facebook or WhatsApp Grade Target scale for any Agent or Floating member.
+                  </p>
+                </div>
+                <button type="button" onclick="closeModal('userModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+
+              <form onsubmit="handleSaveUser(event)" class="space-y-3.5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Employee ID (Login ID)</label>
+                    <input type="text" id="usrId" required placeholder="e.g. 10002 or 11205" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Full Name</label>
+                    <input type="text" id="usrName" required placeholder="e.g. Tanvir Hasan" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Role</label>
+                    <select id="usrRole" onchange="onUserRoleSelectChange()" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 cursor-pointer">
+                      <option value="agent">Sales Agent</option>
+                      <option value="supervisor">Supervisor (View All Only)</option>
+                      ${isNazim ? `<option value="admin">Admin / TL (Full Access)</option>` : ''}
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Channel & Team</label>
+                    <select id="usrTeam" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 cursor-pointer">
+                      ${isNazim ? `
+                        <optgroup label="🔵 Facebook Channel">
+                          <option value="Team Nazim">Team Nazim (Facebook)</option>
+                          <option value="Team Samad">Team Samad (Facebook)</option>
+                          <option value="Floating">Floating Pool (Facebook Scale)</option>
+                        </optgroup>
+                        <optgroup label="🟢 WhatsApp Channel (3 Teams)">
+                          <option value="Team Shakib Baksh">Team Shakib Baksh (WhatsApp)</option>
+                          <option value="Team Parvaj">Team Parvaj (WhatsApp)</option>
+                          <option value="Team Saikat">Team Saikat (WhatsApp)</option>
+                          <option value="WA Floating">WA Floating Pool (WhatsApp Scale)</option>
+                        </optgroup>
+                        <optgroup label="Supervisors">
+                          <option value="All Teams">All Teams (Supervisor)</option>
+                        </optgroup>
+                      ` : `
+                        <option value="${myTeamNorm}" selected>${myTeamNorm} (Assign to Your Team)</option>
+                        <option value="Floating">🔵 Floating Pool (Facebook Scale)</option>
+                        <option value="WA Floating">🟢 WA Floating Pool (WhatsApp Scale)</option>
+                      `}
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Channel Grade Scale Selector (Facebook vs WhatsApp Target Scale) -->
+                <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[10px] font-black uppercase text-slate-500">
+                      <i class="fa-solid fa-scale-balanced text-indigo-600 mr-1"></i>Select Channel Grade Target Scale (${selectedMonthKey}):
+                    </span>
+                    <span class="text-[10px] font-bold text-slate-400">Auto-fills Grade Target below</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button type="button" id="usrModalScaleBtnFB" onclick="setUserModalChannelScale('FACEBOOK', true)" class="flex-1 py-2 px-3 rounded-xl text-[11px] font-black bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all">
+                      <i class="fa-brands fa-facebook-f"></i> Facebook Grade Scale
+                    </button>
+                    <button type="button" id="usrModalScaleBtnWA" onclick="setUserModalChannelScale('WHATSAPP', true)" class="flex-1 py-2 px-3 rounded-xl text-[11px] font-extrabold bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all">
+                      <i class="fa-brands fa-whatsapp"></i> WhatsApp Grade Scale
+                    </button>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Grade (${selectedMonthKey})</label>
+                    <select id="usrGrade" onchange="autoFillGradeTarget()" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 cursor-pointer">
+                      <option value="A+">Grade A+ (৳${Number(gMap['A+']).toLocaleString()})</option>
+                      <option value="A">Grade A (৳${Number(gMap['A']).toLocaleString()})</option>
+                      <option value="A-">Grade A- (৳${Number(gMap['A-']).toLocaleString()})</option>
+                      <option value="B">Grade B (৳${Number(gMap['B']).toLocaleString()})</option>
+                      <option value="C">Grade C (৳${Number(gMap['C']).toLocaleString()})</option>
+                      <option value="Pending">Pending / Not Assigned (৳0)</option>
+                      <option value="Supervisor">Supervisor (0)</option>
+                      <option value="TL">Grade TL (৳${Number(gMap['TL']).toLocaleString()})</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Password</label>
+                    <input type="text" id="usrPass" required value="123456" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900">
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Monthly Base Target (৳) for ${selectedMonthKey}</label>
+                  <input type="number" id="usrTarget" oninput="refreshUserModalGradeOptionsAndPreview(false)" required value="1232174" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-900">
+                  <div id="usrModalLiveScaleSummary" class="mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-900 flex flex-wrap items-center justify-between gap-2"></div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onclick="closeModal('userModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
+                  <button type="submit" class="px-6 py-2.5 text-xs font-extrabold text-white tab-active rounded-xl shadow-lg cursor-pointer">Save User ID & Sync</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      };
+
+      autoFillGradeTarget = function() {
+        window.refreshUserModalGradeOptionsAndPreview(true);
+      };
+
+      openUserModal = function(editId) {
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+        const users = getUsersForMonth(selectedMonthKey, true);
+        const existing = users.find(u => String(u.id) === String(editId));
+        if (existing) {
+          if (!canEditTargetUser(currentUser, existing)) {
+            showPortalToast('Permission Denied', 'Only Nazim (Super Admin) can edit this account.', 'error');
+            return;
+          }
+          const detectedCh = (existing.channel === 'WHATSAPP' || getChannelForTeam(existing.team) === 'WHATSAPP' || Number(existing.baseTarget) === 1696589 || Number(existing.baseTarget) === 1576609 || Number(existing.baseTarget) === 1476810 || Number(existing.baseTarget) === 1377011 || Number(existing.baseTarget) === 1277213)
+            ? 'WHATSAPP'
+            : 'FACEBOOK';
+          window.userModalSelectedScaleChannel = detectedCh;
+
+          document.getElementById('usrId').value = existing.id;
+          document.getElementById('usrName').value = existing.name;
+          document.getElementById('usrRole').value = existing.role || 'agent';
+          const teamSel = document.getElementById('usrTeam');
+          if (teamSel) {
+            teamSel.value = existing.team;
+            if (!teamSel.value) {
+              teamSel.value = detectedCh === 'WHATSAPP' ? 'WA Floating' : 'Floating';
+            }
+            teamSel.onchange = function() {
+              const selCh = getChannelForTeam(this.value);
+              window.setUserModalChannelScale(selCh, false);
+            };
+          }
+          window.refreshUserModalGradeOptionsAndPreview(false);
+          document.getElementById('usrGrade').value = existing.role === 'supervisor' ? 'Supervisor' : (existing.grade || (existing.role === 'admin' ? 'TL' : 'A'));
+          document.getElementById('usrPass').value = existing.pass || '123456';
+          document.getElementById('usrTarget').value = existing.baseTarget ?? 0;
+          window.refreshUserModalGradeOptionsAndPreview(false);
+        } else {
+          const defaultCh = (activeChannel === 'WHATSAPP' || (currentUser && getChannelForTeam(currentUser.team) === 'WHATSAPP'))
+            ? 'WHATSAPP'
+            : 'FACEBOOK';
+          window.userModalSelectedScaleChannel = defaultCh;
+
+          document.getElementById('usrId').value = '';
+          document.getElementById('usrName').value = '';
+          document.getElementById('usrRole').value = 'agent';
+          const teamSel = document.getElementById('usrTeam');
+          if (teamSel) {
+            teamSel.value = isSuperAdmin(currentUser) ? getActiveChannelMeta().teams[0] : currentUser.team;
+            teamSel.onchange = function() {
+              const selCh = getChannelForTeam(this.value);
+              window.setUserModalChannelScale(selCh, false);
+            };
+          }
+          document.getElementById('usrGrade').value = 'A-';
+          document.getElementById('usrPass').value = '123456';
+          window.refreshUserModalGradeOptionsAndPreview(true);
+        }
+        openModal('userModal');
+      };
+
+      // Also show a clear [FB Scale] / [WA Scale] badge next to Grade in Target Setup & IDs table
+      const _origRenderManageAgentsV51 = renderManageAgents;
+      renderManageAgents = function() {
+        let htmlOut = _origRenderManageAgentsV51();
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        allUsers.forEach(usr => {
+          if (!usr || usr.role === 'supervisor') return;
+          const isWa = usr.channel === 'WHATSAPP' || getChannelForTeam(usr.team) === 'WHATSAPP' || [1696589, 1576609, 1476810, 1377011, 1277213, 498997].includes(Number(usr.baseTarget));
+          const scaleBadge = isWa
+            ? `<span class="ml-1.5 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase">🟢 WA Scale</span>`
+            : `<span class="ml-1.5 px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[9px] font-black uppercase">🔵 FB Scale</span>`;
+          const targetStr = `৳${Number(usr.baseTarget || 0).toLocaleString()}`;
+          if (Number(usr.baseTarget || 0) > 0 && isPendingOrFloatingAgent(usr)) {
+            htmlOut = htmlOut.replace(
+              `<td class="p-3.5 font-bold">${targetStr}</td>`,
+              `<td class="p-3.5 font-bold">${targetStr} ${scaleBadge}</td>`
+            );
+          }
+        });
+        return htmlOut;
+      };
+
+      // -----------------------------------------------------------------------
+      // 3. SMART DUTY / DAY-OFF SWAP ENGINE IN MISSING & LEAVE TAB
+      //    (Automatically syncs across Missing Reports, Day Off Submissions & Leave Log!)
+      // -----------------------------------------------------------------------
+      window.getDutySwapsStoreForMonth = function(mKey) {
+        const mk = mKey || selectedMonthKey;
+        const configs = getStored('monthly_configs', {});
+        const storeKey = `DUTY_SWAPS_${mk}`;
+        return (configs[storeKey] && typeof configs[storeKey] === 'object') ? configs[storeKey] : {};
+      };
+
+      window.onLeaveModalTypeChange = function() {
+        const typeVal = document.getElementById('leaveModalTypeSelect')?.value || 'Casual Leave';
+        const swapBox = document.getElementById('leaveModalSmartSwapBox');
+        if (swapBox) {
+          if (typeVal === 'Extra Day Off') {
+            swapBox.classList.remove('hidden');
+          } else {
+            swapBox.classList.add('hidden');
+          }
+        }
+      };
+
+      window.onLeaveModalSwapModeChange = function() {
+        const modeVal = document.getElementById('leaveModalSwapMode')?.value || 'TEAMMATE';
+        const mateWrap = document.getElementById('leaveModalSwapPartnerWrap');
+        if (mateWrap) {
+          if (modeVal === 'SELF') mateWrap.classList.add('hidden');
+          else mateWrap.classList.remove('hidden');
+        }
+      };
+
+      window.openQuickDutySwapModal = function(userId, dateStr, isFromDoTab = false) {
+        openMarkLeaveModal(userId, dateStr, 'Extra Day Off', '');
+        setTimeout(() => {
+          const typeEl = document.getElementById('leaveModalTypeSelect');
+          if (typeEl) {
+            typeEl.value = 'Extra Day Off';
+            window.onLeaveModalTypeChange();
+          }
+          if (isFromDoTab) {
+            const covDateEl = document.getElementById('leaveModalSwapCoveredDate');
+            if (covDateEl && dateStr) covDateEl.value = dateToInputVal(dateStr);
+          }
+        }, 40);
+      };
+
+      renderMarkLeaveModal = function() {
+        if (!currentUser) return '';
+        const ctx = pendingLeaveModalContext || { userId: currentUser.id, userName: currentUser.name, team: currentUser.team, date: getTodayFormatted() };
+        const allAgents = getEditableSalesAgentsForActor(selectedMonthKey);
+        const canManageAll = hasFeatureAccess(currentUser, 'feat_manage_all_sales');
+
+        return `
+          <div id="markLeaveModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+              <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-base shadow-xs">
+                    <i class="fa-solid fa-calendar-minus"></i>
+                  </div>
+                  <div>
+                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-700">Leave / Absent / Duty Swap</span>
+                    <h3 class="text-base font-black text-slate-900 mt-0.5">Mark Leave, Absent or Duty / DO Swap</h3>
+                  </div>
+                </div>
+                <button type="button" onclick="closeModal('markLeaveModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+
+              <form onsubmit="handleSaveLeaveRecord(event)" class="space-y-3.5">
+                ${canManageAll ? `
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Agent Taking Leave / Day Off</label>
+                  <select id="leaveModalAgentSelect" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                    ${allAgents.map(a => `<option value="${a.id}" ${String(a.id) === String(ctx.userId) ? 'selected' : ''}>${a.name} (${a.id} • ${a.team})</option>`).join('')}
+                  </select>
+                </div>
+                ` : `
+                <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
+                  <span>Agent: <strong class="text-slate-900">${ctx.userName}</strong></span>
+                  <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-mono font-black">ID: ${ctx.userId}</span>
+                </div>
+                `}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Excused / Off Date</label>
+                    <input type="date" id="leaveModalDateInput" required value="${dateToInputVal(ctx.date)}" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Leave / Swap Type</label>
+                    <select id="leaveModalTypeSelect" onchange="onLeaveModalTypeChange()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      ${LEAVE_STATUS_TYPES.map(lt => `<option value="${lt.key}">${lt.label}</option>`).join('')}
+                    </select>
+                  </div>
+                </div>
+
+                <!-- SMART DUTY / DAY-OFF SWAP CONFIGURATION BOX -->
+                <div id="leaveModalSmartSwapBox" class="hidden p-3.5 rounded-2xl bg-teal-50/80 border-2 border-teal-200 space-y-3">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-black uppercase text-teal-900">
+                      <i class="fa-solid fa-arrows-rotate text-teal-600 mr-1"></i>Smart Duty / Day-Off Swap Setup
+                    </span>
+                    <span class="px-2 py-0.5 rounded bg-teal-600 text-white text-[9px] font-black uppercase">Auto-Syncs Missing & DO</span>
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Swap Type</label>
+                    <select id="leaveModalSwapMode" onchange="onLeaveModalSwapModeChange()" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      <option value="TEAMMATE">👥 Swap With Teammate (Teammate Covers / Swaps DO)</option>
+                      <option value="SELF">📅 Self Day-Off Swap (Worked Own Roster DO, Taking Off Another Day)</option>
+                    </select>
+                  </div>
+
+                  <div id="leaveModalSwapPartnerWrap">
+                    <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Swap Partner (Teammate Covering / Swapping)</label>
+                    <select id="leaveModalSwapPartnerId" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      <option value="">-- Select Swap Partner (Optional / Self) --</option>
+                      ${allAgents.map(a => `<option value="${a.id}">${a.name} (${a.id} • ${a.team})</option>`).join('')}
+                    </select>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Worked / Covered DO Date</label>
+                      <input type="date" id="leaveModalSwapCoveredDate" value="${dateToInputVal(ctx.date)}" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">Covered Shift</label>
+                      <select id="leaveModalSwapShift" class="w-full px-3 py-2 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                        <option value="3:00 PM">3:00 PM Shift</option>
+                        <option value="7:00 AM">7:00 AM Shift</option>
+                        <option value="9:00 AM">9:00 AM Shift</option>
+                        <option value="10:00 AM">10:00 AM Shift</option>
+                        <option value="Night">Night (11:00 PM) Shift</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <p class="text-[10px] font-bold text-teal-800 leading-relaxed">
+                    <i class="fa-solid fa-bolt text-amber-500 mr-1"></i><strong>What happens automatically:</strong><br>
+                    1) The <strong>Excused / Off Date</strong> is removed from Missing Reports & logged in Leave/Swap Log.<br>
+                    2) The <strong>Worked / Covered DO Date</strong> is approved as an active Swapped Duty (so submitting on that DO won't trigger a Day Off warning, and if unsubmitted after shift end, it will be tracked in Missing Reports!).
+                  </p>
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Reason / Note (Optional)</label>
+                  <input type="text" id="leaveModalReasonInput" placeholder="e.g. Swapped DO with teammate / Fever / Approved by TL..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onclick="closeModal('markLeaveModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Cancel</button>
+                  <button type="submit" class="px-5 py-2.5 text-xs font-black text-white bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-700 hover:to-orange-700 rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-check-double"></i> Save Status & Sync
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      };
+
+      const _origOpenMarkLeaveModalV51 = openMarkLeaveModal;
+      openMarkLeaveModal = function(userId, dateStr, existingLeaveType = 'Casual Leave', existingReason = '') {
+        _origOpenMarkLeaveModalV51(userId, dateStr, existingLeaveType, existingReason);
+        setTimeout(() => {
+          window.onLeaveModalTypeChange();
+          window.onLeaveModalSwapModeChange();
+        }, 20);
+      };
+
+      handleSaveLeaveRecord = function(e) {
+        e.preventDefault();
+        if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+        const canManageAll = hasFeatureAccess(currentUser, 'feat_manage_all_sales');
+        const selectedAgId = canManageAll
+          ? (document.getElementById('leaveModalAgentSelect')?.value || pendingLeaveModalContext?.userId || currentUser.id)
+          : currentUser.id;
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const targetAg = allUsers.find(u => String(u.id) === String(selectedAgId)) || currentUser;
+
+        const offDateStr = inputValToDateStr(document.getElementById('leaveModalDateInput')?.value);
+        const mKey = offDateStr.substring(3) || selectedMonthKey;
+        const leaveType = document.getElementById('leaveModalTypeSelect')?.value || 'Casual Leave';
+        let reason = (document.getElementById('leaveModalReasonInput')?.value || '').trim();
+
+        let swapMeta = null;
+        if (leaveType === 'Extra Day Off') {
+          const swapMode = document.getElementById('leaveModalSwapMode')?.value || 'TEAMMATE';
+          const partnerId = (swapMode === 'TEAMMATE') ? (document.getElementById('leaveModalSwapPartnerId')?.value || '') : '';
+          const partnerObj = partnerId ? allUsers.find(u => String(u.id) === String(partnerId)) : null;
+          const coveredDateStr = inputValToDateStr(document.getElementById('leaveModalSwapCoveredDate')?.value) || offDateStr;
+          const coveredShift = document.getElementById('leaveModalSwapShift')?.value || '3:00 PM';
+
+          const workingAgentObj = partnerObj || targetAg;
+          const autoNote = partnerObj
+            ? `🔄 Swapped DO with ${partnerObj.name} (${partnerObj.id}) • Covered on ${cleanDisplayDate(coveredDateStr)} (${coveredShift})`
+            : `🔄 Self DO Swap • Worked DO on ${cleanDisplayDate(coveredDateStr)} (${coveredShift}), Off on ${cleanDisplayDate(offDateStr)}`;
+          reason = reason ? `${autoNote} — ${reason}` : autoNote;
+
+          swapMeta = {
+            swapId: `${targetAg.id}_${offDateStr}`,
+            offUserId: String(targetAg.id),
+            offUserName: targetAg.name,
+            offTeam: targetAg.team,
+            offDate: offDateStr,
+            workingUserId: String(workingAgentObj.id),
+            workingUserName: workingAgentObj.name,
+            workingTeam: workingAgentObj.team,
+            coveredDate: coveredDateStr,
+            coveredShift: coveredShift,
+            swapMode,
+            note: reason,
+            markedBy: currentUser.name,
+            updatedTs: Date.now()
+          };
+
+          // Save in DUTY_SWAPS_<mKey> and also approve the covered DO date in DO_APPROVED_DUTIES_<mKey>
+          const configs = { ...getStored('monthly_configs', {}) };
+          const swapStoreKey = `DUTY_SWAPS_${mKey}`;
+          const doStoreKey = `DO_APPROVED_DUTIES_${mKey}`;
+          if (!configs[swapStoreKey] || typeof configs[swapStoreKey] !== 'object') configs[swapStoreKey] = {};
+          if (!configs[doStoreKey] || typeof configs[doStoreKey] !== 'object') configs[doStoreKey] = {};
+
+          configs[swapStoreKey][`${targetAg.id}_${offDateStr}`] = swapMeta;
+          configs[doStoreKey][`${workingAgentObj.id}_${coveredDateStr}`] = {
+            userId: String(workingAgentObj.id),
+            userName: workingAgentObj.name,
+            team: workingAgentObj.team,
+            date: coveredDateStr,
+            swapLinkedKey: `${targetAg.id}_${offDateStr}`,
+            approvedBy: `${currentUser.name} (Swap)`,
+            approvedAt: `${getTodayFormatted()} ${getNowTimeStr()}`,
+            updatedTs: Date.now()
+          };
+          setStored('monthly_configs', configs);
+          markLocalUserOrConfigMutatedNow();
+
+          postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: swapStoreKey,
+            configJson: JSON.stringify(configs[swapStoreKey])
+          }).catch(() => {});
+          postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: doStoreKey,
+            configJson: JSON.stringify(configs[doStoreKey])
+          }).catch(() => {});
+        }
+
+        const entryObj = {
+          userId: String(targetAg.id),
+          userName: targetAg.name,
+          team: targetAg.team,
+          date: offDateStr,
+          leaveType,
+          reason: reason || '-',
+          swapMeta,
+          markedBy: currentUser.name,
+          markedAt: `${getTodayFormatted()} ${getNowTimeStr()}`
+        };
+
+        saveLeaveRecordEntry(mKey, targetAg.id, offDateStr, entryObj);
+        recordActivityLog(
+          leaveType === 'Extra Day Off' ? 'Recorded Duty / DO Swap' : `Marked ${leaveType}`,
+          `${targetAg.name} (${targetAg.id}) on ${offDateStr} — ${reason || leaveType}`,
+          true
+        );
+
+        closeModal('markLeaveModal');
+        renderAppLayout();
+        showPortalToast(
+          leaveType === 'Extra Day Off' ? '🔄 Duty / DO Swap Synced!' : `${leaveType} Saved!`,
+          leaveType === 'Extra Day Off'
+            ? `Excused ${targetAg.name} on ${cleanDisplayDate(offDateStr)} & updated Swapped Duty tracking.`
+            : `${targetAg.name} (${offDateStr}) moved to Leave & Absent Log.`,
+          'success'
+        );
+      };
+
+      const _origRemoveLeaveRecordEntryV51 = removeLeaveRecordEntry;
+      removeLeaveRecordEntry = function(mKey, userId, dateStr) {
+        const mk = mKey || selectedMonthKey;
+        const mapKey = `${String(userId).trim()}_${String(dateStr).trim()}`;
+        const configs = { ...getStored('monthly_configs', {}) };
+        const swapStoreKey = `DUTY_SWAPS_${mk}`;
+        const doStoreKey = `DO_APPROVED_DUTIES_${mk}`;
+
+        if (configs[swapStoreKey] && configs[swapStoreKey][mapKey]) {
+          const sw = configs[swapStoreKey][mapKey];
+          configs[swapStoreKey][mapKey] = { isRemoved: true, updatedTs: Date.now() };
+          if (sw && sw.workingUserId && sw.coveredDate && configs[doStoreKey]) {
+            const doKey = `${sw.workingUserId}_${sw.coveredDate}`;
+            if (configs[doStoreKey][doKey]) {
+              configs[doStoreKey][doKey] = { isRemoved: true, updatedTs: Date.now() };
+            }
+          }
+          setStored('monthly_configs', configs);
+          postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: swapStoreKey, configJson: JSON.stringify(configs[swapStoreKey]) }).catch(() => {});
+          postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: doStoreKey, configJson: JSON.stringify(configs[doStoreKey]) }).catch(() => {});
+        }
+        return _origRemoveLeaveRecordEntryV51(mKey, userId, dateStr);
+      };
+
+      // Enhance computeMissingAndLeaveDataForMonth so Swapped Working Duties are also checked for Missing Reports if not submitted!
+      const _origComputeMissingAndLeaveV51 = computeMissingAndLeaveDataForMonth;
+      computeMissingAndLeaveDataForMonth = function(mKey, teamScopeFilter = 'ALL', agentIdFilter = 'ALL') {
+        const mk = mKey || selectedMonthKey;
+        const baseRes = _origComputeMissingAndLeaveV51(mk, teamScopeFilter, agentIdFilter);
+        const swapStore = window.getDutySwapsStoreForMonth(mk);
+        const activeSwaps = Object.values(swapStore).filter(sw => sw && !sw.isRemoved && sw.workingUserId && sw.coveredDate);
+        if (activeSwaps.length === 0) return baseRes;
+
+        const monthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+          .filter(s => String(s.date || '').endsWith(mk) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+        const submittedKeySet = new Set(monthSales.map(s => `${String(s.userId).trim()}_${String(s.date).trim()}`));
+        const leaveStore = getLeaveRecordsStoreForMonth(mk);
+        const allUsersInCh = getUsersForMonth(mk, activeChannel === 'ALL_CHANNELS');
+        const dayShortNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        const extraSwapMissing = [];
+        activeSwaps.forEach(sw => {
+          const wUid = String(sw.workingUserId).trim();
+          const covDate = String(sw.coveredDate).trim();
+          if (!covDate.endsWith(mk)) return;
+
+          const agObj = allUsersInCh.find(u => String(u.id) === wUid);
+          if (!agObj || isUserAccountDeactivated(agObj) || (window.isUserAccountResigned && window.isUserAccountResigned(agObj))) return;
+          if (teamScopeFilter && teamScopeFilter !== 'ALL' && normalizeTeamNameAlias(agObj.team) !== normalizeTeamNameAlias(teamScopeFilter)) return;
+          if (agentIdFilter && agentIdFilter !== 'ALL' && wUid !== String(agentIdFilter)) return;
+          if (currentUser && currentUser.role === 'agent' && !canViewAll(currentUser) && wUid !== String(currentUser.id)) return;
+
+          const mapKey = `${wUid}_${covDate}`;
+          if (submittedKeySet.has(mapKey)) return;
+          if (leaveStore[mapKey] && !leaveStore[mapKey].isRemoved) return;
+          if (baseRes.missingItems.some(m => String(m.userId) === wUid && m.date === covDate)) return;
+
+          const dParts = covDate.split('/');
+          const dNum = parseInt(dParts[0], 10) || 1;
+          const mNum = parseInt(dParts[1], 10) || 11;
+          const yNum = parseInt(dParts[2], 10) || 2026;
+          const shiftLabel = sw.coveredShift || '3:00 PM';
+
+          if (!isRosterShiftDueForReportCheck(dNum, mNum, yNum, shiftLabel)) return;
+
+          const dObj = new Date(yNum, mNum - 1, dNum);
+          const swapLabel = sw.offUserId !== wUid
+            ? `${shiftLabel} (🔄 Swapped w/ ${sw.offUserName})`
+            : `${shiftLabel} (🔄 Self Swapped DO)`;
+
+          extraSwapMissing.push({
+            userId: wUid,
+            userName: agObj.name,
+            team: agObj.team,
+            grade: agObj.grade || 'A',
+            date: covDate,
+            dayName: dayShortNames[dObj.getDay()] || '',
+            shift: swapLabel
+          });
+        });
+
+        return {
+          ...baseRes,
+          missingItems: [...extraSwapMissing, ...baseRes.missingItems]
+        };
+      };
+
+      // Inject 1-Click "🔄 Duty / DO Swap" button into Missing & Leave header and rows, and Dark Mode toggle into top header!
+      const _origRenderMissingV51 = renderMissingReportsAndLeaveView;
+      renderMissingReportsAndLeaveView = function() {
+        let htmlOut = _origRenderMissingV51();
+        htmlOut = htmlOut.replace(
+          `+ Add Leave / Absent`,
+          `+ Leave / Absent / Swap`
+        );
+        // Add a dedicated "🔄 Duty / DO Swap" button on each Missing Report row right beside "Mark Leave / Absent"
+        htmlOut = htmlOut.replace(
+          /onclick="openMarkLeaveModal\('([^']+)',\s*'([^']+)'\)"([^>]*>[\s\S]*?Mark Leave \/ Absent\s*<\/button>)/g,
+          `onclick="openMarkLeaveModal('$1', '$2')"$3
+                          <button type="button" onclick="openQuickDutySwapModal('$1', '$2', false)" class="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 rounded-xl font-extrabold text-[11px] inline-flex items-center gap-1 cursor-pointer" title="Swap Duty or Day Off (DO) with a teammate or another date">
+                            <i class="fa-solid fa-arrows-rotate text-teal-600"></i> Duty / DO Swap
+                          </button>`
+        );
+        // Also add a "🔄 Swap DO" button on each Day Off (DO) Submission row right next to "Day Off Duty"
+        htmlOut = htmlOut.replace(
+          /onclick="handleApproveDayOffDuty\('([^']+)',\s*'([^']+)',\s*'([^']+)'\)"([^>]*>[\s\S]*?Day Off Duty\s*<\/button>)/g,
+          `onclick="handleApproveDayOffDuty('$1', '$2', '$3')"$4
+                              <button type="button" onclick="openQuickDutySwapModal('$1', '$3', true)" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black text-[11px] shadow-xs cursor-pointer" title="Mark this Day Off report as a Swapped Duty">
+                                <i class="fa-solid fa-arrows-rotate mr-1"></i>Swap DO
+                              </button>`
+        );
+        return htmlOut;
+      };
+
+      // Merge DUTY_SWAPS_* in handleCloudData so swap records sync across all panels
+      const _origHandleCloudDataV51 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
+          const localCfg = getStored('monthly_configs', {});
+          Object.keys({ ...localCfg, ...res.monthlyConfigs }).forEach(cfgK => {
+            if (cfgK.startsWith('DUTY_SWAPS_')) {
+              const locSw = (localCfg[cfgK] && typeof localCfg[cfgK] === 'object') ? localCfg[cfgK] : {};
+              const cldSw = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
+              const combinedSw = { ...cldSw };
+              Object.keys(locSw).forEach(lk => {
+                const lItem = locSw[lk];
+                const cItem = cldSw[lk];
+                if (!cItem || Number(lItem.updatedTs || 0) >= Number(cItem.updatedTs || 0)) {
+                  if (lItem && lItem.isRemoved) delete combinedSw[lk];
+                  else combinedSw[lk] = lItem;
+                }
+              });
+              Object.keys(combinedSw).forEach(lk => {
+                if (combinedSw[lk] && combinedSw[lk].isRemoved) delete combinedSw[lk];
+              });
+              res.monthlyConfigs[cfgK] = combinedSw;
+            }
+          });
+        }
+        return _origHandleCloudDataV51(res);
+      };
+
+      // Inject 1-Click Dark / Light Theme toggle button into the top header bar next to Hard Refresh
+      const _origRenderAppLayoutV51 = renderAppLayout;
+      renderAppLayout = function() {
+        window.applyPortalDarkModeState();
+        _origRenderAppLayoutV51();
+        try {
+          const refreshBtn = document.querySelector('header button[onclick="handleHardRefreshPortal()"]');
+          if (refreshBtn && !document.getElementById('headerDarkModeToggleBtn')) {
+            const isDark = Boolean(window.portalDarkMode);
+            const btnHtml = `
+              <button id="headerDarkModeToggleBtn" type="button" onclick="togglePortalDarkMode()" title="${isDark ? 'Switch to Light Theme' : 'Switch to Dark Theme'}" class="w-8 h-8 ${isDark ? 'bg-amber-400 text-slate-950 border-amber-300' : 'bg-slate-100 hover:bg-slate-800 text-slate-700 hover:text-amber-300 border-slate-200'} border rounded-xl inline-flex items-center justify-center transition-colors shadow-2xs shrink-0 cursor-pointer">
+                <i class="fa-solid ${isDark ? 'fa-sun' : 'fa-moon'} text-xs"></i>
+              </button>
+            `;
+            refreshBtn.insertAdjacentHTML('afterend', btnHtml);
+          }
+        } catch (e) {}
+      };
+    } catch (errV51) {
+      console.error('Non-fatal patch v51 warning:', errV51);
     }
 
 window.addEventListener('load', init);
