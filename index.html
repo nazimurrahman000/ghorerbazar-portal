@@ -23082,6 +23082,1647 @@ function renderChatHubView() {
       console.error('Non-fatal patch v53 warning:', errV53);
     }
 
+
+    // =========================================================================
+    // PATCH v54 (index-v32.html) — COMPLETE FIX FOR:
+    // 1. Floating / Unassigned & Pending-Target Agent Save Lock (Never Reverts!)
+    // 2. Unassigned Agent with Target -> Target & Sales count in Own Portal,
+    //    Channel Total & Overall All Channels (NOT in any specific Team).
+    // 3. Team-Assigned Agent with Pending (৳0) Target -> Achievement counts in
+    //    Team, Channel & Overall All Channels; once given a Grade/Target, Target
+    //    immediately counts in Team, Channel & Overall All Channels!
+    // 4. Portal UI (+5% Working Target) vs Sheets/CSV Exports (100% Actual Target)
+    // =========================================================================
+    try {
+      // -----------------------------------------------------------------------
+      // PART 1: SEPARATE "UNASSIGNED FLOATING TEAM" FROM "PENDING (৳0) TARGET"
+      // -----------------------------------------------------------------------
+      window.isUnassignedFloatingTeamName = function(teamName) {
+        const t = normalizeTeamNameAlias(teamName);
+        if (!t || t === 'Floating' || t === 'WA Floating' || t === 'Pending' || t === 'All Teams') return true;
+        const knownTeams = ['Team Nazim', 'Team Samad', 'Team Saikat', 'Team Parvaj', 'Team Shakib Baksh'];
+        if (knownTeams.includes(t)) return false;
+        const dynTeams = getDynamicTeamsForChannel('ALL_CHANNELS');
+        return !dynTeams.includes(t);
+      };
+
+      window.isFloatingPoolAgent = function(usr) {
+        if (!usr || usr.role !== 'agent') return false;
+        return window.isUnassignedFloatingTeamName(usr.team);
+      };
+
+      window.isPendingTargetOnlyAgent = function(usr) {
+        if (!usr || usr.role !== 'agent') return false;
+        return !window.isUnassignedFloatingTeamName(usr.team) && (usr.grade === 'Pending' || Number(usr.baseTarget || 0) <= 0);
+      };
+
+      // Redefine isPendingOrFloatingAgent so that:
+      // - Team-assigned agents (even if their target is Pending ৳0!) are treated as full members of their Team!
+      // - Only truly Unassigned / Floating agents (team === 'Floating' or 'WA Floating') are treated as Floating Pool agents!
+      isPendingOrFloatingAgent = function(usr) {
+        if (!usr || usr.role !== 'agent') return false;
+        return window.isUnassignedFloatingTeamName(usr.team);
+      };
+
+      canEditTargetUser = function(actor, targetUser) {
+        if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
+        if (isSuperAdmin(actor)) return true;
+        if (String(targetUser.id) === '10122') return false;
+        if (String(targetUser.id) === String(actor.id)) return true;
+        if (targetUser.role !== 'agent') return false;
+        if (window.isFloatingPoolAgent(targetUser)) return true;
+        return normalizeTeamNameAlias(actor.team) === normalizeTeamNameAlias(targetUser.team);
+      };
+
+      canViewTargetPassword = function(actor, targetUser) {
+        if (!actor || !targetUser || !hasFeatureAccess(actor, 'feat_manage_users')) return false;
+        if (isSuperAdmin(actor)) return true;
+        if (String(targetUser.id) === '10122') return false;
+        if (String(actor.id) === String(targetUser.id)) return true;
+        if (targetUser.role === 'admin' || targetUser.role === 'supervisor') return false;
+        if (window.isFloatingPoolAgent(targetUser)) return true;
+        return normalizeTeamNameAlias(actor.team) === normalizeTeamNameAlias(targetUser.team);
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 2: PERSISTENT USER EDIT TIMESTAMP LOCK (NEVER REVERTS ON CLOUD SYNC!)
+      // -----------------------------------------------------------------------
+      window.getLocalUserEditsLockStore = function() {
+        try {
+          const raw = localStorage.getItem('gb_persistent_user_edits_v54');
+          const parsed = raw ? JSON.parse(raw) : {};
+          return (parsed && typeof parsed === 'object') ? parsed : {};
+        } catch (e) {
+          return {};
+        }
+      };
+
+      window.saveLocalUserEditLock = function(monthKey, userObj) {
+        if (!userObj || !userObj.id) return;
+        const store = window.getLocalUserEditsLockStore();
+        const mk = monthKey || selectedMonthKey;
+        const uid = String(userObj.id).trim();
+        const nowTs = Date.now();
+        if (!store[mk]) store[mk] = {};
+        store[mk][uid] = {
+          id: uid,
+          name: userObj.name,
+          team: normalizeTeamNameAlias(userObj.team),
+          channel: userObj.channel || getChannelForTeam(userObj.team),
+          grade: userObj.grade,
+          role: userObj.role || 'agent',
+          pass: userObj.pass || '123456',
+          baseTarget: Number(userObj.baseTarget) || 0,
+          updatedTs: nowTs
+        };
+        store['__GLOBAL_USERS__'] = store['__GLOBAL_USERS__'] || {};
+        store['__GLOBAL_USERS__'][uid] = { ...store[mk][uid] };
+        localStorage.setItem('gb_persistent_user_edits_v54', JSON.stringify(store));
+      };
+
+      syncAgentTeamForSelectedMonthOnly = function(agentId, agentName, newTeamName, newGrade, newBaseTarget) {
+        const mk = selectedMonthKey;
+        const cleanTeam = normalizeTeamNameAlias(newTeamName);
+        const targetCh = getChannelForTeam(cleanTeam);
+        const effKey = targetCh === 'WHATSAPP' ? `WA_${mk}` : mk;
+        const otherKey = targetCh === 'WHATSAPP' ? mk : `WA_${mk}`;
+        const nowTs = Date.now();
+
+        let configs = { ...getStored('monthly_configs', {}) };
+        if (!configs[effKey]) configs[effKey] = { users: {}, products: {} };
+        if (!configs[effKey].users) configs[effKey].users = {};
+        if (!configs[otherKey]) configs[otherKey] = { users: {}, products: {} };
+        if (!configs[otherKey].users) configs[otherKey].users = {};
+
+        const userOverrideEntry = {
+          team: cleanTeam,
+          channel: targetCh,
+          grade: newGrade,
+          baseTarget: Number(newBaseTarget) || 0,
+          updatedTs: nowTs
+        };
+
+        configs[effKey].users[String(agentId)] = { ...userOverrideEntry };
+        configs[otherKey].users[String(agentId)] = { ...userOverrideEntry };
+        setStored('monthly_configs', configs);
+
+        let sales = getStored('sales_records', []);
+        sales = sales.map(s => (String(s.userId) === String(agentId) && (String(s.date || '').endsWith(mk) || String(s.date || '') === `MONTHLY_PROD_${mk}`))
+          ? { ...s, team: cleanTeam, userName: agentName }
+          : s
+        );
+        setStored('sales_records', sales);
+        markLocalSalesMutatedNow();
+
+        let attList = getStored('attendance_records', []);
+        attList = attList.map(a => (String(a.userId) === String(agentId) && String(a.date || '').endsWith(mk))
+          ? { ...a, team: cleanTeam, userName: agentName }
+          : a
+        );
+        setStored('attendance_records', attList);
+
+        let rosterList = getStored('roster_records', []);
+        rosterList = rosterList.map(r => (String(r.id) === String(agentId) && r.monthKey === mk)
+          ? { ...r, team: cleanTeam, name: agentName, isDeleted: false }
+          : r
+        );
+        setStored('roster_records', rosterList);
+        markLocalUserOrConfigMutatedNow();
+
+        return { effKey, monthConfigObj: configs[effKey], otherKey, otherConfigObj: configs[otherKey] };
+      };
+
+      getUsersForMonth = function(mKey, includeAllChannels = false) {
+        const mk = mKey || selectedMonthKey;
+        const delSet = (typeof window.isUserPermanentlyDeleted === 'function')
+          ? new Set(Object.keys(window.getDeletedUsersStore ? window.getDeletedUsersStore() : {}).concat(['11102', '20101', '20102', '20103']))
+          : new Set(['11102', '20101', '20102', '20103']);
+
+        const lockStore = window.getLocalUserEditsLockStore();
+        const monthLocks = lockStore[mk] || {};
+        const globalLocks = lockStore['__GLOBAL_USERS__'] || {};
+
+        const rawUsers = getStored('users', DEFAULT_USERS);
+        const userMapById = new Map();
+        DEFAULT_USERS.forEach(u => {
+          const uid = String(u.id).trim();
+          if (!delSet.has(uid)) userMapById.set(uid, normalizeUserRecord(u));
+        });
+        rawUsers.forEach(u => {
+          if (!u || !u.id) return;
+          const uid = String(u.id).trim();
+          if (!delSet.has(uid)) userMapById.set(uid, normalizeUserRecord(u));
+        });
+        Object.keys(globalLocks).forEach(uid => {
+          if (delSet.has(uid)) return;
+          const gLock = globalLocks[uid];
+          const existing = userMapById.get(uid);
+          if (!existing || Number(gLock.updatedTs || 0) >= Number(existing.updatedTs || 0)) {
+            userMapById.set(uid, normalizeUserRecord({ ...(existing || {}), ...gLock }));
+          }
+        });
+
+        const baseUsers = Array.from(userMapById.values());
+        const configs = getStored('monthly_configs', {});
+        const fbCfg = configs[mk] || {};
+        const waCfg = configs[`WA_${mk}`] || {};
+        const fbUsersOv = (fbCfg.users && typeof fbCfg.users === 'object') ? fbCfg.users : {};
+        const waUsersOv = (waCfg.users && typeof waCfg.users === 'object') ? waCfg.users : {};
+
+        const mapped = baseUsers.map(u => {
+          const uid = String(u.id).trim();
+          let updated = { ...u, team: normalizeTeamNameAlias(u.team) };
+
+          const candidates = [fbUsersOv[uid], waUsersOv[uid], monthLocks[uid]].filter(x => x && typeof x === 'object' && !x.isRemoved);
+          let bestOv = null;
+          candidates.forEach(cand => {
+            if (!bestOv || Number(cand.updatedTs || 0) >= Number(bestOv.updatedTs || 0)) {
+              bestOv = cand;
+            }
+          });
+
+          if (bestOv) {
+            if (bestOv.team) updated.team = normalizeTeamNameAlias(bestOv.team);
+            if (bestOv.channel) updated.channel = bestOv.channel;
+            if (bestOv.grade) updated.grade = bestOv.grade;
+            if (bestOv.baseTarget !== undefined && bestOv.baseTarget !== null) {
+              updated.baseTarget = Number(bestOv.baseTarget);
+            }
+          }
+
+          const userCh = updated.channel || getChannelForTeam(updated.team);
+          updated.channel = userCh;
+
+          if (updated.role === 'admin' && uid === '10175' && !bestOv) {
+            updated.grade = updated.grade || 'A';
+            updated.baseTarget = Number(updated.baseTarget) || 1576609;
+          } else if (updated.role === 'admin' && (!updated.baseTarget || Number(updated.baseTarget) === 0)) {
+            updated.baseTarget = userCh === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
+          }
+          return updated;
+        });
+
+        if (includeAllChannels || activeChannel === 'ALL_CHANNELS') return mapped;
+        return mapped.filter(u => u.role === 'supervisor' || getChannelForTeam(u.team) === activeChannel);
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 3: FIX CREATE / EDIT USER MODAL & QUICK ASSIGN SO THEY NEVER FORCE
+      //         OR RESET GRADE, TARGET OR TEAM
+      // -----------------------------------------------------------------------
+      window.refreshUserModalGradeOptionsAndPreview = function(updateTargetInput = false) {
+        const gradeSel = document.getElementById('usrGrade');
+        const targetInp = document.getElementById('usrTarget');
+        if (!gradeSel || !targetInp) return;
+
+        const chKey = window.userModalSelectedScaleChannel || 'FACEBOOK';
+        const chTag = chKey === 'WHATSAPP' ? '🟢 [WhatsApp]' : '🔵 [Facebook]';
+        const gMap = window.getGradeMapForChannelScale(chKey, selectedMonthKey);
+        const curGrade = gradeSel.value || 'A-';
+
+        const gradeSpecs = [
+          { val: 'A+', label: `${chTag} Grade A+ — ৳${Number(gMap['A+']).toLocaleString()}` },
+          { val: 'A',  label: `${chTag} Grade A — ৳${Number(gMap['A']).toLocaleString()}` },
+          { val: 'A-', label: `${chTag} Grade A- — ৳${Number(gMap['A-']).toLocaleString()}` },
+          { val: 'B',  label: `${chTag} Grade B — ৳${Number(gMap['B']).toLocaleString()}` },
+          { val: 'C',  label: `${chTag} Grade C — ৳${Number(gMap['C']).toLocaleString()}` },
+          { val: 'Pending', label: `⏳ Pending Target (৳0 — Can still be in a Team or Floating)` },
+          { val: 'Supervisor', label: `👁️ Supervisor — ৳0` },
+          { val: 'TL', label: `${chTag} Grade TL — ৳${Number(gMap['TL']).toLocaleString()}` }
+        ];
+
+        gradeSel.innerHTML = gradeSpecs.map(gs => `<option value="${gs.val}" ${gs.val === curGrade ? 'selected' : ''}>${gs.label}</option>`).join('');
+        gradeSel.value = curGrade;
+
+        if (updateTargetInput) {
+          if (curGrade === 'Pending' || curGrade === 'Supervisor') {
+            targetInp.value = 0;
+          } else if (gMap[curGrade] !== undefined) {
+            targetInp.value = gMap[curGrade];
+          }
+        }
+
+        const fbScaleBtn = document.getElementById('usrModalScaleBtnFB');
+        const waScaleBtn = document.getElementById('usrModalScaleBtnWA');
+        if (fbScaleBtn && waScaleBtn) {
+          if (chKey === 'WHATSAPP') {
+            waScaleBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[11px] font-black bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+            fbScaleBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[11px] font-extrabold bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+          } else {
+            fbScaleBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[11px] font-black bg-blue-600 text-white shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+            waScaleBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[11px] font-extrabold bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+          }
+        }
+
+        const livePreviewBox = document.getElementById('usrModalLiveScaleSummary');
+        if (livePreviewBox) {
+          const baseNum = Number(targetInp.value) || 0;
+          const workNum = Math.round(baseNum * 1.05);
+          const dailyNum = Math.round(workNum / 26);
+          livePreviewBox.className = chKey === 'WHATSAPP'
+            ? 'mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-900 flex flex-wrap items-center justify-between gap-2'
+            : 'mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-900 flex flex-wrap items-center justify-between gap-2';
+          livePreviewBox.innerHTML = `
+            <span><i class="${chKey === 'WHATSAPP' ? 'fa-brands fa-whatsapp text-emerald-600' : 'fa-brands fa-facebook text-blue-600'} mr-1"></i><strong>${chKey === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} (${curGrade}):</strong> Actual Target ৳${baseNum.toLocaleString()}</span>
+            <span>Portal (+5%): <strong>৳${workNum.toLocaleString()}</strong> • Daily: <strong>৳${dailyNum.toLocaleString()}</strong></span>
+          `;
+        }
+      };
+
+      openUserModal = function(editId) {
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+        const users = getUsersForMonth(selectedMonthKey, true);
+        const existing = users.find(u => String(u.id) === String(editId));
+        if (existing) {
+          if (!canEditTargetUser(currentUser, existing)) {
+            showPortalToast('Permission Denied', 'Only Nazim (Super Admin) can edit this account.', 'error');
+            return;
+          }
+          const detectedCh = (existing.channel === 'WHATSAPP' || getChannelForTeam(existing.team) === 'WHATSAPP' || [1696589, 1576609, 1476810, 1377011, 1277213, 498997].includes(Number(existing.baseTarget)))
+            ? 'WHATSAPP'
+            : 'FACEBOOK';
+          window.userModalSelectedScaleChannel = detectedCh;
+
+          document.getElementById('usrId').value = existing.id;
+          document.getElementById('usrName').value = existing.name;
+          document.getElementById('usrRole').value = existing.role || 'agent';
+          const teamSel = document.getElementById('usrTeam');
+          if (teamSel) {
+            teamSel.value = existing.team;
+            if (!teamSel.value) {
+              teamSel.value = detectedCh === 'WHATSAPP' ? 'WA Floating' : 'Floating';
+            }
+            teamSel.onchange = function() {
+              const selCh = getChannelForTeam(this.value);
+              window.userModalSelectedScaleChannel = (selCh === 'WHATSAPP') ? 'WHATSAPP' : 'FACEBOOK';
+              window.refreshUserModalGradeOptionsAndPreview(false);
+            };
+          }
+          const initGrade = existing.role === 'supervisor' ? 'Supervisor' : (existing.grade || (existing.role === 'admin' ? 'TL' : 'A'));
+          window.refreshUserModalGradeOptionsAndPreview(false);
+          document.getElementById('usrGrade').value = initGrade;
+          document.getElementById('usrPass').value = existing.pass || '123456';
+          document.getElementById('usrTarget').value = existing.baseTarget ?? 0;
+          window.refreshUserModalGradeOptionsAndPreview(false);
+        } else {
+          const defaultCh = (activeChannel === 'WHATSAPP' || (currentUser && getChannelForTeam(currentUser.team) === 'WHATSAPP'))
+            ? 'WHATSAPP'
+            : 'FACEBOOK';
+          window.userModalSelectedScaleChannel = defaultCh;
+
+          document.getElementById('usrId').value = '';
+          document.getElementById('usrName').value = '';
+          document.getElementById('usrRole').value = 'agent';
+          const teamSel = document.getElementById('usrTeam');
+          if (teamSel) {
+            teamSel.value = isSuperAdmin(currentUser) ? getActiveChannelMeta().teams[0] : currentUser.team;
+            teamSel.onchange = function() {
+              const selCh = getChannelForTeam(this.value);
+              window.userModalSelectedScaleChannel = (selCh === 'WHATSAPP') ? 'WHATSAPP' : 'FACEBOOK';
+              window.refreshUserModalGradeOptionsAndPreview(true);
+            };
+          }
+          document.getElementById('usrGrade').value = 'A-';
+          document.getElementById('usrPass').value = '123456';
+          window.refreshUserModalGradeOptionsAndPreview(true);
+        }
+        openModal('userModal');
+      };
+
+      handleSaveUser = async function(e) {
+        e.preventDefault();
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+        const targetId = document.getElementById('usrId').value.trim();
+        const existingUser = getUsersForMonth(selectedMonthKey, true).find(u => String(u.id) === String(targetId));
+        if (existingUser && !canEditTargetUser(currentUser, existingUser)) {
+          showPortalToast('Permission Denied', 'You cannot overwrite a protected Admin ID.', 'error');
+          return;
+        }
+
+        const roleVal = document.getElementById('usrRole').value;
+        if (roleVal === 'admin' && !isSuperAdmin(currentUser) && String(targetId) !== String(currentUser.id)) {
+          showPortalToast('Permission Denied', 'Only Nazim (Super Admin) can create Admin accounts.', 'error');
+          return;
+        }
+
+        const rawGradeVal = roleVal === 'supervisor' ? 'Supervisor' : (document.getElementById('usrGrade').value || (roleVal === 'admin' ? 'TL' : 'A'));
+        const rawName = document.getElementById('usrName').value.trim();
+
+        const selectedTeamVal = normalizeTeamNameAlias(document.getElementById('usrTeam').value || currentUser.team);
+        const allowedNonSuperTeams = [normalizeTeamNameAlias(currentUser.team), 'Floating', 'WA Floating', 'All Teams'];
+        let finalTeamVal = isSuperAdmin(currentUser)
+          ? selectedTeamVal
+          : (allowedNonSuperTeams.includes(selectedTeamVal) ? selectedTeamVal : normalizeTeamNameAlias(currentUser.team));
+
+        if (finalTeamVal === 'Floating' && window.userModalSelectedScaleChannel === 'WHATSAPP') {
+          finalTeamVal = 'WA Floating';
+        } else if (finalTeamVal === 'WA Floating' && window.userModalSelectedScaleChannel === 'FACEBOOK') {
+          finalTeamVal = 'Floating';
+        }
+
+        const rawTargetInputVal = Number(document.getElementById('usrTarget').value) || 0;
+        let finalGradeVal = rawGradeVal;
+        let finalTargetVal = rawTargetInputVal;
+
+        if (roleVal === 'supervisor') {
+          finalGradeVal = 'Supervisor';
+          finalTargetVal = 0;
+        } else if (finalGradeVal === 'Pending') {
+          finalTargetVal = rawTargetInputVal > 0 ? rawTargetInputVal : 0;
+        } else if (finalTargetVal <= 0) {
+          const teamCh = getChannelForTeam(finalTeamVal);
+          const gMap = window.getGradeMapForChannelScale(teamCh, selectedMonthKey);
+          finalTargetVal = Number(gMap[finalGradeVal] || 0);
+        }
+
+        const nowTs = Date.now();
+        const newUser = {
+          ...normalizeUserRecord({
+            id: targetId,
+            name: rawName,
+            team: finalTeamVal,
+            channel: getChannelForTeam(finalTeamVal),
+            grade: finalGradeVal,
+            role: roleVal,
+            pass: document.getElementById('usrPass').value.trim(),
+            baseTarget: finalTargetVal
+          }),
+          team: finalTeamVal,
+          channel: getChannelForTeam(finalTeamVal),
+          grade: finalGradeVal,
+          baseTarget: finalTargetVal,
+          updatedTs: nowTs
+        };
+
+        let users = [...getStored('users', DEFAULT_USERS)];
+        const idx = users.findIndex(u => String(u.id) === String(newUser.id));
+        const isNewAccount = idx === -1;
+
+        openConfirmWarningModal(
+          (isNewAccount ? 'Create New' : 'Update') + ' User ID (' + newUser.id + ') for ' + selectedMonthKey + '?',
+          '<strong>Name:</strong> ' + newUser.name + ' (ID: ' + newUser.id + ')<br><strong>Team / Status (' + selectedMonthKey + '):</strong> ' + newUser.team + ' (' + newUser.channel + ') • <strong>Grade:</strong> ' + newUser.grade + '<br><strong>Actual Base Target (' + selectedMonthKey + '):</strong> ৳' + newUser.baseTarget.toLocaleString() + ' <span class="text-xs text-slate-500">(Portal +5%: ৳' + Math.round(newUser.baseTarget * 1.05).toLocaleString() + ')</span><br><br>Confirm to save and sync this account for <strong>' + selectedMonthKey + '</strong>.',
+          'Confirm User Account Save',
+          async () => {
+            if (idx !== -1) {
+              users[idx] = { ...users[idx], ...newUser, updatedTs: nowTs };
+            } else {
+              users.push(newUser);
+            }
+            setStored('users', users);
+            window.saveLocalUserEditLock(selectedMonthKey, newUser);
+            markLocalUserOrConfigMutatedNow();
+
+            const { effKey, monthConfigObj, otherKey, otherConfigObj } = syncAgentTeamForSelectedMonthOnly(
+              newUser.id,
+              newUser.name,
+              newUser.team,
+              newUser.grade,
+              newUser.baseTarget
+            );
+
+            const logMeta = recordActivityLog(
+              isNewAccount ? 'Created User ID' : 'Updated User ID',
+              (isNewAccount ? 'Created' : 'Updated') + ' ' + newUser.role.toUpperCase() + ' ID for ' + selectedMonthKey + ': ' + newUser.name + ' (' + newUser.id + '), Team: ' + newUser.team + ', Grade: ' + newUser.grade + ', Target: ৳' + newUser.baseTarget.toLocaleString()
+            );
+
+            if (currentUser && String(currentUser.id) === String(newUser.id)) {
+              currentUser = { ...newUser };
+              setStored('session_user', currentUser);
+            }
+
+            closeModal('userModal');
+            renderAppLayout();
+            showPortalToast('User ID Saved & Synced!', newUser.name + ' (' + newUser.id + ') updated for ' + selectedMonthKey + '!', 'success');
+
+            await postToSheet('SAVE_USER', {
+              ...newUser,
+              monthKey: selectedMonthKey,
+              ...logMeta
+            }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+            if (otherConfigObj) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+            }
+          },
+          'Yes, Confirm & Save',
+          true
+        );
+      };
+
+      quickAssignAgentToTeam = function(agentId, newTeamName) {
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users') && !hasFeatureAccess(currentUser, 'feat_edit_roster')) return;
+        const cleanNewTeam = normalizeTeamNameAlias(newTeamName);
+        if (!isSuperAdmin(currentUser) && normalizeTeamNameAlias(currentUser.team) !== cleanNewTeam) {
+          showPortalToast('Permission Denied', `You can only assign available agents to your own team (${currentUser.team}).`, 'error');
+          return;
+        }
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const targetUser = allUsers.find(u => String(u.id) === String(agentId));
+        if (!targetUser) return;
+
+        if (!isSuperAdmin(currentUser) && !window.isFloatingPoolAgent(targetUser) && normalizeTeamNameAlias(targetUser.team) !== cleanNewTeam) {
+          showPortalToast('Agent Locked', `${targetUser.name} is currently assigned to ${targetUser.team}. Their TL must release them first.`, 'error');
+          return;
+        }
+
+        const newChannel = getChannelForTeam(cleanNewTeam);
+        const assignedGrade = targetUser.grade || 'Pending';
+        const assignedBaseTarget = Number(targetUser.baseTarget) || 0;
+
+        openConfirmWarningModal(
+          `Assign ${targetUser.name} to ${cleanNewTeam} (${selectedMonthKey})?`,
+          `Are you sure you want to assign <strong>${targetUser.name} (${targetUser.id})</strong> to <strong>${cleanNewTeam} (${newChannel})</strong> for <strong>${selectedMonthKey}</strong>?<br><br>• <strong>Current Grade:</strong> ${assignedGrade} • <strong>Base Target:</strong> ৳${assignedBaseTarget.toLocaleString()}<br>• Their sales & achievements will immediately count in <strong>${cleanNewTeam}</strong>, <strong>${newChannel}</strong> & <strong>All Channels</strong>.<br>• You can edit their Grade & Target anytime from Target Setup & IDs.`,
+          'Team Assignment Confirmation',
+          async () => {
+            const nowTs = Date.now();
+            let users = [...getStored('users', DEFAULT_USERS)];
+            const idx = users.findIndex(u => String(u.id) === String(agentId));
+            const updatedUsrObj = {
+              ...(idx !== -1 ? users[idx] : targetUser),
+              team: cleanNewTeam,
+              channel: newChannel,
+              grade: assignedGrade,
+              baseTarget: assignedBaseTarget,
+              updatedTs: nowTs
+            };
+            if (idx !== -1) users[idx] = updatedUsrObj;
+            else users.push(updatedUsrObj);
+
+            setStored('users', users);
+            window.saveLocalUserEditLock(selectedMonthKey, updatedUsrObj);
+            markLocalUserOrConfigMutatedNow();
+
+            const { effKey, monthConfigObj, otherKey, otherConfigObj } = syncAgentTeamForSelectedMonthOnly(
+              agentId,
+              targetUser.name,
+              cleanNewTeam,
+              assignedGrade,
+              assignedBaseTarget
+            );
+
+            const assignedRow = {
+              id: String(targetUser.id),
+              name: targetUser.name,
+              team: cleanNewTeam,
+              isTL: targetUser.role === 'admin',
+              sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO',
+              monthKey: selectedMonthKey
+            };
+            let savedRoster = [...getStored('roster_records', [])];
+            const rIdx = savedRoster.findIndex(r => r.monthKey === selectedMonthKey && String(r.id) === String(agentId));
+            if (rIdx !== -1) savedRoster[rIdx] = { ...savedRoster[rIdx], team: cleanNewTeam, isDeleted: false };
+            else savedRoster.push(assignedRow);
+            setStored('roster_records', savedRoster);
+            markLocalUserOrConfigMutatedNow();
+
+            const logMeta = recordActivityLog('Assigned Agent Team', `${currentUser.name} assigned ${targetUser.name} (${targetUser.id}) to ${cleanNewTeam} (Grade: ${assignedGrade}, Target: ৳${assignedBaseTarget.toLocaleString()}) for ${selectedMonthKey}`);
+            renderAppLayout();
+            showPortalToast('Team Assigned & Synced!', `${targetUser.name} is now assigned to ${cleanNewTeam}.`, 'success');
+
+            await postToSheet('SAVE_USER', { ...updatedUsrObj, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
+            await postToSheet('SAVE_ROSTER_ROW', { ...(rIdx !== -1 ? savedRoster[rIdx] : assignedRow), ...logMeta }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+            if (otherConfigObj) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+            }
+          },
+          `Yes, Assign to ${cleanNewTeam}`,
+          true
+        );
+      };
+
+      handleReleaseAgentToFloatingPool = function(empId) {
+        if (!hasFeatureAccess(currentUser, 'feat_edit_roster') && !hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const targetUser = allUsers.find(u => String(u.id) === String(empId));
+        const allRoster = getRosterForMonth(selectedMonthKey);
+        const rosterRow = allRoster.find(r => String(r.id) === String(empId));
+        const memberName = targetUser ? targetUser.name : (rosterRow ? rosterRow.name : empId);
+        const currentTeam = normalizeTeamNameAlias(targetUser ? targetUser.team : (rosterRow ? rosterRow.team : ''));
+
+        if (!isSuperAdmin(currentUser) && normalizeTeamNameAlias(currentUser.team) !== currentTeam) {
+          showPortalToast('Permission Denied', `Only ${currentTeam}'s Team Leader or Super Admin can release this member!`, 'error');
+          return;
+        }
+
+        const floatingPoolName = getChannelForTeam(currentTeam) === 'WHATSAPP' ? 'WA Floating' : 'Floating';
+
+        openConfirmWarningModal(
+          `Release ${memberName} (${empId}) from ${currentTeam}?`,
+          `Are you sure you want to release <strong>${memberName} (${empId})</strong> from <strong>${currentTeam}</strong> to the <strong>${floatingPoolName} Pool</strong> for <strong>${selectedMonthKey}</strong>?`,
+          'Confirm Team Release',
+          async () => {
+            const nowTs = Date.now();
+            let users = [...getStored('users', DEFAULT_USERS)];
+            const uIdx = users.findIndex(u => String(u.id) === String(empId));
+            const keepGrade = targetUser ? targetUser.grade : 'Pending';
+            const keepTarget = targetUser ? (Number(targetUser.baseTarget) || 0) : 0;
+            const releasedUsrObj = {
+              ...(uIdx !== -1 ? users[uIdx] : targetUser),
+              id: String(empId),
+              name: memberName,
+              team: floatingPoolName,
+              channel: getChannelForTeam(floatingPoolName),
+              grade: keepGrade,
+              baseTarget: keepTarget,
+              updatedTs: nowTs
+            };
+            if (uIdx !== -1) users[uIdx] = releasedUsrObj;
+            setStored('users', users);
+            window.saveLocalUserEditLock(selectedMonthKey, releasedUsrObj);
+            markLocalUserOrConfigMutatedNow();
+
+            const { effKey, monthConfigObj, otherKey, otherConfigObj } = syncAgentTeamForSelectedMonthOnly(
+              empId,
+              memberName,
+              floatingPoolName,
+              keepGrade,
+              keepTarget
+            );
+
+            let savedList = [...getStored('roster_records', [])];
+            const rIdx = savedList.findIndex(r => r.monthKey === selectedMonthKey && String(r.id) === String(empId));
+            const updatedRosterRow = {
+              ...(rosterRow || { id: String(empId), name: memberName, sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' }),
+              team: floatingPoolName,
+              isDeleted: false,
+              monthKey: selectedMonthKey
+            };
+            if (rIdx !== -1) savedList[rIdx] = updatedRosterRow;
+            else savedList.push(updatedRosterRow);
+            delete pendingRosterEditsMap[`${selectedMonthKey}_${empId}`];
+            setStored('roster_records', savedList);
+            markLocalUserOrConfigMutatedNow();
+
+            const logMeta = recordActivityLog(
+              'Released Member to Floating Pool',
+              `${currentUser.name} released ${memberName} (${empId}) from ${currentTeam} to ${floatingPoolName} (${selectedMonthKey})`
+            );
+
+            renderAppLayout();
+            showPortalToast('Released to Floating Pool!', `${memberName} (${empId}) is now in ${floatingPoolName}.`, 'warning');
+
+            await postToSheet('SAVE_USER', { ...releasedUsrObj, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
+            await postToSheet('SAVE_ROSTER_ROW', { ...updatedRosterRow, ...logMeta }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+            if (otherConfigObj) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+            }
+          },
+          'Yes, Release to Pool',
+          false
+        );
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 4: TARGET & ACHIEVEMENT AGGREGATION RULES ACROSS TEAM, CHANNEL & ALL CHANNELS
+      // -----------------------------------------------------------------------
+      getTargetData = function(user, scopeOverride, mKey) {
+        const mk = mKey || selectedMonthKey;
+        const allUsers = getUsersForMonth(mk);
+        let baseTarget = 0;
+        let agentCount = 1;
+
+        if (canViewAll(user)) {
+          const defaultTeam = (activeChannel === 'ALL_CHANNELS' || user.role !== 'admin') ? 'ALL' : user.team;
+          const rawScope = scopeOverride || dashboardScope || defaultTeam;
+          const chTeamsList = getActiveChannelMeta().teams || [];
+          const scope = (rawScope === 'ALL' || chTeamsList.includes(normalizeTeamNameAlias(rawScope))) ? rawScope : 'ALL';
+
+          const agentsInScope = allUsers.filter(u => {
+            if (u.role !== 'agent') return false;
+            if (scope === 'ALL') {
+              return !window.isFloatingPoolAgent(u) || Number(u.baseTarget || 0) > 0;
+            }
+            return normalizeTeamNameAlias(u.team) === normalizeTeamNameAlias(scope);
+          });
+
+          const tlsInScope = allUsers.filter(u => u.role === 'admin' && (scope === 'ALL' ? true : normalizeTeamNameAlias(u.team) === normalizeTeamNameAlias(scope)));
+          const agentsTargetSum = agentsInScope.reduce((sum, a) => sum + (Number(a.baseTarget) || 0), 0);
+          const tlsTargetSum = tlsInScope.reduce((sum, tl) => sum + (Number(tl.baseTarget) || (getChannelForTeam(tl.team) === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET)), 0);
+          baseTarget = agentsTargetSum + tlsTargetSum;
+          agentCount = agentsInScope.length || 1;
+        } else {
+          const freshUser = allUsers.find(u => String(u.id) === String(user.id)) || user;
+          baseTarget = (freshUser.baseTarget !== undefined && freshUser.baseTarget !== null) ? Number(freshUser.baseTarget) : 0;
+        }
+
+        const workingTarget = calcWorkingTargetFromBase(baseTarget, activeChannel);
+        const dailyTarget = Math.round(workingTarget / 26);
+
+        const d = new Date().getDate();
+        let sprintName, sprintGoal, sprintPct;
+        if (d <= 10) { sprintName = 'Sprint 1 (Days 1–10)'; sprintPct = 0.40; sprintGoal = Math.round(workingTarget * 0.40); }
+        else if (d <= 20) { sprintName = 'Sprint 2 (Days 11–20)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
+        else { sprintName = 'Sprint 3 (Days 21–31)'; sprintPct = 0.35; sprintGoal = Math.round(workingTarget * 0.35); }
+
+        return { baseTarget, workingTarget, dailyTarget, sprintName, sprintGoal, sprintPct, agentCount };
+      };
+
+      const _origRenderOmniBannerV54 = renderOmniChannelTotalSalesBanner;
+      renderOmniChannelTotalSalesBanner = function() {
+        const u = currentUser;
+        if (!canViewAll(u) || activeChannel !== 'ALL_CHANNELS') return '';
+        const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
+        const knownTeams = [...CHANNEL_META.FACEBOOK.teams, ...CHANNEL_META.WHATSAPP.teams];
+        let htmlOut = _origRenderOmniBannerV54();
+
+        const floatingUsersWithTarget = allUsersOmni.filter(usr =>
+          usr.role === 'agent' &&
+          !knownTeams.includes(normalizeTeamNameAlias(usr.team)) &&
+          Number(usr.baseTarget || 0) > 0
+        );
+
+        if (floatingUsersWithTarget.length > 0) {
+          const allSalesMonth = deduplicateSalesRecordsList(getStored('sales_records', []))
+            .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+          let fbBase = 0, waBase = 0;
+          allUsersOmni.forEach(usr => {
+            if (usr.role === 'supervisor') return;
+            const b = Number(usr.baseTarget) || 0;
+            if (getChannelForTeam(usr.team) === 'WHATSAPP') waBase += b;
+            else fbBase += b;
+          });
+
+          const fbWork = calcWorkingTargetFromBase(fbBase, 'FACEBOOK');
+          const waWork = calcWorkingTargetFromBase(waBase, 'WHATSAPP');
+          const grandWork = fbWork + waWork;
+
+          let fbRev = 0, waRev = 0;
+          allSalesMonth.forEach(s => {
+            const amt = Number(s.amount) || 0;
+            if (getChannelForTeam(s.team) === 'WHATSAPP') waRev += amt;
+            else fbRev += amt;
+          });
+          const grandRev = fbRev + waRev;
+
+          const grandRem = Math.max(0, grandWork - grandRev);
+          const fbRem = Math.max(0, fbWork - fbRev);
+          const waRem = Math.max(0, waWork - waRev);
+
+          const grandPct = grandWork > 0 ? ((grandRev / grandWork) * 100).toFixed(1) : '0.0';
+          const fbPct = fbWork > 0 ? ((fbRev / fbWork) * 100).toFixed(1) : '0.0';
+          const waPct = waWork > 0 ? ((waRev / waWork) * 100).toFixed(1) : '0.0';
+
+          let oldFbBase = 0, oldWaBase = 0;
+          allUsersOmni.forEach(usr => {
+            if (usr.role === 'supervisor') return;
+            if (!knownTeams.includes(normalizeTeamNameAlias(usr.team))) return;
+            const b = Number(usr.baseTarget) || 0;
+            if (getChannelForTeam(usr.team) === 'WHATSAPP') oldWaBase += b;
+            else oldFbBase += b;
+          });
+          const oldFbWork = calcWorkingTargetFromBase(oldFbBase, 'FACEBOOK');
+          const oldWaWork = calcWorkingTargetFromBase(oldWaBase, 'WHATSAPP');
+          const oldGrandWork = oldFbWork + oldWaWork;
+
+          const oldGrandRem = Math.max(0, oldGrandWork - grandRev);
+          const oldFbRem = Math.max(0, oldFbWork - fbRev);
+          const oldWaRem = Math.max(0, oldWaWork - waRev);
+
+          const oldGrandPct = oldGrandWork > 0 ? ((grandRev / oldGrandWork) * 100).toFixed(1) : '0.0';
+          const oldFbPct = oldFbWork > 0 ? ((fbRev / oldFbWork) * 100).toFixed(1) : '0.0';
+          const oldWaPct = oldWaWork > 0 ? ((waRev / oldWaWork) * 100).toFixed(1) : '0.0';
+
+          htmlOut = htmlOut
+            .replace(`৳${oldGrandWork.toLocaleString()}`, `৳${grandWork.toLocaleString()}`)
+            .replace(`৳${oldGrandRem.toLocaleString()}`, `৳${grandRem.toLocaleString()}`)
+            .replace(`${oldGrandPct}%`, `${grandPct}%`)
+            .replace(`৳${oldFbWork.toLocaleString()}`, `৳${fbWork.toLocaleString()}`)
+            .replace(`৳${oldFbRem.toLocaleString()}`, `৳${fbRem.toLocaleString()}`)
+            .replace(`${oldFbPct}%`, `${fbPct}%`)
+            .replace(`৳${oldWaWork.toLocaleString()}`, `৳${waWork.toLocaleString()}`)
+            .replace(`৳${oldWaRem.toLocaleString()}`, `৳${waRem.toLocaleString()}`)
+            .replace(`${oldWaPct}%`, `${waPct}%`);
+        }
+        return htmlOut;
+      };
+
+      // Disable old auto-overwrite timer from PATCH v53
+      window.syncActualTargetsToGoogleSheetNow = function() {};
+
+      const _origHandleCloudDataV54 = handleCloudData;
+      handleCloudData = function(res) {
+        const lockStore = window.getLocalUserEditsLockStore();
+        const globalLocks = lockStore['__GLOBAL_USERS__'] || {};
+
+        if (res && Array.isArray(res.customUsers)) {
+          res.customUsers = res.customUsers.map(cu => {
+            if (!cu || !cu.id) return cu;
+            const uid = String(cu.id).trim();
+            const locLock = globalLocks[uid];
+            if (locLock && Number(locLock.updatedTs || 0) > Number(cu.updatedTs || 0)) {
+              return { ...cu, ...locLock };
+            }
+            return cu;
+          });
+        }
+
+        if (res && res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
+          Object.keys(res.monthlyConfigs).forEach(cfgKey => {
+            const cfgObj = res.monthlyConfigs[cfgKey];
+            if (!cfgObj || typeof cfgObj !== 'object') return;
+            const cleanMk = cfgKey.replace(/^WA_/, '');
+            const mLocks = lockStore[cleanMk] || {};
+            if (cfgObj.users && typeof cfgObj.users === 'object') {
+              Object.keys(cfgObj.users).forEach(uid => {
+                const uOv = cfgObj.users[uid];
+                if (uOv && uOv.portalActualTarget !== undefined) {
+                  uOv.baseTarget = Number(uOv.portalActualTarget);
+                }
+                const locOv = mLocks[uid] || globalLocks[uid];
+                if (locOv && Number(locOv.updatedTs || 0) > Number((uOv && uOv.updatedTs) || 0)) {
+                  cfgObj.users[uid] = {
+                    team: locOv.team,
+                    channel: locOv.channel,
+                    grade: locOv.grade,
+                    baseTarget: locOv.baseTarget,
+                    updatedTs: locOv.updatedTs
+                  };
+                }
+              });
+            }
+          });
+        }
+
+        return _origHandleCloudDataV54(res);
+      };
+    } catch (errV54) {
+      console.error('Non-fatal patch v54 warning:', errV54);
+    }
+
+
+    // =========================================================================
+    // PATCH v55 (index-v33.html) — COMPLETE FIX FOR:
+    // 1. Shift-End Report Submission Data Flicker Glitch Fix:
+    //    - Monotonic Request Sequence Guard (_cloudFetchSeqId) discards stale
+    //      in-flight cloud polls that started before a report submission.
+    //    - 60-Second Grace Hold in pending_sales_queue + 45-Second High-Water
+    //      Anti-Regression Guard so submitted reports do not flicker back to old data.
+    // 2. Team & Channel-Wise File Download Audit Logging in Activity Logs:
+    //    - Logs every CSV/Excel download by any Agent, TL/Admin, or Supervisor
+    //      with exact Channel, Team Scope, Period, Filename & Row Count.
+    //    - Adds an Action Type filter ("📥 File Downloads Only") in Activity Logs.
+    // =========================================================================
+    try {
+      // -----------------------------------------------------------------------
+      // PART 1: ANTI-FLICKER & IN-FLIGHT RACE CONDITION FIX ON REPORT SUBMIT
+      // -----------------------------------------------------------------------
+      window._cloudFetchSeqCounter = 1;
+      window._latestIssuedFetchSeqId = 0;
+      window._highestAppliedFetchSeqId = 0;
+      window._lastSalesMutationEpochMs = 0;
+      window._recentLocalSalesLockMap = {}; // { "userId_date": { entry, lockedAtMs, isDeletion } }
+      window._cloudObservedHighWaterSalesMap = {}; // { "userId_date": { entry, seenAtMs } }
+
+      const _origMarkLocalSalesMutatedV55 = markLocalSalesMutatedNow;
+      markLocalSalesMutatedNow = function() {
+        window._lastSalesMutationEpochMs = Date.now();
+        window._cloudFetchSeqCounter++;
+        window._latestIssuedFetchSeqId = window._cloudFetchSeqCounter;
+        return _origMarkLocalSalesMutatedV55();
+      };
+
+      const _origEnqueueVerifiedSalesV55 = enqueueVerifiedSalesSubmission;
+      enqueueVerifiedSalesSubmission = function(entryObj, logMetaObj, isDeletion = false) {
+        if (entryObj && entryObj.userId && entryObj.date) {
+          const cleanD = String(entryObj.date).replace(/^'/, '').trim();
+          const k = `${String(entryObj.userId).trim()}_${cleanD}`;
+          window._recentLocalSalesLockMap[k] = {
+            entry: { ...entryObj, date: cleanD },
+            lockedAtMs: Date.now(),
+            isDeletion: Boolean(isDeletion)
+          };
+          window._lastSalesMutationEpochMs = Date.now();
+          window._cloudFetchSeqCounter++;
+          window._latestIssuedFetchSeqId = window._cloudFetchSeqCounter;
+        }
+        return _origEnqueueVerifiedSalesV55(entryObj, logMetaObj, isDeletion);
+      };
+
+      const _origCommitSalesEntryInstantV55 = commitSalesEntryInstant;
+      commitSalesEntryInstant = function(entry, targetAgent, isUpdate) {
+        if (entry && entry.userId && entry.date) {
+          const cleanD = String(entry.date).replace(/^'/, '').trim();
+          entry.date = cleanD;
+          const k = `${String(entry.userId).trim()}_${cleanD}`;
+          window._recentLocalSalesLockMap[k] = {
+            entry: { ...entry },
+            lockedAtMs: Date.now(),
+            isDeletion: false
+          };
+          window._lastSalesMutationEpochMs = Date.now();
+          window._cloudFetchSeqCounter++;
+          window._latestIssuedFetchSeqId = window._cloudFetchSeqCounter;
+        }
+        return _origCommitSalesEntryInstantV55(entry, targetAgent, isUpdate);
+      };
+
+      fetchFromSheet = function(forceImmediate = false) {
+        const now = Date.now();
+        if (!forceImmediate && (now - (window._lastWritePostTimestamp || 0)) < 2600) {
+          return;
+        }
+        if (!forceImmediate && (now - (window._lastSalesMutationEpochMs || 0)) < 2600) {
+          return;
+        }
+        if (!forceImmediate && isFetchingCloud && (now - lastCloudFetchTime) < 6000) {
+          return;
+        }
+
+        isFetchingCloud = true;
+        lastCloudFetchTime = now;
+        window._cloudFetchSeqCounter++;
+        const myReqSeqId = window._cloudFetchSeqCounter;
+        window._latestIssuedFetchSeqId = myReqSeqId;
+        const reqStartedAtMs = now;
+
+        let pingQuery = '';
+        const liveCalendarMonthKey = getCurrentMonthKeyStr();
+        if (currentUser) {
+          const st = getUserOnlineStatus(currentUser.id);
+          pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}&monthKey=${encodeURIComponent(liveCalendarMonthKey)}`;
+        } else {
+          pingQuery = `&monthKey=${encodeURIComponent(liveCalendarMonthKey)}`;
+        }
+
+        let handled = false;
+        const onSuccess = (res) => {
+          if (handled) return;
+          handled = true;
+          if (myReqSeqId === window._latestIssuedFetchSeqId) {
+            isFetchingCloud = false;
+          }
+          if (myReqSeqId < window._highestAppliedFetchSeqId || reqStartedAtMs < (window._lastSalesMutationEpochMs || 0)) {
+            return;
+          }
+          window._highestAppliedFetchSeqId = myReqSeqId;
+          if (res && res.status === 'success') handleCloudData(res);
+        };
+
+        fetch(`${webhookUrl}?t=${now}${pingQuery}`)
+          .then(r => r.json())
+          .then(onSuccess)
+          .catch(() => {
+            const cbName = 'gb_cb_' + now + '_' + myReqSeqId;
+            const script = document.createElement('script');
+            window[cbName] = function(res) {
+              delete window[cbName];
+              if (script.parentNode) script.parentNode.removeChild(script);
+              onSuccess(res);
+            };
+            script.src = `${webhookUrl}?callback=${cbName}&t=${now}${pingQuery}`;
+            script.onerror = function() {
+              delete window[cbName];
+              if (script.parentNode) script.parentNode.removeChild(script);
+              if (myReqSeqId === window._latestIssuedFetchSeqId) isFetchingCloud = false;
+            };
+            document.body.appendChild(script);
+          });
+      };
+
+      const _origHandleCloudDataV55 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && Array.isArray(res.salesRecords)) {
+          const nowMs = Date.now();
+          const pendingQ = getPendingSalesOutboxQueue();
+          let queueModified = false;
+
+          const dedupCloudMap = new Map();
+          res.salesRecords.forEach(r => {
+            if (!r || !r.userId || !r.date) return;
+            const uid = String(r.userId).trim();
+            const cleanD = String(r.date).replace(/^'/, '').trim();
+            const k = `${uid}_${cleanD}`;
+            const normRec = { ...r, userId: uid, date: cleanD };
+            if (!dedupCloudMap.has(k)) {
+              dedupCloudMap.set(k, normRec);
+            } else {
+              const prev = dedupCloudMap.get(k);
+              const prevScore = (Number(prev.amount) || 0) + (Number(prev.orders) || 0) + (Number(prev.leads) || 0);
+              const currScore = (Number(normRec.amount) || 0) + (Number(normRec.orders) || 0) + (Number(normRec.leads) || 0);
+              if (currScore >= prevScore) {
+                dedupCloudMap.set(k, normRec);
+              }
+            }
+          });
+
+          const recentDeleteLogKeys = new Set();
+          if (Array.isArray(res.activityLogs)) {
+            res.activityLogs.slice(0, 25).forEach(l => {
+              const act = String(l?.action || '').toUpperCase();
+              if (act.includes('DELETE') || act.includes('CLEAN') || act.includes('MOVED')) {
+                recentDeleteLogKeys.add('HAS_RECENT_DELETE');
+              }
+            });
+          }
+
+          dedupCloudMap.forEach((rec, k) => {
+            const hw = window._cloudObservedHighWaterSalesMap[k];
+            const recAmt = Number(rec.amount) || 0;
+            const recOrd = Number(rec.orders) || 0;
+            if (!hw || recAmt > (Number(hw.entry.amount) || 0) || recOrd > (Number(hw.entry.orders) || 0) || (nowMs - hw.seenAtMs) > 45000) {
+              window._cloudObservedHighWaterSalesMap[k] = { entry: { ...rec }, seenAtMs: nowMs };
+            } else if (!recentDeleteLogKeys.has('HAS_RECENT_DELETE') && (nowMs - hw.seenAtMs) <= 45000 && (recAmt < (Number(hw.entry.amount) || 0))) {
+              dedupCloudMap.set(k, { ...hw.entry });
+            }
+          });
+
+          if (!recentDeleteLogKeys.has('HAS_RECENT_DELETE')) {
+            Object.keys(window._cloudObservedHighWaterSalesMap).forEach(k => {
+              const hw = window._cloudObservedHighWaterSalesMap[k];
+              if (hw && (nowMs - hw.seenAtMs) <= 45000 && !dedupCloudMap.has(k)) {
+                dedupCloudMap.set(k, { ...hw.entry });
+              }
+            });
+          }
+
+          Object.keys(window._recentLocalSalesLockMap).forEach(k => {
+            const lockItem = window._recentLocalSalesLockMap[k];
+            if (!lockItem || (nowMs - lockItem.lockedAtMs) > 65000) {
+              delete window._recentLocalSalesLockMap[k];
+              return;
+            }
+            if (lockItem.isDeletion) {
+              dedupCloudMap.delete(k);
+            } else if (lockItem.entry) {
+              dedupCloudMap.set(k, { ...lockItem.entry });
+            }
+          });
+
+          Object.keys(pendingQ).forEach(k => {
+            const item = pendingQ[k];
+            if (!item || !item.entry) return;
+            const cloudMatch = dedupCloudMap.get(k);
+            if (!item.isDeletion && cloudMatch && doesCloudRecordMatchPending(cloudMatch, item.entry)) {
+              if (!item.verifiedInCloudAt) {
+                item.verifiedInCloudAt = nowMs;
+                item.lastAttemptAt = nowMs + 60000;
+                queueModified = true;
+              }
+              if ((nowMs - item.verifiedInCloudAt) < 45000) {
+                dedupCloudMap.set(k, { ...item.entry });
+              }
+            }
+          });
+
+          if (queueModified) savePendingSalesOutboxQueue(pendingQ);
+          res.salesRecords = Array.from(dedupCloudMap.values());
+        }
+        return _origHandleCloudDataV55(res);
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 2: TEAM & CHANNEL-WISE FILE DOWNLOAD AUDIT LOGS IN ACTIVITY LOGS
+      // -----------------------------------------------------------------------
+      window.activityActionTypeFilter = 'ALL';
+
+      window.setActivityActionTypeFilter = function(val) {
+        window.activityActionTypeFilter = val || 'ALL';
+        renderAppLayout();
+      };
+
+      window.detectDownloadScopeAndChannelMeta = function(filename) {
+        const fn = String(filename || '');
+        const chMeta = getActiveChannelMeta();
+        let channelLabel = chMeta.fullTitle || 'Facebook Channel';
+        let teamScopeLabel = 'All Teams';
+
+        if (activeTab === 'monthly_perf') {
+          teamScopeLabel = monthlyPerfTeamScope === 'ALL' ? `All ${chMeta.name} Teams` : monthlyPerfTeamScope;
+          if (monthlyPerfAgentId !== 'ALL') {
+            const ag = getUsersForMonth(selectedMonthKey, true).find(u => String(u.id) === String(monthlyPerfAgentId));
+            if (ag) teamScopeLabel = `${ag.team} • Agent: ${ag.name} (${ag.id})`;
+          }
+        } else if (activeTab === 'drive_product') {
+          teamScopeLabel = driveProdTeamScope === 'ALL' ? `All ${chMeta.name} Teams` : driveProdTeamScope;
+        } else if (activeTab === 'sprint_target') {
+          teamScopeLabel = sprintTabTeamScope === 'ALL' ? `All ${chMeta.name} Teams` : sprintTabTeamScope;
+        } else if (activeTab === 'missing_reports') {
+          teamScopeLabel = missingReportsTeamScope === 'ALL' ? `All ${chMeta.name} Teams` : missingReportsTeamScope;
+        } else if (activeTab === 'reports') {
+          teamScopeLabel = logsFilterScope === 'ALL' ? `All ${chMeta.name} Teams` : logsFilterScope;
+        } else if (activeTab === 'incentive') {
+          teamScopeLabel = (window.incentiveTabTeamScope && window.incentiveTabTeamScope !== 'ALL') ? window.incentiveTabTeamScope : `All ${chMeta.name} Teams`;
+        } else if (activeTab === 'ranking') {
+          teamScopeLabel = `All ${chMeta.name} Teams`;
+        }
+
+        const allKnownTeams = ['Team Nazim', 'Team Samad', 'Team Saikat', 'Team Parvaj', 'Team Shakib Baksh'];
+        allKnownTeams.forEach(tn => {
+          const slug = tn.replace(/\s+/g, '_');
+          if (fn.includes(slug) || fn.includes(tn)) {
+            teamScopeLabel = tn;
+            channelLabel = getChannelForTeam(tn) === 'WHATSAPP' ? 'WhatsApp Channel' : 'Facebook Channel';
+          }
+        });
+        if (/WhatsApp|WA_/i.test(fn)) channelLabel = 'WhatsApp Channel';
+        else if (/Facebook|FB_/i.test(fn)) channelLabel = 'Facebook Channel';
+        else if (activeChannel === 'ALL_CHANNELS' && teamScopeLabel.startsWith('All ')) channelLabel = 'All Channels (Facebook + WhatsApp)';
+
+        return { channelLabel, teamScopeLabel };
+      };
+
+      const _origDownloadPortalCsvFileV55 = downloadPortalCsvFile;
+      downloadPortalCsvFile = function(filename, headersArr, rowsArr) {
+        const result = _origDownloadPortalCsvFileV55(filename, headersArr, rowsArr);
+        try {
+          if (currentUser) {
+            const cleanTitle = String(filename || 'Report')
+              .replace(/\.(csv|xls|xlsx)$/i, '')
+              .replace(/_/g, ' ')
+              .trim();
+            const { channelLabel, teamScopeLabel } = window.detectDownloadScopeAndChannelMeta(filename);
+            const rowCount = Array.isArray(rowsArr) ? rowsArr.length : 0;
+
+            recordActivityLog(
+              'Downloaded Report File',
+              `📥 Downloaded "${cleanTitle}.xls" • Channel: [${channelLabel}] • Scope/Team: [${teamScopeLabel}] • Period: ${selectedMonthKey} (${rowCount} Rows)`,
+              true
+            );
+          }
+        } catch (logErr) {}
+        return result;
+      };
+
+      const _origRenderActivityLogsViewV55 = renderActivityLogsView;
+      renderActivityLogsView = function() {
+        const u = currentUser;
+        const rawAllowedLogs = deduplicateActivityLogsList(getStored('activity_logs', [])).filter(l => canActorSeeActivityLog(u, l));
+
+        const allLogs = rawAllowedLogs.filter(l => {
+          if (activeChannel === 'ALL_CHANNELS') return true;
+          const det = String(l.details || '');
+          if (activeChannel === 'WHATSAPP' && (det.includes('[WhatsApp Channel]') || det.includes('Team Saikat') || det.includes('Team Parvaj') || det.includes('Team Shakib Baksh'))) return true;
+          if (activeChannel === 'FACEBOOK' && (det.includes('[Facebook Channel]') || det.includes('Team Nazim') || det.includes('Team Samad'))) return true;
+          return l.team === 'All Teams' || l.team === 'Floating' || l.team === 'WA Floating' || getChannelForTeam(l.team) === activeChannel;
+        });
+
+        let visibleLogs = [];
+        if (canViewAll(u)) {
+          visibleLogs = activityTeamFilter === 'ALL'
+            ? allLogs
+            : allLogs.filter(l => {
+                const normFilter = normalizeTeamNameAlias(activityTeamFilter);
+                return normalizeTeamNameAlias(l.team) === normFilter || String(l.details || '').includes(`[${normFilter}`) || String(l.details || '').includes(normFilter);
+              });
+          if (activityAgentFilter !== 'ALL') {
+            const targetAg = getUsersForMonth(selectedMonthKey, true).find(x => String(x.id) === String(activityAgentFilter));
+            const targetNameLow = targetAg ? String(targetAg.name || '').toLowerCase() : '';
+            visibleLogs = visibleLogs.filter(l => String(l.userId) === String(activityAgentFilter) || String(l.details || '').includes(`(${activityAgentFilter})`) || (targetNameLow && String(l.details || '').toLowerCase().includes(targetNameLow)));
+          }
+        } else {
+          visibleLogs = rawAllowedLogs;
+        }
+
+        const actFilter = window.activityActionTypeFilter || 'ALL';
+        if (actFilter !== 'ALL') {
+          visibleLogs = visibleLogs.filter(l => {
+            const a = String(l.action || '').toUpperCase();
+            if (actFilter === 'DOWNLOADS') return a.includes('DOWNLOAD') || a.includes('EXPORT');
+            if (actFilter === 'SALES') return a.includes('SALES') || a.includes('REPORT') || a.includes('DRIVE PRODUCT');
+            if (actFilter === 'AUTH_BREAK') return a.includes('LOGIN') || a.includes('LOGOUT') || a.includes('BREAK') || a.includes('RESUME');
+            if (actFilter === 'ROSTER_SWAP') return a.includes('ROSTER') || a.includes('SWAP') || a.includes('LEAVE') || a.includes('ASSIGN') || a.includes('RELEASE');
+            return true;
+          });
+        }
+
+        let htmlOut = '';
+        const allStoredLogsBackup = getStored('activity_logs', []);
+        const prevTeamFilter = activityTeamFilter;
+        const prevAgentFilter = activityAgentFilter;
+        try {
+          setStored('activity_logs', visibleLogs);
+          activityTeamFilter = 'ALL';
+          activityAgentFilter = 'ALL';
+          htmlOut = _origRenderActivityLogsViewV55();
+        } finally {
+          activityTeamFilter = prevTeamFilter;
+          activityAgentFilter = prevAgentFilter;
+          setStored('activity_logs', allStoredLogsBackup);
+        }
+
+        const downloadLogsCount = allLogs.filter(l => String(l.action || '').toUpperCase().includes('DOWNLOAD')).length;
+        const actionFilterHtml = `
+          <div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
+            <i class="fa-solid fa-file-arrow-down text-emerald-600 text-xs"></i>
+            <span class="text-[10px] font-extrabold text-emerald-800 uppercase">Log Type:</span>
+            <select onchange="setActivityActionTypeFilter(this.value)" class="bg-transparent text-xs font-extrabold text-emerald-950 focus:outline-none cursor-pointer">
+              <option value="ALL" ${actFilter === 'ALL' ? 'selected' : ''}>All Activities (${allLogs.length})</option>
+              <option value="DOWNLOADS" ${actFilter === 'DOWNLOADS' ? 'selected' : ''}>📥 File Downloads Only (${downloadLogsCount})</option>
+              <option value="SALES" ${actFilter === 'SALES' ? 'selected' : ''}>📊 Sales & Product Submissions</option>
+              <option value="ROSTER_SWAP" ${actFilter === 'ROSTER_SWAP' ? 'selected' : ''}>🔄 Roster, Leave & Duty Swaps</option>
+              <option value="AUTH_BREAK" ${actFilter === 'AUTH_BREAK' ? 'selected' : ''}>🕒 Login, Logout & Breaks</option>
+            </select>
+          </div>
+        `;
+
+        htmlOut = htmlOut.replace(
+          `<div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">`,
+          actionFilterHtml + `<div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">`
+        );
+
+        htmlOut = htmlOut.replace(
+          /bg-emerald-100 text-emerald-800 border-emerald-200">Downloaded Report File<\/span>/g,
+          `bg-teal-600 text-white border-teal-700 shadow-2xs"><i class="fa-solid fa-file-arrow-down mr-1"></i>Downloaded Report File</span>`
+        );
+
+        return htmlOut;
+      };
+    } catch (errV55) {
+      console.error('Non-fatal patch v55 warning:', errV55);
+    }
+
+
+    // =========================================================================
+    // PATCH v56 (index-v34.html) — ZERO-LOSS GUARANTEED REPORT SYNC ENGINE
+    // 1. 0% Miss Chance on Instant Tab/Browser Close or Shift-End Rush:
+    //    - Tracks every submitted/edited/deleted report in a dedicated persistent
+    //      store (gb_unconfirmed_sheet_writes_v56) until TRUE RAW Google Sheet
+    //      read-back confirms the exact row is written in the Sheet!
+    //    - Fixes the false-confirmation bug where local anti-flicker lock could
+    //      make handleCloudData think a report was already confirmed in Sheet.
+    // 2. Fastest Possible Sync & Auto-Retry:
+    //    - Fires immediate POST (keepalive:true) + rapid verification poll at
+    //      900ms, then every 1.6s, with automatic retry every 2.8s if Google
+    //      Apps Script LockService was busy during shift-end rush.
+    // 3. Truthful Live Sync Banner (Outside #app, Zero Rerender):
+    //    - Shows "⏳ Saving to Google Sheet... Do not close yet" while in-flight,
+    //      and switches to "✅ 100% Confirmed in Google Sheet & Portal! Safe to close"
+    //      the instant Google Sheet confirms receipt.
+    // 4. Tab-Close Warning + pagehide sendBeacon Failsafe + Safe Logout Wait:
+    //    - Warns user via browser beforeunload if they try to close mid-sync.
+    //    - Flushes unconfirmed reports via navigator.sendBeacon on pagehide /
+    //      visibilitychange (hidden) and holds USER_LOGOUT so it never competes
+    //      for the Apps Script lock.
+    //    - "End Duty & Logout" waits up to 5s for Sheet confirmation before
+    //      signing out so agents who submit & immediately click Logout never lose data.
+    //    - Auto-flushes any leftover unconfirmed reports immediately on next page load
+    //      (even before login!).
+    // =========================================================================
+    try {
+      const UNCONFIRMED_WRITES_KEY_V56 = 'gb_unconfirmed_sheet_writes_v56';
+
+      window.getUnconfirmedSheetWritesV56 = function() {
+        try {
+          const raw = localStorage.getItem(UNCONFIRMED_WRITES_KEY_V56);
+          const parsed = raw ? JSON.parse(raw) : {};
+          return (parsed && typeof parsed === 'object') ? parsed : {};
+        } catch (e) {
+          return {};
+        }
+      };
+
+      window.saveUnconfirmedSheetWritesV56 = function(mapObj) {
+        try {
+          localStorage.setItem(UNCONFIRMED_WRITES_KEY_V56, JSON.stringify(mapObj || {}));
+        } catch (e) {}
+      };
+
+      window.getUnconfirmedSheetWriteCountV56 = function() {
+        const map = window.getUnconfirmedSheetWritesV56();
+        return Object.keys(map).length;
+      };
+
+      // Build URLSearchParams for any sales write item (used by both fetch POST & sendBeacon)
+      window.buildSalesWriteParamsV56 = function(item) {
+        const action = item.isDeletion ? 'DELETE_SALES_RECORD' : 'DAILY_SALES_SUBMIT';
+        const pingInfo = currentUser ? {
+          pingUserId: String(currentUser.id),
+          pingName: currentUser.name,
+          pingRole: currentUser.role,
+          pingTeam: currentUser.team,
+          pingState: getUserOnlineStatus(currentUser.id)
+        } : {};
+        const payloadObj = item.isDeletion
+          ? {
+              action,
+              timestamp: new Date().toISOString(),
+              ...pingInfo,
+              userId: String(item.entry.userId).trim(),
+              date: String(item.entry.date).replace(/^'/, '').trim(),
+              ...(item.logMeta || {})
+            }
+          : {
+              action,
+              timestamp: new Date().toISOString(),
+              ...pingInfo,
+              ...item.entry,
+              ...(item.logMeta || {})
+            };
+        const params = new URLSearchParams();
+        params.append('action', action);
+        params.append('payload', JSON.stringify(payloadObj));
+        return { action, payloadObj, params };
+      };
+
+      // Fire direct resilient POST (+ GET fallback if fetch throws) without bumping _lastSalesMutationEpochMs
+      window.transmitSingleUnconfirmedWriteV56 = function(item, useBeaconAlso = false) {
+        if (!item || !item.entry) return;
+        const { params } = window.buildSalesWriteParamsV56(item);
+
+        if (useBeaconAlso && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+          try {
+            navigator.sendBeacon(webhookUrl, params);
+          } catch (e) {}
+        }
+
+        try {
+          fetch(webhookUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            keepalive: true,
+            redirect: 'follow',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+          }).catch(() => {
+            try {
+              if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+                navigator.sendBeacon(webhookUrl, params);
+              }
+              const qStr = params.toString();
+              if (qStr.length < 1900) {
+                new Image().src = `${webhookUrl}?${qStr}&_cb=${Date.now()}`;
+              }
+            } catch (err2) {}
+          });
+        } catch (err) {
+          try {
+            if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+              navigator.sendBeacon(webhookUrl, params);
+            }
+          } catch (e) {}
+        }
+      };
+
+      // Flush all unconfirmed writes via sendBeacon (for tab close / mobile screen lock / backgrounding)
+      window.beaconFlushAllUnconfirmedWritesV56 = function() {
+        const map = window.getUnconfirmedSheetWritesV56();
+        const keys = Object.keys(map);
+        if (keys.length === 0) return false;
+        keys.forEach(k => {
+          const item = map[k];
+          if (!item || !item.entry) return;
+          const { params } = window.buildSalesWriteParamsV56(item);
+          let sent = false;
+          if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+            try {
+              sent = navigator.sendBeacon(webhookUrl, params);
+            } catch (e) {}
+          }
+          if (!sent) {
+            try {
+              fetch(webhookUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                keepalive: true,
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params.toString()
+              }).catch(() => {});
+            } catch (e) {}
+          }
+        });
+        return true;
+      };
+
+      // Standalone floating Sync Status Pill (Lives on document.body, never interrupts #app)
+      window._syncBannerHideTimerV56 = null;
+      window.renderLiveSheetSyncBannerV56 = function(state, customMsg = '') {
+        let el = document.getElementById('gbLiveSheetSyncBannerV56');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'gbLiveSheetSyncBannerV56';
+          el.className = 'fixed bottom-5 right-5 z-[95] max-w-sm pointer-events-auto transition-all duration-200';
+          document.body.appendChild(el);
+        }
+        if (window._syncBannerHideTimerV56) {
+          clearTimeout(window._syncBannerHideTimerV56);
+          window._syncBannerHideTimerV56 = null;
+        }
+
+        if (state === 'HIDDEN') {
+          el.innerHTML = '';
+          return;
+        }
+
+        if (state === 'SYNCING') {
+          const cnt = window.getUnconfirmedSheetWriteCountV56();
+          el.innerHTML = `
+            <div class="bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl border-2 border-amber-400 flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center text-base shrink-0 shadow">
+                <i class="fa-solid fa-cloud-arrow-up animate-bounce"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-black text-amber-300 uppercase tracking-wide">Saving to Google Sheet...</span>
+                  <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 text-[10px] font-black">${cnt} Pending</span>
+                </div>
+                <p class="text-[11px] font-bold text-slate-200 mt-0.5 leading-snug">
+                  ${customMsg || 'Please wait 2–3 seconds before closing the browser so it is 100% confirmed in Sheet & Portal.'}
+                </p>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        if (state === 'CONFIRMED') {
+          el.innerHTML = `
+            <div class="bg-emerald-950 text-white px-4 py-3 rounded-2xl shadow-2xl border-2 border-emerald-400 flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center text-base shrink-0 shadow">
+                <i class="fa-solid fa-circle-check"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <span class="text-xs font-black text-emerald-300 uppercase tracking-wide block">✅ Submitted — Safe to close now!</span>
+                <p class="text-[11px] font-bold text-emerald-100 mt-0.5 leading-snug">
+                  ${customMsg || 'Submitted! Safe to close now.'}
+                </p>
+              </div>
+              <button type="button" onclick="window.renderLiveSheetSyncBannerV56('HIDDEN')" class="text-emerald-300 hover:text-white text-xs shrink-0">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+          `;
+          window._syncBannerHideTimerV56 = setTimeout(() => {
+            if (window.getUnconfirmedSheetWriteCountV56() === 0) {
+              window.renderLiveSheetSyncBannerV56('HIDDEN');
+            }
+          }, 4200);
+        }
+      };
+
+      // Rapid verification & retry pump (checks every 1.6s while any write is unconfirmed, retries POST every 2.8s)
+      window._rapidVerifyIntervalV56 = null;
+      window.startRapidSheetVerificationLoopV56 = function() {
+        if (window._rapidVerifyIntervalV56) return;
+
+        // First ultra-fast read-back check at 950ms
+        setTimeout(() => {
+          if (window.getUnconfirmedSheetWriteCountV56() > 0) {
+            fetchFromSheet(true);
+          }
+        }, 950);
+
+        window._rapidVerifyIntervalV56 = setInterval(() => {
+          const map = window.getUnconfirmedSheetWritesV56();
+          const keys = Object.keys(map);
+          if (keys.length === 0) {
+            clearInterval(window._rapidVerifyIntervalV56);
+            window._rapidVerifyIntervalV56 = null;
+            return;
+          }
+
+          const nowMs = Date.now();
+          let mapChanged = false;
+          keys.forEach(k => {
+            const item = map[k];
+            if (!item || !item.entry || (nowMs - Number(item.queuedAt || 0)) > 86400000) {
+              delete map[k];
+              mapChanged = true;
+              return;
+            }
+            // Retry transmission every 2.8 seconds if Google Sheet has not yet confirmed it!
+            if ((nowMs - Number(item.lastSentAt || 0)) >= 2800) {
+              item.lastSentAt = nowMs;
+              item.attempts = (item.attempts || 1) + 1;
+              mapChanged = true;
+              window.transmitSingleUnconfirmedWriteV56(item, item.attempts >= 2);
+            }
+          });
+          if (mapChanged) window.saveUnconfirmedSheetWritesV56(map);
+
+          // Force an immediate verification GET poll so confirmation arrives as fast as possible
+          fetchFromSheet(true);
+          window.renderLiveSheetSyncBannerV56('SYNCING');
+        }, 1600);
+      };
+
+      // Hook enqueueVerifiedSalesSubmission so EVERY report submit, Drive Product update, AI ERP import, Move Date & Delete is tracked!
+      const _origEnqueueVerifiedSalesV56 = enqueueVerifiedSalesSubmission;
+      enqueueVerifiedSalesSubmission = function(entryObj, logMetaObj, isDeletion = false) {
+        const res = _origEnqueueVerifiedSalesV56(entryObj, logMetaObj, isDeletion);
+        if (entryObj && entryObj.userId && entryObj.date) {
+          const cleanD = String(entryObj.date).replace(/^'/, '').trim();
+          const uid = String(entryObj.userId).trim();
+          const k = `${uid}_${cleanD}`;
+          const map = window.getUnconfirmedSheetWritesV56();
+          map[k] = {
+            entry: { ...entryObj, userId: uid, date: cleanD },
+            logMeta: logMetaObj || {},
+            isDeletion: Boolean(isDeletion),
+            queuedAt: Date.now(),
+            lastSentAt: Date.now(),
+            attempts: 1
+          };
+          window.saveUnconfirmedSheetWritesV56(map);
+          window.renderLiveSheetSyncBannerV56(
+            'SYNCING',
+            isDeletion
+              ? `Deleting report (${cleanD}) from Google Sheet... Please wait 2 seconds.`
+              : `Syncing ${entryObj.userName || uid}'s report (${cleanD}) to Google Sheet... Do not close yet.`
+          );
+          window.startRapidSheetVerificationLoopV56();
+        }
+        return res;
+      };
+
+      // TRUE RAW CLOUD VERIFICATION (Runs BEFORE PATCH v55's local anti-flicker lock!)
+      const _origHandleCloudDataV56 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && Array.isArray(res.salesRecords)) {
+          const map = window.getUnconfirmedSheetWritesV56();
+          const keys = Object.keys(map);
+          if (keys.length > 0) {
+            // Build raw cloud lookup directly from the unmodified Google Sheet response
+            const rawCloudMap = new Map();
+            res.salesRecords.forEach(r => {
+              if (!r || !r.userId || !r.date) return;
+              const uid = String(r.userId).trim();
+              const cleanD = String(r.date).replace(/^'/, '').trim();
+              const k = `${uid}_${cleanD}`;
+              const prev = rawCloudMap.get(k);
+              if (!prev) {
+                rawCloudMap.set(k, { ...r, userId: uid, date: cleanD });
+              } else {
+                const prevScore = (Number(prev.amount) || 0) + (Number(prev.orders) || 0) + (Number(prev.leads) || 0);
+                const currScore = (Number(r.amount) || 0) + (Number(r.orders) || 0) + (Number(r.leads) || 0);
+                if (currScore >= prevScore) rawCloudMap.set(k, { ...r, userId: uid, date: cleanD });
+              }
+            });
+
+            const nowMs = Date.now();
+            let confirmedNowCount = 0;
+            let lastConfirmedLabel = '';
+            let mapChanged = false;
+
+            keys.forEach(k => {
+              const item = map[k];
+              if (!item || !item.entry) {
+                delete map[k];
+                mapChanged = true;
+                return;
+              }
+              const rawMatch = rawCloudMap.get(k);
+              const isConfirmedInRealSheet = item.isDeletion
+                ? !rawMatch
+                : Boolean(rawMatch && doesCloudRecordMatchPending(rawMatch, item.entry));
+
+              if (isConfirmedInRealSheet) {
+                delete map[k];
+                mapChanged = true;
+                confirmedNowCount++;
+                lastConfirmedLabel = `${item.entry.userName || item.entry.userId} (${item.entry.date})`;
+              } else {
+                // NOT YET IN GOOGLE SHEET: Keep local anti-flicker lock refreshed so UI never flickers back!
+                if (window._recentLocalSalesLockMap) {
+                  window._recentLocalSalesLockMap[k] = {
+                    entry: { ...item.entry },
+                    lockedAtMs: nowMs,
+                    isDeletion: Boolean(item.isDeletion)
+                  };
+                }
+              }
+            });
+
+            if (mapChanged) window.saveUnconfirmedSheetWritesV56(map);
+
+            const remainingCount = Object.keys(map).length;
+            if (remainingCount === 0 && confirmedNowCount > 0) {
+              if (window._rapidVerifyIntervalV56) {
+                clearInterval(window._rapidVerifyIntervalV56);
+                window._rapidVerifyIntervalV56 = null;
+              }
+              window.renderLiveSheetSyncBannerV56(
+                'CONFIRMED',
+                confirmedNowCount === 1
+                  ? `${lastConfirmedLabel} — Submitted! Safe to close now.`
+                  : `All ${confirmedNowCount} reports — Submitted! Safe to close now.`
+              );
+            } else if (remainingCount > 0) {
+              window.renderLiveSheetSyncBannerV56('SYNCING');
+            }
+          }
+        }
+        return _origHandleCloudDataV56(res);
+      };
+
+      // Prevent premature tab/browser close while a report is still uploading to Google Sheet
+      // AND immediately beacon-flush all unconfirmed writes on pagehide / hidden!
+      window.addEventListener('beforeunload', (ev) => {
+        if (window.getUnconfirmedSheetWriteCountV56() > 0) {
+          window.beaconFlushAllUnconfirmedWritesV56();
+          ev.preventDefault();
+          ev.returnValue = 'Your sales report is still syncing to Google Sheet! Please wait 2 seconds before closing.';
+          return ev.returnValue;
+        }
+      }, true);
+
+      window.addEventListener('pagehide', () => {
+        if (window.getUnconfirmedSheetWriteCountV56() > 0) {
+          window.beaconFlushAllUnconfirmedWritesV56();
+        }
+      });
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden' && window.getUnconfirmedSheetWriteCountV56() > 0) {
+          window.beaconFlushAllUnconfirmedWritesV56();
+        } else if (document.visibilityState === 'visible' && window.getUnconfirmedSheetWriteCountV56() > 0) {
+          window.startRapidSheetVerificationLoopV56();
+        }
+      });
+
+      // Safe Logout Guard: If agent clicks "End Duty & Logout" immediately after submitting,
+      // wait up to 5 seconds until Google Sheet confirms their report before signing out!
+      const _origExecuteInstantLogoutV56 = executeInstantLogout;
+      executeInstantLogout = async function() {
+        const unconfirmedCount = window.getUnconfirmedSheetWriteCountV56();
+        if (unconfirmedCount > 0) {
+          window.renderLiveSheetSyncBannerV56(
+            'SYNCING',
+            `Finishing Google Sheet sync (${unconfirmedCount} report) before logging out...`
+          );
+          const logoutModalBtn = document.querySelector('#logoutConfirmModal button[onclick*="executeInstantLogout"]');
+          if (logoutModalBtn) {
+            logoutModalBtn.disabled = true;
+            logoutModalBtn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> Syncing Report First...`;
+          }
+
+          // Immediately re-transmit + beacon and poll until confirmed (max 5.5s wait)
+          const mapNow = window.getUnconfirmedSheetWritesV56();
+          Object.keys(mapNow).forEach(k => window.transmitSingleUnconfirmedWriteV56(mapNow[k], true));
+          window.startRapidSheetVerificationLoopV56();
+
+          const waitStart = Date.now();
+          while (window.getUnconfirmedSheetWriteCountV56() > 0 && (Date.now() - waitStart) < 5500) {
+            await new Promise(r => setTimeout(r, 250));
+          }
+          if (window.getUnconfirmedSheetWriteCountV56() > 0) {
+            window.beaconFlushAllUnconfirmedWritesV56();
+          }
+        }
+        return _origExecuteInstantLogoutV56();
+      };
+
+      // On portal startup (even on Login screen!), immediately flush & verify any unconfirmed reports left over from a force-closed browser!
+      setTimeout(() => {
+        const leftoverMap = window.getUnconfirmedSheetWritesV56();
+        const leftoverKeys = Object.keys(leftoverMap);
+        if (leftoverKeys.length > 0) {
+          leftoverKeys.forEach(k => {
+            window.transmitSingleUnconfirmedWriteV56(leftoverMap[k], false);
+          });
+          window.renderLiveSheetSyncBannerV56(
+            'SYNCING',
+            `Auto-recovering & syncing ${leftoverKeys.length} pending report(s) to Google Sheet...`
+          );
+          window.startRapidSheetVerificationLoopV56();
+        }
+      }, 450);
+    } catch (errV56) {
+      console.error('Non-fatal patch v56 warning:', errV56);
+    }
+
 window.addEventListener('load', init);
   </script>
 </body>
