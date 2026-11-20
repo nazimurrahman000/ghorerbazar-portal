@@ -795,10 +795,19 @@
       { key: 'feat_post_notice', category: 'Action Capabilities', label: 'Broadcast Official Floor Notice', desc: 'Show Post Notice button to send announcements to all Bell Icons', icon: 'fa-bullhorn', color: 'text-orange-600' },
       { key: 'feat_edit_roster', category: 'Action Capabilities', label: 'Edit Weekly Duty Roster Shifts', desc: 'Change shift dropdowns (7 AM, 10 AM, 3 PM, Night, DO) in Duty Roster', icon: 'fa-calendar-check', color: 'text-indigo-600' },
       { key: 'feat_manage_attendance', category: 'Action Capabilities', label: 'Add / Edit / Delete Attendance Logs', desc: 'Manually edit or delete login/logout/working hours in Attendance tab', icon: 'fa-user-clock', color: 'text-teal-600' },
-      { key: 'feat_edit_grades_targets', category: 'Action Capabilities', label: 'Edit Monthly Grade & TL Targets', desc: 'Customize monthly base targets for Grade A+, A, A-, B, C & TL', icon: 'fa-layer-group', color: 'text-indigo-600' },
-      { key: 'feat_edit_products', category: 'Action Capabilities', label: 'Edit Monthly Product Incentives', desc: 'Add/remove monthly products, KG targets & 90%/100% cash bonuses', icon: 'fa-gift', color: 'text-amber-600' },
-      { key: 'feat_manage_users', category: 'Action Capabilities', label: 'Create / Edit / Delete User IDs', desc: 'Create new Agent/Supervisor IDs or edit existing user accounts', icon: 'fa-user-gear', color: 'text-rose-600' }
+      { key: 'feat_manage_users', category: 'Action Capabilities', label: 'Create / Edit User IDs, Grading & Team Assign', desc: 'Create/edit agents, change Grades & assign Teams (Grade amounts remain locked to Nazim unless granted below)', icon: 'fa-user-gear', color: 'text-rose-600' },
+
+      // Section 4: Critical Master Controls (Default: Nazim 10122 ONLY — Delegable per ID!)
+      { key: 'feat_edit_grades_targets', category: 'Critical Master Controls (Nazim Only)', label: 'Edit Grade-Wise Target Amounts & Custom Targets', desc: 'Modify monthly BDT target amounts for Grade A+, A, A-, B, C, TL & type custom target amounts in User ID setup', icon: 'fa-layer-group', color: 'text-indigo-600', isCritical: true },
+      { key: 'feat_edit_products', category: 'Critical Master Controls (Nazim Only)', label: 'Edit Drive Products (Names, Target KG, Bonuses & AI Keywords)', desc: 'Rename/add/remove Drive Products, change target KG quantities, cash bonuses, extra-KG rates & AI scan keywords', icon: 'fa-gift', color: 'text-amber-600', isCritical: true },
+      { key: 'feat_edit_sprint_targets', category: 'Critical Master Controls (Nazim Only)', label: 'Edit Sprint Targets, Dates, % & Sprint Rewards', desc: 'Modify Sprint 1/2/3 target percentages, calendar date boundaries, per-grade Sprint cash rewards & Sprint toggle', icon: 'fa-bolt', color: 'text-blue-600', isCritical: true }
     ];
+
+    const CRITICAL_MASTER_FEATURES_SET = new Set([
+      'feat_edit_grades_targets',
+      'feat_edit_products',
+      'feat_edit_sprint_targets'
+    ]);
 
     function isSuperAdmin(u) { return u && String(u.id) === '10122'; }
     function isFullAdmin(u) { return u && u.role === 'admin'; }
@@ -832,8 +841,9 @@
         feat_post_notice: isAdm,
         feat_edit_roster: isAdm,
         feat_manage_attendance: isAdm,
-        feat_edit_grades_targets: isAdm,
-        feat_edit_products: isAdm,
+        feat_edit_grades_targets: false,
+        feat_edit_products: false,
+        feat_edit_sprint_targets: false,
         feat_manage_users: isAdm
       };
     }
@@ -865,7 +875,12 @@
       const defaults = getDefaultFeaturePermissionsForRole(u.role);
       const store = getRolePermissionsStore();
       const userCustom = store[String(u.id)] || {};
-      return { ...defaults, ...userCustom };
+      const merged = { ...defaults, ...userCustom };
+      // Strictly require explicit Nazim delegation (_grant_<key> === true) for Critical Master Controls
+      CRITICAL_MASTER_FEATURES_SET.forEach(ck => {
+        merged[ck] = Boolean(userCustom['_grant_' + ck] === true);
+      });
+      return merged;
     }
 
         function isSprintSystemActiveForMonth(mKey) {
@@ -876,35 +891,47 @@
     }
 
     function toggleSprintSystemForMonth(mKey, forceVal) {
-      if (!isFullAdmin(currentUser)) return;
+      if (!isSuperAdmin(currentUser) && !hasFeatureAccess(currentUser, 'feat_edit_sprint_targets')) return;
       const mk = mKey || selectedMonthKey;
-      const configs = getStored('monthly_configs', {});
-      if (!configs[mk]) configs[mk] = { users: {}, products: {} };
-      const currentState = configs[mk].sprintEnabled !== false;
+      const configsSnapshot = getStored('monthly_configs', {});
+      const currentState = (configsSnapshot[mk] && configsSnapshot[mk].sprintEnabled === false) ? false : true;
       const nextState = (typeof forceVal === 'boolean') ? forceVal : !currentState;
-      configs[mk].sprintEnabled = nextState;
-      setStored('monthly_configs', configs);
 
-      const logMeta = recordActivityLog(
-        nextState ? 'Activated Sprint Target System' : 'Deactivated Sprint Target System',
-        `${nextState ? 'Enabled' : 'Disabled'} 10-Day Sprint Target system for ${mk} across all agent panels`
+      openConfirmWarningModal(
+        `${nextState ? 'Activate' : 'Deactivate'} Sprint Target System (${mk})?`,
+        `Are you sure you want to <strong>${nextState ? 'ACTIVATE' : 'DEACTIVATE'}</strong> the 10-Day Sprint Target System for <strong>${mk}</strong> across all agent panels?<br><br>📝 This change will sync to Google Sheets and be recorded in Activity Logs.`,
+        'Sprint System Confirmation',
+        async () => {
+          const configs = getStored('monthly_configs', {});
+          if (!configs[mk]) configs[mk] = { users: {}, products: {} };
+          configs[mk].sprintEnabled = nextState;
+          setStored('monthly_configs', configs);
+          markLocalUserOrConfigMutatedNow();
+
+          const logMeta = recordActivityLog(
+            nextState ? 'Activated Sprint Target System' : 'Deactivated Sprint Target System',
+            `${currentUser.name} (${currentUser.id}) ${nextState ? 'ENABLED' : 'DISABLED'} 10-Day Sprint Target system for ${mk} across all agent panels`
+          );
+          if (!nextState && activeTab === 'sprint_target' && !isFullAdmin(currentUser)) {
+            activeTab = 'dashboard';
+          }
+          renderAppLayout();
+          showPortalToast(
+            nextState ? `Sprint System Activated (${mk})` : `Sprint System Deactivated (${mk})`,
+            nextState
+              ? `All 3 Sprint slots (Sprint 1, 2 & 3) are now active for ${mk}!`
+              : `Sprint Target tab & agent sprint cards are now hidden for ${mk}.`,
+            nextState ? 'success' : 'warning'
+          );
+          postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: mk,
+            configJson: JSON.stringify(configs[mk]),
+            ...logMeta
+          }).catch(() => {});
+        },
+        nextState ? 'Yes, Activate Sprint' : 'Yes, Deactivate Sprint',
+        true
       );
-      if (!nextState && activeTab === 'sprint_target' && !isFullAdmin(currentUser)) {
-        activeTab = 'dashboard';
-      }
-      renderAppLayout();
-      showPortalToast(
-        nextState ? `Sprint System Activated (${mk})` : `Sprint System Deactivated (${mk})`,
-        nextState
-          ? `All 3 Sprint slots (Sprint 1, 2 & 3) are now active for ${mk}!`
-          : `Sprint Target tab & agent sprint cards are now hidden for ${mk}.`,
-        nextState ? 'success' : 'warning'
-      );
-      postToSheet('SAVE_MONTHLY_CONFIG', {
-        monthKey: mk,
-        configJson: JSON.stringify(configs[mk]),
-        ...logMeta
-      }).catch(() => {});
     }
 
     function toggleBulkFeatureForAllAgents(featureKey, enableVal) {
@@ -932,17 +959,20 @@
       'feat_post_notice',
       'feat_edit_roster',
       'feat_manage_attendance',
-      'feat_edit_grades_targets',
-      'feat_edit_products',
       'feat_manage_users'
     ]);
 
     function hasFeatureAccess(u, featureKey) {
       if (!u) return false;
       if (featureKey === 'tab_sprint_target' && !isSprintSystemActiveForMonth(selectedMonthKey)) {
-        return isFullAdmin(u);
+        return isSuperAdmin(u) || hasFeatureAccess(u, 'feat_edit_sprint_targets');
       }
       if (isSuperAdmin(u)) return true;
+      // Critical Master Controls: ONLY active if Nazim explicitly delegated them to this specific ID!
+      if (CRITICAL_MASTER_FEATURES_SET.has(featureKey)) {
+        const perms = getEffectivePermissionsForUser(u);
+        return Boolean(perms[featureKey]);
+      }
       // Enforce Cross-Channel Read-Only Mode for TLs viewing a different channel (FB TL viewing WA, or WA TL viewing FB)
       if (WRITE_ACTION_FEATURES.has(featureKey) && isCurrentChannelReadOnlyForUser(u)) {
         return false;
@@ -3150,7 +3180,7 @@
 
     function renderConfirmWarningModal() {
       return `
-        <div id="confirmWarningModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+        <div id="confirmWarningModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
           <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-red-200">
             <div class="flex items-center gap-3.5 mb-4">
               <div id="warnModalIconBox" class="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-xl shrink-0 shadow-sm">
@@ -9538,7 +9568,7 @@ function renderRankingAndComparison() {
       `;
     }
 
-    function openProductConfigModal() { openModal('productConfigModal'); }
+    function openProductConfigModal() { if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return; openModal('productConfigModal'); }
 
     function handleAddCustomProductSlot() {
       if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
@@ -13710,44 +13740,57 @@ function renderChatHubView() {
       const uid = String(targetUserId);
       if (uid === '10122') return;
 
-      const allUsers = getUsersForMonth(selectedMonthKey);
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
       const targetUser = allUsers.find(u => String(u.id) === uid);
       if (!targetUser) return;
 
       const featObj = PORTAL_FEATURES_CATALOG.find(f => f.key === featureKey);
       const featName = featObj ? featObj.label : featureKey;
-      const isChecked = checkboxEl.checked;
+      const isCriticalFeat = CRITICAL_MASTER_FEATURES_SET.has(featureKey);
+      const isChecked = checkboxEl ? Boolean(checkboxEl.checked) : false;
 
-      // Revert checkbox visually until confirmed
-      checkboxEl.checked = !isChecked;
+      if (checkboxEl) checkboxEl.checked = !isChecked;
 
       openConfirmWarningModal(
-        `Confirm Permission Change?`,
-        `Are you sure you want to <strong>${isChecked ? 'ENABLE' : 'DISABLE'}</strong> feature <strong>"${featName}"</strong> for <strong>${targetUser.name} (${uid})</strong>?`,
-        'Role & Access Confirmation',
+        isCriticalFeat ? `Confirm Critical Master Access ${isChecked ? 'Grant' : 'Revoke'}?` : `Confirm Permission Change?`,
+        `Are you sure you want to <strong>${isChecked ? 'GRANT / ENABLE' : 'REVOKE / DISABLE'}</strong> ${isCriticalFeat ? 'Critical Master Control ' : 'feature '}<strong>"${featName}"</strong> for <strong>${targetUser.name} (${uid} • ${targetUser.role.toUpperCase()} • ${targetUser.team})</strong>?${isCriticalFeat ? '<br><br>📝 This access change and all future edits made by this ID will be permanently logged in <strong>Activity Logs</strong>.' : ''}`,
+        isCriticalFeat ? 'Critical Access Audit' : 'Role & Access Confirmation',
         async () => {
           const permStore = getRolePermissionsStore();
           if (!permStore[uid]) {
             permStore[uid] = { ...getDefaultFeaturePermissionsForRole(targetUser.role) };
           }
           permStore[uid][featureKey] = Boolean(isChecked);
+          if (isCriticalFeat) {
+            permStore[uid]['_grant_' + featureKey] = Boolean(isChecked);
+            permStore[uid]['_grantMeta_' + featureKey] = isChecked
+              ? { grantedBy: currentUser.name, at: `${getTodayFormatted()} ${getNowTimeStr()}` }
+              : null;
+          }
           saveRolePermissionsStore(permStore);
 
+          const logActionTitle = isCriticalFeat
+            ? (isChecked ? 'Granted Critical Access' : 'Revoked Critical Access')
+            : 'Updated Feature Access';
           recordActivityLog(
-            'Updated Feature Access',
-            `Nazim ${isChecked ? 'ENABLED' : 'DISABLED'} "${featName}" for ${targetUser.name} (${uid})`,
+            logActionTitle,
+            `Nazim (10122) ${isChecked ? 'GRANTED' : 'REVOKED'} "${featName}" for ${targetUser.name} (${uid} • ${targetUser.role.toUpperCase()} • ${targetUser.team})`,
             true
           );
           renderAppLayout();
           showPortalToast(
-            isChecked ? 'Feature Enabled & Synced' : 'Feature Revoked & Synced',
+            isChecked ? 'Access Granted & Logged!' : 'Access Revoked & Logged!',
             `"${featName}" is now ${isChecked ? 'ACTIVE' : 'OFF'} for ${targetUser.name} (${uid}).`,
             isChecked ? 'success' : 'warning'
           );
         },
-        'Yes, Confirm Change',
+        isChecked ? 'Yes, Grant Access' : 'Yes, Revoke Access',
         true
       );
+    }
+
+    function handleQuickRevokeCriticalAccess(targetUserId, featureKey) {
+      handleToggleSingleUserFeature(targetUserId, featureKey, { checked: false });
     }
 
     function handleApplyRolePresetToUser(targetUserId, presetType) {
@@ -13755,7 +13798,7 @@ function renderChatHubView() {
       const uid = String(targetUserId);
       if (uid === '10122') return;
 
-      const allUsers = getUsersForMonth(selectedMonthKey);
+      const allUsers = getUsersForMonth(selectedMonthKey, true);
       const targetUser = allUsers.find(u => String(u.id) === uid);
       if (!targetUser) return;
 
@@ -13937,8 +13980,7 @@ function renderChatHubView() {
 
       const filteredUsers = controllableUsers.filter(u => {
         if (roleMgmtTeamFilter === 'ADMIN_SUP' && u.role === 'agent') return false;
-        if (roleMgmtTeamFilter === 'Team Nazim' && u.team !== 'Team Nazim') return false;
-        if (roleMgmtTeamFilter === 'Team Samad' && u.team !== 'Team Samad') return false;
+        if (roleMgmtTeamFilter !== 'ALL' && roleMgmtTeamFilter !== 'ADMIN_SUP' && normalizeTeamNameAlias(u.team) !== normalizeTeamNameAlias(roleMgmtTeamFilter)) return false;
         if (roleMgmtSearchQuery.trim()) {
           const q = roleMgmtSearchQuery.toLowerCase();
           return u.name.toLowerCase().includes(q) || String(u.id).includes(q) || (u.team || '').toLowerCase().includes(q);
@@ -13951,7 +13993,7 @@ function renderChatHubView() {
       const permStore = getRolePermissionsStore();
       const hasCustomOverride = targetUser && Boolean(permStore[String(targetUser.id)]);
 
-      const categories = ['Sidebar Tabs', 'Floor Visibility', 'Action Capabilities'];
+      const categories = ['Critical Master Controls (Nazim Only)', 'Action Capabilities', 'Floor Visibility', 'Sidebar Tabs'];
       const totalEnabledForTarget = PORTAL_FEATURES_CATALOG.filter(f => targetPerms[f.key]).length;
 
       return `
@@ -14056,8 +14098,7 @@ function renderChatHubView() {
                   ${[
                     { key: 'ALL', label: 'All IDs' },
                     { key: 'ADMIN_SUP', label: 'TL / Sup' },
-                    { key: 'Team Nazim', label: 'Team Nazim' },
-                    { key: 'Team Samad', label: 'Team Samad' }
+                    ...getDynamicTeamsForChannel('ALL_CHANNELS').map(tn => ({ key: tn, label: tn }))
                   ].map(f => `
                     <button type="button" onclick="setRoleMgmtTeamFilter('${f.key}')" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-colors ${roleMgmtTeamFilter === f.key ? 'bg-purple-600 text-white shadow' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
                       ${f.label}
@@ -14168,13 +14209,16 @@ function renderChatHubView() {
               <!-- Feature Categories & Toggle Cards -->
               ${categories.map(catName => {
                 const catFeatures = PORTAL_FEATURES_CATALOG.filter(f => f.category === catName);
+                const isCritCat = catName.includes('Critical Master');
                 return `
-                  <div class="card-dynamic p-5 bg-white">
-                    <div class="flex items-center justify-between mb-3.5 pb-2 border-b border-slate-100">
-                      <h4 class="text-xs font-black uppercase tracking-wider text-slate-800">
-                        <i class="fa-solid fa-sliders text-purple-600 mr-1.5"></i>${catName} (${catFeatures.filter(f => targetPerms[f.key]).length}/${catFeatures.length} Active)
+                  <div class="card-dynamic p-5 ${isCritCat ? 'bg-gradient-to-br from-rose-50/50 via-white to-amber-50/40 border-2 border-rose-300 shadow-sm' : 'bg-white'}">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3.5 pb-2 border-b ${isCritCat ? 'border-rose-200' : 'border-slate-100'}">
+                      <h4 class="text-xs font-black uppercase tracking-wider ${isCritCat ? 'text-rose-800' : 'text-slate-800'}">
+                        <i class="fa-solid ${isCritCat ? 'fa-shield-halved text-rose-600' : 'fa-sliders text-purple-600'} mr-1.5"></i>${catName} (${catFeatures.filter(f => targetPerms[f.key]).length}/${catFeatures.length} Delegated)
                       </h4>
-                      <span class="text-[10px] font-bold text-slate-400">Click any switch to add/remove feature for ID ${targetUser.id}</span>
+                      <span class="text-[10px] font-bold ${isCritCat ? 'text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md' : 'text-slate-400'}">
+                        ${isCritCat ? '🔒 Locked to Nazim by default — Toggle ON only if delegating to ID ' + targetUser.id : 'Click any switch to add/remove feature for ID ' + targetUser.id}
+                      </span>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                       ${catFeatures.map(feat => {
@@ -14205,6 +14249,95 @@ function renderChatHubView() {
               ` : ''}
             </div>
           </div>
+
+          <!-- Active Delegated Critical Access Overview & Audit Trail (Nazim Only) -->
+          ${(() => {
+            const delegatedRows = [];
+            controllableUsers.forEach(usr => {
+              const up = getEffectivePermissionsForUser(usr);
+              const uMeta = permStore[String(usr.id)] || {};
+              const held = [];
+              PORTAL_FEATURES_CATALOG.filter(f => f.isCritical).forEach(cf => {
+                if (up[cf.key]) {
+                  const meta = uMeta['_grantMeta_' + cf.key] || {};
+                  held.push({ key: cf.key, label: cf.label, at: meta.at || 'Active' });
+                }
+              });
+              if (held.length > 0) delegatedRows.push({ usr, held });
+            });
+
+            const critLogs = deduplicateActivityLogsList(getStored('activity_logs', [])).filter(l => {
+              const a = String(l.action || '').toUpperCase();
+              return a.includes('CRITICAL ACCESS') || a.includes('FEATURE ACCESS') || a.includes('ROLE PRESET') ||
+                     a.includes('GRADE TARGET') || a.includes('PRODUCT INCENTIVE') || a.includes('SPRINT') ||
+                     a.includes('MASTER SETTINGS') || a.includes('CREATED USER') || a.includes('UPDATED USER');
+            }).slice(0, 30);
+
+            return `
+              <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+                <div class="xl:col-span-5 card-dynamic overflow-hidden border-2 border-amber-200">
+                  <div class="px-5 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white flex items-center justify-between">
+                    <span class="text-xs font-black uppercase tracking-wider"><i class="fa-solid fa-key mr-1.5"></i>Currently Delegated Critical Access (${delegatedRows.length} IDs)</span>
+                    <span class="text-[10px] font-bold text-amber-100">Nazim (10122) always has full control</span>
+                  </div>
+                  <div class="p-4 space-y-2.5 max-h-72 overflow-y-auto bg-white">
+                    ${delegatedRows.length === 0 ? `
+                      <div class="p-6 text-center text-xs font-bold text-slate-500 bg-slate-50 rounded-2xl border border-slate-200">
+                        <i class="fa-solid fa-lock text-emerald-600 text-lg block mb-1.5"></i>
+                        100% Locked to Super Admin Nazim (10122) Only.<br>
+                        <span class="text-[11px] text-slate-400">No other TL, Supervisor, or Agent currently has Product Target, Grade Amount, or Sprint Target edit access.</span>
+                      </div>
+                    ` : delegatedRows.map(dr => `
+                      <div class="p-3 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
+                        <div class="flex items-center justify-between gap-2">
+                          <div class="text-xs font-black text-slate-900">${dr.usr.name} <span class="text-blue-600 font-mono">(${dr.usr.id})</span></div>
+                          <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-slate-900 text-white">${dr.usr.role} • ${dr.usr.team}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                          ${dr.held.map(h => `
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-rose-200 text-[10px] font-extrabold text-rose-800">
+                              <span>${h.label.split('(')[0].trim()}</span>
+                              <button type="button" onclick="handleQuickRevokeCriticalAccess('${dr.usr.id}', '${h.key}')" class="px-1.5 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black cursor-pointer" title="Revoke this access immediately">Revoke</button>
+                            </span>
+                          `).join('')}
+                        </div>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+
+                <div class="xl:col-span-7 card-dynamic overflow-hidden border border-slate-200">
+                  <div class="px-5 py-3 bg-slate-900 text-white flex items-center justify-between">
+                    <span class="text-xs font-black uppercase tracking-wider"><i class="fa-solid fa-clipboard-check text-amber-400 mr-1.5"></i>Critical Access & Target/Product/Sprint Edit Audit Log (${critLogs.length})</span>
+                    <span class="text-[10px] font-bold text-slate-300">Synced with Google Sheet Activity_Logs</span>
+                  </div>
+                  <div class="max-h-72 overflow-y-auto overflow-x-auto">
+                    <table class="w-full text-left text-[11px] whitespace-nowrap">
+                      <thead class="bg-slate-50 font-extrabold text-slate-600 border-b border-slate-200">
+                        <tr>
+                          <th class="p-2.5">Date & Time</th>
+                          <th class="p-2.5">Actor (Name & ID)</th>
+                          <th class="p-2.5">Action</th>
+                          <th class="p-2.5">Audit Details</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-slate-100 font-semibold">
+                        ${critLogs.length === 0 ? `<tr><td colspan="4" class="p-6 text-center text-slate-400 font-bold">No critical permission or target/product/sprint configuration changes logged yet.</td></tr>` : ''}
+                        ${critLogs.map(cl => `
+                          <tr class="hover:bg-slate-50">
+                            <td class="p-2.5 font-mono text-slate-500">${cleanDisplayDate(cl.date)} <strong class="text-blue-600">${sanitizeTimeDisplay(cl.time)}</strong></td>
+                            <td class="p-2.5 font-extrabold text-slate-900">${cl.userName} <span class="text-slate-400 text-[10px]">(${cl.userId})</span></td>
+                            <td class="p-2.5"><span class="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-black text-[10px]">${cl.action}</span></td>
+                            <td class="p-2.5 font-bold text-slate-700 whitespace-normal min-w-[240px]">${cl.details}</td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            `;
+          })()}
         </div>
       `;
     }
@@ -21429,8 +21562,14 @@ function renderChatHubView() {
                 </div>
 
                 <div>
-                  <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Monthly Base Target (৳) for ${selectedMonthKey}</label>
-                  <input type="number" id="usrTarget" oninput="refreshUserModalGradeOptionsAndPreview(false)" required value="1232174" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-900">
+                  <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-extrabold text-slate-600 uppercase">Monthly Base Target (৳) for ${selectedMonthKey}</label>
+                    ${hasFeatureAccess(currentUser, 'feat_edit_grades_targets')
+                      ? `<span class="px-2 py-0.5 rounded bg-purple-100 text-purple-800 text-[9px] font-black uppercase">Custom Amount Editable</span>`
+                      : `<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-black uppercase"><i class="fa-solid fa-lock mr-1"></i>Auto-Filled by Grade (Amount Locked to Nazim)</span>`
+                    }
+                  </div>
+                  <input type="number" id="usrTarget" ${hasFeatureAccess(currentUser, 'feat_edit_grades_targets') ? '' : 'readonly'} oninput="refreshUserModalGradeOptionsAndPreview(false)" required value="1232174" class="w-full px-3.5 py-2.5 ${hasFeatureAccess(currentUser, 'feat_edit_grades_targets') ? 'bg-slate-50 text-slate-900' : 'bg-slate-100 text-slate-500 cursor-not-allowed'} border border-slate-200 rounded-xl text-sm font-black">
                   <div id="usrModalLiveScaleSummary" class="mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-900 flex flex-wrap items-center justify-between gap-2"></div>
                 </div>
 
@@ -23525,19 +23664,23 @@ function renderChatHubView() {
           finalTeamVal = 'Floating';
         }
 
+        const canEditTargetAmount = hasFeatureAccess(currentUser, 'feat_edit_grades_targets');
         const rawTargetInputVal = Number(document.getElementById('usrTarget').value) || 0;
         let finalGradeVal = rawGradeVal;
         let finalTargetVal = rawTargetInputVal;
+        const scaleChForSave = window.userModalSelectedScaleChannel || getChannelForTeam(finalTeamVal);
+        const officialGradeMap = window.getGradeMapForChannelScale(scaleChForSave, selectedMonthKey);
 
         if (roleVal === 'supervisor') {
           finalGradeVal = 'Supervisor';
           finalTargetVal = 0;
+        } else if (!canEditTargetAmount) {
+          // Strict lock: Other TLs can change Grade & Team Assign, NOT custom BDT target amounts!
+          finalTargetVal = finalGradeVal === 'Pending' ? 0 : Number(officialGradeMap[finalGradeVal] || 0);
         } else if (finalGradeVal === 'Pending') {
           finalTargetVal = rawTargetInputVal > 0 ? rawTargetInputVal : 0;
         } else if (finalTargetVal <= 0) {
-          const teamCh = getChannelForTeam(finalTeamVal);
-          const gMap = window.getGradeMapForChannelScale(teamCh, selectedMonthKey);
-          finalTargetVal = Number(gMap[finalGradeVal] || 0);
+          finalTargetVal = Number(officialGradeMap[finalGradeVal] || 0);
         }
 
         const nowTs = Date.now();
@@ -25887,36 +26030,72 @@ function renderChatHubView() {
 
       handleRemoveCustomProduct = function(prodKey) {
         if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
-        const { configs, targetKeys } = syncProductModalInputsToStorage();
-        [selectedMonthKey, `WA_${selectedMonthKey}`, ...targetKeys].forEach(tk => {
-          if (configs[tk] && configs[tk].products && configs[tk].products[prodKey]) {
-            delete configs[tk].products[prodKey];
-          }
-        });
-        setStored('monthly_configs', configs);
-        renderAppLayout();
-        openModal('productConfigModal');
+        const pName = document.getElementById(`cfg_prod_name_${prodKey}`)?.value?.trim() || prodKey;
+        openConfirmWarningModal(
+          `Remove Drive Product "${pName}"?`,
+          `Are you sure you want to remove custom Drive Product <strong>${pName}</strong> from <strong>${selectedMonthKey}</strong>?`,
+          'Confirm Product Removal',
+          async () => {
+            const { configs, targetKeys } = syncProductModalInputsToStorage();
+            [selectedMonthKey, `WA_${selectedMonthKey}`, ...targetKeys].forEach(tk => {
+              if (configs[tk] && configs[tk].products && configs[tk].products[prodKey]) {
+                delete configs[tk].products[prodKey];
+              }
+            });
+            setStored('monthly_configs', configs);
+            renderAppLayout();
+            openModal('productConfigModal');
+          },
+          'Yes, Remove Product',
+          false
+        );
       };
 
-      handleSaveProductConfig = async function(e) {
+      handleSaveProductConfig = function(e) {
         e.preventDefault();
         if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
-        const { configs, targetKeys } = syncProductModalInputsToStorage();
-        markLocalUserOrConfigMutatedNow();
 
-        const activeCount = Object.values(getActiveProductsForMonth(selectedMonthKey)).length;
-        const logMeta = recordActivityLog('Updated Product Incentives', `Configured ${activeCount} active products, targets, gifts & 100%+ rates for ${selectedMonthKey} (${targetKeys.join(' & ')})`);
-        closeModal('productConfigModal');
-        renderAppLayout();
-        showPortalToast('Product Setup Saved & Synced!', `${activeCount} active product(s) updated across Portal & Google Sheets for ${selectedMonthKey}.`, 'success');
+        // Preview active products from form inputs BEFORE mutating localStorage!
+        const allProdsPrev = getAllConfiguredProductsForMonth(selectedMonthKey);
+        const previewLines = [];
+        Object.keys(allProdsPrev).forEach(k => {
+          const enEl = document.getElementById(`cfg_prod_en_${k}`);
+          const nameEl = document.getElementById(`cfg_prod_name_${k}`);
+          const kgEl = document.getElementById(`cfg_prod_kg_${k}`);
+          if (nameEl && (!enEl || enEl.checked)) {
+            previewLines.push(`<strong>${nameEl.value.trim() || allProdsPrev[k].name}</strong>: ${Number(kgEl?.value) || allProdsPrev[k].targetKg} kg`);
+          }
+        });
+        const applyBoth = document.getElementById('cfg_prod_apply_both_channels')?.checked !== false;
+        const scopeLabel = applyBoth ? 'Both Facebook & WhatsApp' : (activeChannel === 'WHATSAPP' ? 'WhatsApp Only' : 'Facebook Only');
 
-        for (const tk of targetKeys) {
-          await postToSheet('SAVE_MONTHLY_CONFIG', {
-            monthKey: tk,
-            configJson: JSON.stringify(configs[tk]),
-            ...logMeta
-          }).catch(() => {});
-        }
+        openConfirmWarningModal(
+          `Confirm Drive Product Changes (${selectedMonthKey})?`,
+          `Are you sure you want to save & sync these <strong>${previewLines.length} Active Drive Product(s)</strong> for <strong>${selectedMonthKey}</strong> (${scopeLabel})?<br><br><div class="text-[11px] leading-relaxed">${previewLines.join(' • ')}</div><br>📝 This update will sync across Portal & Google Sheets and be logged under <strong>${currentUser.name} (${currentUser.id})</strong>.`,
+          'Confirm Product Target Save',
+          async () => {
+            const { configs, targetKeys } = syncProductModalInputsToStorage();
+            markLocalUserOrConfigMutatedNow();
+
+            const activeProdMapNow = getActiveProductsForMonth(selectedMonthKey);
+            const activeCount = Object.values(activeProdMapNow).length;
+            const prodSummaryTxt = Object.values(activeProdMapNow).map(p => `${p.name}:${p.targetKg}kg`).join(', ');
+            const logMeta = recordActivityLog('Updated Product Incentives', `${currentUser.name} (${currentUser.id}) updated ${activeCount} Drive Products for ${selectedMonthKey} (${targetKeys.join(' & ')}): ${prodSummaryTxt}`);
+            closeModal('productConfigModal');
+            renderAppLayout();
+            showPortalToast('Product Setup Saved & Synced!', `${activeCount} active product(s) updated across Portal & Google Sheets for ${selectedMonthKey}.`, 'success');
+
+            for (const tk of targetKeys) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', {
+                monthKey: tk,
+                configJson: JSON.stringify(configs[tk]),
+                ...logMeta
+              }).catch(() => {});
+            }
+          },
+          'Yes, Save Product Targets',
+          true
+        );
       };
 
       // Dynamically display configured product bonuses (including edited 100%+ rates & gifts) on Dashboard Product Cards!
@@ -25962,6 +26141,7 @@ function renderChatHubView() {
       };
 
       openGradeConfigModal = function() {
+        if (!hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return;
         window._gradeModalChannelV58 = activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
         renderAppLayout();
         openModal('gradeConfigModal');
@@ -26036,61 +26216,75 @@ function renderChatHubView() {
         `;
       };
 
-      handleSaveGradeConfig = async function(e) {
+      handleSaveGradeConfig = function(e) {
         e.preventDefault();
         if (!hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return;
         const ch = window._gradeModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
         const effKey = ch === 'WHATSAPP' ? `WA_${selectedMonthKey}` : selectedMonthKey;
-
-        let configs = getStored('monthly_configs', {});
-        if (!configs[effKey]) configs[effKey] = { users: {}, products: {}, gradeTargets: {} };
-        if (!configs[effKey].gradeTargets) configs[effKey].gradeTargets = {};
-        if (!configs[effKey].users) configs[effKey].users = {};
-
         const gradeKeys = ['A+', 'A', 'A-', 'B', 'C', 'TL'];
+        const draftGrades = {};
         gradeKeys.forEach(gk => {
-          const val = Number(document.getElementById(`cfg_grade_${gk}`)?.value) || 0;
-          configs[effKey].gradeTargets[gk] = val;
+          draftGrades[gk] = Number(document.getElementById(`cfg_grade_${gk}`)?.value) || 0;
         });
+        const gradeSummaryHtml = gradeKeys.map(gk => `<strong>${gk}:</strong> ৳${draftGrades[gk].toLocaleString()}`).join(' &nbsp;|&nbsp; ');
 
-        const nowTs = Date.now();
-        const allMonthUsers = getUsersForMonth(selectedMonthKey, true);
-        allMonthUsers.forEach(u => {
-          if (u.role === 'supervisor') return;
-          if (getChannelForTeam(u.team) !== ch) return;
-          if (isPendingOrFloatingAgent(u)) return;
-          const g = u.grade || (u.role === 'admin' ? 'TL' : 'A');
-          if (configs[effKey].gradeTargets[g] !== undefined) {
-            configs[effKey].users[String(u.id)] = {
-              ...(configs[effKey].users[String(u.id)] || {}),
-              team: normalizeTeamNameAlias(u.team),
-              channel: ch,
-              grade: g,
-              baseTarget: Number(configs[effKey].gradeTargets[g]) || 0,
-              updatedTs: nowTs
-            };
-          }
-        });
+        openConfirmWarningModal(
+          `Confirm ${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Grade Target Amounts (${selectedMonthKey})?`,
+          `Are you sure you want to update monthly BDT target amounts for all matching <strong>${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'}</strong> members in <strong>${selectedMonthKey}</strong>?<br><br><div class="text-[11px] leading-relaxed">${gradeSummaryHtml}</div><br>📝 This change will sync across Portal & Google Sheets and be logged under <strong>${currentUser.name} (${currentUser.id})</strong>.`,
+          'Confirm Grade Amounts Save',
+          async () => {
+            let configs = getStored('monthly_configs', {});
+            if (!configs[effKey]) configs[effKey] = { users: {}, products: {}, gradeTargets: {} };
+            if (!configs[effKey].gradeTargets) configs[effKey].gradeTargets = {};
+            if (!configs[effKey].users) configs[effKey].users = {};
 
-        setStored('monthly_configs', configs);
-        markLocalUserOrConfigMutatedNow();
+            gradeKeys.forEach(gk => {
+              configs[effKey].gradeTargets[gk] = draftGrades[gk];
+            });
 
-        const logMeta = recordActivityLog(
-          'Updated Grade Targets',
-          `Updated ${ch} monthly grade & TL targets for ${selectedMonthKey}`
+            const nowTs = Date.now();
+            const allMonthUsers = getUsersForMonth(selectedMonthKey, true);
+            allMonthUsers.forEach(u => {
+              if (u.role === 'supervisor') return;
+              if (getChannelForTeam(u.team) !== ch) return;
+              if (isPendingOrFloatingAgent(u)) return;
+              const g = u.grade || (u.role === 'admin' ? 'TL' : 'A');
+              if (configs[effKey].gradeTargets[g] !== undefined) {
+                configs[effKey].users[String(u.id)] = {
+                  ...(configs[effKey].users[String(u.id)] || {}),
+                  team: normalizeTeamNameAlias(u.team),
+                  channel: ch,
+                  grade: g,
+                  baseTarget: Number(configs[effKey].gradeTargets[g]) || 0,
+                  updatedTs: nowTs
+                };
+              }
+            });
+
+            setStored('monthly_configs', configs);
+            markLocalUserOrConfigMutatedNow();
+
+            const gradeSummaryTxt = gradeKeys.map(gk => `${gk}: ৳${Number(configs[effKey].gradeTargets[gk] || 0).toLocaleString()}`).join(' | ');
+            const logMeta = recordActivityLog(
+              'Updated Grade Targets',
+              `${currentUser.name} (${currentUser.id}) updated ${ch} Grade & TL Target Amounts (${selectedMonthKey}): ${gradeSummaryTxt}`
+            );
+            closeModal('gradeConfigModal');
+            renderAppLayout();
+            showPortalToast(
+              `${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Grade Targets Saved!`,
+              `Updated targets for ${selectedMonthKey} applied to all matching ${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} agents & synced to Sheets.`,
+              'success'
+            );
+            postToSheet('SAVE_MONTHLY_CONFIG', {
+              monthKey: effKey,
+              configJson: JSON.stringify(configs[effKey]),
+              ...logMeta
+            }).catch(() => {});
+          },
+          'Yes, Update Grade Amounts',
+          true
         );
-        closeModal('gradeConfigModal');
-        renderAppLayout();
-        showPortalToast(
-          `${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Grade Targets Saved!`,
-          `Updated targets for ${selectedMonthKey} applied to all matching ${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} agents & synced to Sheets.`,
-          'success'
-        );
-        postToSheet('SAVE_MONTHLY_CONFIG', {
-          monthKey: effKey,
-          configJson: JSON.stringify(configs[effKey]),
-          ...logMeta
-        }).catch(() => {});
       };
 
       // -----------------------------------------------------------------------
@@ -26105,14 +26299,14 @@ function renderChatHubView() {
       };
 
       window.openSprintRewardsConfigModal = function() {
-        if (!hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return;
+        if (!hasFeatureAccess(currentUser, 'feat_edit_sprint_targets')) return;
         window._sprintModalChannelV58 = activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
         renderAppLayout();
         openModal('sprintRewardsConfigModal');
       };
 
       window.renderSprintRewardsConfigModalV58 = function() {
-        if (!currentUser || !hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return '';
+        if (!currentUser || !hasFeatureAccess(currentUser, 'feat_edit_sprint_targets')) return '';
         const ch = window._sprintModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
         const prog = window.getSprintRewardProgramForMonthV58(ch, selectedMonthKey);
         const pcts = window.getSprintPctsForMonthV58(ch, selectedMonthKey);
@@ -26224,26 +26418,29 @@ function renderChatHubView() {
         `;
       };
 
-      window.handleSaveSprintRewardsConfigV58 = async function(e) {
+      window.handleSaveSprintRewardsConfigV58 = function(e) {
         e.preventDefault();
-        if (!hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return;
+        if (!hasFeatureAccess(currentUser, 'feat_edit_sprint_targets')) return;
         const ch = window._sprintModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
         const effKey = ch === 'WHATSAPP' ? `WA_${selectedMonthKey}` : selectedMonthKey;
 
-        let configs = getStored('monthly_configs', {});
-        if (!configs[effKey]) configs[effKey] = { users: {}, products: {} };
-
-        configs[effKey].sprintPcts = {
+        const draftPcts = {
           s1: Number(document.getElementById('cfg_sp_pct1')?.value) || 40,
           s2: Number(document.getElementById('cfg_sp_pct2')?.value) || 35,
           s3: Number(document.getElementById('cfg_sp_pct3')?.value) || 35
         };
-        if (isSuperAdmin(currentUser)) {
-          configs[effKey].tlRewards = {
-            r80: Number(document.getElementById('cfg_tl_r80')?.value) || 0,
-            r100: Number(document.getElementById('cfg_tl_r100')?.value) || 0
-          };
+        const s1EndEl = document.getElementById('cfg_sp_s1End');
+        const s2EndEl = document.getElementById('cfg_sp_s2End');
+        let draftRanges = null;
+        if (s1EndEl && s2EndEl) {
+          const s1End = Math.min(25, Math.max(1, Number(s1EndEl.value) || 10));
+          const s2End = Math.min(30, Math.max(s1End + 1, Number(s2EndEl.value) || 20));
+          draftRanges = { s1End, s2End };
         }
+        const draftTlRew = isSuperAdmin(currentUser) ? {
+          r80: Number(document.getElementById('cfg_tl_r80')?.value) || 0,
+          r100: Number(document.getElementById('cfg_tl_r100')?.value) || 0
+        } : null;
 
         const srMap = {};
         ['A+', 'A', 'A-', 'B', 'C'].forEach(g => {
@@ -26258,27 +26455,48 @@ function renderChatHubView() {
             any2Extra: Number(document.getElementById(`cfg_sr_${g}_any2Extra`)?.value) || 0
           };
         });
-        configs[effKey].sprintRewards = srMap;
 
-        setStored('monthly_configs', configs);
-        markLocalUserOrConfigMutatedNow();
+        const rngPreview = draftRanges ? `<br><strong>Calendar Dates:</strong> S1 (1–${draftRanges.s1End}) • S2 (${draftRanges.s1End+1}–${draftRanges.s2End}) • S3 (${draftRanges.s2End+1}–End)` : '';
+        const tlPreview = draftTlRew ? `<br><strong>TL Milestones (80% / 100%):</strong> ৳${draftTlRew.r80.toLocaleString()} / ৳${draftTlRew.r100.toLocaleString()}` : '';
 
-        const logMeta = recordActivityLog(
-          'Updated Sprint Rewards Program',
-          `Updated ${ch} Sprint % (${configs[effKey].sprintPcts.s1}/${configs[effKey].sprintPcts.s2}/${configs[effKey].sprintPcts.s3}%) & Grade/TL Rewards for ${selectedMonthKey}`
+        openConfirmWarningModal(
+          `Confirm ${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Sprint Targets & Rewards (${selectedMonthKey})?`,
+          `Are you sure you want to save & sync these Sprint settings for <strong>${selectedMonthKey}</strong>?<br><br><strong>Sprint Splits:</strong> ${draftPcts.s1}% / ${draftPcts.s2}% / ${draftPcts.s3}%${rngPreview}${tlPreview}<br><br>📝 This update will sync across Portal & Google Sheets and be logged under <strong>${currentUser.name} (${currentUser.id})</strong>.`,
+          'Confirm Sprint Config Save',
+          async () => {
+            let configs = getStored('monthly_configs', {});
+            if (!configs[effKey]) configs[effKey] = { users: {}, products: {} };
+
+            configs[effKey].sprintPcts = draftPcts;
+            if (draftRanges) configs[effKey].sprintRanges = draftRanges;
+            if (draftTlRew) configs[effKey].tlRewards = draftTlRew;
+            configs[effKey].sprintRewards = srMap;
+
+            setStored('monthly_configs', configs);
+            markLocalUserOrConfigMutatedNow();
+
+            const rngInfo = configs[effKey].sprintRanges ? ` | Days: 1-${configs[effKey].sprintRanges.s1End}/${configs[effKey].sprintRanges.s1End+1}-${configs[effKey].sprintRanges.s2End}/${configs[effKey].sprintRanges.s2End+1}-End` : '';
+            const tlRewInfo = configs[effKey].tlRewards ? ` | TL 80%/100%: ৳${Number(configs[effKey].tlRewards.r80||0).toLocaleString()}/৳${Number(configs[effKey].tlRewards.r100||0).toLocaleString()}` : '';
+            const logMeta = recordActivityLog(
+              'Updated Sprint Targets & Rewards',
+              `${currentUser.name} (${currentUser.id}) updated ${ch} Sprint Program (${selectedMonthKey}): ${configs[effKey].sprintPcts.s1}/${configs[effKey].sprintPcts.s2}/${configs[effKey].sprintPcts.s3}%${rngInfo}${tlRewInfo}`
+            );
+            closeModal('sprintRewardsConfigModal');
+            renderAppLayout();
+            showPortalToast(
+              'Sprint Program Saved & Synced!',
+              `${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Sprint Rewards for ${selectedMonthKey} are now live across Portal & Incentive Tab.`,
+              'success'
+            );
+            postToSheet('SAVE_MONTHLY_CONFIG', {
+              monthKey: effKey,
+              configJson: JSON.stringify(configs[effKey]),
+              ...logMeta
+            }).catch(() => {});
+          },
+          'Yes, Save Sprint Program',
+          true
         );
-        closeModal('sprintRewardsConfigModal');
-        renderAppLayout();
-        showPortalToast(
-          'Sprint Program Saved & Synced!',
-          `${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Sprint Rewards for ${selectedMonthKey} are now live across Portal & Incentive Tab.`,
-          'success'
-        );
-        postToSheet('SAVE_MONTHLY_CONFIG', {
-          monthKey: effKey,
-          configJson: JSON.stringify(configs[effKey]),
-          ...logMeta
-        }).catch(() => {});
       };
 
       // Inject SprintRewardsConfigModal into DOM on renderAppLayout + Add "Edit Sprint Rewards" button in Sprint Tab & Target Setup Tab!
@@ -26286,7 +26504,7 @@ function renderChatHubView() {
       renderAppLayout = function() {
         const res = _origRenderAppLayoutV58();
         try {
-          if (currentUser && hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) {
+          if (currentUser && hasFeatureAccess(currentUser, 'feat_edit_sprint_targets')) {
             const appRoot = document.getElementById('app');
             if (appRoot && !document.getElementById('sprintRewardsConfigModal')) {
               appRoot.insertAdjacentHTML('beforeend', window.renderSprintRewardsConfigModalV58());
@@ -26299,15 +26517,22 @@ function renderChatHubView() {
       const _origRenderManageAgentsV58 = renderManageAgents;
       renderManageAgents = function() {
         let htmlOut = _origRenderManageAgentsV58();
-        if (currentUser && hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) {
+        if (currentUser && hasFeatureAccess(currentUser, 'feat_edit_sprint_targets')) {
           const btnSprint = `
                 <button onclick="openSprintRewardsConfigModal()" class="h-9 px-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-bolt text-amber-300"></i> Sprint Rewards (${selectedMonthKey})
+                  <i class="fa-solid fa-bolt text-amber-300"></i> Edit Sprint Targets (${selectedMonthKey})
                 </button>`;
-          htmlOut = htmlOut.replace(
-            /(<button onclick="openGradeConfigModal\(\)"[\s\S]*?<\/button>)/,
-            `$1${btnSprint}`
-          );
+          if (htmlOut.includes('openGradeConfigModal()')) {
+            htmlOut = htmlOut.replace(
+              /(<button onclick="openGradeConfigModal\(\)"[\s\S]*?<\/button>)/,
+              `$1${btnSprint}`
+            );
+          } else {
+            htmlOut = htmlOut.replace(
+              '<div class="flex flex-wrap items-center gap-2 shrink-0">',
+              `<div class="flex flex-wrap items-center gap-2 shrink-0">${btnSprint}`
+            );
+          }
         }
         return htmlOut;
       };
@@ -26315,10 +26540,10 @@ function renderChatHubView() {
       const _origRenderSprintTargetViewV58 = renderSprintTargetView;
       renderSprintTargetView = function() {
         let htmlOut = _origRenderSprintTargetViewV58();
-        if (currentUser && hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) {
+        if (currentUser && hasFeatureAccess(currentUser, 'feat_edit_sprint_targets')) {
           const btnSprintTab = `
                 <button onclick="openSprintRewardsConfigModal()" class="h-9 px-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-sliders text-amber-300"></i> Edit Sprint Rewards
+                  <i class="fa-solid fa-sliders text-amber-300"></i> Edit Sprint Targets & Rewards
                 </button>`;
           htmlOut = htmlOut.replace(
             /(<button onclick="exportSprintTargetCsv\(\)")/,
@@ -26801,7 +27026,7 @@ function renderChatHubView() {
         if (!htmlOut) return htmlOut;
         const ch = window._sprintModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
         const rng = window.getSprintDateRangesForMonthV59(ch, selectedMonthKey);
-        const isSuper = isSuperAdmin(currentUser);
+        const isSuper = isSuperAdmin(currentUser) || hasFeatureAccess(currentUser, 'feat_edit_sprint_targets');
 
         const rangeBoxHtml = `
                 <!-- Sprint Date Ranges (Super Admin Editable, Read-Only for Other TLs) -->
@@ -26836,24 +27061,7 @@ function renderChatHubView() {
         return htmlOut;
       };
 
-      const _origSaveSprintRewardsV59 = window.handleSaveSprintRewardsConfigV58;
-      window.handleSaveSprintRewardsConfigV58 = async function(e) {
-        const ch = window._sprintModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
-        const effKey = ch === 'WHATSAPP' ? `WA_${selectedMonthKey}` : selectedMonthKey;
-        if (isSuperAdmin(currentUser)) {
-          const s1El = document.getElementById('cfg_sp_s1End');
-          const s2El = document.getElementById('cfg_sp_s2End');
-          if (s1El && s2El) {
-            const s1End = Math.min(25, Math.max(1, Number(s1El.value) || 10));
-            const s2End = Math.min(30, Math.max(s1End + 1, Number(s2El.value) || 20));
-            let configs = getStored('monthly_configs', {});
-            if (!configs[effKey]) configs[effKey] = { users: {}, products: {} };
-            configs[effKey].sprintRanges = { s1End, s2End };
-            setStored('monthly_configs', configs);
-          }
-        }
-        return _origSaveSprintRewardsV59(e);
-      };
+      // Sprint Date Ranges are now saved cleanly inside handleSaveSprintRewardsConfigV58 AFTER user confirms in modal!
 
       // -----------------------------------------------------------------------
       // PART 5: SUPER ADMIN ONLY "MASTER PORTAL SETTINGS" MODAL (NAZIM 10122)
@@ -27021,7 +27229,7 @@ function renderChatHubView() {
         `;
       };
 
-      window.handleSaveMasterRulesV59 = async function(e) {
+      window.handleSaveMasterRulesV59 = function(e) {
         e.preventDefault();
         if (!isSuperAdmin(currentUser)) return;
         const fbBuf = Math.max(0, Number(document.getElementById('ms_fb_buf')?.value ?? 5));
@@ -27029,25 +27237,34 @@ function renderChatHubView() {
         const waBuf = Math.max(0, Number(document.getElementById('ms_wa_buf')?.value ?? 5));
         const waDays = Math.min(31, Math.max(15, Math.round(Number(document.getElementById('ms_wa_days')?.value) || 26)));
 
-        let configs = getStored('monthly_configs', {});
-        const fbKey = selectedMonthKey;
-        const waKey = `WA_${selectedMonthKey}`;
-        if (!configs[fbKey]) configs[fbKey] = { users: {}, products: {} };
-        if (!configs[waKey]) configs[waKey] = { users: {}, products: {} };
-        configs[fbKey].bufferPct = fbBuf;
-        configs[fbKey].workingDaysDivisor = fbDays;
-        configs[waKey].bufferPct = waBuf;
-        configs[waKey].workingDaysDivisor = waDays;
-        setStored('monthly_configs', configs);
-        markLocalUserOrConfigMutatedNow();
+        openConfirmWarningModal(
+          `Confirm Master Target Rules (${selectedMonthKey})?`,
+          `Are you sure you want to update Portal Buffer % & Daily Working Days for <strong>${selectedMonthKey}</strong>?<br><br><strong>Facebook:</strong> +${fbBuf}% Buffer, ÷${fbDays} Days<br><strong>WhatsApp:</strong> +${waBuf}% Buffer, ÷${waDays} Days`,
+          'Confirm Master Rules',
+          async () => {
+            let configs = getStored('monthly_configs', {});
+            const fbKey = selectedMonthKey;
+            const waKey = `WA_${selectedMonthKey}`;
+            if (!configs[fbKey]) configs[fbKey] = { users: {}, products: {} };
+            if (!configs[waKey]) configs[waKey] = { users: {}, products: {} };
+            configs[fbKey].bufferPct = fbBuf;
+            configs[fbKey].workingDaysDivisor = fbDays;
+            configs[waKey].bufferPct = waBuf;
+            configs[waKey].workingDaysDivisor = waDays;
+            setStored('monthly_configs', configs);
+            markLocalUserOrConfigMutatedNow();
 
-        const logMeta = recordActivityLog('Updated Master Target Rules', `Set ${selectedMonthKey} FB (+${fbBuf}%, ÷${fbDays}d) & WA (+${waBuf}%, ÷${waDays}d)`);
-        closeModal('masterPortalSettingsModal');
-        renderAppLayout();
-        showPortalToast('Master Target Rules Saved!', `Updated ${selectedMonthKey} Buffer % & Working Days across Portal & Google Sheets.`, 'success');
+            const logMeta = recordActivityLog('Updated Master Target Rules', `${currentUser.name} (${currentUser.id}) set ${selectedMonthKey} FB (+${fbBuf}%, ÷${fbDays}d) & WA (+${waBuf}%, ÷${waDays}d)`);
+            closeModal('masterPortalSettingsModal');
+            renderAppLayout();
+            showPortalToast('Master Target Rules Saved!', `Updated ${selectedMonthKey} Buffer % & Working Days across Portal & Google Sheets.`, 'success');
 
-        await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: fbKey, configJson: JSON.stringify(configs[fbKey]), ...logMeta }).catch(() => {});
-        await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: waKey, configJson: JSON.stringify(configs[waKey]), ...logMeta }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: fbKey, configJson: JSON.stringify(configs[fbKey]), ...logMeta }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: waKey, configJson: JSON.stringify(configs[waKey]), ...logMeta }).catch(() => {});
+          },
+          'Yes, Save Rules & Sync',
+          true
+        );
       };
 
       window.savePortalMasterConfigV59 = async function(mcObj, extraParams = {}) {
