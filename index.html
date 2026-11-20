@@ -758,7 +758,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen || profileMenuDropdownOpen) return true;
-      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal', 'sprintRewardsConfigModal', 'masterPortalSettingsModal', 'agentSwapRequestModal'];
+      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal', 'sprintRewardsConfigModal', 'masterPortalSettingsModal', 'agentSwapRequestModal', 'moveReportDateModal', 'renameTeamModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -14521,6 +14521,8 @@ function renderChatHubView() {
         renderAppLayout();
       };
 
+      window._pendingMoveReportDateCtx = null;
+
       window.handleChangeReportDatePrompt = function(userId, userName, oldDateStr) {
         const allUsers = getUsersForMonth(selectedMonthKey, true);
         const targetUser = allUsers.find(u => String(u.id) === String(userId));
@@ -14529,34 +14531,77 @@ function renderChatHubView() {
           showPortalToast('Permission Denied', 'You can only edit or move reports for your own team.', 'error');
           return;
         }
-        const newDateInput = prompt(`Move report date for ${userName} (${userId}):\nCurrent Date (Day Off): ${oldDateStr}\n\nEnter new date (DD/MM/YYYY):`, oldDateStr);
-        if (!newDateInput || newDateInput.trim() === oldDateStr) return;
-        const cleanNewDate = newDateInput.trim();
-        if (!/^\d{2}\/\d{2}\/20\d{2}$/.test(cleanNewDate)) {
-          showPortalToast('Invalid Date Format', 'Please enter date as DD/MM/YYYY (e.g. 11/11/2026).', 'error');
-          return;
-        }
+        window._pendingMoveReportDateCtx = { userId: String(userId), userName, oldDateStr };
+        let existingModal = document.getElementById('moveReportDateModal');
+        if (existingModal) existingModal.remove();
+        const modalHtml = `
+          <div id="moveReportDateModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[66] flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+              <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-base shadow-xs">
+                    <i class="fa-regular fa-calendar-days"></i>
+                  </div>
+                  <div>
+                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-blue-50 text-blue-700">Date Correction</span>
+                    <h3 class="text-base font-black text-slate-900 mt-0.5">Move Sales Report Date</h3>
+                  </div>
+                </div>
+                <button type="button" onclick="closeModal('moveReportDateModal')" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <form onsubmit="window.handleSubmitMoveReportDateModal(event)" class="space-y-4">
+                <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 space-y-1">
+                  <div>Agent: <strong class="text-slate-900">${userName} (${userId})</strong></div>
+                  <div>Current Date (Day Off): <strong class="text-rose-600">${cleanDisplayDate(oldDateStr)} (${oldDateStr})</strong></div>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Select New Correct Date</label>
+                  <input type="date" id="moveReportNewDateInput" required value="${dateToInputVal(oldDateStr)}" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600">
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onclick="closeModal('moveReportDateModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Cancel</button>
+                  <button type="submit" class="px-5 py-2 text-xs font-black text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl shadow cursor-pointer">
+                    <i class="fa-solid fa-check-double mr-1"></i> Move Report Date
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>`;
+        document.getElementById('app').insertAdjacentHTML('beforeend', modalHtml);
+        openModal('moveReportDateModal');
+      };
+
+      window.handleSubmitMoveReportDateModal = function(e) {
+        e.preventDefault();
+        const ctx = window._pendingMoveReportDateCtx;
+        if (!ctx) return;
+        const rawVal = document.getElementById('moveReportNewDateInput')?.value;
+        const cleanNewDate = inputValToDateStr(rawVal);
+        closeModal('moveReportDateModal');
+        if (!cleanNewDate || cleanNewDate === ctx.oldDateStr) return;
 
         openConfirmWarningModal(
-          `Move Report Date (${oldDateStr} → ${cleanNewDate})?`,
-          `Are you sure you want to move <strong>${userName} (${userId})</strong>'s sales report from <strong>${oldDateStr} (Day Off)</strong> to <strong>${cleanNewDate}</strong>?`,
+          `Move Report Date (${ctx.oldDateStr} → ${cleanNewDate})?`,
+          `Are you sure you want to move <strong>${ctx.userName} (${ctx.userId})</strong>'s sales report from <strong>${ctx.oldDateStr} (Day Off)</strong> to <strong>${cleanNewDate}</strong>?`,
           'Confirm Date Correction',
           async () => {
             let sales = getStored('sales_records', []);
-            const existingRec = sales.find(s => String(s.userId) === String(userId) && String(s.date).replace(/^'/, '').trim() === oldDateStr);
+            const existingRec = sales.find(s => String(s.userId) === String(ctx.userId) && String(s.date).replace(/^'/, '').trim() === ctx.oldDateStr);
             if (!existingRec) return;
 
             const updatedEntry = { ...existingRec, date: cleanNewDate };
-            sales = sales.filter(s => !(String(s.userId) === String(userId) && (s.date === oldDateStr || s.date === cleanNewDate)));
+            sales = sales.filter(s => !(String(s.userId) === String(ctx.userId) && (s.date === ctx.oldDateStr || s.date === cleanNewDate)));
             sales.unshift(updatedEntry);
             setStored('sales_records', sales);
             markLocalSalesMutatedNow();
 
-            const logMeta = recordActivityLog('Moved Day Off Report Date', `Moved ${userName} (${userId}) report from ${oldDateStr} (DO) to ${cleanNewDate}`);
+            const logMeta = recordActivityLog('Moved Day Off Report Date', `Moved ${ctx.userName} (${ctx.userId}) report from ${ctx.oldDateStr} (DO) to ${cleanNewDate}`);
             renderAppLayout();
-            showPortalToast('Report Date Updated!', `Moved ${userName}'s report to ${cleanNewDate}.`, 'success');
+            showPortalToast('Report Date Updated!', `Moved ${ctx.userName}'s report to ${cleanNewDate}.`, 'success');
 
-            await postToSheet('DELETE_SALES_RECORD', { userId: String(userId), date: oldDateStr, ...logMeta }).catch(() => {});
+            enqueueVerifiedSalesSubmission({ userId: String(ctx.userId), userName: ctx.userName, date: ctx.oldDateStr }, logMeta, true);
+            enqueueVerifiedSalesSubmission(updatedEntry, logMeta, false);
+            await postToSheet('DELETE_SALES_RECORD', { userId: String(ctx.userId), date: ctx.oldDateStr, ...logMeta }).catch(() => {});
             await postToSheet('DAILY_SALES_SUBMIT', { ...updatedEntry, ...logMeta }).catch(() => {});
           },
           'Yes, Move Date & Sync',
@@ -21325,15 +21370,12 @@ function renderChatHubView() {
                     <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Channel & Team</label>
                     <select id="usrTeam" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 cursor-pointer">
                       ${isNazim ? `
-                        <optgroup label="🔵 Facebook Channel">
-                          <option value="Team Nazim">Team Nazim (Facebook)</option>
-                          <option value="Team Samad">Team Samad (Facebook)</option>
+                        <optgroup label="🔵 Facebook Channel (${getDynamicTeamsForChannel('FACEBOOK').length} Teams)">
+                          ${getDynamicTeamsForChannel('FACEBOOK').map(tn => `<option value="${tn}">${tn} (Facebook)</option>`).join('')}
                           <option value="Floating">Floating Pool (Facebook Scale)</option>
                         </optgroup>
-                        <optgroup label="🟢 WhatsApp Channel (3 Teams)">
-                          <option value="Team Shakib Baksh">Team Shakib Baksh (WhatsApp)</option>
-                          <option value="Team Parvaj">Team Parvaj (WhatsApp)</option>
-                          <option value="Team Saikat">Team Saikat (WhatsApp)</option>
+                        <optgroup label="🟢 WhatsApp Channel (${getDynamicTeamsForChannel('WHATSAPP').length} Teams)">
+                          ${getDynamicTeamsForChannel('WHATSAPP').map(tn => `<option value="${tn}">${tn} (WhatsApp)</option>`).join('')}
                           <option value="WA Floating">WA Floating Pool (WhatsApp Scale)</option>
                         </optgroup>
                         <optgroup label="Supervisors">
@@ -27040,16 +27082,61 @@ function renderChatHubView() {
         showPortalToast('New Team Created!', `"${nameVal}" added to ${chVal} Channel across Portal & Google Sheets.`, 'success');
       };
 
-      window.handleRenameTeamV59 = async function(chKey, oldName) {
+      window._pendingRenameTeamCtxV59 = null;
+
+      window.handleRenameTeamV59 = function(chKey, oldName) {
         if (!isSuperAdmin(currentUser)) return;
-        const newName = window.prompt(`Rename "${oldName}" (${chKey}) to:`, oldName);
-        if (!newName || !newName.trim() || newName.trim() === oldName) return;
-        const cleanNew = newName.trim();
+        window._pendingRenameTeamCtxV59 = { chKey, oldName };
+        let existingM = document.getElementById('renameTeamModal');
+        if (existingM) existingM.remove();
+        const modalHtml = `
+          <div id="renameTeamModal" class="hidden fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-purple-200">
+              <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center text-base shadow-xs">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                  </div>
+                  <div>
+                    <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-purple-600 text-white">Super Admin Control</span>
+                    <h3 class="text-base font-black text-slate-900 mt-0.5">Rename Team (${chKey})</h3>
+                  </div>
+                </div>
+                <button type="button" onclick="closeModal('renameTeamModal')" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <form onsubmit="window.handleSubmitRenameTeamModalV59(event)" class="space-y-4">
+                <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-600">
+                  Current Team Name: <strong class="text-slate-900">${oldName}</strong>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">New Team Name</label>
+                  <input type="text" id="renameTeamNewNameInput" required value="${oldName.replace(/"/g, '&quot;')}" placeholder="Enter new team name..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-purple-200 rounded-xl text-sm font-extrabold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-600">
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onclick="closeModal('renameTeamModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Cancel</button>
+                  <button type="submit" class="px-5 py-2 text-xs font-black text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow cursor-pointer">
+                    <i class="fa-solid fa-check-double mr-1"></i> Rename & Sync
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>`;
+        document.getElementById('app').insertAdjacentHTML('beforeend', modalHtml);
+        openModal('renameTeamModal');
+        setTimeout(() => { document.getElementById('renameTeamNewNameInput')?.focus(); }, 60);
+      };
+
+      window.handleSubmitRenameTeamModalV59 = async function(e) {
+        e.preventDefault();
+        if (!isSuperAdmin(currentUser) || !window._pendingRenameTeamCtxV59) return;
+        const { chKey, oldName } = window._pendingRenameTeamCtxV59;
+        const cleanNew = (document.getElementById('renameTeamNewNameInput')?.value || '').trim();
+        closeModal('renameTeamModal');
+        if (!cleanNew || cleanNew === oldName) return;
 
         const mc = window.getPortalMasterConfigV59();
         mc.teams[chKey] = mc.teams[chKey].map(t => t === oldName ? cleanNew : t);
 
-        // Update local users, current month sales & roster
         let users = getStored('users', DEFAULT_USERS).map(u => normalizeTeamNameAlias(u.team) === oldName ? { ...u, team: cleanNew } : u);
         setStored('users', users);
         let sales = getStored('sales_records', []).map(s => (String(s.date || '').endsWith(selectedMonthKey) && normalizeTeamNameAlias(s.team) === oldName) ? { ...s, team: cleanNew } : s);
@@ -27922,6 +28009,15 @@ function renderChatHubView() {
         );
       };
 
+      window.canTlManageSwapRequestV61 = function(actor, req) {
+        if (!actor || !req) return false;
+        if (isSuperAdmin(actor)) return true;
+        if (!hasFeatureAccess(actor, 'feat_manage_all_sales')) return false;
+        const actorCh = getChannelForTeam(actor.team);
+        const reqCh = getChannelForTeam(req.fromTeam || req.toTeam);
+        return actorCh === reqCh && !isCurrentChannelReadOnlyForUser(actor);
+      };
+
       window.handleRespondSwapRequestV61 = function(reqId, mKey, decision) {
         if (!currentUser) return;
         const store = window.getSwapRequestsStoreForMonthV61(mKey);
@@ -27930,15 +28026,16 @@ function renderChatHubView() {
 
         const isPartner = String(req.toUserId) === String(currentUser.id);
         const isRequester = String(req.fromUserId) === String(currentUser.id);
-        const isAdminActor = hasFeatureAccess(currentUser, 'feat_manage_all_sales');
+        const isChannelTl = window.canTlManageSwapRequestV61(currentUser, req);
 
-        if (decision === 'CANCELLED' && !(isRequester || isAdminActor)) return;
-        if ((decision === 'ACCEPTED' || decision === 'DECLINED') && !(isPartner || isAdminActor)) return;
+        if (decision === 'CANCELLED' && !(isRequester || isChannelTl)) return;
+        if ((decision === 'ACCEPTED' || decision === 'DECLINED') && !(isPartner || isChannelTl)) return;
 
+        const responderTag = (!isPartner && isChannelTl) ? `${currentUser.name} (TL)` : currentUser.name;
         const updatedReq = {
           ...req,
           status: decision,
-          respondedBy: currentUser.name,
+          respondedBy: responderTag,
           respondedAtLabel: `${getTodayFormatted()} ${getNowTimeStr()}`,
           updatedTs: Date.now()
         };
@@ -28094,6 +28191,7 @@ function renderChatHubView() {
                   ${visibleReqs.map(req => {
                     const isInc = String(req.toUserId) === String(u.id);
                     const isOut = String(req.fromUserId) === String(u.id);
+                    const canTlAct = window.canTlManageSwapRequestV61(u, req);
                     const stBadge = req.status === 'ACCEPTED'
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       : (req.status === 'DECLINED' || req.status === 'CANCELLED'
@@ -28116,8 +28214,8 @@ function renderChatHubView() {
                           <span class="px-2.5 py-1 rounded-lg border text-[10px] font-black ${stBadge}">${req.status}</span>
                         </td>
                         <td class="p-3 text-right space-x-1">
-                          ${req.status === 'PENDING' && (isInc || isAdminOrTl) ? `
-                            <button type="button" onclick="window.handleRespondSwapRequestV61('${req.id}', '${req.monthKey}', 'ACCEPTED')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black cursor-pointer">Accept</button>
+                          ${req.status === 'PENDING' && (isInc || canTlAct) ? `
+                            <button type="button" onclick="window.handleRespondSwapRequestV61('${req.id}', '${req.monthKey}', 'ACCEPTED')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black cursor-pointer">${(!isInc && canTlAct) ? '✅ Accept (TL)' : '✅ Accept'}</button>
                             <button type="button" onclick="window.handleRespondSwapRequestV61('${req.id}', '${req.monthKey}', 'DECLINED')" class="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg text-[10px] font-black cursor-pointer">Decline</button>
                           ` : (req.status === 'PENDING' && isOut ? `
                             <button type="button" onclick="window.handleRespondSwapRequestV61('${req.id}', '${req.monthKey}', 'CANCELLED')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-black cursor-pointer">Cancel</button>
@@ -28144,24 +28242,7 @@ function renderChatHubView() {
 
       const _origHandleCloudDataV61 = handleCloudData;
       handleCloudData = function(res) {
-        if (res && res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
-          const localCfg = getStored('monthly_configs', {});
-          Object.keys({ ...localCfg, ...res.monthlyConfigs }).forEach(cfgK => {
-            if (cfgK.startsWith('SWAP_REQUESTS_')) {
-              const locSw = (localCfg[cfgK] && typeof localCfg[cfgK] === 'object') ? localCfg[cfgK] : {};
-              const cldSw = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
-              const combined = { ...cldSw };
-              Object.keys(locSw).forEach(rk => {
-                const lIt = locSw[rk];
-                const cIt = cldSw[rk];
-                if (!cIt || Number((lIt && lIt.updatedTs) || 0) >= Number((cIt && cIt.updatedTs) || 0)) {
-                  combined[rk] = lIt;
-                }
-              });
-              res.monthlyConfigs[cfgK] = combined;
-            }
-          });
-        }
+        // Call PATCH v60 FIRST so it verifies pending SWAP_REQUESTS_ writes against the 100% RAW Google Sheet response!
         const out = _origHandleCloudDataV61(res);
 
         try {
@@ -28216,10 +28297,14 @@ function renderChatHubView() {
             }
 
             const incCount = window.getIncomingPendingSwapRequestsForUserV61(currentUser).length;
-            if (incCount > 0) {
+            const tlPendingCount = hasFeatureAccess(currentUser, 'feat_manage_all_sales')
+              ? window.getAllSwapRequestsAcrossActiveMonthsV61().filter(r => r.status === 'PENDING' && window.canTlManageSwapRequestV61(currentUser, r)).length
+              : 0;
+            const badgeSwapCount = Math.max(incCount, tlPendingCount);
+            if (badgeSwapCount > 0) {
               const missBtn = document.querySelector('aside button[onclick="setTab(\'missing_reports\')"]');
               if (missBtn && !missBtn.querySelector('.swap-req-sidebar-pill')) {
-                missBtn.insertAdjacentHTML('beforeend', `<span class="swap-req-sidebar-pill ml-1 px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black animate-bounce shadow">🔄 ${incCount}</span>`);
+                missBtn.insertAdjacentHTML('beforeend', `<span class="swap-req-sidebar-pill ml-1 px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black animate-bounce shadow" title="Pending Agent Swap Request(s)">🔄 ${badgeSwapCount}</span>`);
               }
             }
           }
