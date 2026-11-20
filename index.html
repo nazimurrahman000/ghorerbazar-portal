@@ -4064,7 +4064,7 @@
                 <div class="px-3.5 py-2 rounded-xl bg-emerald-50/60 border border-emerald-200/80 flex items-center justify-between gap-2">
                   <div class="flex items-center gap-2">
                     <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-calendar-day"></i></span>
-                    <span class="text-[10px] font-extrabold uppercase text-emerald-700">Daily Goal (÷26)</span>
+                    <span class="text-[10px] font-extrabold uppercase text-emerald-700">Daily Target</span>
                   </div>
                   <strong class="text-xs font-black text-emerald-900">৳${tInfo.dailyTarget.toLocaleString()}</strong>
                 </div>
@@ -4267,7 +4267,7 @@
               <div class="flex justify-between items-start">
                 <div>
                   <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">Monthly Progress Tracker</span>
-                  <h3 class="text-base font-black text-slate-900 mt-1">Daily Goal (÷26 Days): ৳${tInfo.dailyTarget.toLocaleString()}</h3>
+                  <h3 class="text-base font-black text-slate-900 mt-1">Daily Target: ৳${tInfo.dailyTarget.toLocaleString()}</h3>
                 </div>
                 <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm shadow-sm">
                   <i class="fa-solid fa-calendar-check"></i>
@@ -4965,7 +4965,7 @@
           .sort((a, b) => (parseInt(a.date.split('/')[0], 10) || 0) - (parseInt(b.date.split('/')[0], 10) || 0));
         const baseTgt = Number(ag.baseTarget) || 0;
         const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
-        const dailyTgt = Math.round(workTgt / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+        const dailyTgt = Math.round(workTgt / ((typeof window.getCalendarDaysInMonthKeyV62 === 'function') ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey) : 30));
 
         const headers = [
           'Date', 'Emp ID', 'Agent Name', 'Team', 'Grade',
@@ -5086,7 +5086,8 @@
       const baseTargetSum = scopeAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
                             scopeTLs.reduce((s, t) => s + (Number(t.baseTarget) || defaultTlBase), 0);
       const workingTarget = calcWorkingTargetFromBase(baseTargetSum, activeChannel);
-      const dailyTarget = Math.round(workingTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+      const calDaysInMonth = (typeof window.getCalendarDaysInMonthKeyV62 === 'function') ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey) : 30;
+      const dailyTarget = Math.round(workingTarget / calDaysInMonth);
 
       const headers = [
         'Date',
@@ -5095,7 +5096,7 @@
         'Total Orders',
         'Convert Ratio (%)',
         'Sales Amount (BDT)',
-        'Daily Target (÷26 BDT)',
+        'Daily Target (BDT)',
         'Daily Target Achievement Ratio (%)',
         'Monthly Working Target (BDT)'
       ];
@@ -5174,14 +5175,17 @@
       const defaultTlBase = activeChannel === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
       const targetNote = activeChannel === 'WHATSAPP' ? 'At Actual' : '+5% Buffer';
 
+      const calDaysInMonth = (typeof window.getCalendarDaysInMonthKeyV62 === 'function') ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey) : 30;
+      const unmaskedChannelUsers = (typeof window._rawGetUsersForMonthV62 === 'function') ? window._rawGetUsersForMonthV62(selectedMonthKey) : allUsers;
+
       function buildDateWiseTableCard(scopeKey, titleText, badgeText, headerClass, badgePillClass) {
         const isChannelTotal = scopeKey === 'CHANNEL_TOTAL';
-        const scopeAgents = allUsers.filter(u => u.role === 'agent' && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === scopeKey));
-        const scopeTLs = allUsers.filter(u => u.role === 'admin' && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === scopeKey));
+        const scopeAgents = unmaskedChannelUsers.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u) && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === scopeKey));
+        const scopeTLs = unmaskedChannelUsers.filter(u => u.role === 'admin' && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === scopeKey));
         const baseTarget = scopeAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
                            scopeTLs.reduce((s, t) => s + (Number(t.baseTarget) || defaultTlBase), 0);
         const workingTarget = calcWorkingTargetFromBase(baseTarget, activeChannel);
-        const dailyTarget = Math.round(workingTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+        const dailyTarget = Math.round(workingTarget / calDaysInMonth);
 
         let sumLeads = 0, sumOrders = 0, sumAmount = 0;
 
@@ -5217,7 +5221,7 @@
               </div>
               <div class="flex flex-wrap items-center gap-3">
                 <span class="text-[11px] font-extrabold">
-                  Monthly Target (${targetNote}): ৳${workingTarget.toLocaleString()} • Daily Target (÷26): ৳${dailyTarget.toLocaleString()}
+                  Monthly Target (${targetNote}): ৳${workingTarget.toLocaleString()} • Daily Target: ৳${dailyTarget.toLocaleString()}
                 </span>
                 <button
                   type="button"
@@ -5238,7 +5242,7 @@
                   <th class="p-3.5 text-center">Total Orders</th>
                   <th class="p-3.5 text-center">Convert Ratio</th>
                   <th class="p-3.5">Sales Amount</th>
-                  <th class="p-3.5">Daily Target (÷26)</th>
+                  <th class="p-3.5">Daily Target</th>
                   <th class="p-3.5 text-center">Target Achievement Ratio</th>
                 </tr>
               </thead>
@@ -5582,7 +5586,7 @@
           ` : ''}
 
           ${singleAgentObj ? (() => {
-            const dTargetSingle = Math.round(singleAgentObj.workTgt / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+            const dTargetSingle = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(singleAgentObj, selectedMonthKey).dailyTarget : Math.round(singleAgentObj.workTgt / 26);
             const sumDailyTgtSingle = dTargetSingle * singleAgentObj.dailyLogs.length;
             return `
             <div class="space-y-3 mt-6">
@@ -5642,7 +5646,7 @@
                       <th class="p-3.5 text-center">Orders</th>
                       <th class="p-3.5 text-center">Conv. Ratio</th>
                       <th class="p-3.5">Sales Amount</th>
-                      <th class="p-3.5">Daily Target (÷26)</th>
+                      <th class="p-3.5">Daily Target</th>
                       <th class="p-3.5">Daily Achieved %</th>
                       ${isAdmin ? `<th class="p-3.5 text-right">Admin Actions</th>` : ''}
                     </tr>
@@ -9160,7 +9164,7 @@ function renderRankingAndComparison() {
                   <th class="p-3.5 text-center">Orders</th>
                   <th class="p-3.5 text-center">Conv. Ratio</th>
                   <th class="p-3.5">Sales Amount</th>
-                  <th class="p-3.5">Daily Target (÷26)</th>
+                  <th class="p-3.5">Daily Target</th>
                   <th class="p-3.5">Daily Achieved</th>
                   ${(hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales')) ? `<th class="p-3.5 text-right">Actions</th>` : ''}
                 </tr>
@@ -9170,7 +9174,7 @@ function renderRankingAndComparison() {
                 ${sales.map((s, idx) => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
                   const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
-                  const agDailyTarget = Math.round(agWorkTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+                  const agDailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(agObj, selectedMonthKey).dailyTarget : Math.round(agWorkTarget / 26);
                   const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
                   const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
                   const isMe = String(s.userId) === String(u.id);
@@ -10010,7 +10014,7 @@ function renderRankingAndComparison() {
                   <span id="liveConvRatio" class="text-base font-black text-blue-600">0.00%</span>
                 </div>
                 <div class="border-x border-blue-200">
-                  <span class="text-[10px] font-extrabold uppercase text-slate-500 block">Daily Target (÷26)</span>
+                  <span class="text-[10px] font-extrabold uppercase text-slate-500 block">Daily Target</span>
                   <span id="liveDailyTarget" class="text-base font-black text-slate-800">৳0</span>
                 </div>
                 <div>
@@ -10316,7 +10320,9 @@ function renderRankingAndComparison() {
       const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
 
       const workingTarget = calcWorkingTargetFromBase((targetAgent.baseTarget !== undefined && targetAgent.baseTarget !== null) ? Number(targetAgent.baseTarget) : 1232174, targetAgent.team);
-      const dailyTarget = Math.round(workingTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+      const dailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function')
+        ? window.getAgentDynamicDailyTargetV62(targetAgent, selectedMonthKey).dailyTarget
+        : Math.round(workingTarget / 26);
 
       const leads = Number(document.getElementById('subLeads')?.value) || 0;
       const orders = Number(document.getElementById('subOrders')?.value) || 0;
@@ -17990,7 +17996,7 @@ function renderChatHubView() {
         const rows = dateSales.map((s, idx) => {
           const agObj = allUsersOmni.find(usr => String(usr.id) === String(s.userId)) || u;
           const workTgt = calcWorkingTargetFromBase(Number(agObj.baseTarget) || 0, agObj.team);
-          const dTgt = Math.round(workTgt / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+          const dTgt = Math.round(workTgt / ((typeof window.getCalendarDaysInMonthKeyV62 === 'function') ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey) : 30));
           const l = Number(s.leads) || 0, o = Number(s.orders) || 0, amt = Number(s.amount) || 0;
           sumL += l; sumO += o; sumAmt += amt; sumTgt += dTgt;
           const conv = l > 0 ? ((o / l) * 100).toFixed(2) + '%' : '0.00%';
@@ -18006,8 +18012,8 @@ function renderChatHubView() {
       const _origRenderDashboardV41 = renderDashboard;
       renderDashboard = function() {
         return _origRenderDashboardV41()
-          .replace(/Daily Goal \(÷26\)/g, 'Daily Target (÷26)')
-          .replace(/Daily Goal \(÷26 Days\)/g, 'Daily Target (÷26 Days)');
+          .replace(/Daily Goal \(÷\d+\)/g, 'Daily Target')
+          .replace(/Daily Target \(÷\d+(?: Days)?\)/g, 'Daily Target');
       };
 
       const _origExportMonthlyPerfMultiV41 = exportMonthlyPerformanceCsv;
@@ -18033,7 +18039,7 @@ function renderChatHubView() {
             .sort((a, b) => (parseInt(a.date.split('/')[0], 10) || 0) - (parseInt(b.date.split('/')[0], 10) || 0));
           const baseTgt = Number(ag.baseTarget) || 0;
           const workTgt = calcWorkingTargetFromBase(baseTgt, getChannelForTeam(ag.team));
-          const dailyTgt = Math.round(workTgt / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+          const dailyTgt = Math.round(workTgt / ((typeof window.getCalendarDaysInMonthKeyV62 === 'function') ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey) : 30));
 
           const headers = [
             'Date', 'Emp ID', 'Agent Name', 'Team', 'Grade',
@@ -19106,7 +19112,7 @@ function renderChatHubView() {
                   <div class="px-3.5 py-2 rounded-xl bg-emerald-50/60 border border-emerald-200/80 flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
                       <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-calendar-day"></i></span>
-                      <span class="text-[10px] font-extrabold uppercase text-emerald-700">Daily Target (÷26)</span>
+                      <span class="text-[10px] font-extrabold uppercase text-emerald-700">Daily Target</span>
                     </div>
                     <strong class="text-xs font-black text-emerald-900">৳${tInfo.dailyTarget.toLocaleString()}</strong>
                   </div>
@@ -19348,7 +19354,7 @@ function renderChatHubView() {
                 <div class="flex justify-between items-start">
                   <div>
                     <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">Monthly Progress Tracker</span>
-                    <h3 class="text-base font-black text-slate-900 mt-1">Daily Target (÷26 Days): ৳${tInfo.dailyTarget.toLocaleString()}</h3>
+                    <h3 class="text-base font-black text-slate-900 mt-1">Daily Target: ৳${tInfo.dailyTarget.toLocaleString()}</h3>
                   </div>
                   <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm shadow-xs">
                     <i class="fa-solid fa-calendar-check"></i>
@@ -19390,7 +19396,7 @@ function renderChatHubView() {
                     </div>
                     <p class="text-lg font-black text-slate-900 tracking-tight">৳${tInfo.baseTarget.toLocaleString()}</p>
                     <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] font-extrabold">
-                      <span class="text-slate-400">Daily Target (÷26):</span>
+                      <span class="text-slate-400">Daily Target:</span>
                       <span class="text-slate-700">৳${tInfo.dailyTarget.toLocaleString()}</span>
                     </div>
                   </div>
@@ -27482,9 +27488,7 @@ function renderChatHubView() {
               .replace(/\(\+5%\)/g, `(+${buf}%)`)
               .replace(/Excl\. \+5%/g, `Excl. +${buf}%`);
           }
-          if (days !== 26) {
-            htmlOut = htmlOut.replace(/÷26/g, `÷${days}`);
-          }
+          // Clean Daily Target label (no ÷26 suffix shown anywhere)
         } catch (eLbl) {}
         return htmlOut;
       };
@@ -28578,6 +28582,316 @@ function renderChatHubView() {
       }
     } catch (errV61) {
       console.error('Non-fatal patch v61 warning:', errV61);
+    }
+
+
+    // =========================================================================
+    // PATCH v62 (index-v45.html):
+    // 1. ZERO "(÷26)" LABELS ANYWHERE IN THE PORTAL
+    // 2. ADMIN / TL / SUPERVISOR DASHBOARD (CHANNEL-WISE & TEAM-WISE), DATE-WISE
+    //    TEAM TABLES & ALL CSV EXPORTS: Daily Target = Target ÷ Exact Calendar Days (28/29/30/31)
+    // 3. AGENT PANEL GREEN "DAILY TARGET" BOX (AND ALL AGENT DAILY TARGET VIEWS):
+    //    Dynamically calculated from Duty Roster (excl. DO, honoring Approved DO / Swaps)
+    //    + Leave/Absent records = Remaining Working Target (+5%) ÷ Remaining Duty Days to hit 100%!
+    //    (MTD Ratio box stays 100% clean & untouched!)
+    // =========================================================================
+    try {
+      window.getCalendarDaysInMonthKeyV62 = function(mKey) {
+        const mk = String(mKey || selectedMonthKey || getCurrentMonthKeyStr()).replace(/^WA_/, '').trim();
+        const parts = mk.split('/');
+        const mm = parseInt(parts[0], 10) || (new Date().getMonth() + 1);
+        const yyyy = parseInt(parts[1], 10) || new Date().getFullYear();
+        return new Date(yyyy, mm, 0).getDate() || 30;
+      };
+
+      window._rawGetUsersForMonthV62 = getUsersForMonth;
+
+      // Ensure CSV export mode always divides by exact calendar days (28/29/30/31)
+      if (typeof window.getWorkingDaysDivisorForMonthV59 === 'function') {
+        const _origGetWorkDivV62 = window.getWorkingDaysDivisorForMonthV59;
+        window.getWorkingDaysDivisorForMonthV59 = function(chKey, mKey) {
+          if (window._isExportingSheetWithActualTarget) {
+            return window.getCalendarDaysInMonthKeyV62(mKey || selectedMonthKey);
+          }
+          return _origGetWorkDivV62(chKey, mKey);
+        };
+      }
+
+      // Roster + Leave/Absent-Aware Agent Daily Target Calculator (for 100% Monthly Achievement!)
+      window.computeAgentRosterLeaveDailyTargetV62 = function(agentObj, workingTargetVal, achievedVal, mKey, preloadedMonthSales) {
+        const mk = String(mKey || selectedMonthKey || getCurrentMonthKeyStr()).trim();
+        const parts = mk.split('/');
+        const mm = parseInt(parts[0], 10) || (new Date().getMonth() + 1);
+        const yyyy = parseInt(parts[1], 10) || new Date().getFullYear();
+        const daysInMonth = new Date(yyyy, mm, 0).getDate() || 30;
+
+        const now = new Date();
+        const curY = now.getFullYear();
+        const curM = now.getMonth() + 1;
+        const curD = now.getDate();
+
+        const workingTarget = Number(workingTargetVal) || 0;
+        const achieved = Number(achievedVal) || 0;
+        const remainingTarget = Math.max(0, workingTarget - achieved);
+
+        let monthRelation = 'CURRENT';
+        let startDay = curD;
+        if (yyyy < curY || (yyyy === curY && mm < curM)) {
+          monthRelation = 'PAST';
+          startDay = daysInMonth + 1;
+        } else if (yyyy > curY || (yyyy === curY && mm > curM)) {
+          monthRelation = 'FUTURE';
+          startDay = 1;
+        }
+
+        const uid = agentObj ? String(agentObj.id).trim() : '';
+        const allSalesSrc = Array.isArray(preloadedMonthSales)
+          ? preloadedMonthSales
+          : deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(mk) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+        const todayStr = `${String(curD).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${yyyy}`;
+        const submittedToday = (monthRelation === 'CURRENT' && uid)
+          ? allSalesSrc.some(s => String(s.userId).trim() === uid && String(s.date || '').replace(/^'/, '').trim() === todayStr)
+          : false;
+        if (monthRelation === 'CURRENT' && submittedToday) {
+          startDay = curD + 1;
+        }
+
+        const roster = (typeof getRosterForMonth === 'function') ? getRosterForMonth(mk) : [];
+        const rosterRow = uid ? roster.find(r => String(r.id).trim() === uid) : null;
+        const leaveStore = (typeof getLeaveRecordsStoreForMonth === 'function') ? getLeaveRecordsStoreForMonth(mk) : {};
+        const doApprovedStore = (typeof window.getApprovedDayOffDutiesStore === 'function') ? window.getApprovedDayOffDutiesStore(mk) : {};
+        const dutySwapsStore = (typeof window.getDutySwapsStoreForMonth === 'function') ? window.getDutySwapsStoreForMonth(mk) : {};
+
+        const coveredDatesSet = new Set();
+        Object.keys(dutySwapsStore || {}).forEach(sk => {
+          const sw = dutySwapsStore[sk];
+          if (!sw || sw.isRemoved) return;
+          if (sw.swapMode === 'SELF' && String(sw.userId).trim() === uid && sw.coveredDate) {
+            coveredDatesSet.add(String(sw.coveredDate).trim());
+          } else if (sw.swapMode === 'TEAMMATE' && String(sw.partnerId).trim() === uid && sw.coveredDate) {
+            coveredDatesSet.add(String(sw.coveredDate).trim());
+          }
+        });
+
+        const dayKeyByDow = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+        let totalDutyDaysInMonth = 0;
+        let totalDoDaysInMonth = 0;
+        let totalLeaveAbsentDaysInMonth = 0;
+        let remainingDutyDays = 0;
+        let remainingDoDays = 0;
+        let remainingLeaveDays = 0;
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dStr = `${String(d).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${yyyy}`;
+          const dow = new Date(yyyy, mm - 1, d).getDay();
+          const dKey = dayKeyByDow[dow];
+          const rawShift = rosterRow ? String(rosterRow[dKey] || '3:00 PM').trim() : '3:00 PM';
+          const isBaseDo = rawShift.toUpperCase() === 'DO';
+
+          const directDoAppr = doApprovedStore[`${uid}_${dStr}`];
+          const isApprovedDoWork = Boolean((directDoAppr && !directDoAppr.isRemoved) || coveredDatesSet.has(dStr));
+
+          const lv = leaveStore[`${uid}_${dStr}`];
+          const hasLeaveEntry = Boolean(lv && !lv.isRemoved);
+          const lvTypeLow = hasLeaveEntry ? String(lv.leaveType || '').toLowerCase() : '';
+          const isSwapExtraOff = hasLeaveEntry && (lvTypeLow.includes('extra day off') || lvTypeLow.includes('swap'));
+          const isLeaveOrAbsent = hasLeaveEntry && !isSwapExtraOff;
+
+          const effectiveIsDo = (isBaseDo && !isApprovedDoWork) || isSwapExtraOff;
+          const effectiveIsDuty = !effectiveIsDo && !isLeaveOrAbsent;
+
+          if (effectiveIsDo) totalDoDaysInMonth++;
+          if (isLeaveOrAbsent) totalLeaveAbsentDaysInMonth++;
+          if (effectiveIsDuty) totalDutyDaysInMonth++;
+
+          if (d >= startDay) {
+            if (effectiveIsDuty) remainingDutyDays++;
+            else if (isLeaveOrAbsent) remainingLeaveDays++;
+            else if (effectiveIsDo) remainingDoDays++;
+          }
+        }
+
+        let status = 'ACTIVE';
+        let dailyTarget = 0;
+        if (workingTarget <= 0) {
+          status = 'NO_TARGET';
+          dailyTarget = 0;
+        } else if (monthRelation === 'PAST') {
+          status = remainingTarget <= 0 ? 'ACHIEVED' : 'PAST';
+          dailyTarget = Math.round(workingTarget / Math.max(1, totalDutyDaysInMonth));
+        } else if (remainingTarget <= 0) {
+          status = 'ACHIEVED';
+          dailyTarget = 0;
+        } else if (remainingDutyDays <= 0) {
+          status = 'FINAL_BALANCE';
+          dailyTarget = remainingTarget;
+        } else {
+          dailyTarget = Math.round(remainingTarget / remainingDutyDays);
+        }
+
+        return {
+          dailyTarget,
+          workingTarget,
+          achieved,
+          remainingTarget,
+          remainingDutyDays,
+          remainingDoDays,
+          remainingLeaveDays,
+          totalDutyDaysInMonth,
+          totalDoDaysInMonth,
+          totalLeaveAbsentDaysInMonth,
+          submittedToday,
+          daysInMonth,
+          monthRelation,
+          status
+        };
+      };
+
+      window.getAgentDynamicDailyTargetV62 = function(agentObj, mKey, preloadedMonthSales) {
+        const mk = String(mKey || selectedMonthKey || getCurrentMonthKeyStr()).trim();
+        if (!agentObj) {
+          return { dailyTarget: 0, remainingDutyDays: 0, totalLeaveAbsentDaysInMonth: 0, status: 'NO_TARGET' };
+        }
+        const uid = String(agentObj.id).trim();
+        const allMonthSales = Array.isArray(preloadedMonthSales)
+          ? preloadedMonthSales
+          : deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(mk) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+        const agSales = allMonthSales.filter(s => String(s.userId).trim() === uid);
+        const achieved = agSales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+        const baseTgt = Number(agentObj.baseTarget) || 0;
+        const workTgt = calcWorkingTargetFromBase(baseTgt, getChannelForTeam(agentObj.team));
+        return window.computeAgentRosterLeaveDailyTargetV62(agentObj, workTgt, achieved, mk, agSales);
+      };
+
+      // Override getTargetData:
+      // - Admin / TL / Supervisor (Channel-wise, Team-wise, All Channels): Working Target (+5%) ÷ exact calendar days (28/29/30/31)
+      // - Agent Panel: Live Roster + Leave/Absent-adjusted Remaining Target ÷ Remaining Duty Days to hit 100%!
+      const _origGetTargetDataV62 = getTargetData;
+      getTargetData = function(user, scopeOverride, mKey) {
+        const res = _origGetTargetDataV62(user, scopeOverride, mKey);
+        try {
+          const mk = mKey || selectedMonthKey;
+          const calDays = window.getCalendarDaysInMonthKeyV62(mk);
+          if (user && canViewAll(user)) {
+            res.dailyTarget = Math.round((Number(res.workingTarget) || 0) / calDays);
+            res.dailyTargetMetaV62 = {
+              mode: 'TEAM',
+              calDays,
+              tooltip: `Working Target (৳${Number(res.workingTarget || 0).toLocaleString()}) ÷ ${calDays} calendar days in ${mk}`
+            };
+          } else if (user) {
+            const allUsers = window._rawGetUsersForMonthV62(mk, true);
+            const freshUser = allUsers.find(u => String(u.id) === String(user.id)) || user;
+            const pace = window.getAgentDynamicDailyTargetV62(freshUser, mk);
+            res.dailyTarget = pace.dailyTarget;
+            res.dailyTargetMetaV62 = {
+              mode: 'AGENT',
+              ...pace,
+              tooltip: pace.status === 'ACHIEVED'
+                ? '100% Monthly Working Target Achieved!'
+                : (pace.monthRelation === 'PAST'
+                    ? `Closed month target ÷ ${pace.totalDutyDaysInMonth} duty days (DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`
+                    : `Remaining ৳${pace.remainingTarget.toLocaleString()} ÷ ${pace.remainingDutyDays} remaining duty days (Roster DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth}) to achieve 100%`)
+            };
+          }
+        } catch (eT62) {}
+        return res;
+      };
+
+      // Clean subtle enhancement on the green "Daily Target" pill in Dashboard (NO clutter, NO ÷26, NO changes to MTD box!)
+      const _origRenderDashboardV62 = renderDashboard;
+      renderDashboard = function() {
+        let htmlOut = _origRenderDashboardV62();
+        try {
+          const u = currentUser;
+          if (!u) return htmlOut;
+          const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
+          const meta = tInfo.dailyTargetMetaV62;
+          if (!meta) return htmlOut;
+
+          let subHintHtml = '';
+          let valueOverrideHtml = null;
+
+          if (meta.mode === 'AGENT') {
+            if (meta.status === 'ACHIEVED') {
+              subHintHtml = `<span class="block text-[9px] font-black text-emerald-600 leading-none mt-0.5">100% Target Hit!</span>`;
+              valueOverrideHtml = `<strong class="text-xs font-black text-emerald-700">✅ 100% Hit</strong>`;
+            } else if (meta.status === 'ACTIVE') {
+              const lvBit = meta.totalLeaveAbsentDaysInMonth > 0 ? ` • ${meta.totalLeaveAbsentDaysInMonth}L adj.` : '';
+              subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/80 leading-none mt-0.5">${meta.remainingDutyDays} duty days left${lvBit}</span>`;
+            } else if (meta.status === 'FINAL_BALANCE') {
+              subHintHtml = `<span class="block text-[9px] font-bold text-rose-600 leading-none mt-0.5">Remaining balance</span>`;
+            } else if (meta.status === 'PAST') {
+              subHintHtml = `<span class="block text-[9px] font-bold text-slate-500 leading-none mt-0.5">${meta.totalDutyDaysInMonth} duty days</span>`;
+            }
+          } else if (meta.mode === 'TEAM') {
+            subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/75 leading-none mt-0.5">${meta.calDays}-day month avg</span>`;
+          }
+
+          const safeTip = String(meta.tooltip || '').replace(/"/g, '&quot;');
+          const oldPillPattern = /<div class="px-3\.5 py-2 rounded-xl bg-emerald-50\/60 border border-emerald-200\/80 flex items-center justify-between gap-2">\s*<div class="flex items-center gap-2">\s*<span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-calendar-day"><\/i><\/span>\s*<span class="text-\[10px\] font-extrabold uppercase text-emerald-700">Daily Target<\/span>\s*<\/div>\s*<strong class="text-xs font-black text-emerald-900">[^<]*<\/strong>\s*<\/div>/;
+
+          const newPillHtml = `<div class="px-3.5 py-2 rounded-xl bg-emerald-50/60 border border-emerald-200/80 flex items-center justify-between gap-2" title="${safeTip}">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-calendar-day"></i></span>
+                      <div class="min-w-0">
+                        <span class="text-[10px] font-extrabold uppercase text-emerald-700 block leading-none">Daily Target</span>
+                        ${subHintHtml}
+                      </div>
+                    </div>
+                    ${valueOverrideHtml || `<strong class="text-xs font-black text-emerald-900 shrink-0">৳${tInfo.dailyTarget.toLocaleString()}</strong>`}
+                  </div>`;
+
+          htmlOut = htmlOut.replace(oldPillPattern, newPillHtml);
+        } catch (eDash62) {}
+        return htmlOut;
+      };
+
+      // Subtle 1-line Roster+Leave Daily Target under each agent's Remaining cell in Monthly Performance table (for TL visibility)
+      const _origRenderMonthlyPerfV62 = renderMonthlyPerformanceView;
+      renderMonthlyPerformanceView = function() {
+        let htmlOut = _origRenderMonthlyPerfV62();
+        try {
+          const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+            .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+          const allUsers = window._rawGetUsersForMonthV62(selectedMonthKey, true);
+
+          allUsers.forEach(ag => {
+            if (!ag || ag.role === 'supervisor') return;
+            const uid = String(ag.id).trim();
+            const rowMarker = `setMonthlyPerfAgent('${uid}')`;
+            const idxRow = htmlOut.indexOf(rowMarker);
+            if (idxRow === -1) return;
+
+            const agSales = allMonthSales.filter(s => String(s.userId).trim() === uid);
+            const rev = agSales.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+            const workTgt = calcWorkingTargetFromBase(Number(ag.baseTarget) || 0, getChannelForTeam(ag.team));
+            const rem = Math.max(0, workTgt - rev);
+            const pace = window.computeAgentRosterLeaveDailyTargetV62(ag, workTgt, rev, selectedMonthKey, agSales);
+
+            const remCellStr = `<td class="p-3.5 font-bold text-slate-500">৳${rem.toLocaleString()}</td>`;
+            const idxRem = htmlOut.indexOf(remCellStr, idxRow);
+            if (idxRem !== -1 && (idxRem - idxRow) < 2200) {
+              let subPill = '';
+              if (pace.status === 'ACHIEVED') {
+                subPill = `<span class="block text-[9px] font-black text-emerald-600 mt-0.5">✅ 100% Achieved</span>`;
+              } else if (pace.status === 'ACTIVE') {
+                const lvTag = pace.totalLeaveAbsentDaysInMonth > 0 ? ` • ${pace.totalLeaveAbsentDaysInMonth}L` : '';
+                const tip = `Daily Target to hit 100%: ৳${pace.dailyTarget.toLocaleString()}/day across ${pace.remainingDutyDays} remaining duty days (Roster DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`;
+                subPill = `<span class="block text-[9px] font-black text-emerald-700 mt-0.5" title="${tip}">Daily: ৳${pace.dailyTarget.toLocaleString()}/d (${pace.remainingDutyDays}d${lvTag})</span>`;
+              }
+              if (subPill) {
+                const newRemCell = `<td class="p-3.5 font-bold text-slate-500"><div>৳${rem.toLocaleString()}</div>${subPill}</td>`;
+                htmlOut = htmlOut.slice(0, idxRem) + newRemCell + htmlOut.slice(idxRem + remCellStr.length);
+              }
+            }
+          });
+        } catch (eMp62) {}
+        return htmlOut;
+      };
+    } catch (errV62) {
+      console.error('Non-fatal patch v62 warning:', errV62);
     }
 
 window.addEventListener('load', init);
