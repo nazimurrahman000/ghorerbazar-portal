@@ -395,12 +395,12 @@
     ];
 
     const DEFAULT_PRODUCTS = {
-      ajwa: { name: 'Ajwa Dates', targetKg: 69.03, style: 'prod-amber', badge: 'bg-amber-500 text-white', bar: 'bg-amber-500', icon: 'fa-seedling', bonus90: 600, bonus100: 1000 },
-      pinkSalt: { name: 'Pink Salt', targetKg: 10.07, style: 'prod-rose', badge: 'bg-rose-500 text-white', bar: 'bg-rose-500', icon: 'fa-jar', item100: '2L Mustard Oil' },
-      blackGarlic: { name: 'Black Garlic', targetKg: 6.09, style: 'prod-purple', badge: 'bg-purple-600 text-white', bar: 'bg-purple-600', icon: 'fa-spa', item100: '400gm Gawa Ghee' },
-      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51, style: 'prod-orange', badge: 'bg-orange-500 text-white', bar: 'bg-orange-500', icon: 'fa-droplet', bonus90: 1000, bonus100: 2000 },
-      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09, style: 'prod-blue', badge: 'bg-blue-600 text-white', bar: 'bg-blue-600', icon: 'fa-bottle-droplet', bonus100: 1000 },
-      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56, style: 'prod-emerald', badge: 'bg-emerald-600 text-white', bar: 'bg-emerald-600', icon: 'fa-cheese', bonus90: 1200, bonus100: 2000 }
+      ajwa: { name: 'Ajwa Dates', targetKg: 69.03, style: 'prod-amber', badge: 'bg-amber-500 text-white', bar: 'bg-amber-500', icon: 'fa-seedling', bonus90: 600, bonus100: 1000, extraUnitKg: 1, extraRateTk: 50, extraUnitLabel: 'kg' },
+      pinkSalt: { name: 'Pink Salt', targetKg: 10.07, style: 'prod-rose', badge: 'bg-rose-500 text-white', bar: 'bg-rose-500', icon: 'fa-jar', item100: '2L Mustard Oil', extraUnitKg: 1, extraRateTk: 50, extraUnitLabel: 'kg' },
+      blackGarlic: { name: 'Black Garlic', targetKg: 6.09, style: 'prod-purple', badge: 'bg-purple-600 text-white', bar: 'bg-purple-600', icon: 'fa-spa', item100: '400gm Gawa Ghee', extraUnitKg: 0.5, extraRateTk: 50, extraUnitLabel: '500gm' },
+      sunHoney: { name: 'Sundarban Honey', targetKg: 101.51, style: 'prod-orange', badge: 'bg-orange-500 text-white', bar: 'bg-orange-500', icon: 'fa-droplet', bonus90: 1000, bonus100: 2000, extraUnitKg: 1, extraRateTk: 50, extraUnitLabel: 'kg' },
+      bsHoney: { name: 'Black Seed Honey', targetKg: 73.09, style: 'prod-blue', badge: 'bg-blue-600 text-white', bar: 'bg-blue-600', icon: 'fa-bottle-droplet', bonus100: 1000, extraUnitKg: 1, extraRateTk: 50, extraUnitLabel: 'kg' },
+      gawaGhee: { name: 'Gawa Ghee', targetKg: 153.56, style: 'prod-emerald', badge: 'bg-emerald-600 text-white', bar: 'bg-emerald-600', icon: 'fa-cheese', bonus90: 1200, bonus100: 2000, extraUnitKg: 1, extraRateTk: 50, extraUnitLabel: 'kg' }
     };
 
     const BREAK_REASONS = [
@@ -758,7 +758,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen || profileMenuDropdownOpen) return true;
-      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal'];
+      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal', 'sprintRewardsConfigModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -7391,10 +7391,13 @@
         .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
 
       const effPhase = sprintTabPhase === 'AUTO' ? getAutoCurrentSprintPhase() : sprintTabPhase;
+      const spPctCsv = (typeof window.getSprintPctsForMonthV58 === 'function')
+        ? window.getSprintPctsForMonthV58(activeChannel, selectedMonthKey)
+        : { s1: 40, s2: 35, s3: 35 };
       const phaseMeta = {
-        S1: { label: 'Sprint 1 (Days 1-10)', pct: 0.40 },
-        S2: { label: 'Sprint 2 (Days 11-20)', pct: 0.35 },
-        S3: { label: 'Sprint 3 (Days 21-31)', pct: 0.35 }
+        S1: { label: 'Sprint 1 (Days 1-10)', pct: spPctCsv.s1 / 100 },
+        S2: { label: 'Sprint 2 (Days 11-20)', pct: spPctCsv.s2 / 100 },
+        S3: { label: 'Sprint 3 (Days 21-31)', pct: spPctCsv.s3 / 100 }
       }[effPhase];
 
       const filteredAgents = sprintTabTeamScope === 'ALL'
@@ -7463,10 +7466,13 @@
 
       const autoPhase = getAutoCurrentSprintPhase();
       const effPhase = sprintTabPhase === 'AUTO' ? autoPhase : sprintTabPhase;
+      const spPctView = (typeof window.getSprintPctsForMonthV58 === 'function')
+        ? window.getSprintPctsForMonthV58(activeChannel, selectedMonthKey)
+        : { s1: 40, s2: 35, s3: 35 };
       const phaseInfo = {
-        S1: { key: 'S1', name: 'Sprint 1 (Days 1–10)', short: 'Sprint 1 (1–10)', dateRange: `01/${selectedMonthKey} – 10/${selectedMonthKey}`, pct: 0.40, pctLabel: '40% of Monthly Target' },
-        S2: { key: 'S2', name: 'Sprint 2 (Days 11–20)', short: 'Sprint 2 (11–20)', dateRange: `11/${selectedMonthKey} – 20/${selectedMonthKey}`, pct: 0.35, pctLabel: '35% of Monthly Target' },
-        S3: { key: 'S3', name: 'Sprint 3 (Days 21–31)', short: 'Sprint 3 (21–31)', dateRange: `21/${selectedMonthKey} – End of Month`, pct: 0.35, pctLabel: '35% of Monthly Target' }
+        S1: { key: 'S1', name: 'Sprint 1 (Days 1–10)', short: 'Sprint 1 (1–10)', dateRange: `01/${selectedMonthKey} – 10/${selectedMonthKey}`, pct: spPctView.s1 / 100, pctLabel: `${spPctView.s1}% of Monthly Target` },
+        S2: { key: 'S2', name: 'Sprint 2 (Days 11–20)', short: 'Sprint 2 (11–20)', dateRange: `11/${selectedMonthKey} – 20/${selectedMonthKey}`, pct: spPctView.s2 / 100, pctLabel: `${spPctView.s2}% of Monthly Target` },
+        S3: { key: 'S3', name: 'Sprint 3 (Days 21–31)', short: 'Sprint 3 (21–31)', dateRange: `21/${selectedMonthKey} – End of Month`, pct: spPctView.s3 / 100, pctLabel: `${spPctView.s3}% of Monthly Target` }
       }[effPhase];
 
       let channelTLMilestones = [];
@@ -7505,9 +7511,9 @@
       const rankedSprintAgents = filteredAgents.map(ag => {
         const baseTgt = Number(ag.baseTarget) || 0;
         const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
-        const s1Goal = Math.round(workTgt * 0.40);
-        const s2Goal = Math.round(workTgt * 0.35);
-        const s3Goal = Math.round(workTgt * 0.35);
+        const s1Goal = Math.round(workTgt * (spPctView.s1 / 100));
+        const s2Goal = Math.round(workTgt * (spPctView.s2 / 100));
+        const s3Goal = Math.round(workTgt * (spPctView.s3 / 100));
 
         const agSales = monthSales.filter(s => String(s.userId) === String(ag.id));
         let s1Sales = 0, s2Sales = 0, s3Sales = 0, sprintOrders = 0, sprintLeads = 0;
@@ -19084,9 +19090,12 @@ function renderChatHubView() {
                 </div>
                 `;
               })() : (isSprintSystemActiveForMonth(selectedMonthKey) ? (() => {
-                const s1Goal = Math.round(tInfo.workingTarget * 0.40);
-                const s2Goal = Math.round(tInfo.workingTarget * 0.35);
-                const s3Goal = Math.round(tInfo.workingTarget * 0.35);
+                const spPctDash = (typeof window.getSprintPctsForMonthV58 === 'function')
+                  ? window.getSprintPctsForMonthV58(getChannelForTeam(u.team), selectedMonthKey)
+                  : { s1: 40, s2: 35, s3: 35 };
+                const s1Goal = Math.round(tInfo.workingTarget * (spPctDash.s1 / 100));
+                const s2Goal = Math.round(tInfo.workingTarget * (spPctDash.s2 / 100));
+                const s3Goal = Math.round(tInfo.workingTarget * (spPctDash.s3 / 100));
                 let s1Amt = 0, s2Amt = 0, s3Amt = 0;
                 thisMonthSales.forEach(s => {
                   const day = parseInt(String(s.date).split('/')[0], 10) || 0;
@@ -24455,11 +24464,11 @@ function renderChatHubView() {
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between gap-2">
-                  <span class="text-xs font-black text-amber-300 uppercase tracking-wide">Saving to Google Sheet...</span>
+                  <span class="text-xs font-black text-amber-300 tracking-wide">Report Submitting.....</span>
                   <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 text-[10px] font-black">${cnt} Pending</span>
                 </div>
                 <p class="text-[11px] font-bold text-slate-200 mt-0.5 leading-snug">
-                  ${customMsg || 'Please wait 2–3 seconds before closing the browser so it is 100% confirmed in Sheet & Portal.'}
+                  ${customMsg || 'Please wait 2–3 seconds before closing the browser so it is 100% confirmed.'}
                 </p>
               </div>
             </div>
@@ -24559,8 +24568,8 @@ function renderChatHubView() {
           window.renderLiveSheetSyncBannerV56(
             'SYNCING',
             isDeletion
-              ? `Deleting report (${cleanD}) from Google Sheet... Please wait 2 seconds.`
-              : `Syncing ${entryObj.userName || uid}'s report (${cleanD}) to Google Sheet... Do not close yet.`
+              ? `Deleting report (${cleanD})... Please wait 2–3 seconds so it is 100% confirmed.`
+              : `Please wait 2–3 seconds before closing the browser so it is 100% confirmed.`
           );
           window.startRapidSheetVerificationLoopV56();
         }
@@ -24680,7 +24689,7 @@ function renderChatHubView() {
         if (unconfirmedCount > 0) {
           window.renderLiveSheetSyncBannerV56(
             'SYNCING',
-            `Finishing Google Sheet sync (${unconfirmedCount} report) before logging out...`
+            `Finishing report submission (${unconfirmedCount} pending) before logging out so it is 100% confirmed.`
           );
           const logoutModalBtn = document.querySelector('#logoutConfirmModal button[onclick*="executeInstantLogout"]');
           if (logoutModalBtn) {
@@ -24714,13 +24723,1551 @@ function renderChatHubView() {
           });
           window.renderLiveSheetSyncBannerV56(
             'SYNCING',
-            `Auto-recovering & syncing ${leftoverKeys.length} pending report(s) to Google Sheet...`
+            `Submitting ${leftoverKeys.length} pending report(s)... Please wait 2–3 seconds so it is 100% confirmed.`
           );
           window.startRapidSheetVerificationLoopV56();
         }
       }, 450);
     } catch (errV56) {
       console.error('Non-fatal patch v56 warning:', errV56);
+    }
+
+
+    // =========================================================================
+    // PATCH v57 (index-v36.html) — COMPLETE UPGRADE FOR:
+    // 1. Smart Compact MTD Ratio (Month-To-Date Target Achievement %) on EVERY
+    //    Dashboard: Agent-wise, Team-wise, Channel-wise & All-Channel Matrix.
+    // 2. Agent CSV/Excel Download Restriction: Removes all Download CSV/Excel
+    //    buttons from Agent accounts (Admin/TL & Supervisor ONLY).
+    // 3. 0% Miss Zero-Loss Serialized Cloud Write Engine (Regular Submit, Drive
+    //    Product Updates & AI ERP Bulk Imports):
+    //    - Verifies ALL 6 products (including Pink Salt & Black Garlic + custom)
+    //      with float tolerance so no update is ever falsely marked confirmed.
+    //    - Serializes rapid back-to-back & AI ERP multi-agent writes sequentially
+    //      so Google Apps Script LockService never drops an agent (e.g. Ranju).
+    //    - Fixes newest-row preservation on MONTHLY_PROD_ score ties.
+    // 4. November 2026 Drive Product 100%+ Over-Achievement Bonus + Total 100%
+    //    Monthly Target Bonus Floor:
+    //    - Black Garlic > 6.09 kg: +৳50 per every extra 500gm (0.5 kg)
+    //    - Ajwa, Pink Salt, Sundarban Honey, Black Seed Honey, Gawa Ghee > 100%:
+    //      +৳50 per every extra 1 kg above 100% target!
+    //    - Full Monthly 100% Target Floor (Total 100% of Target column from
+    //      Nov 2026 Sales Incentive Program sheet).
+    // =========================================================================
+    try {
+      // -----------------------------------------------------------------------
+      // PART 1: NOVEMBER 2026 DRIVE PRODUCT 100%+ EXTRA BONUS & SPRINT 100% FLOOR
+      // -----------------------------------------------------------------------
+      window.computeSingleProductIncentiveV57 = function(prodKey, prodObj, soldKgVal, targetKgOverride) {
+        const p = prodObj || {};
+        const soldKg = Number(soldKgVal) || 0;
+        const tgtKg = (targetKgOverride !== undefined && targetKgOverride !== null)
+          ? Number(targetKgOverride)
+          : (Number(p.targetKg) || 0);
+
+        if (tgtKg <= 0 || soldKg <= 0) {
+          return { cash: 0, baseCash: 0, extraCash: 0, extraUnits: 0, extraUnitLabel: 'kg', gift: '', cashBadges: [] };
+        }
+
+        const pctExact = (soldKg / tgtKg) * 100;
+        const isBlackGarlic = prodKey === 'blackGarlic' || /black\s*garlic/i.test(String(p.name || ''));
+        const extraUnitKg = Number(p.extraUnitKg) || (isBlackGarlic ? 0.5 : 1);
+        const extraRateTk = (p.extraRateTk !== undefined && p.extraRateTk !== null) ? Number(p.extraRateTk) : 50;
+        const extraUnitLabel = p.extraUnitLabel || (extraUnitKg === 0.5 ? '500gm' : 'kg');
+
+        let baseCash = 0;
+        let extraCash = 0;
+        let extraUnits = 0;
+        let gift = '';
+        const cashBadges = [];
+
+        if (soldKg + 0.0001 >= tgtKg) {
+          if (p.bonus100) {
+            baseCash = Number(p.bonus100);
+            cashBadges.push(`${p.name} (100% — ${soldKg.toFixed(2)}kg: ৳${baseCash.toLocaleString()})`);
+          }
+          if (p.item100) {
+            gift = `🎁 ${p.item100} (${p.name} 100% — ${soldKg.toFixed(2)}kg)`;
+          }
+          const excessKg = Math.max(0, soldKg - tgtKg);
+          if (excessKg + 0.0001 >= extraUnitKg && extraRateTk > 0) {
+            extraUnits = Math.floor((excessKg + 0.0001) / extraUnitKg);
+            extraCash = extraUnits * extraRateTk;
+            if (extraCash > 0) {
+              const extraWeightStr = extraUnitKg === 0.5
+                ? `${(extraUnits * 0.5).toFixed(1)}kg (${extraUnits}×500gm)`
+                : `${extraUnits}kg`;
+              cashBadges.push(`${p.name} (100%+ Extra ${extraWeightStr}: +৳${extraCash.toLocaleString()})`);
+            }
+          }
+        } else if (pctExact + 0.0001 >= 90 && p.bonus90) {
+          baseCash = Number(p.bonus90);
+          cashBadges.push(`${p.name} (90% — ${soldKg.toFixed(2)}kg: ৳${baseCash.toLocaleString()})`);
+        }
+
+        return {
+          cash: baseCash + extraCash,
+          baseCash,
+          extraCash,
+          extraUnits,
+          extraUnitLabel,
+          gift,
+          cashBadges
+        };
+      };
+
+      // Upgrade Sprint Incentive to ALSO include "Total 100% of Target" reward floor from Nov 2026 Sheet
+      const _origComputeSprintIncV57 = window.computeSingleAgentSprintIncentive;
+      window.computeSingleAgentSprintIncentive = function(agentObj, monthSalesList, mKey) {
+        const res = _origComputeSprintIncV57(agentObj, monthSalesList, mKey);
+        if (!agentObj || !isSprintSystemActiveForMonth(mKey || selectedMonthKey)) return res;
+
+        const chKey = getChannelForTeam(agentObj.team) === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        const gradeKey = agentObj.role === 'admin' ? 'TL' : (agentObj.grade || 'A');
+        const rewardSpec = (SPRINT_REWARD_PROGRAM[chKey] && SPRINT_REWARD_PROGRAM[chKey][gradeKey])
+          ? SPRINT_REWARD_PROGRAM[chKey][gradeKey]
+          : SPRINT_REWARD_PROGRAM.FACEBOOK['A'];
+
+        const baseTgt = Number(agentObj.baseTarget) || 0;
+        const workTgt = calcWorkingTargetFromBase(baseTgt, chKey);
+        if (workTgt <= 0 || !rewardSpec || !rewardSpec.total100) return res;
+
+        const mk = mKey || selectedMonthKey;
+        const agSales = deduplicateSalesRecordsList(monthSalesList).filter(s =>
+          String(s.userId).trim() === String(agentObj.id).trim() &&
+          String(s.date || '').endsWith(mk) &&
+          !String(s.date || '').startsWith('MONTHLY_PROD_')
+        );
+        const totalMonthlySales = agSales.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+
+        if (totalMonthlySales >= workTgt && Number(rewardSpec.total100) > (Number(res.sprintMoney) || 0)) {
+          return {
+            sprintMoney: Number(rewardSpec.total100),
+            sprintBadges: [`🎯 100% Monthly Target Achieved: ৳${Number(rewardSpec.total100).toLocaleString()}`]
+          };
+        }
+        return res;
+      };
+
+      // Upgrade calculateEarnedIncentives (Dashboard Live Bonus Box & Drive Product Stats)
+      let _insideDriveProductStatsV57 = false;
+      const _origComputeAgentDriveStatsV57 = computeAgentDriveProductStats;
+      computeAgentDriveProductStats = function(agentObj, monthSalesList, mKey) {
+        _insideDriveProductStatsV57 = true;
+        try {
+          return _origComputeAgentDriveStatsV57(agentObj, monthSalesList, mKey);
+        } finally {
+          _insideDriveProductStatsV57 = false;
+        }
+      };
+
+      calculateEarnedIncentives = function(pTotals, agentCount, mKey) {
+        const mk = mKey || selectedMonthKey;
+        const activeProds = getActiveProductsForMonth(mk);
+        let prodMoney = 0;
+        let earnedCashBadges = [];
+        let earnedGiftItems = [];
+
+        if (_insideDriveProductStatsV57) {
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const res = window.computeSingleProductIncentiveV57(k, p, pTotals[k], (Number(p.targetKg) || 0) * (agentCount || 1));
+            prodMoney += res.cash;
+            res.cashBadges.forEach(b => earnedCashBadges.push(b));
+            if (res.gift) earnedGiftItems.push(res.gift);
+          });
+          return { totalMoney: prodMoney, earnedCashBadges, earnedGiftItems, earnedRewards: [...earnedCashBadges, ...earnedGiftItems] };
+        }
+
+        const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(mk));
+        const monthUsers = getUsersForMonth(mk);
+        let sprintMoneyTotal = 0;
+        let sprintBadgesList = [];
+
+        if (currentUser && canViewAll(currentUser) && agentCount > 1) {
+          const scopedAgents = monthUsers.filter(usr => {
+            if (usr.role !== 'agent') return false;
+            if (dashboardScope === 'ALL') return true;
+            return normalizeTeamNameAlias(usr.team) === normalizeTeamNameAlias(dashboardScope);
+          });
+          scopedAgents.forEach(ag => {
+            const agDp = computeAgentDriveProductStats(ag, allMonthSales, mk);
+            const firstNm = ag.name.split(' ')[0];
+            Object.keys(activeProds).forEach(k => {
+              const p = activeProds[k];
+              const res = window.computeSingleProductIncentiveV57(k, p, agDp.prodKg[k], Number(p.targetKg) || 0);
+              prodMoney += res.cash;
+              res.cashBadges.forEach(b => earnedCashBadges.push(`${firstNm}: ${b}`));
+              if (res.gift) earnedGiftItems.push(`${res.gift.replace('🎁 ', `🎁 ${firstNm}: `)}`);
+            });
+            const spRes = window.computeSingleAgentSprintIncentive(ag, allMonthSales, mk);
+            if (spRes.sprintMoney > 0) {
+              sprintMoneyTotal += spRes.sprintMoney;
+              spRes.sprintBadges.forEach(b => sprintBadgesList.push(`${firstNm} (${b})`));
+            }
+          });
+        } else {
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const res = window.computeSingleProductIncentiveV57(k, p, pTotals[k], (Number(p.targetKg) || 0) * (agentCount || 1));
+            prodMoney += res.cash;
+            res.cashBadges.forEach(b => earnedCashBadges.push(b));
+            if (res.gift) earnedGiftItems.push(res.gift);
+          });
+          if (currentUser && !canViewAll(currentUser)) {
+            const myMonthObj = monthUsers.find(x => String(x.id) === String(currentUser.id)) || currentUser;
+            const mySp = window.computeSingleAgentSprintIncentive(myMonthObj, allMonthSales, mk);
+            sprintMoneyTotal += mySp.sprintMoney;
+            sprintBadgesList = mySp.sprintBadges;
+          }
+        }
+
+        const combinedCashBadges = [...sprintBadgesList, ...earnedCashBadges];
+        return {
+          totalMoney: prodMoney + sprintMoneyTotal,
+          sprintMoney: sprintMoneyTotal,
+          productMoney: prodMoney,
+          earnedCashBadges: combinedCashBadges,
+          earnedGiftItems,
+          earnedRewards: [...combinedCashBadges, ...earnedGiftItems]
+        };
+      };
+
+      // Upgrade Incentive Tab Breakdown (computeFloorIncentiveBreakdown) to include 100%+ per-KG / per-500gm bonus!
+      const _origComputeFloorIncentiveV57 = window.computeFloorIncentiveBreakdown;
+      window.computeFloorIncentiveBreakdown = function(mKey, teamScopeFilter = 'ALL', memberFilter = 'ALL') {
+        const res = _origComputeFloorIncentiveV57(mKey, teamScopeFilter, memberFilter);
+        const mk = mKey || selectedMonthKey;
+        const activeProds = getActiveProductsForMonth(mk);
+        const allSales = deduplicateSalesRecordsList(getStored('sales_records', []));
+        const monthSales = allSales.filter(s => String(s.date || '').endsWith(mk));
+
+        res.agentRows.forEach(row => {
+          const dpStats = computeAgentDriveProductStats(row.agent, monthSales, mk);
+          let prodMoney = 0;
+          const prodCashBadges = [];
+          const prodGiftBadges = [];
+
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const pRes = window.computeSingleProductIncentiveV57(k, p, dpStats.prodKg[k], Number(p.targetKg) || 0);
+            prodMoney += pRes.cash;
+            pRes.cashBadges.forEach(b => prodCashBadges.push(b));
+            if (pRes.gift) prodGiftBadges.push(pRes.gift);
+          });
+
+          row.prodMoney = prodMoney;
+          row.prodCashBadges = prodCashBadges;
+          row.prodGiftBadges = prodGiftBadges;
+          row.totalCash = (Number(row.sprintMoney) || 0) + prodMoney;
+          row.giftCount = prodGiftBadges.length;
+          row.allBreakdownBadges = [...(row.sprintBadges || []), ...prodCashBadges, ...prodGiftBadges];
+        });
+
+        res.agentRows.sort((a, b) => b.totalCash - a.totalCash || b.giftCount - a.giftCount || b.rev - a.rev);
+        res.totalAgentSprintMoney = res.agentRows.reduce((s, r) => s + (Number(r.sprintMoney) || 0), 0);
+        res.totalAgentProdMoney = res.agentRows.reduce((s, r) => s + (Number(r.prodMoney) || 0), 0);
+        res.totalAgentCash = res.totalAgentSprintMoney + res.totalAgentProdMoney;
+        res.totalAgentGifts = res.agentRows.reduce((s, r) => s + (Number(r.giftCount) || 0), 0);
+        res.grandTotalCash = (Number(res.totalTlMoney) || 0) + res.totalAgentCash;
+        return res;
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 2: SMART COMPACT MTD RATIO CALCULATOR & DASHBOARD WIDGETS
+      // -----------------------------------------------------------------------
+      window.computeMtdRatioMetricsV57 = function(workingTargetVal, achievedVal, mKey) {
+        const mk = String(mKey || selectedMonthKey || getCurrentMonthKeyStr()).trim();
+        const parts = mk.split('/');
+        const mm = parseInt(parts[0], 10) || (new Date().getMonth() + 1);
+        const yyyy = parseInt(parts[1], 10) || new Date().getFullYear();
+        const daysInMonth = new Date(yyyy, mm, 0).getDate() || 30;
+
+        const now = new Date();
+        const curY = now.getFullYear();
+        const curM = now.getMonth() + 1;
+        const curD = now.getDate();
+
+        let elapsedDays = daysInMonth;
+        let monthRelation = 'CURRENT';
+        if (yyyy < curY || (yyyy === curY && mm < curM)) {
+          elapsedDays = daysInMonth;
+          monthRelation = 'PAST';
+        } else if (yyyy > curY || (yyyy === curY && mm > curM)) {
+          elapsedDays = 0;
+          monthRelation = 'FUTURE';
+        } else {
+          elapsedDays = Math.min(daysInMonth, Math.max(1, curD));
+          monthRelation = 'CURRENT';
+        }
+
+        const workingTarget = Number(workingTargetVal) || 0;
+        const achieved = Number(achievedVal) || 0;
+        const mtdTarget = elapsedDays > 0 ? Math.round((workingTarget / daysInMonth) * elapsedDays) : 0;
+        const mtdRatioNum = mtdTarget > 0 ? (achieved / mtdTarget) * 100 : 0;
+        const mtdRatioStr = mtdRatioNum.toFixed(1);
+        const mtdVariance = achieved - mtdTarget;
+        const progressBarPct = Math.min(100, Math.max(0, Math.round(mtdRatioNum)));
+
+        let statusLabel = 'Ahead of Pace';
+        let statusIcon = 'fa-fire';
+        let badgeCls = 'bg-emerald-600 text-white';
+        let borderCls = 'border-emerald-300/90 bg-gradient-to-r from-emerald-50/80 via-white to-teal-50/70';
+        let barCls = 'bg-gradient-to-r from-emerald-500 to-teal-500';
+        let textCls = 'text-emerald-700';
+
+        if (monthRelation === 'FUTURE' || mtdTarget === 0) {
+          statusLabel = 'Upcoming / No Target';
+          statusIcon = 'fa-clock';
+          badgeCls = 'bg-slate-600 text-white';
+          borderCls = 'border-slate-200 bg-slate-50/80';
+          barCls = 'bg-slate-400';
+          textCls = 'text-slate-600';
+        } else if (mtdRatioNum < 80) {
+          statusLabel = 'Behind Pace';
+          statusIcon = 'fa-triangle-exclamation';
+          badgeCls = 'bg-rose-600 text-white';
+          borderCls = 'border-rose-300/90 bg-gradient-to-r from-rose-50/80 via-white to-orange-50/60';
+          barCls = 'bg-gradient-to-r from-rose-500 to-orange-500';
+          textCls = 'text-rose-700';
+        } else if (mtdRatioNum < 100) {
+          statusLabel = 'Close to Pace';
+          statusIcon = 'fa-bolt';
+          badgeCls = 'bg-amber-500 text-slate-950';
+          borderCls = 'border-amber-300/90 bg-gradient-to-r from-amber-50/80 via-white to-yellow-50/60';
+          barCls = 'bg-gradient-to-r from-amber-500 to-orange-500';
+          textCls = 'text-amber-700';
+        }
+
+        return {
+          daysInMonth, elapsedDays, monthRelation, mtdTarget, achieved,
+          mtdRatioNum, mtdRatioStr, mtdVariance, progressBarPct,
+          statusLabel, statusIcon, badgeCls, borderCls, barCls, textCls
+        };
+      };
+
+      window.renderSmartMtdRatioStripV57 = function() {
+        const u = currentUser;
+        if (!u) return '';
+        const allSales = getStored('sales_records', []);
+        const channelSalesAll = activeChannel === 'ALL_CHANNELS'
+          ? allSales
+          : allSales.filter(s => getChannelForTeam(s.team) === activeChannel);
+
+        let scopedSales = [];
+        let scopeTitle = '';
+        if (canViewAll(u)) {
+          const chMeta = getActiveChannelMeta();
+          const chTeamsList = chMeta.teams || [];
+          const effScope = (dashboardScope !== 'ALL' && chTeamsList.includes(normalizeTeamNameAlias(dashboardScope)))
+            ? normalizeTeamNameAlias(dashboardScope)
+            : 'ALL';
+          scopedSales = effScope === 'ALL'
+            ? channelSalesAll
+            : channelSalesAll.filter(s => normalizeTeamNameAlias(s.team) === effScope);
+          scopeTitle = activeChannel === 'ALL_CHANNELS'
+            ? 'All Channels (All Teams)'
+            : (effScope === 'ALL' ? `${chMeta.name} Channel` : effScope);
+        } else {
+          scopedSales = channelSalesAll.filter(s => String(s.userId) === String(u.id));
+          scopeTitle = `${u.name} (Personal)`;
+        }
+
+        const dedupSales = deduplicateSalesRecordsList(scopedSales);
+        const thisMonthSales = dedupSales.filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+        const monthTotalAmount = thisMonthSales.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+        const tInfo = getTargetData(u, dashboardScope, selectedMonthKey);
+        const mtd = window.computeMtdRatioMetricsV57(tInfo.workingTarget, monthTotalAmount, selectedMonthKey);
+
+        const varianceHtml = mtd.mtdTarget <= 0
+          ? `<span class="text-slate-400 font-bold">No MTD target set</span>`
+          : (mtd.mtdVariance >= 0
+              ? `<span class="text-emerald-700 font-black"><i class="fa-solid fa-arrow-trend-up mr-0.5"></i>+৳${mtd.mtdVariance.toLocaleString()} Ahead</span>`
+              : `<span class="text-rose-600 font-black"><i class="fa-solid fa-arrow-trend-down mr-0.5"></i>Need ৳${Math.abs(mtd.mtdVariance).toLocaleString()}</span>`);
+
+        return `
+          <div class="card-dynamic px-4 py-3 rounded-2xl border-2 ${mtd.borderCls} shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-xl ${mtd.badgeCls} flex items-center justify-center text-sm shadow-sm shrink-0">
+                <i class="fa-solid fa-gauge-high"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="text-xs font-black text-slate-900 uppercase tracking-wide">MTD Ratio</span>
+                  <span class="px-2 py-0.5 rounded-md bg-slate-900 text-white text-[10px] font-black">${scopeTitle}</span>
+                  <span class="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-extrabold">
+                    <i class="fa-regular fa-calendar-check mr-1"></i>Day ${mtd.elapsedDays} / ${mtd.daysInMonth}
+                  </span>
+                </div>
+                <p class="text-[11px] font-bold text-slate-500 mt-0.5 truncate">Target achievement pace up to today (${selectedMonthKey})</p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 sm:gap-4 text-xs flex-1 xl:justify-center">
+              <div class="px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
+                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">MTD Target (Till Today)</span>
+                <strong class="text-xs sm:text-sm font-black text-slate-900">৳${mtd.mtdTarget.toLocaleString()}</strong>
+              </div>
+              <div class="px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
+                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Achieved (Till Today)</span>
+                <strong class="text-xs sm:text-sm font-black ${mtd.textCls}">৳${mtd.achieved.toLocaleString()}</strong>
+              </div>
+              <div class="px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
+                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">MTD Pace Status</span>
+                <div class="text-xs">${varianceHtml}</div>
+              </div>
+              <div class="hidden 2xl:block w-32">
+                <div class="flex justify-between text-[9px] font-black text-slate-500 mb-1">
+                  <span>Pace Bar</span>
+                  <span class="${mtd.textCls}">${mtd.mtdRatioStr}%</span>
+                </div>
+                <div class="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden">
+                  <div class="${mtd.barCls} h-2 rounded-full transition-all" style="width: ${mtd.progressBarPct}%"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2.5 shrink-0 self-start xl:self-auto">
+              <div class="px-3.5 py-2 rounded-xl ${mtd.badgeCls} shadow-sm flex items-center gap-2.5">
+                <div class="text-right leading-none">
+                  <span class="text-[9px] font-black uppercase opacity-90 block">MTD Achieved</span>
+                  <span class="text-lg font-black tracking-tight">${mtd.mtdRatioStr}%</span>
+                </div>
+                <div class="pl-2.5 border-l border-white/25 text-[10px] font-black flex items-center gap-1">
+                  <i class="fa-solid ${mtd.statusIcon}"></i>
+                  <span>${mtd.statusLabel}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      };
+
+      const _origRenderDashboardV57 = renderDashboard;
+      renderDashboard = function() {
+        let htmlOut = _origRenderDashboardV57();
+        try {
+          // 1) Inject Smart Compact MTD Ratio Strip right below the 5 KPI cards
+          const mtdStripHtml = window.renderSmartMtdRatioStripV57();
+          if (mtdStripHtml) {
+            if (htmlOut.includes('<!-- SECTION 3:')) {
+              htmlOut = htmlOut.replace('<!-- SECTION 3:', mtdStripHtml + '\n            <!-- SECTION 3:');
+            } else {
+              const idxKpi5 = htmlOut.indexOf('kpi-card-5');
+              if (idxKpi5 !== -1) {
+                const closeGrid = htmlOut.indexOf('</div>\n            </div>', idxKpi5);
+                if (closeGrid !== -1) {
+                  const pos = closeGrid + '</div>\n            </div>'.length;
+                  htmlOut = htmlOut.slice(0, pos) + '\n' + mtdStripHtml + htmlOut.slice(pos);
+                }
+              }
+            }
+          }
+
+          // 2) Show 100%+ per-kg / per-500gm bonus directly on Dashboard Product Cards!
+          htmlOut = htmlOut
+            .replace(/90% = Entry Bonus \| 100% = Full Bonus/g, '90% = Entry | 100% = Full | 100%+ = ৳50/kg (Garlic ৳50/500gm)')
+            .replace(/(100%: 400gm Gawa Ghee)(<\/strong>)/g, '$1 | 100%+: ৳50/500gm$2')
+            .replace(/(100%: 2L Mustard Oil)(<\/strong>)/g, '$1 | 100%+: ৳50/kg$2')
+            .replace(/(100%: ৳1000)(<\/strong>)/g, '$1 | 100%+: ৳50/kg$2')
+            .replace(/(100%: ৳2000)(<\/strong>)/g, '$1 | 100%+: ৳50/kg$2');
+        } catch (mtdErr) {
+          console.error('Non-fatal MTD/Product display warning:', mtdErr);
+        }
+        return htmlOut;
+      };
+
+      // Inject crisp inline MTD Ratio badges inside All-Channel Executive Matrix (Grand Total, FB, WA & 5 Team Cards)
+      const _origRenderOmniBannerV57 = renderOmniChannelTotalSalesBanner;
+      renderOmniChannelTotalSalesBanner = function() {
+        let htmlOut = _origRenderOmniBannerV57();
+        if (!htmlOut || activeChannel !== 'ALL_CHANNELS') return htmlOut;
+        try {
+          const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
+          const allSalesMonth = deduplicateSalesRecordsList(getStored('sales_records', []))
+            .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+
+          let fbBase = 0, waBase = 0;
+          allUsersOmni.forEach(usr => {
+            if (usr.role === 'supervisor') return;
+            const b = Number(usr.baseTarget) || 0;
+            if (getChannelForTeam(usr.team) === 'WHATSAPP') waBase += b;
+            else fbBase += b;
+          });
+          const fbWork = calcWorkingTargetFromBase(fbBase, 'FACEBOOK');
+          const waWork = calcWorkingTargetFromBase(waBase, 'WHATSAPP');
+          const grandWork = fbWork + waWork;
+
+          let fbRev = 0, waRev = 0;
+          allSalesMonth.forEach(s => {
+            const amt = Number(s.amount) || 0;
+            if (getChannelForTeam(s.team) === 'WHATSAPP') waRev += amt;
+            else fbRev += amt;
+          });
+          const grandRev = fbRev + waRev;
+
+          const makeInlineMtdRow = (workTgt, rev, compact) => {
+            const m = window.computeMtdRatioMetricsV57(workTgt, rev, selectedMonthKey);
+            const pillCol = m.mtdRatioNum >= 100
+              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+              : (m.mtdRatioNum >= 80 ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
+            if (compact) {
+              return `<div class="flex justify-between items-center pt-1 border-t border-slate-100"><span class="text-slate-400">MTD (D${m.elapsedDays}/${m.daysInMonth}):</span><span class="px-1.5 py-0.5 rounded border ${pillCol} text-[10px] font-black">${m.mtdRatioStr}%</span></div>`;
+            }
+            return `<div class="flex items-center justify-between pt-1 border-t border-slate-100"><span class="font-bold text-slate-500">MTD Ratio (Day ${m.elapsedDays}/${m.daysInMonth}):</span><span class="px-2 py-0.5 rounded-md border ${pillCol} text-[11px] font-black">${m.mtdRatioStr}% <span class="font-bold opacity-80">(৳${m.mtdTarget.toLocaleString()})</span></span></div>`;
+          };
+
+          htmlOut = htmlOut
+            .replace(/(Total Orders \/ Conv:[\s\S]*?<\/div>)/, `$1${makeInlineMtdRow(grandWork, grandRev, false)}`)
+            .replace(/(FB Orders \/ Conv:[\s\S]*?<\/div>)/, `$1${makeInlineMtdRow(fbWork, fbRev, false)}`)
+            .replace(/(WA Orders \/ Conv:[\s\S]*?<\/div>)/, `$1${makeInlineMtdRow(waWork, waRev, false)}`);
+
+          const allKnownTeams = [...CHANNEL_META.FACEBOOK.teams, ...CHANNEL_META.WHATSAPP.teams];
+          allKnownTeams.forEach(tName => {
+            const ch = getChannelForTeam(tName);
+            const tMembers = allUsersOmni.filter(usr => usr.role !== 'supervisor' && !isPendingOrFloatingAgent(usr) && normalizeTeamNameAlias(usr.team) === tName);
+            const tBase = tMembers.reduce((sum, m) => sum + (Number(m.baseTarget) || 0), 0);
+            const tWork = calcWorkingTargetFromBase(tBase, ch);
+            const tRev = allSalesMonth
+              .filter(s => normalizeTeamNameAlias(s.team) === tName)
+              .reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+            const idxT = htmlOut.indexOf(`setDashboardScope('${tName}');`);
+            if (idxT !== -1) {
+              const leadsIdx = htmlOut.indexOf('Total Leads:', idxT);
+              if (leadsIdx !== -1) {
+                const closeDivIdx = htmlOut.indexOf('</div>', leadsIdx);
+                if (closeDivIdx !== -1) {
+                  const insertPos = closeDivIdx + '</div>'.length;
+                  htmlOut = htmlOut.slice(0, insertPos) + makeInlineMtdRow(tWork, tRev, true) + htmlOut.slice(insertPos);
+                }
+              }
+            }
+          });
+        } catch (omniMtdErr) {}
+        return htmlOut;
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 3: RESTRICT ALL CSV / EXCEL DOWNLOADS TO ADMIN/TL & SUPERVISOR ONLY
+      // -----------------------------------------------------------------------
+      window.canCurrentUserDownloadCsvV57 = function() {
+        return Boolean(currentUser && (currentUser.role === 'admin' || currentUser.role === 'supervisor'));
+      };
+
+      const _origDownloadPortalCsvFileV57 = downloadPortalCsvFile;
+      downloadPortalCsvFile = function(filename, headersArr, rowsArr) {
+        if (!window.canCurrentUserDownloadCsvV57()) {
+          showPortalToast(
+            'Download Restricted',
+            'Only Team Leaders (Admin) and Supervisors are allowed to download CSV/Excel files.',
+            'error'
+          );
+          return;
+        }
+        return _origDownloadPortalCsvFileV57(filename, headersArr, rowsArr);
+      };
+
+      const _origRenderAppLayoutV57 = renderAppLayout;
+      renderAppLayout = function() {
+        const res = _origRenderAppLayoutV57();
+        if (!window.canCurrentUserDownloadCsvV57()) {
+          try {
+            const appRoot = document.getElementById('app');
+            if (appRoot) {
+              appRoot.querySelectorAll(
+                'button[onclick*="Csv"], button[onclick*="csv"], button[onclick*="downloadPortalCsv"]'
+              ).forEach(btn => {
+                if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
+              });
+            }
+          } catch (stripErr) {}
+        }
+        return res;
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 4: 0% MISS ZERO-LOSS SERIALIZED REPORT & PRODUCT SUBMISSION ENGINE
+      // -----------------------------------------------------------------------
+      doesCloudRecordMatchPending = function(cloudRec, pendingEntry) {
+        if (!cloudRec || !pendingEntry) return false;
+        const eps = 0.005;
+        const sameNum = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < eps;
+        const coreProdKeys = ['ajwa', 'pinkSalt', 'blackGarlic', 'sunHoney', 'bsHoney', 'gawaGhee'];
+        const activeProds = getActiveProductsForMonth(selectedMonthKey) || {};
+        const allProdKeys = Array.from(new Set([...coreProdKeys, ...Object.keys(activeProds)]));
+
+        if (String(pendingEntry.date || '').startsWith('MONTHLY_PROD_')) {
+          return allProdKeys.every(k => sameNum(cloudRec[k], pendingEntry[k]));
+        }
+        return sameNum(cloudRec.amount, pendingEntry.amount) &&
+               sameNum(cloudRec.orders, pendingEntry.orders) &&
+               sameNum(cloudRec.leads, pendingEntry.leads) &&
+               coreProdKeys.every(k => sameNum(cloudRec[k], pendingEntry[k]));
+      };
+
+      window._salesWriteSerialChainV57 = Promise.resolve();
+      window._lastSalesPostDispatchedAtV57 = 0;
+      window._pendingSerialWritesInFlightV57 = 0;
+
+      const _origPostToSheetV57 = postToSheet;
+      postToSheet = function(action, payload) {
+        if (action !== 'DAILY_SALES_SUBMIT' && action !== 'DELETE_SALES_RECORD') {
+          return _origPostToSheetV57(action, payload);
+        }
+        const job = window._salesWriteSerialChainV57.then(async () => {
+          window._pendingSerialWritesInFlightV57++;
+          try {
+            const gapNeeded = 1150 - (Date.now() - (window._lastSalesPostDispatchedAtV57 || 0));
+            if (gapNeeded > 0) await new Promise(r => setTimeout(r, gapNeeded));
+            window._lastSalesPostDispatchedAtV57 = Date.now();
+            await _origPostToSheetV57(action, payload);
+          } finally {
+            window._pendingSerialWritesInFlightV57 = Math.max(0, window._pendingSerialWritesInFlightV57 - 1);
+          }
+        }).catch(() => {});
+        window._salesWriteSerialChainV57 = job;
+        return job;
+      };
+
+      window._retryCursorV57 = 0;
+      window.startRapidSheetVerificationLoopV56 = function() {
+        if (window._rapidVerifyIntervalV56) return;
+
+        setTimeout(() => {
+          if (window.getUnconfirmedSheetWriteCountV56() > 0) fetchFromSheet(true);
+        }, 1050);
+
+        window._rapidVerifyIntervalV56 = setInterval(() => {
+          const map = window.getUnconfirmedSheetWritesV56();
+          const keys = Object.keys(map);
+          if (keys.length === 0) {
+            clearInterval(window._rapidVerifyIntervalV56);
+            window._rapidVerifyIntervalV56 = null;
+            return;
+          }
+
+          const nowMs = Date.now();
+          let mapChanged = false;
+          const dueKeys = [];
+
+          keys.forEach(k => {
+            const item = map[k];
+            if (!item || !item.entry || (nowMs - Number(item.queuedAt || 0)) > 86400000) {
+              delete map[k];
+              mapChanged = true;
+              return;
+            }
+            if ((nowMs - Number(item.lastSentAt || 0)) >= 4200) dueKeys.push(k);
+          });
+
+          if (dueKeys.length > 0 && (window._pendingSerialWritesInFlightV57 || 0) === 0) {
+            const pickKey = dueKeys[window._retryCursorV57 % dueKeys.length];
+            window._retryCursorV57++;
+            const item = map[pickKey];
+            if (item) {
+              item.lastSentAt = nowMs;
+              item.attempts = (item.attempts || 1) + 1;
+              mapChanged = true;
+              window.transmitSingleUnconfirmedWriteV56(item, item.attempts >= 3);
+            }
+          }
+
+          if (mapChanged) window.saveUnconfirmedSheetWritesV56(map);
+          fetchFromSheet(true);
+          window.renderLiveSheetSyncBannerV56('SYNCING');
+        }, 1800);
+      };
+
+      const _origHandleCloudDataV57 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && Array.isArray(res.salesRecords)) {
+          const dedupFirstMap = new Map();
+          const prodSum = (r) =>
+            (Number(r.ajwa) || 0) + (Number(r.pinkSalt) || 0) + (Number(r.blackGarlic) || 0) +
+            (Number(r.sunHoney) || 0) + (Number(r.bsHoney) || 0) + (Number(r.gawaGhee) || 0);
+
+          res.salesRecords.forEach(r => {
+            if (!r || !r.userId || !r.date) return;
+            const uid = String(r.userId).trim();
+            const cleanD = String(r.date).replace(/^'/, '').trim();
+            const k = `${uid}_${cleanD}`;
+            if (!dedupFirstMap.has(k)) {
+              dedupFirstMap.set(k, { ...r, userId: uid, date: cleanD });
+            } else {
+              const prev = dedupFirstMap.get(k);
+              const prevScore = (Number(prev.amount) || 0) + (Number(prev.orders) || 0) + (Number(prev.leads) || 0) + prodSum(prev);
+              const currScore = (Number(r.amount) || 0) + (Number(r.orders) || 0) + (Number(r.leads) || 0) + prodSum(r);
+              if (currScore > prevScore) dedupFirstMap.set(k, { ...r, userId: uid, date: cleanD });
+            }
+          });
+          res.salesRecords = Array.from(dedupFirstMap.values());
+        }
+        return _origHandleCloudDataV57(res);
+      };
+    } catch (errV57) {
+      console.error('Non-fatal patch v57 warning:', errV57);
+    }
+
+
+    // =========================================================================
+    // PATCH v58 (index-v37.html) — 100% SELF-SERVICE MONTHLY CONFIGURATION ENGINE
+    // Makes future months (Dec 2026, Jan 2027, etc.) 100% editable from Portal UI
+    // WITHOUT ever touching index.html or Apps Script code again!
+    // 1. Dynamic Product Config Editor: Rename, Enable/Disable, +Add New 7th+
+    //    Products, Edit 100% Gift Items & 100%+ Rate (৳ per kg / 500gm), and
+    //    sync custom products to Google Sheet col 18 + dynamic _Product_ tabs!
+    // 2. Channel-Aware Grade & TL Targets Editor (Facebook MM/YYYY + WhatsApp
+    //    WA_MM/YYYY saved accurately with per-channel user updates).
+    // 3. Dynamic Monthly Sprint Rewards, Sprint % (S1/S2/S3) & TL 80%/100%
+    //    Milestone Rewards Editor (saved per channel per month in cloud!).
+    // =========================================================================
+    try {
+      // -----------------------------------------------------------------------
+      // A. DYNAMIC MONTHLY SPRINT REWARDS, SPRINT % & TL MILESTONE CONFIG HELPERS
+      // -----------------------------------------------------------------------
+      window.getSprintPctsForMonthV58 = function(chKey, mKey) {
+        const mk = mKey || selectedMonthKey;
+        const ch = (chKey === 'WHATSAPP' || (chKey !== 'FACEBOOK' && activeChannel === 'WHATSAPP')) ? 'WHATSAPP' : 'FACEBOOK';
+        const configs = getStored('monthly_configs', {});
+        const effKey = ch === 'WHATSAPP' ? `WA_${mk}` : mk;
+        const saved = (configs[effKey] && configs[effKey].sprintPcts) || (configs[mk] && configs[mk].sprintPcts) || {};
+        return {
+          s1: Number(saved.s1) > 0 ? Number(saved.s1) : 40,
+          s2: Number(saved.s2) > 0 ? Number(saved.s2) : 35,
+          s3: Number(saved.s3) > 0 ? Number(saved.s3) : 35
+        };
+      };
+
+      window.getTlMilestoneRewardsForMonthV58 = function(chKey, mKey) {
+        const mk = mKey || selectedMonthKey;
+        const ch = (chKey === 'WHATSAPP' || (chKey !== 'FACEBOOK' && activeChannel === 'WHATSAPP')) ? 'WHATSAPP' : 'FACEBOOK';
+        const configs = getStored('monthly_configs', {});
+        const effKey = ch === 'WHATSAPP' ? `WA_${mk}` : mk;
+        const saved = (configs[effKey] && configs[effKey].tlRewards) || (configs[mk] && configs[mk].tlRewards) || {};
+        return {
+          r80: (saved.r80 !== undefined && saved.r80 !== null) ? Number(saved.r80) : 7000,
+          r100: (saved.r100 !== undefined && saved.r100 !== null) ? Number(saved.r100) : 10000
+        };
+      };
+
+      window.getSprintRewardProgramForMonthV58 = function(chKey, mKey) {
+        const mk = mKey || selectedMonthKey;
+        const ch = chKey === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        const baseProg = SPRINT_REWARD_PROGRAM[ch] || SPRINT_REWARD_PROGRAM.FACEBOOK;
+        const configs = getStored('monthly_configs', {});
+        const effKey = ch === 'WHATSAPP' ? `WA_${mk}` : mk;
+        const saved = (configs[effKey] && configs[effKey].sprintRewards) || {};
+        const merged = {};
+        Object.keys(baseProg).forEach(g => {
+          merged[g] = { ...baseProg[g], ...(saved[g] || {}) };
+        });
+        return merged;
+      };
+
+      // Hook getTargetData so dynamic Sprint % applies automatically
+      const _origGetTargetDataV58 = getTargetData;
+      getTargetData = function(user, scopeOverride, mKey) {
+        const res = _origGetTargetDataV58(user, scopeOverride, mKey);
+        try {
+          const chForPct = (activeChannel === 'WHATSAPP' || (user && !canViewAll(user) && getChannelForTeam(user.team) === 'WHATSAPP')) ? 'WHATSAPP' : 'FACEBOOK';
+          const sp = window.getSprintPctsForMonthV58(chForPct, mKey || selectedMonthKey);
+          const d = new Date().getDate();
+          if (d <= 10) {
+            res.sprintPct = sp.s1 / 100;
+            res.sprintGoal = Math.round(res.workingTarget * res.sprintPct);
+          } else if (d <= 20) {
+            res.sprintPct = sp.s2 / 100;
+            res.sprintGoal = Math.round(res.workingTarget * res.sprintPct);
+          } else {
+            res.sprintPct = sp.s3 / 100;
+            res.sprintGoal = Math.round(res.workingTarget * res.sprintPct);
+          }
+        } catch (eSpPct) {}
+        return res;
+      };
+
+      // Upgrade computeSingleAgentSprintIncentive to use dynamic monthly sprint % & rewards!
+      window.computeSingleAgentSprintIncentive = function(agentObj, monthSalesList, mKey) {
+        const mk = mKey || selectedMonthKey;
+        if (!agentObj || !isSprintSystemActiveForMonth(mk)) {
+          return { sprintMoney: 0, sprintBadges: [] };
+        }
+        const chKey = getChannelForTeam(agentObj.team) === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        const gradeKey = agentObj.role === 'admin' ? 'TL' : (agentObj.grade || 'A');
+        const progMap = window.getSprintRewardProgramForMonthV58(chKey, mk);
+        const rewardSpec = progMap[gradeKey] || progMap['A'] || SPRINT_REWARD_PROGRAM.FACEBOOK['A'];
+        const spPcts = window.getSprintPctsForMonthV58(chKey, mk);
+
+        const baseTgt = Number(agentObj.baseTarget) || 0;
+        const workTgt = calcWorkingTargetFromBase(baseTgt, chKey);
+        if (workTgt <= 0) return { sprintMoney: 0, sprintBadges: [] };
+
+        const s1Goal = Math.round(workTgt * (spPcts.s1 / 100));
+        const s2Goal = Math.round(workTgt * (spPcts.s2 / 100));
+        const s3Goal = Math.round(workTgt * (spPcts.s3 / 100));
+
+        const agSales = deduplicateSalesRecordsList(monthSalesList).filter(s =>
+          String(s.userId).trim() === String(agentObj.id).trim() &&
+          String(s.date || '').endsWith(mk) &&
+          !String(s.date || '').startsWith('MONTHLY_PROD_')
+        );
+
+        let s1Sales = 0, s2Sales = 0, s3Sales = 0;
+        agSales.forEach(s => {
+          const day = parseInt(String(s.date).split('/')[0], 10) || 0;
+          const amt = Number(s.amount) || 0;
+          if (day <= 10) s1Sales += amt;
+          else if (day <= 20) s2Sales += amt;
+          else s3Sales += amt;
+        });
+
+        const hitS1 = s1Goal > 0 && s1Sales >= s1Goal;
+        const hitS2 = s2Goal > 0 && s2Sales >= s2Goal;
+        const hitS3 = s3Goal > 0 && s3Sales >= s3Goal;
+        const hitCount = (hitS1 ? 1 : 0) + (hitS2 ? 1 : 0) + (hitS3 ? 1 : 0);
+
+        let sprintMoney = 0;
+        const sprintBadges = [];
+
+        if (hitCount === 3) {
+          sprintMoney = Number(rewardSpec.all3) || ((Number(rewardSpec.s1) || 0) + (Number(rewardSpec.s2) || 0) + (Number(rewardSpec.s3) || 0));
+          sprintBadges.push(`🏆 All 3 Sprints Hit: ৳${sprintMoney.toLocaleString()}`);
+        } else {
+          if (hitS1) { sprintMoney += Number(rewardSpec.s1) || 0; sprintBadges.push(`⚡ Sprint 1 (100%): ৳${Number(rewardSpec.s1).toLocaleString()}`); }
+          if (hitS2) { sprintMoney += Number(rewardSpec.s2) || 0; sprintBadges.push(`⚡ Sprint 2 (100%): ৳${Number(rewardSpec.s2).toLocaleString()}`); }
+          if (hitS3) { sprintMoney += Number(rewardSpec.s3) || 0; sprintBadges.push(`⚡ Sprint 3 (100%): ৳${Number(rewardSpec.s3).toLocaleString()}`); }
+          if (hitCount === 2 && Number(rewardSpec.any2Extra) > 0) {
+            sprintMoney += Number(rewardSpec.any2Extra);
+            sprintBadges.push(`🔥 2-Sprint Combo Bonus: +৳${Number(rewardSpec.any2Extra).toLocaleString()}`);
+          }
+        }
+
+        const totalMonthlySales = s1Sales + s2Sales + s3Sales;
+        if (totalMonthlySales >= workTgt && Number(rewardSpec.total100) > sprintMoney) {
+          return {
+            sprintMoney: Number(rewardSpec.total100),
+            sprintBadges: [`🎯 100% Monthly Target Achieved: ৳${Number(rewardSpec.total100).toLocaleString()}`]
+          };
+        }
+        return { sprintMoney, sprintBadges };
+      };
+
+      // Also apply dynamic TL 80%/100% Milestone rewards in computeFloorIncentiveBreakdown
+      const _origComputeFloorIncentiveV58 = window.computeFloorIncentiveBreakdown;
+      window.computeFloorIncentiveBreakdown = function(mKey, teamScopeFilter = 'ALL', memberFilter = 'ALL') {
+        const res = _origComputeFloorIncentiveV58(mKey, teamScopeFilter, memberFilter);
+        const mk = mKey || selectedMonthKey;
+        let newTlTotal = 0;
+        (res.tlRows || []).forEach(tl => {
+          const tlRew = window.getTlMilestoneRewardsForMonthV58(tl.channel, mk);
+          tl.tlRewardMoney = tl.hit100 ? tlRew.r100 : (tl.hit80 ? tlRew.r80 : 0);
+          tl.tlStatusLabel = tl.hit100
+            ? `🏆 100% Target Hit (৳${tlRew.r100.toLocaleString()} Unlocked)`
+            : (tl.hit80 ? `🔥 80% Target Hit (৳${tlRew.r80.toLocaleString()} Unlocked)` : tl.tlStatusLabel);
+          newTlTotal += tl.tlRewardMoney;
+        });
+        res.totalTlMoney = newTlTotal;
+        res.grandTotalCash = newTlTotal + (Number(res.totalAgentCash) || 0);
+        return res;
+      };
+
+      // -----------------------------------------------------------------------
+      // B. UPGRADED getAllConfiguredProductsForMonth (Channel-Safe + Full Fields!)
+      // -----------------------------------------------------------------------
+      getAllConfiguredProductsForMonth = function(mKey) {
+        const mk = mKey || selectedMonthKey;
+        const configs = getStored('monthly_configs', {});
+        const effKey = getEffectiveMonthConfigKey(mk);
+        const chProds = (configs[effKey] && configs[effKey].products && Object.keys(configs[effKey].products).length > 0)
+          ? configs[effKey].products
+          : null;
+        const fbProds = (configs[mk] && configs[mk].products && Object.keys(configs[mk].products).length > 0)
+          ? configs[mk].products
+          : null;
+        const prodOverrides = chProds || fbProds || {};
+
+        const result = {};
+        Object.keys(DEFAULT_PRODUCTS).forEach(k => {
+          const ov = prodOverrides[k] || {};
+          const merged = { ...DEFAULT_PRODUCTS[k], ...ov, enabled: ov.enabled !== false };
+          if (ov.item100 !== undefined) merged.item100 = String(ov.item100 || '').trim();
+          merged.extraUnitKg = Number(merged.extraUnitKg) || (k === 'blackGarlic' ? 0.5 : 1);
+          merged.extraRateTk = (merged.extraRateTk !== undefined && merged.extraRateTk !== null) ? Number(merged.extraRateTk) : 50;
+          merged.extraUnitLabel = merged.extraUnitKg === 0.5 ? '500gm' : 'kg';
+          result[k] = merged;
+        });
+
+        Object.keys(prodOverrides).forEach((k, idx) => {
+          if (!result[k]) {
+            const st = EXTRA_PRODUCT_STYLES[idx % EXTRA_PRODUCT_STYLES.length];
+            const ov = prodOverrides[k] || {};
+            const unitKg = Number(ov.extraUnitKg) || 1;
+            result[k] = {
+              name: ov.name || 'Custom Product',
+              targetKg: Number(ov.targetKg) || 10,
+              style: ov.style || st.style,
+              badge: ov.badge || st.badge,
+              bar: ov.bar || st.bar,
+              icon: ov.icon || st.icon,
+              bonus90: Number(ov.bonus90) || 0,
+              bonus100: Number(ov.bonus100) || 0,
+              item100: String(ov.item100 || '').trim(),
+              extraUnitKg: unitKg,
+              extraRateTk: (ov.extraRateTk !== undefined && ov.extraRateTk !== null) ? Number(ov.extraRateTk) : 50,
+              extraUnitLabel: unitKg === 0.5 ? '500gm' : 'kg',
+              enabled: ov.enabled !== false,
+              isCustom: true
+            };
+          }
+        });
+        return result;
+      };
+
+      // Pack any non-core custom product keys into payload.extraProductsJson for appscript-v10.js!
+      const _origPostToSheetV58 = postToSheet;
+      postToSheet = function(action, payload) {
+        if (action === 'DAILY_SALES_SUBMIT' && payload && typeof payload === 'object') {
+          const coreSet = new Set(['ajwa', 'pinkSalt', 'blackGarlic', 'sunHoney', 'bsHoney', 'gawaGhee']);
+          const activeProdsNow = getActiveProductsForMonth(selectedMonthKey) || {};
+          const extraMap = {};
+          Object.keys(payload).forEach(pk => {
+            if ((pk.startsWith('customProd_') || (activeProdsNow[pk] && !coreSet.has(pk))) && Number(payload[pk]) > 0) {
+              extraMap[pk] = Number(payload[pk]);
+            }
+          });
+          if (Object.keys(extraMap).length > 0) {
+            payload = { ...payload, extraProductsJson: JSON.stringify(extraMap) };
+          }
+        }
+        return _origPostToSheetV58(action, payload);
+      };
+
+      // -----------------------------------------------------------------------
+      // C. UPGRADED PRODUCT CONFIG MODAL (Name, Target, 90%, 100%, Gift, 100%+ Rate, +Add New!)
+      // -----------------------------------------------------------------------
+      window._prodConfigApplyBothChannelsV58 = true;
+
+      renderProductConfigModal = function() {
+        const allProds = getAllConfiguredProductsForMonth(selectedMonthKey);
+        const activeCount = Object.values(allProds).filter(p => p.enabled !== false).length;
+        const chLabel = activeChannel === 'ALL_CHANNELS' ? 'All Channels' : getActiveChannelMeta().fullTitle;
+        return `
+          <div id="productConfigModal" class="hidden fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-5xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="text-base font-black text-slate-900">Edit Monthly Drive Products, Gifts & 100%+ Rates (${selectedMonthKey})</h3>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">${activeCount} Active Products</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800">${chLabel}</span>
+                  </div>
+                  <p class="text-xs font-bold text-slate-500 mt-0.5">
+                    Rename products, change KG targets, edit 90%/100% cash bonuses, Gift items, 100%+ per-kg/500gm rates, or add 7th/8th+ custom products — syncs automatically to Portal & Google Sheet 1 + 2!
+                  </p>
+                </div>
+                <button type="button" onclick="closeModal('productConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <form onsubmit="handleSaveProductConfig(event)" class="space-y-3">
+                <div id="productConfigRowsContainer" class="space-y-2.5">
+                  ${Object.keys(allProds).map(k => {
+                    const p = allProds[k];
+                    const isEnabled = p.enabled !== false;
+                    const unitKg = Number(p.extraUnitKg) || (k === 'blackGarlic' ? 0.5 : 1);
+                    const rateTk = (p.extraRateTk !== undefined && p.extraRateTk !== null) ? Number(p.extraRateTk) : 50;
+                    return `
+                      <div class="p-3.5 rounded-2xl border ${isEnabled ? 'bg-slate-50 border-slate-200' : 'bg-slate-100/60 border-slate-200 opacity-60'} space-y-2.5" data-prod-key="${k}">
+                        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                          <div class="sm:col-span-1 flex items-center justify-center">
+                            <input type="checkbox" id="cfg_en_${k}" ${isEnabled ? 'checked' : ''} class="w-4 h-4 accent-blue-600 rounded cursor-pointer" title="Enable/Disable this product for ${selectedMonthKey}">
+                          </div>
+                          <div class="sm:col-span-4">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Product Name (${selectedMonthKey})</label>
+                            <input type="text" id="cfg_name_${k}" value="${String(p.name || '').replace(/"/g, '&quot;')}" required class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-extrabold text-slate-900">
+                          </div>
+                          <div class="sm:col-span-2">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Target (KG)</label>
+                            <input type="number" step="0.01" min="0.01" id="cfg_kg_${k}" value="${p.targetKg}" required class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold">
+                          </div>
+                          <div class="sm:col-span-2">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">90% Cash (৳)</label>
+                            <input type="number" min="0" id="cfg_b90_${k}" value="${p.bonus90 || 0}" class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold">
+                          </div>
+                          <div class="sm:col-span-2">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">100% Cash (৳)</label>
+                            <input type="number" min="0" id="cfg_b100_${k}" value="${p.bonus100 || 0}" class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold">
+                          </div>
+                          <div class="sm:col-span-1 flex items-center justify-center pt-3">
+                            ${p.isCustom ? `
+                              <button type="button" onclick="handleRemoveCustomProduct('${k}')" title="Delete Custom Product" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center cursor-pointer">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
+                              </button>
+                            ` : `<span class="text-[9px] font-extrabold text-slate-400 uppercase">Core</span>`}
+                          </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center pt-2 border-t border-slate-200/70">
+                          <div class="sm:col-span-1"></div>
+                          <div class="sm:col-span-5">
+                            <label class="block text-[10px] font-bold text-rose-600 uppercase mb-0.5"><i class="fa-solid fa-gift mr-1"></i>100% Gift Item (Optional)</label>
+                            <input type="text" id="cfg_item100_${k}" value="${String(p.item100 || '').replace(/"/g, '&quot;')}" placeholder="e.g. 2L Mustard Oil or 400gm Gawa Ghee (leave empty if none)" class="w-full px-2.5 py-1.5 bg-white border border-rose-200 rounded-lg text-xs font-bold text-slate-800">
+                          </div>
+                          <div class="sm:col-span-3">
+                            <label class="block text-[10px] font-bold text-emerald-700 uppercase mb-0.5"><i class="fa-solid fa-bolt mr-1"></i>100%+ Extra Rate (৳)</label>
+                            <input type="number" min="0" id="cfg_extraRate_${k}" value="${rateTk}" class="w-full px-2.5 py-1.5 bg-white border border-emerald-200 rounded-lg text-xs font-extrabold text-emerald-900">
+                          </div>
+                          <div class="sm:col-span-3">
+                            <label class="block text-[10px] font-bold text-emerald-700 uppercase mb-0.5">Extra Bonus Unit</label>
+                            <select id="cfg_extraUnit_${k}" class="w-full px-2.5 py-1.5 bg-white border border-emerald-200 rounded-lg text-xs font-extrabold text-slate-800 cursor-pointer">
+                              <option value="1" ${unitKg !== 0.5 ? 'selected' : ''}>Per 1 KG (৳${rateTk}/kg)</option>
+                              <option value="0.5" ${unitKg === 0.5 ? 'selected' : ''}>Per 500gm (৳${rateTk}/500gm)</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                  <div class="flex flex-wrap items-center gap-3">
+                    <button type="button" onclick="handleAddCustomProductSlot()" class="px-3.5 py-2 text-xs font-extrabold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl flex items-center gap-1.5 cursor-pointer">
+                      <i class="fa-solid fa-plus-circle"></i> + Add New Product for ${selectedMonthKey}
+                    </button>
+                    <label class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-extrabold text-emerald-900 cursor-pointer select-none">
+                      <input type="checkbox" id="cfg_prod_applyBothCh" ${window._prodConfigApplyBothChannelsV58 ? 'checked' : ''} onchange="window._prodConfigApplyBothChannelsV58 = this.checked" class="w-4 h-4 accent-emerald-600 rounded">
+                      <span>Apply to Both Facebook & WhatsApp (${selectedMonthKey})</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button type="button" onclick="closeModal('productConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl cursor-pointer">Cancel</button>
+                    <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white tab-active rounded-xl shadow cursor-pointer">Save & Sync ${selectedMonthKey} Products</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      };
+
+      syncProductModalInputsToStorage = function() {
+        const allProds = getAllConfiguredProductsForMonth(selectedMonthKey);
+        let configs = getStored('monthly_configs', {});
+        const applyBoth = document.getElementById('cfg_prod_applyBothCh')
+          ? document.getElementById('cfg_prod_applyBothCh').checked
+          : (window._prodConfigApplyBothChannelsV58 !== false);
+        const effKey = getEffectiveMonthConfigKey(selectedMonthKey);
+        const targetKeys = applyBoth
+          ? Array.from(new Set([selectedMonthKey, `WA_${selectedMonthKey}`]))
+          : [effKey];
+
+        const builtProds = {};
+        Object.keys(allProds).forEach(k => {
+          const enEl = document.getElementById(`cfg_en_${k}`);
+          const nameEl = document.getElementById(`cfg_name_${k}`);
+          const kgEl = document.getElementById(`cfg_kg_${k}`);
+          const b90El = document.getElementById(`cfg_b90_${k}`);
+          const b100El = document.getElementById(`cfg_b100_${k}`);
+          const item100El = document.getElementById(`cfg_item100_${k}`);
+          const extraRateEl = document.getElementById(`cfg_extraRate_${k}`);
+          const extraUnitEl = document.getElementById(`cfg_extraUnit_${k}`);
+          if (!nameEl) return;
+
+          const unitVal = Number(extraUnitEl?.value) === 0.5 ? 0.5 : 1;
+          builtProds[k] = {
+            ...(allProds[k] || {}),
+            enabled: enEl ? enEl.checked : true,
+            name: nameEl.value.trim() || allProds[k].name,
+            targetKg: Number(kgEl?.value) || allProds[k].targetKg,
+            bonus90: Number(b90El?.value) || 0,
+            bonus100: Number(b100El?.value) || 0,
+            item100: String(item100El?.value || '').trim(),
+            extraRateTk: (extraRateEl && extraRateEl.value !== '') ? Number(extraRateEl.value) : 50,
+            extraUnitKg: unitVal,
+            extraUnitLabel: unitVal === 0.5 ? '500gm' : 'kg',
+            isCustom: Boolean(allProds[k].isCustom)
+          };
+        });
+
+        targetKeys.forEach(tk => {
+          if (!configs[tk]) configs[tk] = { users: {}, products: {} };
+          configs[tk].products = { ...(configs[tk].products || {}), ...builtProds };
+        });
+        setStored('monthly_configs', configs);
+        return { configs, targetKeys };
+      };
+
+      handleAddCustomProductSlot = function() {
+        if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
+        const { configs, targetKeys } = syncProductModalInputsToStorage();
+        const newKey = 'customProd_' + Date.now();
+        const sampleProds = configs[targetKeys[0]]?.products || {};
+        const idx = Object.keys(sampleProds).length;
+        const st = EXTRA_PRODUCT_STYLES[idx % EXTRA_PRODUCT_STYLES.length];
+        const newProdObj = {
+          name: 'New Product ' + (idx + 1),
+          targetKg: 25,
+          bonus90: 500,
+          bonus100: 1000,
+          item100: '',
+          extraRateTk: 50,
+          extraUnitKg: 1,
+          extraUnitLabel: 'kg',
+          style: st.style,
+          badge: st.badge,
+          bar: st.bar,
+          icon: st.icon,
+          enabled: true,
+          isCustom: true
+        };
+        targetKeys.forEach(tk => {
+          if (!configs[tk]) configs[tk] = { users: {}, products: {} };
+          if (!configs[tk].products) configs[tk].products = {};
+          configs[tk].products[newKey] = { ...newProdObj };
+        });
+        setStored('monthly_configs', configs);
+        renderAppLayout();
+        openModal('productConfigModal');
+      };
+
+      handleRemoveCustomProduct = function(prodKey) {
+        if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
+        const { configs, targetKeys } = syncProductModalInputsToStorage();
+        [selectedMonthKey, `WA_${selectedMonthKey}`, ...targetKeys].forEach(tk => {
+          if (configs[tk] && configs[tk].products && configs[tk].products[prodKey]) {
+            delete configs[tk].products[prodKey];
+          }
+        });
+        setStored('monthly_configs', configs);
+        renderAppLayout();
+        openModal('productConfigModal');
+      };
+
+      handleSaveProductConfig = async function(e) {
+        e.preventDefault();
+        if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
+        const { configs, targetKeys } = syncProductModalInputsToStorage();
+        markLocalUserOrConfigMutatedNow();
+
+        const activeCount = Object.values(getActiveProductsForMonth(selectedMonthKey)).length;
+        const logMeta = recordActivityLog('Updated Product Incentives', `Configured ${activeCount} active products, targets, gifts & 100%+ rates for ${selectedMonthKey} (${targetKeys.join(' & ')})`);
+        closeModal('productConfigModal');
+        renderAppLayout();
+        showPortalToast('Product Setup Saved & Synced!', `${activeCount} active product(s) updated across Portal & Google Sheets for ${selectedMonthKey}.`, 'success');
+
+        for (const tk of targetKeys) {
+          await postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: tk,
+            configJson: JSON.stringify(configs[tk]),
+            ...logMeta
+          }).catch(() => {});
+        }
+      };
+
+      // Dynamically display configured product bonuses (including edited 100%+ rates & gifts) on Dashboard Product Cards!
+      const _origRenderDashboardV58 = renderDashboard;
+      renderDashboard = function() {
+        let htmlOut = _origRenderDashboardV58();
+        try {
+          const activeProds = getActiveProductsForMonth(selectedMonthKey);
+          Object.keys(activeProds).forEach(k => {
+            const p = activeProds[k];
+            const parts = [];
+            if (Number(p.bonus90) > 0) parts.push(`90%: ৳${Number(p.bonus90).toLocaleString()}`);
+            if (Number(p.bonus100) > 0) parts.push(`100%: ৳${Number(p.bonus100).toLocaleString()}`);
+            if (p.item100) parts.push(`100%: ${p.item100}`);
+            if (Number(p.extraRateTk) > 0) parts.push(`100%+: ৳${Number(p.extraRateTk)}/${p.extraUnitLabel || 'kg'}`);
+            const bonusLine = parts.join(' | ') || 'No Bonus Set';
+            // Match this specific product's card block cleanly
+            const cardAnchor = `<h4 class="font-black text-sm text-slate-900">${p.name}`;
+            const idxCard = htmlOut.indexOf(cardAnchor);
+            if (idxCard !== -1) {
+              const bonusIdx = htmlOut.indexOf('Bonus: <strong>', idxCard);
+              if (bonusIdx !== -1 && (bonusIdx - idxCard) < 1800) {
+                const endStrong = htmlOut.indexOf('</strong>', bonusIdx);
+                if (endStrong !== -1) {
+                  htmlOut = htmlOut.slice(0, bonusIdx) + `Bonus: <strong>${bonusLine}` + htmlOut.slice(endStrong);
+                }
+              }
+            }
+          });
+        } catch (dynCardErr) {}
+        return htmlOut;
+      };
+
+      // -----------------------------------------------------------------------
+      // D. CHANNEL-AWARE GRADE & TL TARGETS EDITOR (FIXES WHATSAPP WA_MM/YYYY!)
+      // -----------------------------------------------------------------------
+      window._gradeModalChannelV58 = activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+
+      window.switchGradeModalChannelV58 = function(chKey) {
+        window._gradeModalChannelV58 = chKey === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        renderAppLayout();
+        openModal('gradeConfigModal');
+      };
+
+      openGradeConfigModal = function() {
+        window._gradeModalChannelV58 = activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        renderAppLayout();
+        openModal('gradeConfigModal');
+      };
+
+      renderGradeConfigModal = function() {
+        const ch = window._gradeModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
+        const configs = getStored('monthly_configs', {});
+        const effKey = ch === 'WHATSAPP' ? `WA_${selectedMonthKey}` : selectedMonthKey;
+        const baseDefaults = ch === 'WHATSAPP' ? WA_DEFAULT_GRADE_TARGETS : DEFAULT_GRADE_TARGETS;
+        const gMap = { ...baseDefaults, ...((configs[effKey] && configs[effKey].gradeTargets) || {}) };
+
+        const gradesList = [
+          { key: 'A+', label: 'Grade A+ (Top Tier Agent)' },
+          { key: 'A', label: 'Grade A (Senior Agent)' },
+          { key: 'A-', label: 'Grade A- (Standard Agent)' },
+          { key: 'B', label: 'Grade B (Mid Agent)' },
+          { key: 'C', label: 'Grade C (Entry Agent)' },
+          { key: 'TL', label: 'Grade TL (Team Leader Target)' }
+        ];
+
+        return `
+          <div id="gradeConfigModal" class="hidden fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+              <div class="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
+                <div>
+                  <h3 class="text-base font-black text-slate-900">Edit Monthly Grade & TL Targets (${selectedMonthKey})</h3>
+                  <p class="text-xs font-bold text-slate-500 mt-0.5">Select channel below and edit Base Targets. Saving updates all matching ${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} agents & TLs for ${selectedMonthKey}!</p>
+                </div>
+                <button type="button" onclick="closeModal('gradeConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+
+              <div class="flex items-center gap-2 mb-4 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
+                <button type="button" onclick="window.switchGradeModalChannelV58('FACEBOOK')" class="flex-1 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${ch === 'FACEBOOK' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">
+                  <i class="fa-brands fa-facebook-f mr-1"></i> Facebook Channel (${selectedMonthKey})
+                </button>
+                <button type="button" onclick="window.switchGradeModalChannelV58('WHATSAPP')" class="flex-1 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${ch === 'WHATSAPP' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">
+                  <i class="fa-brands fa-whatsapp mr-1"></i> WhatsApp Channel (${selectedMonthKey})
+                </button>
+              </div>
+
+              <form onsubmit="handleSaveGradeConfig(event)" class="space-y-3">
+                ${gradesList.map(g => {
+                  const baseVal = Number(gMap[g.key] || 0);
+                  const workVal = Math.round(baseVal * 1.05);
+                  return `
+                    <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                      <div>
+                        <span class="text-xs font-black ${g.key === 'TL' ? 'text-purple-700' : 'text-slate-900'} block">${g.label}</span>
+                        <span class="text-[10px] font-bold text-slate-400">${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} • ${selectedMonthKey}</span>
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Actual Base Target (৳)</label>
+                        <input type="number" min="0" id="cfg_grade_${g.key}" value="${baseVal}" required class="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                      </div>
+                      <div>
+                        <span class="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Portal Working (+5%)</span>
+                        <span class="text-xs font-black text-emerald-600">৳${workVal.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onclick="closeModal('gradeConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl cursor-pointer">Cancel</button>
+                  <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white ${ch === 'WHATSAPP' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'} rounded-xl shadow cursor-pointer">
+                    Save ${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Grade Targets (${selectedMonthKey})
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      };
+
+      handleSaveGradeConfig = async function(e) {
+        e.preventDefault();
+        if (!hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return;
+        const ch = window._gradeModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
+        const effKey = ch === 'WHATSAPP' ? `WA_${selectedMonthKey}` : selectedMonthKey;
+
+        let configs = getStored('monthly_configs', {});
+        if (!configs[effKey]) configs[effKey] = { users: {}, products: {}, gradeTargets: {} };
+        if (!configs[effKey].gradeTargets) configs[effKey].gradeTargets = {};
+        if (!configs[effKey].users) configs[effKey].users = {};
+
+        const gradeKeys = ['A+', 'A', 'A-', 'B', 'C', 'TL'];
+        gradeKeys.forEach(gk => {
+          const val = Number(document.getElementById(`cfg_grade_${gk}`)?.value) || 0;
+          configs[effKey].gradeTargets[gk] = val;
+        });
+
+        const nowTs = Date.now();
+        const allMonthUsers = getUsersForMonth(selectedMonthKey, true);
+        allMonthUsers.forEach(u => {
+          if (u.role === 'supervisor') return;
+          if (getChannelForTeam(u.team) !== ch) return;
+          if (isPendingOrFloatingAgent(u)) return;
+          const g = u.grade || (u.role === 'admin' ? 'TL' : 'A');
+          if (configs[effKey].gradeTargets[g] !== undefined) {
+            configs[effKey].users[String(u.id)] = {
+              ...(configs[effKey].users[String(u.id)] || {}),
+              team: normalizeTeamNameAlias(u.team),
+              channel: ch,
+              grade: g,
+              baseTarget: Number(configs[effKey].gradeTargets[g]) || 0,
+              updatedTs: nowTs
+            };
+          }
+        });
+
+        setStored('monthly_configs', configs);
+        markLocalUserOrConfigMutatedNow();
+
+        const logMeta = recordActivityLog(
+          'Updated Grade Targets',
+          `Updated ${ch} monthly grade & TL targets for ${selectedMonthKey}`
+        );
+        closeModal('gradeConfigModal');
+        renderAppLayout();
+        showPortalToast(
+          `${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Grade Targets Saved!`,
+          `Updated targets for ${selectedMonthKey} applied to all matching ${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} agents & synced to Sheets.`,
+          'success'
+        );
+        postToSheet('SAVE_MONTHLY_CONFIG', {
+          monthKey: effKey,
+          configJson: JSON.stringify(configs[effKey]),
+          ...logMeta
+        }).catch(() => {});
+      };
+
+      // -----------------------------------------------------------------------
+      // E. NEW DYNAMIC MONTHLY SPRINT REWARDS & % EDITOR MODAL
+      // -----------------------------------------------------------------------
+      window._sprintModalChannelV58 = activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+
+      window.switchSprintModalChannelV58 = function(chKey) {
+        window._sprintModalChannelV58 = chKey === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        renderAppLayout();
+        openModal('sprintRewardsConfigModal');
+      };
+
+      window.openSprintRewardsConfigModal = function() {
+        if (!hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return;
+        window._sprintModalChannelV58 = activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        renderAppLayout();
+        openModal('sprintRewardsConfigModal');
+      };
+
+      window.renderSprintRewardsConfigModalV58 = function() {
+        if (!currentUser || !hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return '';
+        const ch = window._sprintModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
+        const prog = window.getSprintRewardProgramForMonthV58(ch, selectedMonthKey);
+        const pcts = window.getSprintPctsForMonthV58(ch, selectedMonthKey);
+        const tlRew = window.getTlMilestoneRewardsForMonthV58(ch, selectedMonthKey);
+        const gradesOrder = ['A+', 'A', 'A-', 'B', 'C'];
+
+        return `
+          <div id="sprintRewardsConfigModal" class="hidden fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+              <div class="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
+                <div>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800">Dynamic Monthly Sprint & TL Reward Setup</span>
+                  <h3 class="text-base font-black text-slate-900 mt-1">Edit Sprint Rewards, Sprint % & TL Milestones (${selectedMonthKey})</h3>
+                  <p class="text-xs font-bold text-slate-500">Customize Sprint percentages, cash rewards per grade, and TL 80%/100% milestone payouts for ${selectedMonthKey} — zero code edits needed!</p>
+                </div>
+                <button type="button" onclick="closeModal('sprintRewardsConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+
+              <div class="flex items-center gap-2 mb-4 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
+                <button type="button" onclick="window.switchSprintModalChannelV58('FACEBOOK')" class="flex-1 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${ch === 'FACEBOOK' ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">
+                  <i class="fa-brands fa-facebook-f mr-1"></i> Facebook Sprint Program (${selectedMonthKey})
+                </button>
+                <button type="button" onclick="window.switchSprintModalChannelV58('WHATSAPP')" class="flex-1 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${ch === 'WHATSAPP' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">
+                  <i class="fa-brands fa-whatsapp mr-1"></i> WhatsApp Sprint Program (${selectedMonthKey})
+                </button>
+              </div>
+
+              <form onsubmit="window.handleSaveSprintRewardsConfigV58(event)" class="space-y-4">
+                <!-- Sprint Target Split % & TL Rewards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div class="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200 space-y-2">
+                    <span class="text-[11px] font-black uppercase text-blue-900 block"><i class="fa-solid fa-percent mr-1"></i>Sprint Target % Split</span>
+                    <div class="grid grid-cols-3 gap-2">
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Sprint 1 (1–10)</label>
+                        <input type="number" min="1" max="100" id="cfg_sp_pct1" value="${pcts.s1}" required class="w-full px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs font-black text-slate-900">
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Sprint 2 (11–20)</label>
+                        <input type="number" min="1" max="100" id="cfg_sp_pct2" value="${pcts.s2}" required class="w-full px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs font-black text-slate-900">
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Sprint 3 (21–31)</label>
+                        <input type="number" min="1" max="100" id="cfg_sp_pct3" value="${pcts.s3}" required class="w-full px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs font-black text-slate-900">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-2">
+                    <span class="text-[11px] font-black uppercase text-indigo-900 block"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>TL Milestone Rewards (৳)</span>
+                    <div class="grid grid-cols-2 gap-2">
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">80% Team Milestone (৳)</label>
+                        <input type="number" min="0" id="cfg_tl_r80" value="${tlRew.r80}" required class="w-full px-2.5 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-black text-slate-900">
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">100% Team Milestone (৳)</label>
+                        <input type="number" min="0" id="cfg_tl_r100" value="${tlRew.r100}" required class="w-full px-2.5 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-black text-slate-900">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Per-Grade Sprint Rewards Table -->
+                <div class="rounded-2xl border border-slate-200 overflow-hidden overflow-x-auto">
+                  <table class="w-full text-left text-xs whitespace-nowrap">
+                    <thead class="bg-slate-900 text-white uppercase text-[10px] font-black">
+                      <tr>
+                        <th class="p-3">Grade</th>
+                        <th class="p-3">Sprint 1 (৳)</th>
+                        <th class="p-3">Sprint 2 (৳)</th>
+                        <th class="p-3">Sprint 3 (৳)</th>
+                        <th class="p-3">100% Target Floor (৳)</th>
+                        <th class="p-3">All 3 Achieve (৳)</th>
+                        <th class="p-3">Any 2 Extra (৳)</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 bg-white">
+                      ${gradesOrder.map(g => {
+                        const r = prog[g] || {};
+                        return `
+                          <tr class="hover:bg-slate-50">
+                            <td class="p-2.5 font-black text-slate-900"><span class="px-2.5 py-1 rounded-lg bg-slate-100">${g}</span></td>
+                            <td class="p-2"><input type="number" min="0" id="cfg_sr_${g}_s1" value="${r.s1 || 0}" class="w-24 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"></td>
+                            <td class="p-2"><input type="number" min="0" id="cfg_sr_${g}_s2" value="${r.s2 || 0}" class="w-24 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"></td>
+                            <td class="p-2"><input type="number" min="0" id="cfg_sr_${g}_s3" value="${r.s3 || 0}" class="w-24 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"></td>
+                            <td class="p-2"><input type="number" min="0" id="cfg_sr_${g}_total100" value="${r.total100 || 0}" class="w-24 px-2 py-1.5 bg-blue-50/60 border border-blue-200 rounded-lg text-xs font-bold"></td>
+                            <td class="p-2"><input type="number" min="0" id="cfg_sr_${g}_all3" value="${r.all3 || 0}" class="w-24 px-2 py-1.5 bg-emerald-50/60 border border-emerald-200 rounded-lg text-xs font-bold"></td>
+                            <td class="p-2"><input type="number" min="0" id="cfg_sr_${g}_any2Extra" value="${r.any2Extra || 0}" class="w-24 px-2 py-1.5 bg-amber-50/60 border border-amber-200 rounded-lg text-xs font-bold"></td>
+                          </tr>
+                        `;
+                      }).join('')}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onclick="closeModal('sprintRewardsConfigModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl cursor-pointer">Cancel</button>
+                  <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white ${ch === 'WHATSAPP' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'} rounded-xl shadow cursor-pointer">
+                    <i class="fa-solid fa-check-double mr-1"></i> Save ${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Sprint Program (${selectedMonthKey})
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      };
+
+      window.handleSaveSprintRewardsConfigV58 = async function(e) {
+        e.preventDefault();
+        if (!hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) return;
+        const ch = window._sprintModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
+        const effKey = ch === 'WHATSAPP' ? `WA_${selectedMonthKey}` : selectedMonthKey;
+
+        let configs = getStored('monthly_configs', {});
+        if (!configs[effKey]) configs[effKey] = { users: {}, products: {} };
+
+        configs[effKey].sprintPcts = {
+          s1: Number(document.getElementById('cfg_sp_pct1')?.value) || 40,
+          s2: Number(document.getElementById('cfg_sp_pct2')?.value) || 35,
+          s3: Number(document.getElementById('cfg_sp_pct3')?.value) || 35
+        };
+        configs[effKey].tlRewards = {
+          r80: Number(document.getElementById('cfg_tl_r80')?.value) || 0,
+          r100: Number(document.getElementById('cfg_tl_r100')?.value) || 0
+        };
+
+        const srMap = {};
+        ['A+', 'A', 'A-', 'B', 'C'].forEach(g => {
+          const s1 = Number(document.getElementById(`cfg_sr_${g}_s1`)?.value) || 0;
+          const s2 = Number(document.getElementById(`cfg_sr_${g}_s2`)?.value) || 0;
+          const s3 = Number(document.getElementById(`cfg_sr_${g}_s3`)?.value) || 0;
+          srMap[g] = {
+            s1, s2, s3,
+            totalReward: s1 + s2 + s3,
+            total100: Number(document.getElementById(`cfg_sr_${g}_total100`)?.value) || 0,
+            all3: Number(document.getElementById(`cfg_sr_${g}_all3`)?.value) || 0,
+            any2Extra: Number(document.getElementById(`cfg_sr_${g}_any2Extra`)?.value) || 0
+          };
+        });
+        configs[effKey].sprintRewards = srMap;
+
+        setStored('monthly_configs', configs);
+        markLocalUserOrConfigMutatedNow();
+
+        const logMeta = recordActivityLog(
+          'Updated Sprint Rewards Program',
+          `Updated ${ch} Sprint % (${configs[effKey].sprintPcts.s1}/${configs[effKey].sprintPcts.s2}/${configs[effKey].sprintPcts.s3}%) & Grade/TL Rewards for ${selectedMonthKey}`
+        );
+        closeModal('sprintRewardsConfigModal');
+        renderAppLayout();
+        showPortalToast(
+          'Sprint Program Saved & Synced!',
+          `${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Sprint Rewards for ${selectedMonthKey} are now live across Portal & Incentive Tab.`,
+          'success'
+        );
+        postToSheet('SAVE_MONTHLY_CONFIG', {
+          monthKey: effKey,
+          configJson: JSON.stringify(configs[effKey]),
+          ...logMeta
+        }).catch(() => {});
+      };
+
+      // Inject SprintRewardsConfigModal into DOM on renderAppLayout + Add "Edit Sprint Rewards" button in Sprint Tab & Target Setup Tab!
+      const _origRenderAppLayoutV58 = renderAppLayout;
+      renderAppLayout = function() {
+        const res = _origRenderAppLayoutV58();
+        try {
+          if (currentUser && hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) {
+            const appRoot = document.getElementById('app');
+            if (appRoot && !document.getElementById('sprintRewardsConfigModal')) {
+              appRoot.insertAdjacentHTML('beforeend', window.renderSprintRewardsConfigModalV58());
+            }
+          }
+        } catch (mErr) {}
+        return res;
+      };
+
+      const _origRenderManageAgentsV58 = renderManageAgents;
+      renderManageAgents = function() {
+        let htmlOut = _origRenderManageAgentsV58();
+        if (currentUser && hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) {
+          const btnSprint = `
+                <button onclick="openSprintRewardsConfigModal()" class="h-9 px-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-bolt text-amber-300"></i> Sprint Rewards (${selectedMonthKey})
+                </button>`;
+          htmlOut = htmlOut.replace(
+            /(<button onclick="openGradeConfigModal\(\)"[\s\S]*?<\/button>)/,
+            `$1${btnSprint}`
+          );
+        }
+        return htmlOut;
+      };
+
+      const _origRenderSprintTargetViewV58 = renderSprintTargetView;
+      renderSprintTargetView = function() {
+        let htmlOut = _origRenderSprintTargetViewV58();
+        if (currentUser && hasFeatureAccess(currentUser, 'feat_edit_grades_targets')) {
+          const btnSprintTab = `
+                <button onclick="openSprintRewardsConfigModal()" class="h-9 px-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-sliders text-amber-300"></i> Edit Sprint Rewards
+                </button>`;
+          htmlOut = htmlOut.replace(
+            /(<button onclick="exportSprintTargetCsv\(\)")/,
+            `${btnSprintTab}\n                $1`
+          );
+        }
+        return htmlOut;
+      };
+    } catch (errV58) {
+      console.error('Non-fatal patch v58 warning:', errV58);
     }
 
 window.addEventListener('load', init);
