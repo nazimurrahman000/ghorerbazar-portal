@@ -758,7 +758,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen || profileMenuDropdownOpen) return true;
-      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal', 'sprintRewardsConfigModal', 'masterPortalSettingsModal'];
+      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal', 'sprintRewardsConfigModal', 'masterPortalSettingsModal', 'agentSwapRequestModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -15372,10 +15372,11 @@ function renderChatHubView() {
 
           const hit100 = target100 > 0 && teamRev >= target100;
           const hit80 = target80 > 0 && teamRev >= target80;
-          const tlRewardMoney = hit100 ? 10000 : (hit80 ? 7000 : 0);
+          const tlRewBase = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function') ? window.getTlMilestoneRewardsForMonthV58(ch, mk) : { r80: 7000, r100: 12000 };
+          const tlRewardMoney = hit100 ? tlRewBase.r100 : (hit80 ? tlRewBase.r80 : 0);
           const tlStatusLabel = hit100
-            ? '🏆 100% Target Hit (৳10,000 Unlocked)'
-            : (hit80 ? '🔥 80% Target Hit (৳7,000 Unlocked)' : `⏳ In Progress (${teamAchPct}% — Need ৳${Math.max(0, target80 - teamRev).toLocaleString()} for 80%)`);
+            ? `🏆 100% Target Hit (৳${tlRewBase.r100.toLocaleString()} Unlocked)`
+            : (hit80 ? `🔥 80% Target Hit (৳${tlRewBase.r80.toLocaleString()} Unlocked)` : `⏳ In Progress (${teamAchPct}% — Need ৳${Math.max(0, target80 - teamRev).toLocaleString()} for 80%)`);
 
           tTLs.forEach(tlObj => {
             if (memberFilter !== 'ALL' && memberFilter !== 'TLS_ONLY' && String(tlObj.id) !== String(memberFilter)) {
@@ -15596,7 +15597,7 @@ function renderChatHubView() {
                   ${chMeta.fullTitle} — Earned Cash Incentives & Product Gifts (${monthLabel})
                 </h2>
                 <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  Complete breakdown of Team Leader rewards (80% = ৳7,000 • 100% = ৳10,000) and Agent Sprint + Drive Product bonuses & gifts.
+                  Complete breakdown of Team Leader rewards (80% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()}) and Agent Sprint + Drive Product bonuses & gifts.
                 </p>
               </div>
 
@@ -15637,7 +15638,7 @@ function renderChatHubView() {
                 </div>
                 <div class="mt-2.5">
                   <p class="text-2xl font-black">৳${data.totalTlMoney.toLocaleString()}</p>
-                  <p class="text-[10px] font-bold text-indigo-100 mt-0.5">80% Team Goal = ৳7,000 • 100% = ৳10,000</p>
+                  <p class="text-[10px] font-bold text-indigo-100 mt-0.5">80% Team Goal = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()}</p>
                 </div>
               </div>
 
@@ -15680,7 +15681,7 @@ function renderChatHubView() {
             <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-indigo-200">
               <div class="px-5 py-3 bg-gradient-to-r from-indigo-700 to-blue-700 text-white flex flex-wrap items-center justify-between gap-2">
                 <span class="text-xs font-black uppercase tracking-wider">
-                  <i class="fa-solid fa-crown text-amber-300 mr-1.5"></i>Team Leader (TL) Milestone Rewards (Team + TL Combined Target: 80% = ৳7,000 • 100% = ৳10,000)
+                  <i class="fa-solid fa-crown text-amber-300 mr-1.5"></i>Team Leader (TL) Milestone Rewards (Team + TL Combined Target: 80% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()})
                 </span>
                 <span class="text-[11px] font-bold text-indigo-100">${data.tlRows.length} Team Leader(s)</span>
               </div>
@@ -15690,8 +15691,8 @@ function renderChatHubView() {
                     <th class="p-3.5">TL Name & ID</th>
                     <th class="p-3.5">Team</th>
                     <th class="p-3.5">Total Team Target (+5%)</th>
-                    <th class="p-3.5">80% Goal (৳7,000)</th>
-                    <th class="p-3.5">100% Goal (৳10,000)</th>
+                    <th class="p-3.5">80% Goal (৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()})</th>
+                    <th class="p-3.5">100% Goal (৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()})</th>
                     <th class="p-3.5">Team Achieved Revenue</th>
                     <th class="p-3.5 text-center">Achievement %</th>
                     <th class="p-3.5">Earned TL Bonus</th>
@@ -15980,7 +15981,8 @@ function renderChatHubView() {
         const target100 = tInfo.workingTarget;
         const hit100 = target100 > 0 && monthTotalAmount >= target100;
         const hit80 = target80 > 0 && monthTotalAmount >= target80;
-        const tlPersonalEarned = hit100 ? 10000 : (hit80 ? 7000 : 0);
+        const _tlRewDyn = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function') ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : { r80: 7000, r100: 12000 };
+        const tlPersonalEarned = hit100 ? _tlRewDyn.r100 : (hit80 ? _tlRewDyn.r80 : 0);
         const exactPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
         const scopeLabel = dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope;
 
@@ -16023,7 +16025,7 @@ function renderChatHubView() {
                   </div>
                   <div class="flex items-baseline justify-between mt-1.5">
                     <strong class="text-lg font-black ${tlPersonalEarned > 0 ? 'text-emerald-600' : 'text-indigo-950'}">৳${tlPersonalEarned.toLocaleString()} <span class="text-[11px] font-bold text-slate-500">Earned</span></strong>
-                    <span class="text-[10px] font-extrabold text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">80%: ৳7,000 • 100%: ৳10,000</span>
+                    <span class="text-[10px] font-extrabold text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">80%: ৳${_tlRewDyn.r80.toLocaleString()} • 100%: ৳${_tlRewDyn.r100.toLocaleString()}</span>
                   </div>
                 </div>
 
@@ -16063,13 +16065,13 @@ function renderChatHubView() {
         let htmlOut = _origRenderDashboardV29();
         htmlOut = htmlOut.replace(
           '🎯 80% Reward Goal</span>',
-          '🎯 80% Goal (TL Reward: ৳7,000)</span>'
+          `🎯 80% Goal (TL Reward: ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()})</span>`
         ).replace(
           '🏆 100% Full Target</span>',
-          '🏆 100% Goal (TL Reward: ৳10,000)</span>'
+          `🏆 100% Goal (TL Reward: ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()})</span>`
         ).replace(
           '80% & 100% Milestones',
-          '80% = ৳7,000 • 100% = ৳10,000 TL Reward'
+          `80% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()} TL Reward`
         );
         return htmlOut;
       };
@@ -18562,7 +18564,8 @@ function renderChatHubView() {
         const target100 = tInfo.workingTarget;
         const hit100 = target100 > 0 && monthTotalAmount >= target100;
         const hit80 = target80 > 0 && monthTotalAmount >= target80;
-        const tlPersonalEarned = hit100 ? 10000 : (hit80 ? 7000 : 0);
+        const _tlRewDyn = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function') ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : { r80: 7000, r100: 12000 };
+        const tlPersonalEarned = hit100 ? _tlRewDyn.r100 : (hit80 ? _tlRewDyn.r80 : 0);
         const exactPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
         const scopeLabel = dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope;
 
@@ -18608,7 +18611,7 @@ function renderChatHubView() {
                       <strong class="text-lg font-black ${tlPersonalEarned > 0 ? 'text-emerald-600' : 'text-slate-900'}">৳${tlPersonalEarned.toLocaleString()}</strong>
                       <span class="text-[10px] font-bold text-slate-500 ml-1">Earned</span>
                     </div>
-                    <span class="text-[10px] font-extrabold text-indigo-700 whitespace-nowrap">80%: ৳7k • 100%: ৳10k</span>
+                    <span class="text-[10px] font-extrabold text-indigo-700 whitespace-nowrap">80%: ৳${_tlRewDyn.r80.toLocaleString()} • 100%: ৳${_tlRewDyn.r100.toLocaleString()}</span>
                   </div>
                 </div>
 
@@ -19056,7 +19059,7 @@ function renderChatHubView() {
                           🎯 80% Milestone
                         </span>
                         <span class="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/70 text-[10px] font-black">
-                          Reward: ৳7,000
+                          Reward: ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()}
                         </span>
                       </div>
                       <p class="text-lg font-black text-slate-900 tracking-tight">৳${target80.toLocaleString()}</p>
@@ -19073,7 +19076,7 @@ function renderChatHubView() {
                           🏆 100% Full Target
                         </span>
                         <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/70 text-[10px] font-black">
-                          Reward: ৳10,000
+                          Reward: ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()}
                         </span>
                       </div>
                       <p class="text-lg font-black text-slate-900 tracking-tight">৳${target100.toLocaleString()}</p>
@@ -25457,7 +25460,7 @@ function renderChatHubView() {
         const saved = (configs[effKey] && configs[effKey].tlRewards) || (configs[mk] && configs[mk].tlRewards) || {};
         return {
           r80: (saved.r80 !== undefined && saved.r80 !== null) ? Number(saved.r80) : 7000,
-          r100: (saved.r100 !== undefined && saved.r100 !== null) ? Number(saved.r100) : 10000
+          r100: (saved.r100 !== undefined && saved.r100 !== null) ? Number(saved.r100) : 12000
         };
       };
 
@@ -26117,15 +26120,18 @@ function renderChatHubView() {
                   </div>
 
                   <div class="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-2">
-                    <span class="text-[11px] font-black uppercase text-indigo-900 block"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>TL Milestone Rewards (৳)</span>
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="text-[11px] font-black uppercase text-indigo-900"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>TL Milestone Rewards (৳)</span>
+                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${isSuperAdmin(currentUser) ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-600'}">${isSuperAdmin(currentUser) ? 'Super Admin Control' : 'Super Admin Only'}</span>
+                    </div>
                     <div class="grid grid-cols-2 gap-2">
                       <div>
                         <label class="block text-[10px] font-bold text-slate-600 mb-0.5">80% Team Milestone (৳)</label>
-                        <input type="number" min="0" id="cfg_tl_r80" value="${tlRew.r80}" required class="w-full px-2.5 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-black text-slate-900">
+                        <input type="number" min="0" id="cfg_tl_r80" value="${tlRew.r80}" required ${isSuperAdmin(currentUser) ? '' : 'readonly'} class="w-full px-2.5 py-1.5 ${isSuperAdmin(currentUser) ? 'bg-white' : 'bg-slate-100 text-slate-500 cursor-not-allowed'} border border-indigo-200 rounded-lg text-xs font-black text-slate-900">
                       </div>
                       <div>
                         <label class="block text-[10px] font-bold text-slate-600 mb-0.5">100% Team Milestone (৳)</label>
-                        <input type="number" min="0" id="cfg_tl_r100" value="${tlRew.r100}" required class="w-full px-2.5 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-black text-slate-900">
+                        <input type="number" min="0" id="cfg_tl_r100" value="${tlRew.r100}" required ${isSuperAdmin(currentUser) ? '' : 'readonly'} class="w-full px-2.5 py-1.5 ${isSuperAdmin(currentUser) ? 'bg-white' : 'bg-slate-100 text-slate-500 cursor-not-allowed'} border border-indigo-200 rounded-lg text-xs font-black text-slate-900">
                       </div>
                     </div>
                   </div>
@@ -26190,10 +26196,12 @@ function renderChatHubView() {
           s2: Number(document.getElementById('cfg_sp_pct2')?.value) || 35,
           s3: Number(document.getElementById('cfg_sp_pct3')?.value) || 35
         };
-        configs[effKey].tlRewards = {
-          r80: Number(document.getElementById('cfg_tl_r80')?.value) || 0,
-          r100: Number(document.getElementById('cfg_tl_r100')?.value) || 0
-        };
+        if (isSuperAdmin(currentUser)) {
+          configs[effKey].tlRewards = {
+            r80: Number(document.getElementById('cfg_tl_r80')?.value) || 0,
+            r100: Number(document.getElementById('cfg_tl_r100')?.value) || 0
+          };
+        }
 
         const srMap = {};
         ['A+', 'A', 'A-', 'B', 'C'].forEach(g => {
@@ -27241,7 +27249,7 @@ function renderChatHubView() {
 
           // Map-based timestamped records: LEAVE_RECORDS_*, DO_APPROVED_DUTIES_*, DUTY_SWAPS_*, SHIFT_TIME_SWAPS_*
           if (mk.startsWith('LEAVE_RECORDS_') || mk.startsWith('DO_APPROVED_DUTIES_') ||
-              mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_')) {
+              mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_') || mk.startsWith('SWAP_REQUESTS_')) {
             const expectedEntries = item.expectedMapEntries || {};
             const expKeys = Object.keys(expectedEntries);
             if (expKeys.length === 0) return true;
@@ -27378,7 +27386,7 @@ function renderChatHubView() {
             const parsedObj = JSON.parse(String(trackedPayload.configJson || '{}'));
             if (parsedObj && typeof parsedObj === 'object') {
               if (mk.startsWith('LEAVE_RECORDS_') || mk.startsWith('DO_APPROVED_DUTIES_') ||
-                  mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_')) {
+                  mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_') || mk.startsWith('SWAP_REQUESTS_')) {
                 expectedMapEntries = {};
                 Object.keys(parsedObj).forEach(ek => {
                   const ev = parsedObj[ek];
@@ -27449,7 +27457,7 @@ function renderChatHubView() {
                   try {
                     const pendingObj = JSON.parse(String(it.payload.configJson || '{}'));
                     if (mk.startsWith('LEAVE_RECORDS_') || mk.startsWith('DO_APPROVED_DUTIES_') ||
-                        mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_')) {
+                        mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_') || mk.startsWith('SWAP_REQUESTS_')) {
                       const cldMap = (res.monthlyConfigs[mk] && typeof res.monthlyConfigs[mk] === 'object') ? { ...res.monthlyConfigs[mk] } : {};
                       Object.keys(pendingObj).forEach(ek => {
                         const pv = pendingObj[ek];
@@ -27498,6 +27506,776 @@ function renderChatHubView() {
       }, 1500);
     } catch (errV60) {
       console.error('Non-fatal patch v60 warning:', errV60);
+    }
+
+
+    // =========================================================================
+    // PATCH v61 (index-v41.html) — AGENT MUTUAL SWAP REQUEST & ACCEPTANCE SYSTEM
+    // + NAZIM SUPER ADMIN TL REWARDS SHORTCUT (80% = ৳7,000 | 100% = ৳12,000)
+    // =========================================================================
+    try {
+      window.getSwapRequestsStoreForMonthV61 = function(mKey) {
+        const mk = mKey || selectedMonthKey;
+        const configs = getStored('monthly_configs', {});
+        const storeKey = `SWAP_REQUESTS_${mk}`;
+        return (configs[storeKey] && typeof configs[storeKey] === 'object') ? configs[storeKey] : {};
+      };
+
+      window.getAllSwapRequestsAcrossActiveMonthsV61 = function() {
+        const configs = getStored('monthly_configs', {});
+        const list = [];
+        Object.keys(configs).forEach(k => {
+          if (!k.startsWith('SWAP_REQUESTS_')) return;
+          const mObj = configs[k];
+          if (!mObj || typeof mObj !== 'object') return;
+          Object.keys(mObj).forEach(reqId => {
+            const req = mObj[reqId];
+            if (req && typeof req === 'object' && !req.isRemoved && req.id) {
+              list.push(req);
+            }
+          });
+        });
+        return list.sort((a, b) => Number(b.updatedTs || b.createdAt || 0) - Number(a.updatedTs || a.createdAt || 0));
+      };
+
+      window.getIncomingPendingSwapRequestsForUserV61 = function(userObj) {
+        if (!userObj) return [];
+        const uid = String(userObj.id).trim();
+        return window.getAllSwapRequestsAcrossActiveMonthsV61().filter(r =>
+          r.status === 'PENDING' && String(r.toUserId).trim() === uid
+        );
+      };
+
+      window.saveSwapRequestRecordV61 = function(mKey, reqObj) {
+        const mk = mKey || selectedMonthKey;
+        const storeKey = `SWAP_REQUESTS_${mk}`;
+        const configs = { ...getStored('monthly_configs', {}) };
+        if (!configs[storeKey] || typeof configs[storeKey] !== 'object') configs[storeKey] = {};
+        configs[storeKey][reqObj.id] = { ...reqObj, updatedTs: Date.now() };
+        setStored('monthly_configs', configs);
+        markLocalUserOrConfigMutatedNow();
+        postToSheet('SAVE_MONTHLY_CONFIG', {
+          monthKey: storeKey,
+          configJson: JSON.stringify(configs[storeKey])
+        }).catch(() => {});
+      };
+
+      window.applyAcceptedSwapRequestEffectsV61 = function(req) {
+        if (!req) return;
+        const mk = req.monthKey || String(req.date || '').substring(3) || selectedMonthKey;
+        const configs = { ...getStored('monthly_configs', {}) };
+        const nowTs = Date.now();
+        const actorLabel = `Mutual Swap (${req.fromUserName} ↔ ${req.toUserName})`;
+
+        if (req.swapMode === 'SAME_DAY_SHIFT') {
+          const shiftSwapKey = `SHIFT_TIME_SWAPS_${mk}`;
+          if (!configs[shiftSwapKey] || typeof configs[shiftSwapKey] !== 'object') configs[shiftSwapKey] = {};
+
+          const pNote = `🔄 Mutual Shift Swap (${req.fromOrigShift} → ${req.fromNewShift}) with ${req.toUserName} (${req.toOrigShift} → ${req.toNewShift})${req.reason && req.reason !== '-' ? ' • ' + req.reason : ''}`;
+          const tNote = `🔄 Mutual Shift Swap (${req.toOrigShift} → ${req.toNewShift}) with ${req.fromUserName} (${req.fromOrigShift} → ${req.fromNewShift})${req.reason && req.reason !== '-' ? ' • ' + req.reason : ''}`;
+
+          configs[shiftSwapKey][`${req.fromUserId}_${req.date}`] = {
+            userId: String(req.fromUserId),
+            userName: req.fromUserName,
+            team: req.fromTeam,
+            date: req.date,
+            origShift: req.fromOrigShift,
+            newShift: req.fromNewShift,
+            partnerId: String(req.toUserId),
+            partnerName: req.toUserName,
+            note: pNote,
+            markedBy: actorLabel,
+            updatedTs: nowTs
+          };
+
+          configs[shiftSwapKey][`${req.toUserId}_${req.date}`] = {
+            userId: String(req.toUserId),
+            userName: req.toUserName,
+            team: req.toTeam,
+            date: req.date,
+            origShift: req.toOrigShift,
+            newShift: req.toNewShift,
+            partnerId: String(req.fromUserId),
+            partnerName: req.fromUserName,
+            note: tNote,
+            markedBy: actorLabel,
+            updatedTs: nowTs
+          };
+
+          setStored('monthly_configs', configs);
+          markLocalUserOrConfigMutatedNow();
+          postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: shiftSwapKey,
+            configJson: JSON.stringify(configs[shiftSwapKey])
+          }).catch(() => {});
+        } else {
+          const offDateStr = req.date;
+          const coveredDateStr = req.coveredDate || req.date;
+          const coveredShift = req.coveredShift || '3:00 PM';
+          const swapStoreKey = `DUTY_SWAPS_${mk}`;
+          const doStoreKey = `DO_APPROVED_DUTIES_${mk}`;
+          if (!configs[swapStoreKey] || typeof configs[swapStoreKey] !== 'object') configs[swapStoreKey] = {};
+          if (!configs[doStoreKey] || typeof configs[doStoreKey] !== 'object') configs[doStoreKey] = {};
+
+          const autoNote = `🔄 Mutual DO Swap: ${req.fromUserName} off on ${cleanDisplayDate(offDateStr)} • ${req.toUserName} covers on ${cleanDisplayDate(coveredDateStr)} (${coveredShift})${req.reason && req.reason !== '-' ? ' • ' + req.reason : ''}`;
+
+          const swapMeta = {
+            swapMode: 'TEAMMATE',
+            offUserId: String(req.fromUserId),
+            offUserName: req.fromUserName,
+            offTeam: req.fromTeam,
+            offDate: offDateStr,
+            workingUserId: String(req.toUserId),
+            workingUserName: req.toUserName,
+            workingTeam: req.toTeam,
+            coveredDate: coveredDateStr,
+            coveredShift,
+            markedBy: actorLabel,
+            updatedTs: nowTs
+          };
+
+          configs[swapStoreKey][`${req.fromUserId}_${offDateStr}`] = swapMeta;
+          configs[doStoreKey][`${req.toUserId}_${coveredDateStr}`] = {
+            userId: String(req.toUserId),
+            userName: req.toUserName,
+            team: req.toTeam,
+            date: coveredDateStr,
+            swapLinkedKey: `${req.fromUserId}_${offDateStr}`,
+            approvedBy: actorLabel,
+            approvedAt: `${getTodayFormatted()} ${getNowTimeStr()}`,
+            updatedTs: nowTs
+          };
+          setStored('monthly_configs', configs);
+          markLocalUserOrConfigMutatedNow();
+
+          postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: swapStoreKey,
+            configJson: JSON.stringify(configs[swapStoreKey])
+          }).catch(() => {});
+          postToSheet('SAVE_MONTHLY_CONFIG', {
+            monthKey: doStoreKey,
+            configJson: JSON.stringify(configs[doStoreKey])
+          }).catch(() => {});
+
+          saveLeaveRecordEntry(mk, req.fromUserId, offDateStr, {
+            userId: String(req.fromUserId),
+            userName: req.fromUserName,
+            team: req.fromTeam,
+            date: offDateStr,
+            leaveType: 'Extra Day Off',
+            reason: autoNote,
+            swapMeta,
+            markedBy: actorLabel,
+            markedAt: `${getTodayFormatted()} ${getNowTimeStr()}`
+          });
+        }
+      };
+
+      window._agentSwapReqCtxV61 = null;
+
+      window.openAgentSwapRequestModalV61 = function(dateStr, defaultMode) {
+        if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+        const dVal = dateStr || getTodayFormatted();
+        window._agentSwapReqCtxV61 = {
+          date: dVal,
+          mode: defaultMode || 'SAME_DAY_SHIFT'
+        };
+        renderAppLayout();
+        const modeEl = document.getElementById('agSwapReqMode');
+        if (modeEl && defaultMode) modeEl.value = defaultMode;
+        const dateEl = document.getElementById('agSwapReqDate');
+        if (dateEl) dateEl.value = dateToInputVal(dVal);
+        const covEl = document.getElementById('agSwapReqCoveredDate');
+        if (covEl) covEl.value = dateToInputVal(dVal);
+        window.onAgentSwapReqDateOrModeChangeV61();
+        openModal('agentSwapRequestModal');
+      };
+
+      window.onAgentSwapReqDateOrModeChangeV61 = function() {
+        if (!currentUser) return;
+        const mode = document.getElementById('agSwapReqMode')?.value || 'SAME_DAY_SHIFT';
+        const rawDate = document.getElementById('agSwapReqDate')?.value;
+        const dStr = inputValToDateStr(rawDate);
+        const myOrigShift = (window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(currentUser.id, dStr)) || '3:00 PM';
+
+        const myShiftBadge = document.getElementById('agSwapReqMyShiftBadge');
+        if (myShiftBadge) myShiftBadge.textContent = `Your Roster Shift: ${myOrigShift}`;
+
+        const sameDayWrap = document.getElementById('agSwapReqSameDayWrap');
+        const doWrap = document.getElementById('agSwapReqDoWrap');
+        if (sameDayWrap) sameDayWrap.classList.toggle('hidden', mode !== 'SAME_DAY_SHIFT');
+        if (doWrap) doWrap.classList.toggle('hidden', mode === 'SAME_DAY_SHIFT');
+
+        const partnerSel = document.getElementById('agSwapReqPartnerId');
+        if (partnerSel) {
+          const prevVal = partnerSel.value;
+          const myTeamNorm = normalizeTeamNameAlias(currentUser.team);
+          const myCh = getChannelForTeam(currentUser.team);
+          const allChannelAgents = getUsersForMonth(selectedMonthKey, true).filter(a =>
+            a && a.role === 'agent' &&
+            String(a.id) !== String(currentUser.id) &&
+            !isPendingOrFloatingAgent(a) &&
+            !isUserAccountDeactivated(a) &&
+            getChannelForTeam(a.team) === myCh
+          ).sort((a, b) => {
+            const aSame = normalizeTeamNameAlias(a.team) === myTeamNorm ? 0 : 1;
+            const bSame = normalizeTeamNameAlias(b.team) === myTeamNorm ? 0 : 1;
+            return aSame - bSame || String(a.name).localeCompare(String(b.name));
+          });
+
+          partnerSel.innerHTML = `<option value="">-- Select Teammate to Send Swap Request --</option>` + allChannelAgents.map(a => {
+            const pShift = (window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(a.id, dStr)) || '3:00 PM';
+            const sameTag = normalizeTeamNameAlias(a.team) === myTeamNorm ? 'My Team' : a.team;
+            return `<option value="${a.id}" data-shift="${pShift}">${a.name} (${a.id} • ${sameTag} • Roster: ${pShift})</option>`;
+          }).join('');
+          if (prevVal && allChannelAgents.some(a => String(a.id) === String(prevVal))) {
+            partnerSel.value = prevVal;
+          }
+        }
+        window.onAgentSwapReqPartnerChangeV61();
+      };
+
+      window.onAgentSwapReqPartnerChangeV61 = function() {
+        const partnerId = document.getElementById('agSwapReqPartnerId')?.value;
+        const rawDate = document.getElementById('agSwapReqDate')?.value;
+        const dStr = inputValToDateStr(rawDate);
+        const mode = document.getElementById('agSwapReqMode')?.value || 'SAME_DAY_SHIFT';
+        const myOrigShift = (window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(currentUser?.id, dStr)) || '3:00 PM';
+
+        let partnerObj = null;
+        let partnerShift = '3:00 PM';
+        if (partnerId) {
+          partnerObj = getUsersForMonth(selectedMonthKey, true).find(a => String(a.id) === String(partnerId));
+          partnerShift = (window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(partnerId, dStr)) || '3:00 PM';
+          const newShiftSel = document.getElementById('agSwapReqNewShift');
+          if (newShiftSel && partnerShift && partnerShift !== 'DO') {
+            newShiftSel.value = partnerShift;
+          }
+        }
+
+        const previewEl = document.getElementById('agSwapReqLivePreview');
+        if (previewEl) {
+          if (!partnerObj) {
+            previewEl.innerHTML = `<i class="fa-solid fa-circle-info text-teal-600 mr-1"></i>Select a teammate above to send a mutual Swap Request. The swap will ONLY activate once your teammate clicks <strong>Accept</strong> on their panel!`;
+          } else if (mode === 'SAME_DAY_SHIFT') {
+            const chosenNew = document.getElementById('agSwapReqNewShift')?.value || partnerShift;
+            previewEl.innerHTML = `<i class="fa-solid fa-paper-plane text-teal-600 mr-1"></i><strong>Request Preview (${cleanDisplayDate(dStr)}):</strong> You (<strong>${currentUser.name}</strong>: ${myOrigShift} → <strong>${chosenNew}</strong>) ↔ <strong>${partnerObj.name}</strong> (${partnerShift} → <strong>${myOrigShift}</strong>). Waiting for <strong>${partnerObj.name}</strong> to Accept!`;
+          } else {
+            const covDate = inputValToDateStr(document.getElementById('agSwapReqCoveredDate')?.value) || dStr;
+            const covShift = document.getElementById('agSwapReqCoveredShift')?.value || '3:00 PM';
+            previewEl.innerHTML = `<i class="fa-solid fa-paper-plane text-teal-600 mr-1"></i><strong>DO Swap Request Preview:</strong> You take off on <strong>${cleanDisplayDate(dStr)}</strong>, and <strong>${partnerObj.name}</strong> covers on <strong>${cleanDisplayDate(covDate)} (${covShift})</strong>. Waiting for <strong>${partnerObj.name}</strong> to Accept!`;
+          }
+        }
+      };
+
+      window.renderAgentSwapRequestModalV61 = function() {
+        if (!currentUser || hasFeatureAccess(currentUser, 'feat_manage_all_sales')) return '';
+        const ctx = window._agentSwapReqCtxV61 || { date: getTodayFormatted(), mode: 'SAME_DAY_SHIFT' };
+        const shiftsList = (window.getActiveShiftOptionsV59 ? window.getActiveShiftOptionsV59() : SHIFT_OPTIONS).filter(s => s !== 'DO');
+
+        return `
+          <div id="agentSwapRequestModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[66] flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border-2 border-teal-200 max-h-[92vh] overflow-y-auto">
+              <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                <div class="flex items-center gap-3">
+                  <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center text-lg shadow-md">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                  </div>
+                  <div>
+                    <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-teal-100 text-teal-800">Mutual Approval Swap Request</span>
+                    <h3 class="text-base font-black text-slate-900 mt-0.5">Send Duty / Shift Swap Request</h3>
+                  </div>
+                </div>
+                <button type="button" onclick="closeModal('agentSwapRequestModal')" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+
+              <form onsubmit="window.handleSubmitAgentSwapRequestV61(event)" class="space-y-3.5">
+                <div class="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-200 flex items-center justify-between text-xs">
+                  <span class="font-bold text-slate-700">From: <strong class="text-slate-900">${currentUser.name} (${currentUser.id})</strong></span>
+                  <span id="agSwapReqMyShiftBadge" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-[10px] font-black">Your Roster Shift</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">1. Swap Type</label>
+                    <select id="agSwapReqMode" onchange="window.onAgentSwapReqDateOrModeChangeV61()" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      <option value="SAME_DAY_SHIFT">🔄 Same-Day Shift Swap (e.g. 7 AM ↔ 3 PM)</option>
+                      <option value="TEAMMATE">👥 Day-Off (DO) Swap With Teammate</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">2. Swap / Off Date</label>
+                    <input type="date" id="agSwapReqDate" required value="${dateToInputVal(ctx.date)}" onchange="window.onAgentSwapReqDateOrModeChangeV61()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-extrabold text-teal-800 uppercase mb-1">3. Choose Teammate (Request Will Appear Live on Their Panel)</label>
+                  <select id="agSwapReqPartnerId" required onchange="window.onAgentSwapReqPartnerChangeV61()" class="w-full px-3 py-2.5 bg-teal-50/50 border-2 border-teal-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                    <option value="">-- Select Teammate to Send Swap Request --</option>
+                  </select>
+                </div>
+
+                <div id="agSwapReqSameDayWrap">
+                  <label class="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">4. New Shift You Will Work On This Date</label>
+                  <select id="agSwapReqNewShift" onchange="window.onAgentSwapReqPartnerChangeV61()" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                    ${shiftsList.map(sh => `<option value="${sh}">${sh} Shift</option>`).join('')}
+                  </select>
+                </div>
+
+                <div id="agSwapReqDoWrap" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-2xl bg-amber-50/60 border border-amber-200">
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-amber-900 uppercase mb-1">Teammate Covers On Date</label>
+                    <input type="date" id="agSwapReqCoveredDate" value="${dateToInputVal(ctx.date)}" onchange="window.onAgentSwapReqPartnerChangeV61()" class="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl text-xs font-extrabold text-slate-900">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-extrabold text-amber-900 uppercase mb-1">Covered Duty Shift</label>
+                    <select id="agSwapReqCoveredShift" onchange="window.onAgentSwapReqPartnerChangeV61()" class="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                      ${shiftsList.map(sh => `<option value="${sh}">${sh} Shift</option>`).join('')}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-extrabold text-slate-600 uppercase mb-1">Reason / Message for Teammate (Optional)</label>
+                  <input type="text" id="agSwapReqReason" placeholder="e.g. Need morning shift tomorrow for urgent personal work..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900">
+                </div>
+
+                <div id="agSwapReqLivePreview" class="p-3 rounded-2xl bg-teal-50 border border-teal-200 text-[11px] font-bold text-teal-900 leading-relaxed"></div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onclick="closeModal('agentSwapRequestModal')" class="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Cancel</button>
+                  <button type="submit" class="px-5 py-2.5 text-xs font-black text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 rounded-xl shadow-md inline-flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-paper-plane"></i> Send Swap Request
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        `;
+      };
+
+      window.handleSubmitAgentSwapRequestV61 = function(e) {
+        e.preventDefault();
+        if (!currentUser || isCurrentChannelReadOnlyForUser(currentUser)) return;
+
+        const mode = document.getElementById('agSwapReqMode')?.value || 'SAME_DAY_SHIFT';
+        const dateStr = inputValToDateStr(document.getElementById('agSwapReqDate')?.value);
+        const mk = dateStr.substring(3) || selectedMonthKey;
+        const partnerId = document.getElementById('agSwapReqPartnerId')?.value || '';
+        const partnerObj = getUsersForMonth(mk, true).find(a => String(a.id) === String(partnerId));
+        if (!partnerObj) {
+          showPortalToast('Select Teammate', 'Please select a teammate to send the swap request to.', 'error');
+          return;
+        }
+
+        const fromOrigShift = (window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(currentUser.id, dateStr)) || '3:00 PM';
+        const toOrigShift = (window.getAgentRosterShiftForDateStr && window.getAgentRosterShiftForDateStr(partnerObj.id, dateStr)) || '3:00 PM';
+        const fromNewShift = mode === 'SAME_DAY_SHIFT' ? (document.getElementById('agSwapReqNewShift')?.value || toOrigShift) : 'DO';
+        const toNewShift = mode === 'SAME_DAY_SHIFT' ? fromOrigShift : (document.getElementById('agSwapReqCoveredShift')?.value || '3:00 PM');
+        const coveredDate = mode === 'TEAMMATE' ? (inputValToDateStr(document.getElementById('agSwapReqCoveredDate')?.value) || dateStr) : dateStr;
+        const coveredShift = mode === 'TEAMMATE' ? (document.getElementById('agSwapReqCoveredShift')?.value || '3:00 PM') : toNewShift;
+        const reason = (document.getElementById('agSwapReqReason')?.value || '').trim() || '-';
+
+        if (mode === 'SAME_DAY_SHIFT' && fromOrigShift === fromNewShift) {
+          showPortalToast('Same Shift Selected', `Your shift on ${cleanDisplayDate(dateStr)} is already ${fromOrigShift}. Choose a different shift to swap.`, 'warning');
+          return;
+        }
+
+        const reqObj = {
+          id: `swreq_${Date.now()}_${currentUser.id}_${partnerObj.id}`,
+          monthKey: mk,
+          swapMode: mode,
+          date: dateStr,
+          coveredDate,
+          coveredShift,
+          fromUserId: String(currentUser.id),
+          fromUserName: currentUser.name,
+          fromTeam: currentUser.team,
+          fromOrigShift,
+          fromNewShift,
+          toUserId: String(partnerObj.id),
+          toUserName: partnerObj.name,
+          toTeam: partnerObj.team,
+          toOrigShift,
+          toNewShift,
+          reason,
+          status: 'PENDING',
+          createdAt: Date.now(),
+          createdAtLabel: `${getTodayFormatted()} ${getNowTimeStr()}`,
+          updatedTs: Date.now()
+        };
+
+        window.saveSwapRequestRecordV61(mk, reqObj);
+        recordActivityLog(
+          'Sent Duty Swap Request',
+          `${currentUser.name} (${currentUser.id}) sent a ${mode === 'SAME_DAY_SHIFT' ? `Shift Swap (${fromOrigShift} ↔ ${fromNewShift})` : 'DO Swap'} request to ${partnerObj.name} (${partnerObj.id}) for ${dateStr}`,
+          true
+        );
+
+        closeModal('agentSwapRequestModal');
+        renderAppLayout();
+        showPortalToast(
+          '🔄 Swap Request Sent!',
+          `Sent to ${partnerObj.name}. Swap will activate automatically as soon as they click Accept!`,
+          'success'
+        );
+      };
+
+      window.handleRespondSwapRequestV61 = function(reqId, mKey, decision) {
+        if (!currentUser) return;
+        const store = window.getSwapRequestsStoreForMonthV61(mKey);
+        const req = store[reqId];
+        if (!req || req.status !== 'PENDING') return;
+
+        const isPartner = String(req.toUserId) === String(currentUser.id);
+        const isRequester = String(req.fromUserId) === String(currentUser.id);
+        const isAdminActor = hasFeatureAccess(currentUser, 'feat_manage_all_sales');
+
+        if (decision === 'CANCELLED' && !(isRequester || isAdminActor)) return;
+        if ((decision === 'ACCEPTED' || decision === 'DECLINED') && !(isPartner || isAdminActor)) return;
+
+        const updatedReq = {
+          ...req,
+          status: decision,
+          respondedBy: currentUser.name,
+          respondedAtLabel: `${getTodayFormatted()} ${getNowTimeStr()}`,
+          updatedTs: Date.now()
+        };
+
+        window.saveSwapRequestRecordV61(mKey, updatedReq);
+
+        if (decision === 'ACCEPTED') {
+          window.applyAcceptedSwapRequestEffectsV61(updatedReq);
+          recordActivityLog(
+            'Accepted Duty Swap Request',
+            `${currentUser.name} (${currentUser.id}) ACCEPTED ${req.fromUserName}'s ${req.swapMode === 'SAME_DAY_SHIFT' ? `Shift Swap (${req.fromOrigShift} ↔ ${req.fromNewShift})` : 'DO Swap'} for ${req.date}`,
+            true
+          );
+          renderAppLayout();
+          showPortalToast(
+            '✅ Duty Swap Confirmed & Active!',
+            `Swap between ${req.fromUserName} & ${req.toUserName} (${cleanDisplayDate(req.date)}) is now live across Missing Reports & Reminders!`,
+            'success'
+          );
+        } else if (decision === 'DECLINED') {
+          recordActivityLog(
+            'Declined Duty Swap Request',
+            `${currentUser.name} (${currentUser.id}) declined ${req.fromUserName}'s swap request for ${req.date}`,
+            true
+          );
+          renderAppLayout();
+          showPortalToast('Swap Request Declined', `Declined swap request from ${req.fromUserName}. No roster or missing report changes were made.`, 'warning');
+        } else {
+          renderAppLayout();
+          showPortalToast('Swap Request Cancelled', 'Your pending swap request has been cancelled.', 'warning');
+        }
+      };
+
+      window.renderIncomingSwapRequestGlobalBannerV61 = function() {
+        if (!currentUser) return '';
+        const incoming = window.getIncomingPendingSwapRequestsForUserV61(currentUser);
+        if (incoming.length === 0) return '';
+
+        return `
+          <div class="mb-4 space-y-2.5">
+            ${incoming.map(req => {
+              const isShiftSwap = req.swapMode === 'SAME_DAY_SHIFT';
+              const swapSummaryHtml = isShiftSwap
+                ? `<strong>${req.fromUserName}</strong> wants to swap shift with you on <span class="px-2 py-0.5 rounded-md bg-white/90 text-slate-900 font-black">${cleanDisplayDate(req.date)}</span>: You move <strong>${req.toOrigShift} → ${req.toNewShift}</strong> & they move <strong>${req.fromOrigShift} → ${req.fromNewShift}</strong>.`
+                : `<strong>${req.fromUserName}</strong> requests a <strong>Day-Off (DO) Swap</strong>: They take off on <strong>${cleanDisplayDate(req.date)}</strong> and you cover on <strong>${cleanDisplayDate(req.coveredDate || req.date)} (${req.coveredShift})</strong>.`;
+              return `
+                <div class="p-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-teal-600 text-white shadow-xl border-2 border-amber-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+                  <div class="flex items-start sm:items-center gap-3.5 min-w-0">
+                    <div class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-xl shrink-0 shadow-md">
+                      <i class="fa-solid fa-arrows-rotate fa-spin"></i>
+                    </div>
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="px-2.5 py-0.5 rounded-full bg-slate-950 text-amber-300 text-[10px] font-black uppercase tracking-wider shadow">
+                          🔔 Action Required — Incoming Duty Swap Request!
+                        </span>
+                        <span class="text-[11px] font-extrabold text-amber-100">${req.createdAtLabel || ''}</span>
+                      </div>
+                      <p class="text-xs sm:text-sm font-bold text-white mt-1 leading-snug">${swapSummaryHtml}</p>
+                      ${req.reason && req.reason !== '-' ? `<p class="text-[11px] font-extrabold text-amber-100 mt-0.5"><i class="fa-regular fa-comment-dots mr-1"></i>Note: "${req.reason}"</p>` : ''}
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0 self-end lg:self-center">
+                    <button type="button" onclick="window.handleRespondSwapRequestV61('${req.id}', '${req.monthKey}', 'ACCEPTED')" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-white/80 text-xs font-black shadow-lg inline-flex items-center gap-1.5 cursor-pointer transition-transform hover:scale-105">
+                      <i class="fa-solid fa-circle-check"></i> Accept Swap
+                    </button>
+                    <button type="button" onclick="window.handleRespondSwapRequestV61('${req.id}', '${req.monthKey}', 'DECLINED')" class="px-4 py-2.5 rounded-xl bg-slate-900/80 hover:bg-rose-700 text-white border border-white/30 text-xs font-black shadow inline-flex items-center gap-1.5 cursor-pointer transition-colors">
+                      <i class="fa-solid fa-circle-xmark"></i> Decline
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      };
+
+      const _origRenderMarkLeaveModalV61 = renderMarkLeaveModal;
+      renderMarkLeaveModal = function() {
+        let htmlOut = _origRenderMarkLeaveModalV61();
+        if (currentUser && !hasFeatureAccess(currentUser, 'feat_manage_all_sales')) {
+          htmlOut = htmlOut.replace(/<option value="Extra Day Off"[^>]*>[\s\S]*?<\/option>/g, '');
+          htmlOut = htmlOut.replace('Leave / Absent / Duty Swap', 'Leave / Absent Status');
+          htmlOut = htmlOut.replace('Mark Leave, Absent or Duty / Shift Swap', 'Mark Leave or Absent');
+        }
+        return htmlOut;
+      };
+
+      const _origOpenQuickDutySwapV61 = window.openQuickDutySwapModal;
+      window.openQuickDutySwapModal = function(userId, dateStr, isFromDoTab = false) {
+        if (currentUser && !hasFeatureAccess(currentUser, 'feat_manage_all_sales')) {
+          window.openAgentSwapRequestModalV61(dateStr, isFromDoTab ? 'TEAMMATE' : 'SAME_DAY_SHIFT');
+          return;
+        }
+        return _origOpenQuickDutySwapV61(userId, dateStr, isFromDoTab);
+      };
+
+      const _origRenderMissingV61 = renderMissingReportsAndLeaveView;
+      renderMissingReportsAndLeaveView = function() {
+        let htmlOut = _origRenderMissingV61();
+        const u = currentUser;
+        if (!u) return htmlOut;
+        const isAdminOrTl = hasFeatureAccess(u, 'feat_manage_all_sales');
+
+        if (!isAdminOrTl && !isCurrentChannelReadOnlyForUser(u)) {
+          htmlOut = htmlOut.replace('+ Leave / Absent / Swap', '+ Add Leave / Absent');
+          const reqBtnHeader = `
+                <button type="button" onclick="window.openAgentSwapRequestModalV61('${missingReportsDateFilter !== 'ALL' ? missingReportsDateFilter : getTodayFormatted()}', 'SAME_DAY_SHIFT')" class="h-9 px-4 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-arrows-rotate"></i> Request Duty / Shift Swap
+                </button>`;
+          htmlOut = htmlOut.replace(
+            /(<button type="button" onclick="exportMissingAndLeaveCsv\(\)")/,
+            `${reqBtnHeader}\n                $1`
+          );
+          htmlOut = htmlOut.replace(/>(\s*<i class="fa-solid fa-arrows-rotate text-teal-600"><\/i>)\s*Duty \/ DO Swap\s*<\/button>/g, '>$1 Request Swap</button>');
+          htmlOut = htmlOut.replace(/>(\s*<i class="fa-solid fa-arrows-rotate mr-1"><\/i>)Swap DO\s*<\/button>/g, '>$1Request DO Swap</button>');
+        }
+
+        const allReqs = window.getAllSwapRequestsAcrossActiveMonthsV61().filter(r => r.monthKey === selectedMonthKey);
+        const visibleReqs = allReqs.filter(r => {
+          if (isAdminOrTl || isSupervisor(u)) {
+            if (activeChannel !== 'ALL_CHANNELS' && getChannelForTeam(r.fromTeam) !== activeChannel) return false;
+            if (missingReportsTeamScope !== 'ALL' && normalizeTeamNameAlias(r.fromTeam) !== normalizeTeamNameAlias(missingReportsTeamScope) && normalizeTeamNameAlias(r.toTeam) !== normalizeTeamNameAlias(missingReportsTeamScope)) return false;
+            return true;
+          }
+          return String(r.fromUserId) === String(u.id) || String(r.toUserId) === String(u.id);
+        });
+
+        if (visibleReqs.length > 0) {
+          const panelHtml = `
+            <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-teal-200 mt-4">
+              <div class="px-5 py-3 bg-gradient-to-r from-teal-700 to-emerald-700 text-white flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs font-black uppercase tracking-wider">
+                  <i class="fa-solid fa-arrows-rotate text-amber-300 mr-1.5"></i>Mutual Agent Duty & Shift Swap Requests (${visibleReqs.length})
+                </span>
+                <span class="text-[11px] font-bold text-teal-100">
+                  ${isAdminOrTl ? 'TLs can apply direct swaps instantly; Agent-to-Agent swaps activate upon mutual partner acceptance.' : 'Swaps apply automatically across Missing Reports & Shift Reminders once accepted by partner.'}
+                </span>
+              </div>
+              <table class="w-full text-left text-xs whitespace-nowrap">
+                <thead class="table-header-light uppercase font-extrabold">
+                  <tr>
+                    <th class="p-3">Date</th>
+                    <th class="p-3">Swap Type</th>
+                    <th class="p-3">Requested By ➔ Partner</th>
+                    <th class="p-3">Shift / DO Details</th>
+                    <th class="p-3">Note</th>
+                    <th class="p-3 text-center">Status</th>
+                    <th class="p-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-semibold">
+                  ${visibleReqs.map(req => {
+                    const isInc = String(req.toUserId) === String(u.id);
+                    const isOut = String(req.fromUserId) === String(u.id);
+                    const stBadge = req.status === 'ACCEPTED'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : (req.status === 'DECLINED' || req.status === 'CANCELLED'
+                          ? 'bg-rose-100 text-rose-800 border-rose-300'
+                          : 'bg-amber-100 text-amber-900 border-amber-300');
+                    return `
+                      <tr class="${req.status === 'PENDING' && isInc ? 'bg-amber-50/70' : 'hover:bg-slate-50'}">
+                        <td class="p-3 font-extrabold text-slate-900">${cleanDisplayDate(req.date)}</td>
+                        <td class="p-3"><span class="px-2 py-0.5 rounded-lg bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-black">${req.swapMode === 'SAME_DAY_SHIFT' ? '🔄 Shift Swap' : '👥 DO Swap'}</span></td>
+                        <td class="p-3 font-extrabold text-slate-800">
+                          ${req.fromUserName} <i class="fa-solid fa-arrow-right-arrow-left text-teal-600 mx-1 text-[10px]"></i> ${req.toUserName}
+                        </td>
+                        <td class="p-3 text-[11px] font-bold text-slate-700">
+                          ${req.swapMode === 'SAME_DAY_SHIFT'
+                            ? `${req.fromUserName}: <strong>${req.fromOrigShift} → ${req.fromNewShift}</strong> • ${req.toUserName}: <strong>${req.toOrigShift} → ${req.toNewShift}</strong>`
+                            : `Off: <strong>${cleanDisplayDate(req.date)}</strong> • Covered: <strong>${cleanDisplayDate(req.coveredDate || req.date)} (${req.coveredShift})</strong>`}
+                        </td>
+                        <td class="p-3 text-[11px] text-slate-500 max-w-[180px] truncate" title="${req.reason || '-'}">${req.reason || '-'}</td>
+                        <td class="p-3 text-center">
+                          <span class="px-2.5 py-1 rounded-lg border text-[10px] font-black ${stBadge}">${req.status}</span>
+                        </td>
+                        <td class="p-3 text-right space-x-1">
+                          ${req.status === 'PENDING' && (isInc || isAdminOrTl) ? `
+                            <button type="button" onclick="window.handleRespondSwapRequestV61('${req.id}', '${req.monthKey}', 'ACCEPTED')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black cursor-pointer">Accept</button>
+                            <button type="button" onclick="window.handleRespondSwapRequestV61('${req.id}', '${req.monthKey}', 'DECLINED')" class="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg text-[10px] font-black cursor-pointer">Decline</button>
+                          ` : (req.status === 'PENDING' && isOut ? `
+                            <button type="button" onclick="window.handleRespondSwapRequestV61('${req.id}', '${req.monthKey}', 'CANCELLED')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-black cursor-pointer">Cancel</button>
+                          ` : `<span class="text-[10px] text-slate-400 font-bold">${req.respondedBy ? 'By ' + req.respondedBy : '-'}</span>`)}
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+          const lastDivIdx = htmlOut.lastIndexOf('</div>');
+          if (lastDivIdx !== -1) {
+            htmlOut = htmlOut.slice(0, lastDivIdx) + panelHtml + htmlOut.slice(lastDivIdx);
+          } else {
+            htmlOut += panelHtml;
+          }
+        }
+        return htmlOut;
+      };
+
+      window._seenSwapReqNotifSetV61 = new Set();
+
+      const _origHandleCloudDataV61 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && res.monthlyConfigs && typeof res.monthlyConfigs === 'object') {
+          const localCfg = getStored('monthly_configs', {});
+          Object.keys({ ...localCfg, ...res.monthlyConfigs }).forEach(cfgK => {
+            if (cfgK.startsWith('SWAP_REQUESTS_')) {
+              const locSw = (localCfg[cfgK] && typeof localCfg[cfgK] === 'object') ? localCfg[cfgK] : {};
+              const cldSw = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
+              const combined = { ...cldSw };
+              Object.keys(locSw).forEach(rk => {
+                const lIt = locSw[rk];
+                const cIt = cldSw[rk];
+                if (!cIt || Number((lIt && lIt.updatedTs) || 0) >= Number((cIt && cIt.updatedTs) || 0)) {
+                  combined[rk] = lIt;
+                }
+              });
+              res.monthlyConfigs[cfgK] = combined;
+            }
+          });
+        }
+        const out = _origHandleCloudDataV61(res);
+
+        try {
+          if (currentUser) {
+            const uid = String(currentUser.id).trim();
+            window.getAllSwapRequestsAcrossActiveMonthsV61().forEach(req => {
+              const sig = `${req.id}_${req.status}`;
+              if (window._seenSwapReqNotifSetV61.has(sig)) return;
+              if (req.status === 'PENDING' && String(req.toUserId).trim() === uid) {
+                window._seenSwapReqNotifSetV61.add(sig);
+                if (typeof pushUserNotification === 'function') {
+                  pushUserNotification(
+                    '🔄 New Duty Swap Request!',
+                    `${req.fromUserName} requested a ${req.swapMode === 'SAME_DAY_SHIFT' ? `Shift Swap (${req.fromOrigShift} ↔ ${req.fromNewShift})` : 'Day-Off Swap'} with you for ${cleanDisplayDate(req.date)}. Click Accept or Decline at the top!`,
+                    'swap_request',
+                    sig
+                  );
+                }
+              } else if ((req.status === 'ACCEPTED' || req.status === 'DECLINED') && String(req.fromUserId).trim() === uid) {
+                window._seenSwapReqNotifSetV61.add(sig);
+                if ((Date.now() - Number(req.updatedTs || 0)) < 120000 && typeof pushUserNotification === 'function') {
+                  pushUserNotification(
+                    req.status === 'ACCEPTED' ? '✅ Swap Request Accepted!' : '❌ Swap Request Declined',
+                    `${req.toUserName} ${req.status.toLowerCase()} your swap request for ${cleanDisplayDate(req.date)}.`,
+                    'swap_response',
+                    sig
+                  );
+                }
+              }
+            });
+          }
+        } catch (eNotif61) {}
+        return out;
+      };
+
+      const _origRenderAppLayoutV61 = renderAppLayout;
+      renderAppLayout = function() {
+        const res = _origRenderAppLayoutV61();
+        try {
+          if (currentUser) {
+            const mainEl = document.querySelector('main');
+            const bannerHtml = window.renderIncomingSwapRequestGlobalBannerV61();
+            if (mainEl && bannerHtml) {
+              mainEl.insertAdjacentHTML('afterbegin', bannerHtml);
+            }
+
+            if (!hasFeatureAccess(currentUser, 'feat_manage_all_sales')) {
+              const appRoot = document.getElementById('app');
+              if (appRoot && !document.getElementById('agentSwapRequestModal')) {
+                appRoot.insertAdjacentHTML('beforeend', window.renderAgentSwapRequestModalV61());
+              }
+            }
+
+            const incCount = window.getIncomingPendingSwapRequestsForUserV61(currentUser).length;
+            if (incCount > 0) {
+              const missBtn = document.querySelector('aside button[onclick="setTab(\'missing_reports\')"]');
+              if (missBtn && !missBtn.querySelector('.swap-req-sidebar-pill')) {
+                missBtn.insertAdjacentHTML('beforeend', `<span class="swap-req-sidebar-pill ml-1 px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black animate-bounce shadow">🔄 ${incCount}</span>`);
+              }
+            }
+          }
+        } catch (eLay61) {}
+        return res;
+      };
+
+      const _origGetAgentShiftV61 = getAgentTodayRosterShiftInfo;
+      getAgentTodayRosterShiftInfo = function(user) {
+        if (user) {
+          const todayStr = getTodayFormatted();
+          const mk = todayStr.substring(3);
+          const shiftSwaps = (window.getSameDayShiftSwapsStoreForMonth && window.getSameDayShiftSwapsStoreForMonth(mk)) || {};
+          const sw = shiftSwaps[`${String(user.id).trim()}_${todayStr}`];
+          if (sw && !sw.isRemoved && sw.newShift) {
+            const ns = String(sw.newShift).trim();
+            if (ns.toUpperCase() === 'DO') return { isDayOff: true, shiftLabel: 'DO (Swapped Day Off)', endText: 'Day Off' };
+            if (ns.toUpperCase().includes('NIGHT')) return { isDayOff: false, shiftLabel: 'Night (Swapped 11:00 PM – 7:00 AM)', endHour: 7, endMin: 0, endText: '7:00 AM', shiftDateKey: `${todayStr}_SWAP_NIGHT` };
+            const mTime = ns.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+            if (mTime) {
+              let sh = parseInt(mTime[1], 10);
+              const sm = parseInt(mTime[2] || '0', 10);
+              if (mTime[3].toUpperCase() === 'PM' && sh < 12) sh += 12;
+              if (mTime[3].toUpperCase() === 'AM' && sh === 12) sh = 0;
+              const endTotal = (sh * 60 + sm + 480) % 1440;
+              const endHour = Math.floor(endTotal / 60);
+              const endMin = endTotal % 60;
+              const endAp = endHour >= 12 ? 'PM' : 'AM';
+              const endHr12 = endHour % 12 === 0 ? 12 : endHour % 12;
+              const endText = `${endHr12}:${String(endMin).padStart(2, '0')} ${endAp}`;
+              return { isDayOff: false, shiftLabel: `${ns} – ${endText} (Swapped)`, endHour, endMin, endText, shiftDateKey: `${todayStr}_SWAP_${ns.replace(/\s+/g, '')}` };
+            }
+          }
+        }
+        return _origGetAgentShiftV61(user);
+      };
+
+      if (typeof window.renderIncentiveTabView === 'function') {
+        const _origRenderIncTabV61 = window.renderIncentiveTabView;
+        window.renderIncentiveTabView = function() {
+          let htmlOut = _origRenderIncTabV61();
+          if (currentUser && isSuperAdmin(currentUser)) {
+            const btnEditTl = `
+                <button type="button" onclick="openSprintRewardsConfigModal()" class="h-9 px-3.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Super Admin Only: Change Monthly TL 80%/100% Milestone Rewards">
+                  <i class="fa-solid fa-crown text-amber-300"></i> Edit TL Rewards
+                </button>`;
+            htmlOut = htmlOut.replace(
+              /(<button onclick="exportIncentiveTabCsv\(\)")/,
+              `${btnEditTl}\n                $1`
+            );
+          }
+          return htmlOut;
+        };
+      }
+    } catch (errV61) {
+      console.error('Non-fatal patch v61 warning:', errV61);
     }
 
 window.addEventListener('load', init);
