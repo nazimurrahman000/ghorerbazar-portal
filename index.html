@@ -5586,7 +5586,7 @@
           ` : ''}
 
           ${singleAgentObj ? (() => {
-            const dTargetSingle = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(singleAgentObj, selectedMonthKey).dailyTarget : Math.round(singleAgentObj.workTgt / 26);
+            const dTargetSingle = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(singleAgentObj, selectedMonthKey).tableDailyTarget : Math.round(singleAgentObj.workTgt / 26);
             const sumDailyTgtSingle = dTargetSingle * singleAgentObj.dailyLogs.length;
             return `
             <div class="space-y-3 mt-6">
@@ -9070,7 +9070,7 @@ function renderRankingAndComparison() {
       sales.forEach(s => {
         const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
         const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
-        const agDailyTarget = Math.round(agWorkTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+        const agDailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(agObj, selectedMonthKey).tableDailyTarget : Math.round(agWorkTarget / 26);
 
         sumLeads += Number(s.leads) || 0;
         sumOrders += Number(s.orders) || 0;
@@ -9174,7 +9174,7 @@ function renderRankingAndComparison() {
                 ${sales.map((s, idx) => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
                   const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
-                  const agDailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(agObj, selectedMonthKey).dailyTarget : Math.round(agWorkTarget / 26);
+                  const agDailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(agObj, selectedMonthKey).tableDailyTarget : Math.round(agWorkTarget / 26);
                   const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
                   const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
                   const isMe = String(s.userId) === String(u.id);
@@ -10321,7 +10321,7 @@ function renderRankingAndComparison() {
 
       const workingTarget = calcWorkingTargetFromBase((targetAgent.baseTarget !== undefined && targetAgent.baseTarget !== null) ? Number(targetAgent.baseTarget) : 1232174, targetAgent.team);
       const dailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function')
-        ? window.getAgentDynamicDailyTargetV62(targetAgent, selectedMonthKey).dailyTarget
+        ? window.getAgentDynamicDailyTargetV62(targetAgent, selectedMonthKey).tableDailyTarget
         : Math.round(workingTarget / 26);
 
       const leads = Number(document.getElementById('subLeads')?.value) || 0;
@@ -23567,8 +23567,8 @@ function renderChatHubView() {
         const livePreviewBox = document.getElementById('usrModalLiveScaleSummary');
         if (livePreviewBox) {
           const baseNum = Number(targetInp.value) || 0;
-          const workNum = Math.round(baseNum * 1.05);
-          const dailyNum = Math.round(workNum / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
+          const workNum = calcWorkingTargetFromBase(baseNum, chKey);
+          const dailyNum = Math.round(workNum / ((typeof window.getCalendarDaysInMonthKeyV62 === 'function') ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey) : 30));
           livePreviewBox.className = chKey === 'WHATSAPP'
             ? 'mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-900 flex flex-wrap items-center justify-between gap-2'
             : 'mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-900 flex flex-wrap items-center justify-between gap-2';
@@ -28730,8 +28730,13 @@ function renderChatHubView() {
           dailyTarget = Math.round(remainingTarget / remainingDutyDays);
         }
 
+        const baseDutyDayTarget = workingTarget > 0 ? Math.round(workingTarget / Math.max(1, totalDutyDaysInMonth)) : 0;
+        const tableDailyTarget = (status === 'ACHIEVED' || dailyTarget <= 0) ? baseDutyDayTarget : dailyTarget;
+
         return {
           dailyTarget,
+          tableDailyTarget,
+          baseDutyDayTarget,
           workingTarget,
           achieved,
           remainingTarget,
@@ -28751,7 +28756,7 @@ function renderChatHubView() {
       window.getAgentDynamicDailyTargetV62 = function(agentObj, mKey, preloadedMonthSales) {
         const mk = String(mKey || selectedMonthKey || getCurrentMonthKeyStr()).trim();
         if (!agentObj) {
-          return { dailyTarget: 0, remainingDutyDays: 0, totalLeaveAbsentDaysInMonth: 0, status: 'NO_TARGET' };
+          return { dailyTarget: 0, tableDailyTarget: 0, baseDutyDayTarget: 0, remainingDutyDays: 0, totalLeaveAbsentDaysInMonth: 0, status: 'NO_TARGET' };
         }
         const uid = String(agentObj.id).trim();
         const allMonthSales = Array.isArray(preloadedMonthSales)
@@ -28844,6 +28849,11 @@ function renderChatHubView() {
                   </div>`;
 
           htmlOut = htmlOut.replace(oldPillPattern, newPillHtml);
+          if (meta.mode === 'AGENT' && meta.status === 'ACHIEVED') {
+            htmlOut = htmlOut
+              .replace(/Daily: ৳0/g, '✅ 100% Target Hit!')
+              .replace(/(<span class="text-slate-400">Daily Target:<\/span>\s*<span class="text-slate-700">)৳0(<\/span>)/g, '$1✅ 100% Hit$2');
+          }
         } catch (eDash62) {}
         return htmlOut;
       };
