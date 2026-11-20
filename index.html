@@ -149,10 +149,10 @@
     function buildAvailableMonthsList() {
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       const list = [];
-      for (let y = 2026; y <= 2028; y++) {
+      const maxYear = Math.max(2029, new Date().getFullYear() + 3);
+      for (let y = 2026; y <= maxYear; y++) {
         for (let m = 1; m <= 12; m++) {
           if (y === 2026 && m < 10) continue;
-          if (y === 2028 && m > 6) continue;
           const key = `${String(m).padStart(2, '0')}/${y}`;
           list.push({ key, label: `${monthNames[m - 1]} ${y}` });
         }
@@ -758,7 +758,7 @@
 
     function isAnyModalOpen() {
       if (notificationDropdownOpen || profileMenuDropdownOpen) return true;
-      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal', 'sprintRewardsConfigModal'];
+      const modalIds = ['markLeaveModal', 'submitModal', 'userModal', 'breakModal', 'editAttModal', 'productConfigModal', 'gradeConfigModal', 'confirmWarningModal', 'aiImportModal', 'logoutConfirmModal', 'announceModal', 'driveProdModal', 'noticeBoardModal', 'profilePicModal', 'chatDeleteModal', 'customChatGroupModal', 'changePasswordModal', 'sprintRewardsConfigModal', 'masterPortalSettingsModal'];
       return modalIds.some(id => {
         const el = document.getElementById(id);
         return el && !el.classList.contains('hidden');
@@ -2001,7 +2001,7 @@
       }
 
       const workingTarget = calcWorkingTargetFromBase(baseTarget, activeChannel);
-      const dailyTarget = Math.round(workingTarget / 26);
+      const dailyTarget = Math.round(workingTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
 
       const d = new Date().getDate();
       let sprintName, sprintGoal, sprintPct;
@@ -4236,7 +4236,7 @@
             <div class="sprint-banner p-4 rounded-2xl shadow-sm flex flex-col justify-between">
               <div class="flex justify-between items-start">
                 <div>
-                  <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">Monthly Pace Tracker</span>
+                  <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">Monthly Progress Tracker</span>
                   <h3 class="text-base font-black text-slate-900 mt-1">Daily Goal (÷26 Days): ৳${tInfo.dailyTarget.toLocaleString()}</h3>
                 </div>
                 <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm shadow-sm">
@@ -4935,7 +4935,7 @@
           .sort((a, b) => (parseInt(a.date.split('/')[0], 10) || 0) - (parseInt(b.date.split('/')[0], 10) || 0));
         const baseTgt = Number(ag.baseTarget) || 0;
         const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
-        const dailyTgt = Math.round(workTgt / 26);
+        const dailyTgt = Math.round(workTgt / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
 
         const headers = [
           'Date', 'Emp ID', 'Agent Name', 'Team', 'Grade',
@@ -5056,7 +5056,7 @@
       const baseTargetSum = scopeAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
                             scopeTLs.reduce((s, t) => s + (Number(t.baseTarget) || defaultTlBase), 0);
       const workingTarget = calcWorkingTargetFromBase(baseTargetSum, activeChannel);
-      const dailyTarget = Math.round(workingTarget / 26);
+      const dailyTarget = Math.round(workingTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
 
       const headers = [
         'Date',
@@ -5151,7 +5151,7 @@
         const baseTarget = scopeAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
                            scopeTLs.reduce((s, t) => s + (Number(t.baseTarget) || defaultTlBase), 0);
         const workingTarget = calcWorkingTargetFromBase(baseTarget, activeChannel);
-        const dailyTarget = Math.round(workingTarget / 26);
+        const dailyTarget = Math.round(workingTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
 
         let sumLeads = 0, sumOrders = 0, sumAmount = 0;
 
@@ -5552,7 +5552,7 @@
           ` : ''}
 
           ${singleAgentObj ? (() => {
-            const dTargetSingle = Math.round(singleAgentObj.workTgt / 26);
+            const dTargetSingle = Math.round(singleAgentObj.workTgt / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
             const sumDailyTgtSingle = dTargetSingle * singleAgentObj.dailyLogs.length;
             return `
             <div class="space-y-3 mt-6">
@@ -5934,7 +5934,7 @@
         return `
           <td class="p-1 border border-slate-200 text-center ${cellClass}">
             <select onchange="handleRosterShiftChange('${row.id}', '${dKey}', this.value)" class="w-full bg-transparent text-center text-[11px] font-bold focus:outline-none cursor-pointer">
-              ${SHIFT_OPTIONS.map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('')}
+              ${(window.getActiveShiftOptionsV59 ? window.getActiveShiftOptionsV59() : SHIFT_OPTIONS).map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('')}
             </select>
           </td>
         `;
@@ -6431,7 +6431,7 @@
                     <div class="bg-white p-2 rounded-xl border border-slate-200">
                       <label class="block text-[10px] font-black uppercase text-slate-500 mb-1">${d.label}</label>
                       <select id="rosterAddShift_${d.key}" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-extrabold text-slate-900">
-                        ${SHIFT_OPTIONS.map(opt => `<option value="${opt}" ${(d.key === 'fri' ? opt === 'DO' : opt === '3:00 PM') ? 'selected' : ''}>${opt}</option>`).join('')}
+                        ${(window.getActiveShiftOptionsV59 ? window.getActiveShiftOptionsV59() : SHIFT_OPTIONS).map(opt => `<option value="${opt}" ${(d.key === 'fri' ? opt === 'DO' : opt === '3:00 PM') ? 'selected' : ''}>${opt}</option>`).join('')}
                       </select>
                     </div>
                   `).join('')}
@@ -7369,8 +7369,11 @@
     // =========================================================================
     function getAutoCurrentSprintPhase() {
       const d = new Date().getDate();
-      if (d <= 10) return 'S1';
-      if (d <= 20) return 'S2';
+      const rng = (typeof window.getSprintDateRangesForMonthV59 === 'function')
+        ? window.getSprintDateRangesForMonthV59(activeChannel, selectedMonthKey)
+        : { s1End: 10, s2End: 20 };
+      if (d <= rng.s1End) return 'S1';
+      if (d <= rng.s2End) return 'S2';
       return 'S3';
     }
 
@@ -7415,7 +7418,8 @@
         agSales.forEach(s => {
           const day = parseInt(String(s.date).split('/')[0], 10) || 0;
           const amt = Number(s.amount) || 0;
-          const isMatch = (effPhase === 'S1' && day <= 10) || (effPhase === 'S2' && day > 10 && day <= 20) || (effPhase === 'S3' && day > 20);
+          const spRngCsv = (typeof window.getSprintDateRangesForMonthV59 === 'function') ? window.getSprintDateRangesForMonthV59(activeChannel, selectedMonthKey) : { s1End: 10, s2End: 20 };
+          const isMatch = (effPhase === 'S1' && day <= spRngCsv.s1End) || (effPhase === 'S2' && day > spRngCsv.s1End && day <= spRngCsv.s2End) || (effPhase === 'S3' && day > spRngCsv.s2End);
           if (isMatch) {
             curSales += amt;
             activeSprintOrders += Number(s.orders) || 0;
@@ -7469,10 +7473,17 @@
       const spPctView = (typeof window.getSprintPctsForMonthV58 === 'function')
         ? window.getSprintPctsForMonthV58(activeChannel, selectedMonthKey)
         : { s1: 40, s2: 35, s3: 35 };
+      const spRngView = (typeof window.getSprintDateRangesForMonthV59 === 'function')
+        ? window.getSprintDateRangesForMonthV59(activeChannel, selectedMonthKey)
+        : { s1End: 10, s2End: 20 };
+      const s1E = String(spRngView.s1End).padStart(2, '0');
+      const s2S = String(spRngView.s1End + 1).padStart(2, '0');
+      const s2E = String(spRngView.s2End).padStart(2, '0');
+      const s3S = String(spRngView.s2End + 1).padStart(2, '0');
       const phaseInfo = {
-        S1: { key: 'S1', name: 'Sprint 1 (Days 1–10)', short: 'Sprint 1 (1–10)', dateRange: `01/${selectedMonthKey} – 10/${selectedMonthKey}`, pct: spPctView.s1 / 100, pctLabel: `${spPctView.s1}% of Monthly Target` },
-        S2: { key: 'S2', name: 'Sprint 2 (Days 11–20)', short: 'Sprint 2 (11–20)', dateRange: `11/${selectedMonthKey} – 20/${selectedMonthKey}`, pct: spPctView.s2 / 100, pctLabel: `${spPctView.s2}% of Monthly Target` },
-        S3: { key: 'S3', name: 'Sprint 3 (Days 21–31)', short: 'Sprint 3 (21–31)', dateRange: `21/${selectedMonthKey} – End of Month`, pct: spPctView.s3 / 100, pctLabel: `${spPctView.s3}% of Monthly Target` }
+        S1: { key: 'S1', name: `Sprint 1 (Days 1–${spRngView.s1End})`, short: `Sprint 1 (1–${spRngView.s1End})`, dateRange: `01/${selectedMonthKey} – ${s1E}/${selectedMonthKey}`, pct: spPctView.s1 / 100, pctLabel: `${spPctView.s1}% of Monthly Target` },
+        S2: { key: 'S2', name: `Sprint 2 (Days ${spRngView.s1End + 1}–${spRngView.s2End})`, short: `Sprint 2 (${spRngView.s1End + 1}–${spRngView.s2End})`, dateRange: `${s2S}/${selectedMonthKey} – ${s2E}/${selectedMonthKey}`, pct: spPctView.s2 / 100, pctLabel: `${spPctView.s2}% of Monthly Target` },
+        S3: { key: 'S3', name: `Sprint 3 (Days ${spRngView.s2End + 1}–31)`, short: `Sprint 3 (${spRngView.s2End + 1}–31)`, dateRange: `${s3S}/${selectedMonthKey} – End of Month`, pct: spPctView.s3 / 100, pctLabel: `${spPctView.s3}% of Monthly Target` }
       }[effPhase];
 
       let channelTLMilestones = [];
@@ -7521,10 +7532,10 @@
         agSales.forEach(s => {
           const day = parseInt(String(s.date).split('/')[0], 10) || 0;
           const amt = Number(s.amount) || 0;
-          if (day <= 10) {
+          if (day <= spRngView.s1End) {
             s1Sales += amt;
             if (effPhase === 'S1') { sprintOrders += Number(s.orders) || 0; sprintLeads += Number(s.leads) || 0; }
-          } else if (day <= 20) {
+          } else if (day <= spRngView.s2End) {
             s2Sales += amt;
             if (effPhase === 'S2') { sprintOrders += Number(s.orders) || 0; sprintLeads += Number(s.leads) || 0; }
           } else {
@@ -9025,7 +9036,7 @@ function renderRankingAndComparison() {
       sales.forEach(s => {
         const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
         const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
-        const agDailyTarget = Math.round(agWorkTarget / 26);
+        const agDailyTarget = Math.round(agWorkTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
 
         sumLeads += Number(s.leads) || 0;
         sumOrders += Number(s.orders) || 0;
@@ -9129,7 +9140,7 @@ function renderRankingAndComparison() {
                 ${sales.map((s, idx) => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
                   const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
-                  const agDailyTarget = Math.round(agWorkTarget / 26);
+                  const agDailyTarget = Math.round(agWorkTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
                   const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
                   const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
                   const isMe = String(s.userId) === String(u.id);
@@ -10043,15 +10054,12 @@ function renderRankingAndComparison() {
                   <label class="block text-xs font-extrabold text-slate-600 uppercase mb-1">Channel & Team</label>
                   <select id="usrTeam" class="w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
                     ${isNazim ? `
-                      <optgroup label="Facebook Channel">
-                        <option value="Team Nazim">Team Nazim (Facebook)</option>
-                        <option value="Team Samad">Team Samad (Facebook)</option>
+                      <optgroup label="Facebook Channel (${getDynamicTeamsForChannel('FACEBOOK').length} Teams)">
+                        ${getDynamicTeamsForChannel('FACEBOOK').map(tn => `<option value="${tn}">${tn} (Facebook)</option>`).join('')}
                         <option value="Floating">Floating Pool (Facebook)</option>
                       </optgroup>
-                      <optgroup label="WhatsApp Channel (3 Teams)">
-                        <option value="Team Shakib Baksh">Team Shakib Baksh (WhatsApp)</option>
-                        <option value="Team Parvaj">Team Parvaj (WhatsApp)</option>
-                        <option value="Team Saikat">Team Saikat (WhatsApp)</option>
+                      <optgroup label="WhatsApp Channel (${getDynamicTeamsForChannel('WHATSAPP').length} Teams)">
+                        ${getDynamicTeamsForChannel('WHATSAPP').map(tn => `<option value="${tn}">${tn} (WhatsApp)</option>`).join('')}
                         <option value="WA Floating">WA Floating Pool (WhatsApp)</option>
                       </optgroup>
                       <optgroup label="Supervisors">
@@ -10278,7 +10286,7 @@ function renderRankingAndComparison() {
       const targetAgent = allUsers.find(usr => String(usr.id) === String(agentId)) || u;
 
       const workingTarget = calcWorkingTargetFromBase((targetAgent.baseTarget !== undefined && targetAgent.baseTarget !== null) ? Number(targetAgent.baseTarget) : 1232174, targetAgent.team);
-      const dailyTarget = Math.round(workingTarget / 26);
+      const dailyTarget = Math.round(workingTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
 
       const leads = Number(document.getElementById('subLeads')?.value) || 0;
       const orders = Number(document.getElementById('subOrders')?.value) || 0;
@@ -17802,7 +17810,7 @@ function renderChatHubView() {
         const rows = dateSales.map((s, idx) => {
           const agObj = allUsersOmni.find(usr => String(usr.id) === String(s.userId)) || u;
           const workTgt = calcWorkingTargetFromBase(Number(agObj.baseTarget) || 0, agObj.team);
-          const dTgt = Math.round(workTgt / 26);
+          const dTgt = Math.round(workTgt / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
           const l = Number(s.leads) || 0, o = Number(s.orders) || 0, amt = Number(s.amount) || 0;
           sumL += l; sumO += o; sumAmt += amt; sumTgt += dTgt;
           const conv = l > 0 ? ((o / l) * 100).toFixed(2) + '%' : '0.00%';
@@ -17845,7 +17853,7 @@ function renderChatHubView() {
             .sort((a, b) => (parseInt(a.date.split('/')[0], 10) || 0) - (parseInt(b.date.split('/')[0], 10) || 0));
           const baseTgt = Number(ag.baseTarget) || 0;
           const workTgt = calcWorkingTargetFromBase(baseTgt, getChannelForTeam(ag.team));
-          const dailyTgt = Math.round(workTgt / 26);
+          const dailyTgt = Math.round(workTgt / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
 
           const headers = [
             'Date', 'Emp ID', 'Agent Name', 'Team', 'Grade',
@@ -19096,12 +19104,15 @@ function renderChatHubView() {
                 const s1Goal = Math.round(tInfo.workingTarget * (spPctDash.s1 / 100));
                 const s2Goal = Math.round(tInfo.workingTarget * (spPctDash.s2 / 100));
                 const s3Goal = Math.round(tInfo.workingTarget * (spPctDash.s3 / 100));
+                const spRngDash = (typeof window.getSprintDateRangesForMonthV59 === 'function')
+                  ? window.getSprintDateRangesForMonthV59(getChannelForTeam(u.team), selectedMonthKey)
+                  : { s1End: 10, s2End: 20 };
                 let s1Amt = 0, s2Amt = 0, s3Amt = 0;
                 thisMonthSales.forEach(s => {
                   const day = parseInt(String(s.date).split('/')[0], 10) || 0;
                   const val = Number(s.amount) || 0;
-                  if (day <= 10) s1Amt += val;
-                  else if (day <= 20) s2Amt += val;
+                  if (day <= spRngDash.s1End) s1Amt += val;
+                  else if (day <= spRngDash.s2End) s2Amt += val;
                   else s3Amt += val;
                 });
                 const s1Pct = s1Goal > 0 ? Math.min(100, Math.round((s1Amt / s1Goal) * 100)) : 0;
@@ -19125,17 +19136,17 @@ function renderChatHubView() {
                   </div>
                   <div class="grid grid-cols-3 gap-2.5 text-center">
                     <div onclick="sprintTabPhase='S1'; setTab('sprint_target');" class="p-2.5 rounded-xl bg-white hover:bg-blue-50/50 cursor-pointer border border-blue-200/80 shadow-2xs" title="Click to open Sprint 1 (Days 1–10) full leaderboard">
-                      <span class="text-[10px] font-black uppercase text-slate-500 block">Sprint 1 (1–10)</span>
+                      <span class="text-[10px] font-black uppercase text-slate-500 block">Sprint 1 (1–${spRngDash.s1End})</span>
                       <strong class="text-xs font-black text-blue-700 block mt-0.5">৳${s1Amt.toLocaleString()}</strong>
                       <span class="text-[10px] font-extrabold text-emerald-600">${s1Pct}%</span>
                     </div>
                     <div onclick="sprintTabPhase='S2'; setTab('sprint_target');" class="p-2.5 rounded-xl bg-white hover:bg-blue-50/50 cursor-pointer border border-blue-200/80 shadow-2xs" title="Click to open Sprint 2 (Days 11–20) full leaderboard">
-                      <span class="text-[10px] font-black uppercase text-slate-500 block">Sprint 2 (11–20)</span>
+                      <span class="text-[10px] font-black uppercase text-slate-500 block">Sprint 2 (${spRngDash.s1End + 1}–${spRngDash.s2End})</span>
                       <strong class="text-xs font-black text-blue-700 block mt-0.5">৳${s2Amt.toLocaleString()}</strong>
                       <span class="text-[10px] font-extrabold text-emerald-600">${s2Pct}%</span>
                     </div>
                     <div onclick="sprintTabPhase='S3'; setTab('sprint_target');" class="p-2.5 rounded-xl bg-white hover:bg-blue-50/50 cursor-pointer border border-blue-200/80 shadow-2xs" title="Click to open Sprint 3 (Days 21–31) full leaderboard">
-                      <span class="text-[10px] font-black uppercase text-slate-500 block">Sprint 3 (21–31)</span>
+                      <span class="text-[10px] font-black uppercase text-slate-500 block">Sprint 3 (${spRngDash.s2End + 1}–31)</span>
                       <strong class="text-xs font-black text-blue-700 block mt-0.5">৳${s3Amt.toLocaleString()}</strong>
                       <span class="text-[10px] font-extrabold text-emerald-600">${s3Pct}%</span>
                     </div>
@@ -19155,7 +19166,7 @@ function renderChatHubView() {
               <div class="card-dynamic p-5 bg-gradient-to-br from-blue-50/70 via-white to-indigo-50/60 border-2 border-blue-200/90 flex flex-col justify-between">
                 <div class="flex justify-between items-start">
                   <div>
-                    <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">Monthly Pace Tracker</span>
+                    <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">Monthly Progress Tracker</span>
                     <h3 class="text-base font-black text-slate-900 mt-1">Daily Target (÷26 Days): ৳${tInfo.dailyTarget.toLocaleString()}</h3>
                   </div>
                   <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm shadow-xs">
@@ -21256,7 +21267,7 @@ function renderChatHubView() {
         if (livePreviewBox) {
           const baseNum = Number(targetInp.value) || 0;
           const workNum = calcWorkingTargetFromBase(baseNum, chKey);
-          const dailyNum = Math.round(workNum / 26);
+          const dailyNum = Math.round(workNum / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
           livePreviewBox.className = chKey === 'WHATSAPP'
             ? 'mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-900 flex flex-wrap items-center justify-between gap-2'
             : 'mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-900 flex flex-wrap items-center justify-between gap-2';
@@ -23367,7 +23378,7 @@ function renderChatHubView() {
         if (livePreviewBox) {
           const baseNum = Number(targetInp.value) || 0;
           const workNum = Math.round(baseNum * 1.05);
-          const dailyNum = Math.round(workNum / 26);
+          const dailyNum = Math.round(workNum / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
           livePreviewBox.className = chKey === 'WHATSAPP'
             ? 'mt-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-900 flex flex-wrap items-center justify-between gap-2'
             : 'mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-[11px] font-bold text-blue-900 flex flex-wrap items-center justify-between gap-2';
@@ -23757,7 +23768,7 @@ function renderChatHubView() {
         }
 
         const workingTarget = calcWorkingTargetFromBase(baseTarget, activeChannel);
-        const dailyTarget = Math.round(workingTarget / 26);
+        const dailyTarget = Math.round(workingTarget / (window.getWorkingDaysDivisorForMonthV59 ? window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey) : 26));
 
         const d = new Date().getDate();
         let sprintName, sprintGoal, sprintPct;
@@ -25099,7 +25110,7 @@ function renderChatHubView() {
                     <i class="fa-regular fa-calendar-check mr-1"></i>Day ${mtd.elapsedDays} / ${mtd.daysInMonth}
                   </span>
                 </div>
-                <p class="text-[11px] font-bold text-slate-500 mt-0.5 truncate">Target achievement pace up to today (${selectedMonthKey})</p>
+                <p class="text-[11px] font-bold text-slate-500 mt-0.5 truncate">Target Progress Till Today</p>
               </div>
             </div>
 
@@ -25113,12 +25124,12 @@ function renderChatHubView() {
                 <strong class="text-xs sm:text-sm font-black ${mtd.textCls}">৳${mtd.achieved.toLocaleString()}</strong>
               </div>
               <div class="px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
-                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">MTD Pace Status</span>
+                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">MTD Target Status</span>
                 <div class="text-xs">${varianceHtml}</div>
               </div>
               <div class="hidden 2xl:block w-32">
                 <div class="flex justify-between text-[9px] font-black text-slate-500 mb-1">
-                  <span>Pace Bar</span>
+                  <span>Progress Bar</span>
                   <span class="${mtd.textCls}">${mtd.mtdRatioStr}%</span>
                 </div>
                 <div class="w-full h-2 bg-slate-200/80 rounded-full overflow-hidden">
@@ -25128,14 +25139,10 @@ function renderChatHubView() {
             </div>
 
             <div class="flex items-center gap-2.5 shrink-0 self-start xl:self-auto">
-              <div class="px-3.5 py-2 rounded-xl ${mtd.badgeCls} shadow-sm flex items-center gap-2.5">
-                <div class="text-right leading-none">
-                  <span class="text-[9px] font-black uppercase opacity-90 block">MTD Achieved</span>
+              <div class="px-4 py-2 rounded-xl ${mtd.badgeCls} shadow-sm flex items-center justify-center min-w-[116px]">
+                <div class="text-center leading-none">
+                  <span class="text-[9px] font-black uppercase opacity-90 block mb-0.5">MTD Achieved</span>
                   <span class="text-lg font-black tracking-tight">${mtd.mtdRatioStr}%</span>
-                </div>
-                <div class="pl-2.5 border-l border-white/25 text-[10px] font-black flex items-center gap-1">
-                  <i class="fa-solid ${mtd.statusIcon}"></i>
-                  <span>${mtd.statusLabel}</span>
                 </div>
               </div>
             </div>
@@ -25950,7 +25957,7 @@ function renderChatHubView() {
               <form onsubmit="handleSaveGradeConfig(event)" class="space-y-3">
                 ${gradesList.map(g => {
                   const baseVal = Number(gMap[g.key] || 0);
-                  const workVal = Math.round(baseVal * 1.05);
+                  const workVal = calcWorkingTargetFromBase(baseVal, ch, selectedMonthKey);
                   return `
                     <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
                       <div>
@@ -26268,6 +26275,1225 @@ function renderChatHubView() {
       };
     } catch (errV58) {
       console.error('Non-fatal patch v58 warning:', errV58);
+    }
+
+
+    // =========================================================================
+    // PATCH v59 (index-v38.html) — COMPLETE ZERO-CODE FUTURE-PROOFING ENGINE
+    // Permission Policy (Zero Existing Restrictions Added!):
+    //  • Super Admin Only (Nazim 10122):
+    //      1. Master Settings Modal: Working Buffer % (+5%) & Daily Divisor (÷26)
+    //      2. Dynamic Teams Manager (Add / Rename / Remove Teams for FB & WA)
+    //      3. Dynamic Duty Shift Times (e.g. Ramadan 8:00 AM, 2:00 PM) + Auto 8h Reminders
+    //      4. Sprint Date Ranges (Days 1–10, 11–20, 21–31) inside Sprint Rewards Modal
+    //  • All Admins with existing feature access (unchanged + enhanced):
+    //      5. AI ERP Scan Keywords per Product (inside Edit Product Targets) + Custom
+    //         7th/8th+ product AI scanning & submission support
+    //  • Automatic for Everyone:
+    //      6. Auto-Rolling Calendar Months Dropdown (never expires!)
+    // =========================================================================
+    try {
+      // -----------------------------------------------------------------------
+      // PART 1: MASTER CONFIG READERS (Buffer %, Working Days, Teams, Shifts, Sprint Dates)
+      // -----------------------------------------------------------------------
+      window.getPortalMasterConfigV59 = function() {
+        const configs = getStored('monthly_configs', {});
+        const saved = (configs['PORTAL_MASTER_CONFIG'] && typeof configs['PORTAL_MASTER_CONFIG'] === 'object')
+          ? configs['PORTAL_MASTER_CONFIG']
+          : {};
+        const fbTeams = (saved.teams && Array.isArray(saved.teams.FACEBOOK) && saved.teams.FACEBOOK.length > 0)
+          ? saved.teams.FACEBOOK.slice()
+          : [...CHANNEL_META.FACEBOOK.teams];
+        const waTeams = (saved.teams && Array.isArray(saved.teams.WHATSAPP) && saved.teams.WHATSAPP.length > 0)
+          ? saved.teams.WHATSAPP.slice()
+          : [...CHANNEL_META.WHATSAPP.teams];
+        const shifts = (Array.isArray(saved.shifts) && saved.shifts.length > 0)
+          ? saved.shifts.slice()
+          : [...SHIFT_OPTIONS];
+        return {
+          teams: { FACEBOOK: fbTeams, WHATSAPP: waTeams },
+          shifts
+        };
+      };
+
+      window.getBufferPctForMonthV59 = function(teamOrChannel, mKey) {
+        const mk = mKey || selectedMonthKey;
+        let ch = 'FACEBOOK';
+        if (teamOrChannel === 'WHATSAPP') ch = 'WHATSAPP';
+        else if (teamOrChannel === 'FACEBOOK') ch = 'FACEBOOK';
+        else if (teamOrChannel && teamOrChannel !== 'ALL_CHANNELS') ch = getChannelForTeam(teamOrChannel);
+        else if (activeChannel === 'WHATSAPP') ch = 'WHATSAPP';
+
+        const configs = getStored('monthly_configs', {});
+        const effKey = ch === 'WHATSAPP' ? `WA_${mk}` : mk;
+        const chCfg = configs[effKey] || {};
+        const fbCfg = configs[mk] || {};
+        if (chCfg.bufferPct !== undefined && chCfg.bufferPct !== null && chCfg.bufferPct !== '') {
+          return Math.max(0, Number(chCfg.bufferPct));
+        }
+        if (fbCfg.bufferPct !== undefined && fbCfg.bufferPct !== null && fbCfg.bufferPct !== '') {
+          return Math.max(0, Number(fbCfg.bufferPct));
+        }
+        return 5;
+      };
+
+      window.getWorkingDaysDivisorForMonthV59 = function(teamOrChannel, mKey) {
+        const mk = mKey || selectedMonthKey;
+        let ch = 'FACEBOOK';
+        if (teamOrChannel === 'WHATSAPP') ch = 'WHATSAPP';
+        else if (teamOrChannel === 'FACEBOOK') ch = 'FACEBOOK';
+        else if (teamOrChannel && teamOrChannel !== 'ALL_CHANNELS') ch = getChannelForTeam(teamOrChannel);
+        else if (activeChannel === 'WHATSAPP') ch = 'WHATSAPP';
+
+        const configs = getStored('monthly_configs', {});
+        const effKey = ch === 'WHATSAPP' ? `WA_${mk}` : mk;
+        const chCfg = configs[effKey] || {};
+        const fbCfg = configs[mk] || {};
+        if (Number(chCfg.workingDaysDivisor) > 0) return Math.round(Number(chCfg.workingDaysDivisor));
+        if (Number(fbCfg.workingDaysDivisor) > 0) return Math.round(Number(fbCfg.workingDaysDivisor));
+        return 26;
+      };
+
+      window.getActiveShiftOptionsV59 = function() {
+        return window.getPortalMasterConfigV59().shifts;
+      };
+
+      window.getSprintDateRangesForMonthV59 = function(chKey, mKey) {
+        const mk = mKey || selectedMonthKey;
+        const ch = (chKey === 'WHATSAPP' || (chKey !== 'FACEBOOK' && activeChannel === 'WHATSAPP')) ? 'WHATSAPP' : 'FACEBOOK';
+        const configs = getStored('monthly_configs', {});
+        const effKey = ch === 'WHATSAPP' ? `WA_${mk}` : mk;
+        const saved = (configs[effKey] && configs[effKey].sprintRanges) || (configs[mk] && configs[mk].sprintRanges) || {};
+        const s1End = Math.min(25, Math.max(1, Number(saved.s1End) || 10));
+        const s2End = Math.min(30, Math.max(s1End + 1, Number(saved.s2End) || 20));
+        return { s1End, s2End };
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 2: HOOK CORE CALCULATORS (Buffer %, Dynamic Teams, Dynamic Shifts)
+      // -----------------------------------------------------------------------
+      calcWorkingTargetFromBase = function(baseTargetVal, teamOrChannel, mKey) {
+        const base = Number(baseTargetVal) || 0;
+        const bufPct = window.getBufferPctForMonthV59(teamOrChannel, mKey || selectedMonthKey);
+        return Math.round(base * (1 + (bufPct / 100)));
+      };
+
+      const _origGetChannelForTeamV59 = getChannelForTeam;
+      getChannelForTeam = function(teamName) {
+        const t = normalizeTeamNameAlias(teamName);
+        const mc = window.getPortalMasterConfigV59();
+        if (mc.teams.WHATSAPP.includes(t)) return 'WHATSAPP';
+        if (mc.teams.FACEBOOK.includes(t)) return 'FACEBOOK';
+        return _origGetChannelForTeamV59(teamName);
+      };
+
+      getDynamicTeamsForChannel = function(chKey) {
+        const mc = window.getPortalMasterConfigV59();
+        let baseList = [];
+        if (chKey === 'ALL_CHANNELS') {
+          baseList = [...mc.teams.FACEBOOK, ...mc.teams.WHATSAPP];
+        } else if (chKey === 'WHATSAPP') {
+          baseList = [...mc.teams.WHATSAPP];
+        } else {
+          baseList = [...mc.teams.FACEBOOK];
+        }
+        try {
+          const storedUsers = getStored('users', DEFAULT_USERS);
+          storedUsers.forEach(u => {
+            if (!u || u.role === 'supervisor' || !u.team) return;
+            const t = normalizeTeamNameAlias(u.team);
+            if (t === 'Floating' || t === 'WA Floating' || t === 'All Teams' || t === 'Pending') return;
+            const tCh = (u.channel === 'WHATSAPP' || getChannelForTeam(t) === 'WHATSAPP') ? 'WHATSAPP' : 'FACEBOOK';
+            if (chKey === 'ALL_CHANNELS' || chKey === tCh) {
+              if (!baseList.includes(t)) baseList.push(t);
+            }
+          });
+        } catch (e) {}
+        return baseList;
+      };
+
+      // Upgrade getTargetData to use dynamic sprint date ranges & dynamic daily working days divisor!
+      const _origGetTargetDataV59 = getTargetData;
+      getTargetData = function(user, scopeOverride, mKey) {
+        const res = _origGetTargetDataV59(user, scopeOverride, mKey);
+        try {
+          const mk = mKey || selectedMonthKey;
+          const chForCalc = (activeChannel === 'WHATSAPP' || (user && !canViewAll(user) && getChannelForTeam(user.team) === 'WHATSAPP')) ? 'WHATSAPP' : 'FACEBOOK';
+          const sp = window.getSprintPctsForMonthV58(chForCalc, mk);
+          const rng = window.getSprintDateRangesForMonthV59(chForCalc, mk);
+          const divDays = window.getWorkingDaysDivisorForMonthV59(chForCalc, mk);
+          res.dailyTarget = Math.round(res.workingTarget / divDays);
+
+          const d = new Date().getDate();
+          if (d <= rng.s1End) {
+            res.sprintName = `Sprint 1 (Days 1–${rng.s1End})`;
+            res.sprintPct = sp.s1 / 100;
+            res.sprintGoal = Math.round(res.workingTarget * res.sprintPct);
+          } else if (d <= rng.s2End) {
+            res.sprintName = `Sprint 2 (Days ${rng.s1End + 1}–${rng.s2End})`;
+            res.sprintPct = sp.s2 / 100;
+            res.sprintGoal = Math.round(res.workingTarget * res.sprintPct);
+          } else {
+            res.sprintName = `Sprint 3 (Days ${rng.s2End + 1}–31)`;
+            res.sprintPct = sp.s3 / 100;
+            res.sprintGoal = Math.round(res.workingTarget * res.sprintPct);
+          }
+        } catch (eT59) {}
+        return res;
+      };
+
+      // Upgrade computeSingleAgentSprintIncentive to respect dynamic Sprint Date Ranges (s1End / s2End)!
+      window.computeSingleAgentSprintIncentive = function(agentObj, monthSalesList, mKey) {
+        const mk = mKey || selectedMonthKey;
+        if (!agentObj || !isSprintSystemActiveForMonth(mk)) {
+          return { sprintMoney: 0, sprintBadges: [] };
+        }
+        const chKey = getChannelForTeam(agentObj.team) === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        const gradeKey = agentObj.role === 'admin' ? 'TL' : (agentObj.grade || 'A');
+        const progMap = window.getSprintRewardProgramForMonthV58(chKey, mk);
+        const rewardSpec = progMap[gradeKey] || progMap['A'] || SPRINT_REWARD_PROGRAM.FACEBOOK['A'];
+        const spPcts = window.getSprintPctsForMonthV58(chKey, mk);
+        const spRng = window.getSprintDateRangesForMonthV59(chKey, mk);
+
+        const baseTgt = Number(agentObj.baseTarget) || 0;
+        const workTgt = calcWorkingTargetFromBase(baseTgt, chKey, mk);
+        if (workTgt <= 0) return { sprintMoney: 0, sprintBadges: [] };
+
+        const s1Goal = Math.round(workTgt * (spPcts.s1 / 100));
+        const s2Goal = Math.round(workTgt * (spPcts.s2 / 100));
+        const s3Goal = Math.round(workTgt * (spPcts.s3 / 100));
+
+        const agSales = deduplicateSalesRecordsList(monthSalesList).filter(s =>
+          String(s.userId).trim() === String(agentObj.id).trim() &&
+          String(s.date || '').endsWith(mk) &&
+          !String(s.date || '').startsWith('MONTHLY_PROD_')
+        );
+
+        let s1Sales = 0, s2Sales = 0, s3Sales = 0;
+        agSales.forEach(s => {
+          const day = parseInt(String(s.date).split('/')[0], 10) || 0;
+          const amt = Number(s.amount) || 0;
+          if (day <= spRng.s1End) s1Sales += amt;
+          else if (day <= spRng.s2End) s2Sales += amt;
+          else s3Sales += amt;
+        });
+
+        const hitS1 = s1Goal > 0 && s1Sales >= s1Goal;
+        const hitS2 = s2Goal > 0 && s2Sales >= s2Goal;
+        const hitS3 = s3Goal > 0 && s3Sales >= s3Goal;
+        const hitCount = (hitS1 ? 1 : 0) + (hitS2 ? 1 : 0) + (hitS3 ? 1 : 0);
+
+        let sprintMoney = 0;
+        const sprintBadges = [];
+
+        if (hitCount === 3) {
+          sprintMoney = Number(rewardSpec.all3) || ((Number(rewardSpec.s1) || 0) + (Number(rewardSpec.s2) || 0) + (Number(rewardSpec.s3) || 0));
+          sprintBadges.push(`🏆 All 3 Sprints Hit: ৳${sprintMoney.toLocaleString()}`);
+        } else {
+          if (hitS1) { sprintMoney += Number(rewardSpec.s1) || 0; sprintBadges.push(`⚡ Sprint 1 (100%): ৳${Number(rewardSpec.s1).toLocaleString()}`); }
+          if (hitS2) { sprintMoney += Number(rewardSpec.s2) || 0; sprintBadges.push(`⚡ Sprint 2 (100%): ৳${Number(rewardSpec.s2).toLocaleString()}`); }
+          if (hitS3) { sprintMoney += Number(rewardSpec.s3) || 0; sprintBadges.push(`⚡ Sprint 3 (100%): ৳${Number(rewardSpec.s3).toLocaleString()}`); }
+          if (hitCount === 2 && Number(rewardSpec.any2Extra) > 0) {
+            sprintMoney += Number(rewardSpec.any2Extra);
+            sprintBadges.push(`🔥 2-Sprint Combo Bonus: +৳${Number(rewardSpec.any2Extra).toLocaleString()}`);
+          }
+        }
+
+        const totalMonthlySales = s1Sales + s2Sales + s3Sales;
+        if (totalMonthlySales >= workTgt && Number(rewardSpec.total100) > sprintMoney) {
+          return {
+            sprintMoney: Number(rewardSpec.total100),
+            sprintBadges: [`🎯 100% Monthly Target Achieved: ৳${Number(rewardSpec.total100).toLocaleString()}`]
+          };
+        }
+        return { sprintMoney, sprintBadges };
+      };
+
+      // Upgrade getAgentTodayRosterShiftInfo so ANY custom shift time (e.g., "8:00 AM", "2:00 PM")
+      // automatically calculates its 8-hour end time for the 5-min shift-end reminder!
+      const _origGetAgentShiftInfoV59 = getAgentTodayRosterShiftInfo;
+      getAgentTodayRosterShiftInfo = function(user) {
+        if (!user) return _origGetAgentShiftInfoV59(user);
+        const now = new Date();
+        const mKey = `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+        const rosterList = getRosterForMonth(mKey);
+        const myRoster = rosterList.find(r => String(r.id) === String(user.id));
+        if (!myRoster) return _origGetAgentShiftInfoV59(user);
+
+        const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+        const todayShift = String(myRoster[dayKeys[now.getDay()]] || '').trim();
+        const up = todayShift.toUpperCase();
+        // Let built-in handler deal with DO, Night, 7:00 AM, 10:00 AM, 3:00 PM
+        if (!todayShift || up === 'DO' || up.includes('OFF') || up.includes('NIGHT') || todayShift.includes('7:00') || todayShift.includes('10:00') || todayShift.includes('3:00')) {
+          return _origGetAgentShiftInfoV59(user);
+        }
+        // Parse any custom shift time like "8:00 AM", "9:00 AM", "2:00 PM", "1:30 PM" -> +8 hours
+        const mTime = todayShift.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+        if (mTime) {
+          let sh = parseInt(mTime[1], 10);
+          const sm = parseInt(mTime[2] || '0', 10);
+          const ap = mTime[3].toUpperCase();
+          if (ap === 'PM' && sh < 12) sh += 12;
+          if (ap === 'AM' && sh === 12) sh = 0;
+          const endTotal = (sh * 60 + sm + 480) % 1440;
+          const endHour = Math.floor(endTotal / 60);
+          const endMin = endTotal % 60;
+          const endAp = endHour >= 12 ? 'PM' : 'AM';
+          const endHr12 = endHour % 12 === 0 ? 12 : endHour % 12;
+          const endText = `${endHr12}:${String(endMin).padStart(2, '0')} ${endAp}`;
+          return {
+            isDayOff: false,
+            shiftLabel: `${todayShift} – ${endText}`,
+            endHour,
+            endMin,
+            endText,
+            shiftDateKey: `${getTodayFormatted()}_${todayShift.replace(/\s+/g, '')}`
+          };
+        }
+        return _origGetAgentShiftInfoV59(user);
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 3: DYNAMIC AI ERP SCAN KEYWORDS (ALL ADMINS WITH feat_edit_products)
+      // -----------------------------------------------------------------------
+      window.DEFAULT_AI_PRODUCT_KEYWORDS_V59 = {
+        ajwa: 'ajwa, khejuri, dates, 130210',
+        pinkSalt: 'pink salt, himalayan, salt, 180024',
+        blackGarlic: 'black garlic, garlic, 200054',
+        sunHoney: 'sundarban, sundorban, shunderban, sun.h, 000008, 000009, 000214',
+        bsHoney: 'black seed honey, bs.h, kalojira, 150052, 150205, 150133',
+        gawaGhee: 'gawa ghee, ghee, shosti food, 120048, 120055, 120068'
+      };
+
+      // Inject "AI Scan Keywords" input inside Edit Product Targets modal
+      const _origRenderProdCfgModalV59 = renderProductConfigModal;
+      renderProductConfigModal = function() {
+        let htmlOut = _origRenderProdCfgModalV59();
+        try {
+          const allProds = getAllConfiguredProductsForMonth(selectedMonthKey);
+          Object.keys(allProds).forEach(k => {
+            const p = allProds[k];
+            const kwVal = String(
+              p.aiKeywords !== undefined
+                ? p.aiKeywords
+                : (window.DEFAULT_AI_PRODUCT_KEYWORDS_V59[k] || String(p.name || '').toLowerCase())
+            ).replace(/"/g, '&quot;');
+            const marker = `id="cfg_extraUnit_${k}"`;
+            const idxM = htmlOut.indexOf(marker);
+            if (idxM !== -1) {
+              const closeRowDiv = htmlOut.indexOf('</div>\n                      </div>', idxM);
+              if (closeRowDiv !== -1) {
+                const kwHtml = `
+                        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center pt-1.5 border-t border-slate-200/50">
+                          <div class="sm:col-span-1"></div>
+                          <div class="sm:col-span-11">
+                            <label class="block text-[10px] font-bold text-purple-700 uppercase mb-0.5"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>AI ERP Scan Keywords (comma-separated — lets AI auto-detect this product in uploaded screenshots)</label>
+                            <input type="text" id="cfg_aiKw_${k}" value="${kwVal}" placeholder="e.g. mustard oil, sorisha, oil" class="w-full px-2.5 py-1.5 bg-white border border-purple-200 rounded-lg text-xs font-bold text-slate-800">
+                          </div>
+                        </div>`;
+                const insertPos = closeRowDiv + '</div>'.length;
+                htmlOut = htmlOut.slice(0, insertPos) + kwHtml + htmlOut.slice(insertPos);
+              }
+            }
+          });
+        } catch (kwErr) {}
+        return htmlOut;
+      };
+
+      const _origSyncProdModalV59 = syncProductModalInputsToStorage;
+      syncProductModalInputsToStorage = function() {
+        const res = _origSyncProdModalV59();
+        try {
+          const allProds = getAllConfiguredProductsForMonth(selectedMonthKey);
+          Object.keys(allProds).forEach(k => {
+            const kwEl = document.getElementById(`cfg_aiKw_${k}`);
+            if (!kwEl) return;
+            const kwClean = String(kwEl.value || '').trim();
+            (res.targetKeys || []).forEach(tk => {
+              if (res.configs[tk] && res.configs[tk].products && res.configs[tk].products[k]) {
+                res.configs[tk].products[k].aiKeywords = kwClean;
+              }
+            });
+          });
+          setStored('monthly_configs', res.configs);
+        } catch (eKwSave) {}
+        return res;
+      };
+
+      // Enhance parseErpProductSummaryRow to match custom/renamed products by their configured AI Keywords!
+      const _origParseErpRowV59 = parseErpProductSummaryRow;
+      parseErpProductSummaryRow = function(lineText) {
+        const baseRes = _origParseErpRowV59(lineText);
+        if (baseRes) return baseRes;
+
+        const raw = String(lineText || '').trim();
+        const lower = raw.toLowerCase();
+        if (!lower || lower.startsWith('products:') || lower.startsWith('report filters') || /^total\s*:/i.test(lower) || /product\s*name.*quantity\s*sold/i.test(lower)) {
+          return null;
+        }
+        const activeProds = getActiveProductsForMonth(selectedMonthKey);
+        let matchedCat = null;
+        for (const k of Object.keys(activeProds)) {
+          const p = activeProds[k];
+          const kwRaw = String(p.aiKeywords || p.name || '').trim();
+          const tokens = kwRaw.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length >= 2);
+          if (p.name && !tokens.includes(p.name.toLowerCase())) tokens.push(p.name.toLowerCase());
+          if (tokens.some(tok => lower.includes(tok))) {
+            matchedCat = k;
+            break;
+          }
+        }
+        if (!matchedCat) return null;
+
+        // Parse weight & qty for custom/keyword-matched product row
+        const normalizedDec = lower.replace(/(\d),(\d)/g, '$1.$2');
+        const hasErpTableCols = /ghorer\s*bazar|\b894\d{7,10}\b|[৳$]\s*\d/i.test(raw);
+        if (!hasErpTableCols) {
+          const dm = normalizedDec.match(/(\d+(?:\.\d+)?)\s*(kg|kq|k9|gm|qm|9m|g|q|l|ltr|ml)\b/i);
+          if (dm) {
+            const val = parseFloat(dm[1]) || 0;
+            const uStr = dm[2].toLowerCase();
+            const kg = (uStr.startsWith('k') || uStr.startsWith('l')) ? Number(val.toFixed(2)) : Number((val / 1000).toFixed(2));
+            if (kg > 0) return { cat: matchedCat, unitKg: kg, qty: 1, totalKg: kg, itemSummary: `${kg}kg` };
+          }
+        }
+        let unitKg = 1.0, sizeLabel = '1kg', sizeEndIdx = 0;
+        const wm = lower.match(/(?<![.\d])(500|250|200|400|100|1|2|5|0\.5|0\.25)\s*(kg|kq|k9|gm|qm|9m|g|q|l|ltr|ml)\b/i);
+        if (wm) {
+          const wn = parseFloat(wm[1]) || 1;
+          const wu = wm[2].toLowerCase();
+          unitKg = (wu.startsWith('k') || wu.startsWith('l') || wn <= 5) ? wn : (wn / 1000);
+          sizeLabel = `${wn}${wu}`;
+          sizeEndIdx = wm.index + wm[0].length;
+        }
+        const tail = sizeEndIdx > 0 ? raw.substring(sizeEndIdx) : raw;
+        const nums = tail.replace(/\b894\d{6,11}\b/g, ' ').replace(/\d+\.\d{2}/g, ' ').match(/\b\d{1,4}\b/g) || [];
+        const qty = nums.length > 0 ? Math.max(1, parseInt(nums[nums.length - 1], 10) || 1) : 1;
+        const totalKg = Number((unitKg * qty).toFixed(2));
+        return totalKg > 0 ? { cat: matchedCat, unitKg, qty, totalKg, itemSummary: `${sizeLabel}×${qty}=${totalKg}kg` } : null;
+      };
+
+      // Also capture custom product keys inside analyzeErpOcrText & executeAiApprovalCommit!
+      const _origAnalyzeErpV59 = analyzeErpOcrText;
+      analyzeErpOcrText = function(ocrText) {
+        const res = _origAnalyzeErpV59(ocrText);
+        try {
+          const activeProds = getActiveProductsForMonth(selectedMonthKey);
+          const coreSet = new Set(['ajwa', 'pinkSalt', 'blackGarlic', 'sunHoney', 'bsHoney', 'gawaGhee']);
+          const customKeys = Object.keys(activeProds).filter(k => !coreSet.has(k));
+          if (customKeys.length > 0 && aiDetectedRecords && aiDetectedRecords.length > 0) {
+            const customSums = {};
+            const customBreaks = {};
+            customKeys.forEach(k => { customSums[k] = 0; customBreaks[k] = []; });
+            String(ocrText || '').split(/\r?\n/).forEach(ln => {
+              const pr = parseErpProductSummaryRow(ln);
+              if (pr && customKeys.includes(pr.cat)) {
+                customSums[pr.cat] = Number((customSums[pr.cat] + pr.totalKg).toFixed(2));
+                customBreaks[pr.cat].push(pr.itemSummary);
+              }
+            });
+            const extraParts = [];
+            customKeys.forEach(k => {
+              if (customSums[k] > 0) {
+                aiDetectedRecords[0][k] = customSums[k];
+                extraParts.push(`<strong>${activeProds[k].name} (${customSums[k]}kg):</strong> [${customBreaks[k].join(' + ')}]`);
+              }
+            });
+            if (extraParts.length > 0) {
+              aiDetectedRecords[0].breakdownText = [aiDetectedRecords[0].breakdownText, ...extraParts].filter(Boolean).join(' • ');
+              renderAiDetectedPreviewTable();
+            }
+          }
+        } catch (aiCustErr) {}
+        return res;
+      };
+
+      const _origExecAiCommitV59 = executeAiApprovalCommit;
+      executeAiApprovalCommit = function(approvedRows) {
+        // Carry over any custom product keys into sales_records right after commit
+        const res = _origExecAiCommitV59(approvedRows);
+        try {
+          const activeProds = getActiveProductsForMonth(selectedMonthKey);
+          const coreSet = new Set(['ajwa', 'pinkSalt', 'blackGarlic', 'sunHoney', 'bsHoney', 'gawaGhee']);
+          const customKeys = Object.keys(activeProds).filter(k => !coreSet.has(k));
+          if (customKeys.length > 0 && Array.isArray(approvedRows)) {
+            let sales = getStored('sales_records', []);
+            let touched = false;
+            approvedRows.forEach(row => {
+              const hasCustom = customKeys.some(ck => Number(row[ck]) > 0);
+              if (!hasCustom) return;
+              const idx = sales.findIndex(s => String(s.userId) === String(row.userId) && s.date === row.date);
+              if (idx !== -1) {
+                customKeys.forEach(ck => { sales[idx][ck] = Number(row[ck]) || 0; });
+                touched = true;
+                postToSheet('DAILY_SALES_SUBMIT', { ...sales[idx] }).catch(() => {});
+              }
+            });
+            if (touched) {
+              setStored('sales_records', sales);
+              renderAppLayout();
+            }
+          }
+        } catch (aiC2Err) {}
+        return res;
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 4: SPRINT DATE RANGES INSIDE SPRINT REWARDS MODAL (SUPER ADMIN EDITABLE!)
+      // -----------------------------------------------------------------------
+      const _origRenderSprintModalV59 = window.renderSprintRewardsConfigModalV58;
+      window.renderSprintRewardsConfigModalV58 = function() {
+        let htmlOut = _origRenderSprintModalV59();
+        if (!htmlOut) return htmlOut;
+        const ch = window._sprintModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
+        const rng = window.getSprintDateRangesForMonthV59(ch, selectedMonthKey);
+        const isSuper = isSuperAdmin(currentUser);
+
+        const rangeBoxHtml = `
+                <!-- Sprint Date Ranges (Super Admin Editable, Read-Only for Other TLs) -->
+                <div class="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[11px] font-black uppercase text-purple-900"><i class="fa-regular fa-calendar-days mr-1"></i>Sprint Calendar Date Boundaries</span>
+                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${isSuper ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-600'}">${isSuper ? 'Super Admin Control' : 'Managed by Super Admin'}</span>
+                    </div>
+                    <p class="text-[11px] font-bold text-slate-500 mt-0.5">
+                      Sprint 1: Days <strong>1–${rng.s1End}</strong> • Sprint 2: Days <strong>${rng.s1End + 1}–${rng.s2End}</strong> • Sprint 3: Days <strong>${rng.s2End + 1}–End</strong>
+                    </p>
+                  </div>
+                  ${isSuper ? `
+                  <div class="flex items-center gap-2 shrink-0">
+                    <div>
+                      <label class="block text-[9px] font-black uppercase text-purple-800 mb-0.5">Sprint 1 Ends (Day)</label>
+                      <input type="number" min="1" max="25" id="cfg_sp_s1End" value="${rng.s1End}" required class="w-24 px-2.5 py-1.5 bg-white border border-purple-300 rounded-lg text-xs font-black text-slate-900">
+                    </div>
+                    <div>
+                      <label class="block text-[9px] font-black uppercase text-purple-800 mb-0.5">Sprint 2 Ends (Day)</label>
+                      <input type="number" min="2" max="30" id="cfg_sp_s2End" value="${rng.s2End}" required class="w-24 px-2.5 py-1.5 bg-white border border-purple-300 rounded-lg text-xs font-black text-slate-900">
+                    </div>
+                  </div>
+                  ` : ''}
+                </div>`;
+
+        htmlOut = htmlOut.replace(
+          '<!-- Per-Grade Sprint Rewards Table -->',
+          rangeBoxHtml + '\n\n                <!-- Per-Grade Sprint Rewards Table -->'
+        );
+        return htmlOut;
+      };
+
+      const _origSaveSprintRewardsV59 = window.handleSaveSprintRewardsConfigV58;
+      window.handleSaveSprintRewardsConfigV58 = async function(e) {
+        const ch = window._sprintModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
+        const effKey = ch === 'WHATSAPP' ? `WA_${selectedMonthKey}` : selectedMonthKey;
+        if (isSuperAdmin(currentUser)) {
+          const s1El = document.getElementById('cfg_sp_s1End');
+          const s2El = document.getElementById('cfg_sp_s2End');
+          if (s1El && s2El) {
+            const s1End = Math.min(25, Math.max(1, Number(s1El.value) || 10));
+            const s2End = Math.min(30, Math.max(s1End + 1, Number(s2El.value) || 20));
+            let configs = getStored('monthly_configs', {});
+            if (!configs[effKey]) configs[effKey] = { users: {}, products: {} };
+            configs[effKey].sprintRanges = { s1End, s2End };
+            setStored('monthly_configs', configs);
+          }
+        }
+        return _origSaveSprintRewardsV59(e);
+      };
+
+      // -----------------------------------------------------------------------
+      // PART 5: SUPER ADMIN ONLY "MASTER PORTAL SETTINGS" MODAL (NAZIM 10122)
+      // Controls: 1) Buffer % & Daily Working Days, 2) Dynamic Teams, 3) Shift Options
+      // -----------------------------------------------------------------------
+      window.openMasterPortalSettingsModalV59 = function(defaultSection) {
+        if (!isSuperAdmin(currentUser)) return;
+        window._masterSettingsSectionV59 = defaultSection || 'RULES';
+        renderAppLayout();
+        openModal('masterPortalSettingsModal');
+      };
+
+      window.setMasterSettingsSectionV59 = function(sec) {
+        window._masterSettingsSectionV59 = sec;
+        renderAppLayout();
+        openModal('masterPortalSettingsModal');
+      };
+
+      window.renderMasterPortalSettingsModalV59 = function() {
+        if (!currentUser || !isSuperAdmin(currentUser)) return '';
+        const sec = window._masterSettingsSectionV59 || 'RULES';
+        const mc = window.getPortalMasterConfigV59();
+        const fbBuf = window.getBufferPctForMonthV59('FACEBOOK', selectedMonthKey);
+        const fbDays = window.getWorkingDaysDivisorForMonthV59('FACEBOOK', selectedMonthKey);
+        const waBuf = window.getBufferPctForMonthV59('WHATSAPP', selectedMonthKey);
+        const waDays = window.getWorkingDaysDivisorForMonthV59('WHATSAPP', selectedMonthKey);
+
+        return `
+          <div id="masterPortalSettingsModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[65] flex items-center justify-center p-4">
+            <div class="modal-card-anim bg-white rounded-3xl max-w-3xl w-full p-6 shadow-2xl border-2 border-purple-200 max-h-[92vh] overflow-y-auto space-y-4">
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-purple-600 text-white"><i class="fa-solid fa-crown text-amber-300 mr-1"></i>Super Admin Exclusive (ID: 10122)</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700">Month: ${selectedMonthKey}</span>
+                  </div>
+                  <h3 class="text-lg font-black text-slate-900 mt-1">Master Portal Settings (Zero-Code Dynamic Control)</h3>
+                  <p class="text-xs font-bold text-slate-500">Manage company-wide Target Buffer %, Working Days, Teams, and Duty Shift Options without ever editing code!</p>
+                </div>
+                <button type="button" onclick="closeModal('masterPortalSettingsModal')" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+
+              <!-- 3-Section Pill Switcher -->
+              <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+                <button type="button" onclick="window.setMasterSettingsSectionV59('RULES')" class="py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${sec === 'RULES' ? 'bg-purple-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">
+                  <i class="fa-solid fa-sliders mr-1"></i> Buffer % & Days
+                </button>
+                <button type="button" onclick="window.setMasterSettingsSectionV59('TEAMS')" class="py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${sec === 'TEAMS' ? 'bg-purple-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">
+                  <i class="fa-solid fa-people-group mr-1"></i> Manage Teams (${mc.teams.FACEBOOK.length + mc.teams.WHATSAPP.length})
+                </button>
+                <button type="button" onclick="window.setMasterSettingsSectionV59('SHIFTS')" class="py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer ${sec === 'SHIFTS' ? 'bg-purple-600 text-white shadow' : 'text-slate-600 hover:bg-white'}">
+                  <i class="fa-regular fa-clock mr-1"></i> Shift Times (${mc.shifts.length})
+                </button>
+              </div>
+
+              ${sec === 'RULES' ? `
+                <form onsubmit="window.handleSaveMasterRulesV59(event)" class="space-y-4">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 space-y-3">
+                      <span class="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-black uppercase inline-block"><i class="fa-brands fa-facebook-f mr-1"></i>Facebook Channel (${selectedMonthKey})</span>
+                      <div>
+                        <label class="block text-[11px] font-extrabold text-slate-700 mb-1">Portal Working Target Buffer (%)</label>
+                        <input type="number" step="0.5" min="0" max="50" id="ms_fb_buf" value="${fbBuf}" required class="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl text-sm font-black text-slate-900">
+                        <span class="text-[10px] font-bold text-slate-500">Default: 5% (Google Sheets always stays 100% Actual Target)</span>
+                      </div>
+                      <div>
+                        <label class="block text-[11px] font-extrabold text-slate-700 mb-1">Daily Target Working Days (Divisor)</label>
+                        <input type="number" min="15" max="31" id="ms_fb_days" value="${fbDays}" required class="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl text-sm font-black text-slate-900">
+                        <span class="text-[10px] font-bold text-slate-500">Default: 26 days (e.g. set 24 for Eid/February)</span>
+                      </div>
+                    </div>
+
+                    <div class="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-3">
+                      <span class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase inline-block"><i class="fa-brands fa-whatsapp mr-1"></i>WhatsApp Channel (${selectedMonthKey})</span>
+                      <div>
+                        <label class="block text-[11px] font-extrabold text-slate-700 mb-1">Portal Working Target Buffer (%)</label>
+                        <input type="number" step="0.5" min="0" max="50" id="ms_wa_buf" value="${waBuf}" required class="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl text-sm font-black text-slate-900">
+                        <span class="text-[10px] font-bold text-slate-500">Default: 5% (Google Sheets always stays 100% Actual Target)</span>
+                      </div>
+                      <div>
+                        <label class="block text-[11px] font-extrabold text-slate-700 mb-1">Daily Target Working Days (Divisor)</label>
+                        <input type="number" min="15" max="31" id="ms_wa_days" value="${waDays}" required class="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl text-sm font-black text-slate-900">
+                        <span class="text-[10px] font-bold text-slate-500">Default: 26 days (applies to Portal & Sheets!)</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('masterPortalSettingsModal')" class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl cursor-pointer">Close</button>
+                    <button type="submit" class="px-6 py-2 text-xs font-extrabold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow cursor-pointer"><i class="fa-solid fa-check-double mr-1"></i>Save ${selectedMonthKey} Target Rules</button>
+                  </div>
+                </form>
+              ` : (sec === 'TEAMS' ? `
+                <div class="space-y-4">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    ${['FACEBOOK', 'WHATSAPP'].map(chK => {
+                      const isWa = chK === 'WHATSAPP';
+                      const list = mc.teams[chK] || [];
+                      return `
+                        <div class="p-4 rounded-2xl ${isWa ? 'bg-emerald-50/60 border-emerald-200' : 'bg-blue-50/60 border-blue-200'} border space-y-2.5">
+                          <span class="px-2.5 py-1 rounded-lg ${isWa ? 'bg-emerald-600' : 'bg-blue-600'} text-white text-[10px] font-black uppercase inline-block">${isWa ? 'WhatsApp' : 'Facebook'} Teams (${list.length})</span>
+                          <div class="space-y-1.5">
+                            ${list.map(tn => `
+                              <div class="flex items-center justify-between gap-2 px-3 py-2 bg-white rounded-xl border border-slate-200 text-xs font-extrabold text-slate-800">
+                                <span class="truncate">${tn}</span>
+                                <div class="flex items-center gap-1 shrink-0">
+                                  <button type="button" onclick="window.handleRenameTeamV59('${chK}', '${tn.replace(/'/g, "\\'")}')" class="px-2 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-black cursor-pointer" title="Rename team across Portal & Sheets"><i class="fa-solid fa-pen"></i></button>
+                                  ${list.length > 1 ? `<button type="button" onclick="window.handleDeleteTeamV59('${chK}', '${tn.replace(/'/g, "\\'")}')" class="px-2 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-black cursor-pointer" title="Remove team"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+                                </div>
+                              </div>
+                            `).join('')}
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+
+                  <form onsubmit="window.handleAddNewTeamV59(event)" class="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-end gap-2.5">
+                    <div class="flex-1">
+                      <label class="block text-[10px] font-black uppercase text-slate-600 mb-1">New Team Name</label>
+                      <input type="text" id="ms_new_team_name" required placeholder="e.g. Team Karim or Team Hasan" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                    </div>
+                    <div class="w-full sm:w-44">
+                      <label class="block text-[10px] font-black uppercase text-slate-600 mb-1">Channel</label>
+                      <select id="ms_new_team_ch" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900 cursor-pointer">
+                        <option value="FACEBOOK">Facebook Channel</option>
+                        <option value="WHATSAPP">WhatsApp Channel</option>
+                      </select>
+                    </div>
+                    <button type="submit" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow cursor-pointer shrink-0">
+                      <i class="fa-solid fa-plus mr-1"></i>Add Team
+                    </button>
+                  </form>
+                </div>
+              ` : `
+                <div class="space-y-4">
+                  <div class="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-200 space-y-3">
+                    <span class="text-xs font-black text-indigo-900 uppercase block"><i class="fa-regular fa-clock mr-1"></i>Active Duty Roster Shift Times</span>
+                    <div class="flex flex-wrap gap-2">
+                      ${mc.shifts.map(sh => {
+                        const isProtected = sh === 'DO' || sh === 'Night';
+                        return `
+                          <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-xs font-black text-slate-800 shadow-2xs">
+                            <span>${sh}</span>
+                            ${!isProtected ? `<button type="button" onclick="window.handleRemoveShiftOptionV59('${sh.replace(/'/g, "\\'")}')" class="text-rose-500 hover:text-rose-700 cursor-pointer" title="Remove shift option"><i class="fa-solid fa-xmark"></i></button>` : `<i class="fa-solid fa-lock text-[9px] text-slate-400" title="Core shift"></i>`}
+                          </span>
+                        `;
+                      }).join('')}
+                    </div>
+                    <p class="text-[11px] font-bold text-slate-500">All custom shifts (e.g. <strong>8:00 AM</strong>, <strong>11:00 AM</strong>, <strong>2:00 PM</strong>) automatically appear in Duty Roster dropdowns and trigger 5-minute shift-end reminders after 8 hours!</p>
+                  </div>
+
+                  <form onsubmit="window.handleAddShiftOptionV59(event)" class="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-end gap-2.5">
+                    <div class="flex-1">
+                      <label class="block text-[10px] font-black uppercase text-slate-600 mb-1">Add New Shift Start Time</label>
+                      <input type="text" id="ms_new_shift_val" required placeholder="e.g. 8:00 AM, 1:00 PM, 2:00 PM" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-extrabold text-slate-900">
+                    </div>
+                    <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow cursor-pointer shrink-0">
+                      <i class="fa-solid fa-plus mr-1"></i>Add Shift
+                    </button>
+                  </form>
+                </div>
+              `)}
+            </div>
+          </div>
+        `;
+      };
+
+      window.handleSaveMasterRulesV59 = async function(e) {
+        e.preventDefault();
+        if (!isSuperAdmin(currentUser)) return;
+        const fbBuf = Math.max(0, Number(document.getElementById('ms_fb_buf')?.value ?? 5));
+        const fbDays = Math.min(31, Math.max(15, Math.round(Number(document.getElementById('ms_fb_days')?.value) || 26)));
+        const waBuf = Math.max(0, Number(document.getElementById('ms_wa_buf')?.value ?? 5));
+        const waDays = Math.min(31, Math.max(15, Math.round(Number(document.getElementById('ms_wa_days')?.value) || 26)));
+
+        let configs = getStored('monthly_configs', {});
+        const fbKey = selectedMonthKey;
+        const waKey = `WA_${selectedMonthKey}`;
+        if (!configs[fbKey]) configs[fbKey] = { users: {}, products: {} };
+        if (!configs[waKey]) configs[waKey] = { users: {}, products: {} };
+        configs[fbKey].bufferPct = fbBuf;
+        configs[fbKey].workingDaysDivisor = fbDays;
+        configs[waKey].bufferPct = waBuf;
+        configs[waKey].workingDaysDivisor = waDays;
+        setStored('monthly_configs', configs);
+        markLocalUserOrConfigMutatedNow();
+
+        const logMeta = recordActivityLog('Updated Master Target Rules', `Set ${selectedMonthKey} FB (+${fbBuf}%, ÷${fbDays}d) & WA (+${waBuf}%, ÷${waDays}d)`);
+        closeModal('masterPortalSettingsModal');
+        renderAppLayout();
+        showPortalToast('Master Target Rules Saved!', `Updated ${selectedMonthKey} Buffer % & Working Days across Portal & Google Sheets.`, 'success');
+
+        await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: fbKey, configJson: JSON.stringify(configs[fbKey]), ...logMeta }).catch(() => {});
+        await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: waKey, configJson: JSON.stringify(configs[waKey]), ...logMeta }).catch(() => {});
+      };
+
+      window.savePortalMasterConfigV59 = async function(mcObj, extraParams = {}) {
+        let configs = getStored('monthly_configs', {});
+        configs['PORTAL_MASTER_CONFIG'] = mcObj;
+        setStored('monthly_configs', configs);
+        markLocalUserOrConfigMutatedNow();
+        await postToSheet('SAVE_MONTHLY_CONFIG', {
+          monthKey: 'PORTAL_MASTER_CONFIG',
+          configJson: JSON.stringify(mcObj),
+          ...extraParams
+        }).catch(() => {});
+      };
+
+      window.handleAddNewTeamV59 = async function(e) {
+        e.preventDefault();
+        if (!isSuperAdmin(currentUser)) return;
+        const nameVal = (document.getElementById('ms_new_team_name')?.value || '').trim();
+        const chVal = document.getElementById('ms_new_team_ch')?.value === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+        if (!nameVal) return;
+
+        const mc = window.getPortalMasterConfigV59();
+        if (mc.teams.FACEBOOK.includes(nameVal) || mc.teams.WHATSAPP.includes(nameVal)) {
+          showPortalToast('Team Already Exists', `"${nameVal}" is already in the team list.`, 'warning');
+          return;
+        }
+        mc.teams[chVal].push(nameVal);
+        const logMeta = recordActivityLog('Added New Team', `Created new ${chVal} team: ${nameVal}`);
+        await window.savePortalMasterConfigV59(mc, logMeta);
+        renderAppLayout();
+        openModal('masterPortalSettingsModal');
+        showPortalToast('New Team Created!', `"${nameVal}" added to ${chVal} Channel across Portal & Google Sheets.`, 'success');
+      };
+
+      window.handleRenameTeamV59 = async function(chKey, oldName) {
+        if (!isSuperAdmin(currentUser)) return;
+        const newName = window.prompt(`Rename "${oldName}" (${chKey}) to:`, oldName);
+        if (!newName || !newName.trim() || newName.trim() === oldName) return;
+        const cleanNew = newName.trim();
+
+        const mc = window.getPortalMasterConfigV59();
+        mc.teams[chKey] = mc.teams[chKey].map(t => t === oldName ? cleanNew : t);
+
+        // Update local users, current month sales & roster
+        let users = getStored('users', DEFAULT_USERS).map(u => normalizeTeamNameAlias(u.team) === oldName ? { ...u, team: cleanNew } : u);
+        setStored('users', users);
+        let sales = getStored('sales_records', []).map(s => (String(s.date || '').endsWith(selectedMonthKey) && normalizeTeamNameAlias(s.team) === oldName) ? { ...s, team: cleanNew } : s);
+        setStored('sales_records', sales);
+        let roster = getStored('roster_records', []).map(r => (r.monthKey === selectedMonthKey && normalizeTeamNameAlias(r.team) === oldName) ? { ...r, team: cleanNew } : r);
+        setStored('roster_records', roster);
+
+        if (dashboardScope === oldName) dashboardScope = cleanNew;
+        if (monthlyPerfTeamScope === oldName) monthlyPerfTeamScope = cleanNew;
+        if (driveProdTeamScope === oldName) driveProdTeamScope = cleanNew;
+        if (sprintTabTeamScope === oldName) sprintTabTeamScope = cleanNew;
+        if (missingReportsTeamScope === oldName) missingReportsTeamScope = cleanNew;
+
+        const logMeta = recordActivityLog('Renamed Team', `Renamed ${chKey} team "${oldName}" → "${cleanNew}"`);
+        await window.savePortalMasterConfigV59(mc, { renameFrom: oldName, renameTo: cleanNew, ...logMeta });
+        renderAppLayout();
+        openModal('masterPortalSettingsModal');
+        showPortalToast('Team Renamed & Synced!', `"${oldName}" renamed to "${cleanNew}" across Portal & Google Sheets.`, 'success');
+      };
+
+      window.handleDeleteTeamV59 = async function(chKey, teamName) {
+        if (!isSuperAdmin(currentUser)) return;
+        const allUsers = getUsersForMonth(selectedMonthKey, true);
+        const membersInTeam = allUsers.filter(u => u.role !== 'supervisor' && normalizeTeamNameAlias(u.team) === teamName);
+        if (membersInTeam.length > 0) {
+          showPortalToast('Team Has Active Members', `Move or release ${membersInTeam.length} member(s) from "${teamName}" before deleting this team.`, 'error');
+          return;
+        }
+        const mc = window.getPortalMasterConfigV59();
+        mc.teams[chKey] = mc.teams[chKey].filter(t => t !== teamName);
+        const logMeta = recordActivityLog('Removed Team', `Removed empty ${chKey} team: ${teamName}`);
+        await window.savePortalMasterConfigV59(mc, logMeta);
+        renderAppLayout();
+        openModal('masterPortalSettingsModal');
+        showPortalToast('Team Removed', `"${teamName}" removed from ${chKey} Channel.`, 'warning');
+      };
+
+      window.handleAddShiftOptionV59 = async function(e) {
+        e.preventDefault();
+        if (!isSuperAdmin(currentUser)) return;
+        const val = (document.getElementById('ms_new_shift_val')?.value || '').trim();
+        if (!val) return;
+        const mc = window.getPortalMasterConfigV59();
+        if (mc.shifts.includes(val)) {
+          showPortalToast('Shift Exists', `"${val}" is already in the shift list.`, 'warning');
+          return;
+        }
+        const doIdx = mc.shifts.indexOf('DO');
+        if (doIdx !== -1) mc.shifts.splice(doIdx, 0, val);
+        else mc.shifts.push(val);
+        const logMeta = recordActivityLog('Added Duty Shift Option', `Added custom roster shift time: ${val}`);
+        await window.savePortalMasterConfigV59(mc, logMeta);
+        renderAppLayout();
+        openModal('masterPortalSettingsModal');
+        showPortalToast('Shift Time Added!', `"${val}" is now available in Duty Roster dropdowns.`, 'success');
+      };
+
+      window.handleRemoveShiftOptionV59 = async function(shiftVal) {
+        if (!isSuperAdmin(currentUser) || shiftVal === 'DO' || shiftVal === 'Night') return;
+        const mc = window.getPortalMasterConfigV59();
+        mc.shifts = mc.shifts.filter(s => s !== shiftVal);
+        const logMeta = recordActivityLog('Removed Duty Shift Option', `Removed roster shift time: ${shiftVal}`);
+        await window.savePortalMasterConfigV59(mc, logMeta);
+        renderAppLayout();
+        openModal('masterPortalSettingsModal');
+        showPortalToast('Shift Removed', `"${shiftVal}" removed from Duty Roster options.`, 'warning');
+      };
+
+      // Inject Master Settings Modal into DOM + Super Admin Exclusive Buttons!
+      const _origRenderAppLayoutV59 = renderAppLayout;
+      renderAppLayout = function() {
+        const res = _origRenderAppLayoutV59();
+        try {
+          if (currentUser && isSuperAdmin(currentUser)) {
+            const appRoot = document.getElementById('app');
+            if (appRoot && !document.getElementById('masterPortalSettingsModal')) {
+              appRoot.insertAdjacentHTML('beforeend', window.renderMasterPortalSettingsModalV59());
+            }
+          }
+        } catch (m59Err) {}
+        return res;
+      };
+
+      const _origRenderManageAgentsV59 = renderManageAgents;
+      renderManageAgents = function() {
+        let htmlOut = _origRenderManageAgentsV59();
+        if (currentUser && isSuperAdmin(currentUser)) {
+          const btnMaster = `
+                <button onclick="window.openMasterPortalSettingsModalV59('RULES')" class="h-9 px-3.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer" title="Super Admin Only: Edit Buffer %, Working Days, Dynamic Teams & Shift Options">
+                  <i class="fa-solid fa-crown text-amber-300"></i> Master Settings
+                </button>`;
+          htmlOut = htmlOut.replace(
+            /(<button onclick="setTab\('role_management'\)"[\s\S]*?<\/button>)/,
+            `$1${btnMaster}`
+          );
+        }
+        return htmlOut;
+      };
+
+      const _origRenderDutyRosterV59 = renderDutyRosterView;
+      renderDutyRosterView = function() {
+        let htmlOut = _origRenderDutyRosterV59();
+        if (currentUser && isSuperAdmin(currentUser)) {
+          const btnShifts = `
+                  <button type="button" onclick="window.openMasterPortalSettingsModalV59('SHIFTS')" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 cursor-pointer" title="Super Admin Only: Add or remove custom Duty Shift times">
+                    <i class="fa-regular fa-clock text-amber-300"></i> Manage Shifts
+                  </button>`;
+          htmlOut = htmlOut.replace(
+            /(<button type="button" onclick="handleAddCustomRosterRowPrompt\(\)")/,
+            `${btnShifts}\n                  $1`
+          );
+        }
+        return htmlOut;
+      };
+
+      // Dynamically reflect non-default Buffer % or Working Days labels in Dashboard & Grade Modal
+      const _origRenderDashboardV59 = renderDashboard;
+      renderDashboard = function() {
+        let htmlOut = _origRenderDashboardV59();
+        try {
+          const buf = window.getBufferPctForMonthV59(activeChannel, selectedMonthKey);
+          const days = window.getWorkingDaysDivisorForMonthV59(activeChannel, selectedMonthKey);
+          if (buf !== 5) {
+            htmlOut = htmlOut
+              .replace(/\(\+5% Buffer\)/g, `(+${buf}% Buffer)`)
+              .replace(/\(\+5%\)/g, `(+${buf}%)`)
+              .replace(/Excl\. \+5%/g, `Excl. +${buf}%`);
+          }
+          if (days !== 26) {
+            htmlOut = htmlOut.replace(/÷26/g, `÷${days}`);
+          }
+        } catch (eLbl) {}
+        return htmlOut;
+      };
+
+      const _origRenderGradeModalV59 = renderGradeConfigModal;
+      renderGradeConfigModal = function() {
+        let htmlOut = _origRenderGradeModalV59();
+        try {
+          const ch = window._gradeModalChannelV58 || (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
+          const buf = window.getBufferPctForMonthV59(ch, selectedMonthKey);
+          if (buf !== 5) {
+            htmlOut = htmlOut.replace(/Portal Working \(\+5%\)/g, `Portal Working (+${buf}%)`);
+          }
+        } catch (eGrLbl) {}
+        return htmlOut;
+      };
+    } catch (errV59) {
+      console.error('Non-fatal patch v59 warning:', errV59);
+    }
+
+
+    // =========================================================================
+    // PATCH v60 (index-v39.html) — UNIVERSAL ZERO-LOSS VERIFIED SYNC QUEUE FOR
+    // LEAVE/ABSENT, SWAPS, ROSTER, USER ACCOUNTS & ALL MONTHLY CONFIGS!
+    // Prevents ANY Leave/Absent mark (e.g., Zubayer), Duty Swap, Roster edit,
+    // User edit, or Target/Product/Master config change from EVER silently
+    // dropping or reverting after page reload / file update!
+    // =========================================================================
+    try {
+      const VERIFIED_META_WRITES_KEY_V60 = 'gb_verified_meta_writes_v60';
+
+      window.getVerifiedMetaWritesV60 = function() {
+        try {
+          const raw = JSON.parse(localStorage.getItem(VERIFIED_META_WRITES_KEY_V60) || '{}');
+          return (raw && typeof raw === 'object') ? raw : {};
+        } catch (e) {
+          return {};
+        }
+      };
+
+      window.saveVerifiedMetaWritesV60 = function(mapObj) {
+        try {
+          localStorage.setItem(VERIFIED_META_WRITES_KEY_V60, JSON.stringify(mapObj || {}));
+        } catch (e) {}
+      };
+
+      window.getPendingMetaWriteCountV60 = function() {
+        return Object.keys(window.getVerifiedMetaWritesV60()).length;
+      };
+
+      window._metaSerialChainV60 = Promise.resolve();
+      window._lastMetaPostDispatchedAtV60 = 0;
+      window._metaRetryCursorV60 = 0;
+      window._metaVerifyIntervalV60 = null;
+
+      // Helper: Check whether a queued meta write is 100% confirmed in the raw Google Sheet response!
+      window.isMetaWriteConfirmedInCloudV60 = function(item, res) {
+        if (!item || !res) return true;
+        const act = item.action;
+        const p = item.payload || {};
+
+        if (act === 'SAVE_MONTHLY_CONFIG') {
+          const mk = String(p.monthKey || '').replace(/^'/, '').trim();
+          const cloudMap = res.monthlyConfigs && res.monthlyConfigs[mk];
+          if (!cloudMap || typeof cloudMap !== 'object') return false;
+
+          // Map-based timestamped records: LEAVE_RECORDS_*, DO_APPROVED_DUTIES_*, DUTY_SWAPS_*, SHIFT_TIME_SWAPS_*
+          if (mk.startsWith('LEAVE_RECORDS_') || mk.startsWith('DO_APPROVED_DUTIES_') ||
+              mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_')) {
+            const expectedEntries = item.expectedMapEntries || {};
+            const expKeys = Object.keys(expectedEntries);
+            if (expKeys.length === 0) return true;
+            return expKeys.every(ek => {
+              const exp = expectedEntries[ek];
+              const cld = cloudMap[ek];
+              if (!exp) return true;
+              if (exp.isRemoved) {
+                return !cld || Boolean(cld.isRemoved) || Number(cld.updatedTs || 0) >= Number(exp.updatedTs || 0);
+              }
+              return Boolean(cld && !cld.isRemoved && Number(cld.updatedTs || cld.approvedAt || 0) >= Number(exp.updatedTs || exp.approvedAt || 0));
+            });
+          }
+
+          // General config keys (MM/YYYY, WA_MM/YYYY, PORTAL_MASTER_CONFIG, ROLE_PERMISSIONS, DEACTIVATED_USERS, etc.)
+          if (item.syncRev) {
+            return Number(cloudMap._syncRev || 0) >= Number(item.syncRev);
+          }
+          return true;
+        }
+
+        if (act === 'SAVE_ROSTER_ROW') {
+          if (!Array.isArray(res.rosterRecords)) return false;
+          const rMk = String(p.monthKey || '').trim();
+          const rId = String(p.id || '').trim();
+          const match = res.rosterRecords.find(r => String(r.monthKey || '').trim() === rMk && String(r.id || '').trim() === rId);
+          if (!match) return false;
+          if (p.isDeleted) return Boolean(match.isDeleted);
+          return ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'].every(d =>
+            !p[d] || String(match[d] || '').trim() === String(p[d] || '').trim()
+          ) && (!p.team || normalizeTeamNameAlias(match.team) === normalizeTeamNameAlias(p.team));
+        }
+
+        if (act === 'SAVE_USER') {
+          if (!Array.isArray(res.customUsers)) return false;
+          const uid = String(p.id || '').trim();
+          const match = res.customUsers.find(u => String(u.id || '').trim() === uid);
+          if (!match) return false;
+          const teamOk = !p.team || normalizeTeamNameAlias(match.team) === normalizeTeamNameAlias(p.team);
+          const gradeOk = !p.grade || String(match.grade || '').trim() === String(p.grade || '').trim();
+          const tgtOk = p.baseTarget === undefined || Number(match.baseTarget || 0) === Number(p.baseTarget || 0);
+          const passOk = !p.pass || String(match.pass || '').trim() === String(p.pass || '').trim();
+          return teamOk && gradeOk && tgtOk && passOk;
+        }
+
+        return true;
+      };
+
+      const _origPostToSheetV60 = postToSheet;
+
+      window.startMetaVerificationLoopV60 = function() {
+        if (window._metaVerifyIntervalV60) return;
+        setTimeout(() => {
+          if (window.getPendingMetaWriteCountV60() > 0) fetchFromSheet(true);
+        }, 1600);
+
+        window._metaVerifyIntervalV60 = setInterval(() => {
+          const map = window.getVerifiedMetaWritesV60();
+          const keys = Object.keys(map);
+          if (keys.length === 0) {
+            clearInterval(window._metaVerifyIntervalV60);
+            window._metaVerifyIntervalV60 = null;
+            return;
+          }
+          const nowMs = Date.now();
+          let changed = false;
+          const dueKeys = [];
+          keys.forEach(k => {
+            const it = map[k];
+            if (!it || !it.action || (nowMs - Number(it.queuedAt || 0)) > 86400000) {
+              delete map[k];
+              changed = true;
+              return;
+            }
+            if ((nowMs - Number(it.lastSentAt || 0)) >= 4500) dueKeys.push(k);
+          });
+          if (dueKeys.length > 0) {
+            const pickKey = dueKeys[window._metaRetryCursorV60 % dueKeys.length];
+            window._metaRetryCursorV60++;
+            const it = map[pickKey];
+            if (it) {
+              it.lastSentAt = nowMs;
+              it.attempts = (it.attempts || 1) + 1;
+              changed = true;
+              window.dispatchMetaWriteSeriallyV60(it.action, it.payload);
+            }
+          }
+          if (changed) window.saveVerifiedMetaWritesV60(map);
+          fetchFromSheet(true);
+        }, 3200);
+      };
+
+      window.dispatchMetaWriteSeriallyV60 = function(action, payload) {
+        const job = window._metaSerialChainV60.then(async () => {
+          const gapNeeded = 900 - (Date.now() - (window._lastMetaPostDispatchedAtV60 || 0));
+          if (gapNeeded > 0) await new Promise(r => setTimeout(r, gapNeeded));
+          window._lastMetaPostDispatchedAtV60 = Date.now();
+          await _origPostToSheetV60(action, payload);
+        }).catch(() => {});
+        window._metaSerialChainV60 = job;
+        return job;
+      };
+
+      // Intercept SAVE_MONTHLY_CONFIG, SAVE_ROSTER_ROW & SAVE_USER so EVERY ONE is
+      // persisted in localStorage outbox & retried until Google Sheet confirms it!
+      postToSheet = function(action, payload) {
+        const isTrackedMeta = (
+          action === 'SAVE_MONTHLY_CONFIG' ||
+          action === 'SAVE_ROSTER_ROW' ||
+          action === 'SAVE_USER'
+        );
+        if (!isTrackedMeta || !payload || typeof payload !== 'object') {
+          return _origPostToSheetV60(action, payload);
+        }
+
+        // Skip tracking high-frequency noisy keys like CHAT_AND_NOTICES / USER_AVATARS (they have their own handlers)
+        if (action === 'SAVE_MONTHLY_CONFIG') {
+          const mkCheck = String(payload.monthKey || '').trim();
+          if (mkCheck === 'CHAT_AND_NOTICES' || mkCheck === 'USER_AVATARS' || mkCheck === 'FRAUD_API_CONFIG') {
+            return _origPostToSheetV60(action, payload);
+          }
+        }
+
+        const nowMs = Date.now();
+        let trackedPayload = { ...payload };
+        let queueKey = '';
+        let syncRev = nowMs;
+        let expectedMapEntries = null;
+
+        if (action === 'SAVE_MONTHLY_CONFIG') {
+          const mk = String(trackedPayload.monthKey || '').replace(/^'/, '').trim();
+          queueKey = `CFG_${mk}`;
+          try {
+            const parsedObj = JSON.parse(String(trackedPayload.configJson || '{}'));
+            if (parsedObj && typeof parsedObj === 'object') {
+              if (mk.startsWith('LEAVE_RECORDS_') || mk.startsWith('DO_APPROVED_DUTIES_') ||
+                  mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_')) {
+                expectedMapEntries = {};
+                Object.keys(parsedObj).forEach(ek => {
+                  const ev = parsedObj[ek];
+                  if (ev && typeof ev === 'object') {
+                    expectedMapEntries[ek] = {
+                      isRemoved: Boolean(ev.isRemoved),
+                      updatedTs: Number(ev.updatedTs || ev.approvedAt || nowMs)
+                    };
+                  }
+                });
+              } else {
+                parsedObj._syncRev = syncRev;
+                trackedPayload.configJson = JSON.stringify(parsedObj);
+                // Keep local monthly_configs in sync with _syncRev too
+                try {
+                  const locCfgs = getStored('monthly_configs', {});
+                  if (locCfgs[mk] && typeof locCfgs[mk] === 'object') {
+                    locCfgs[mk]._syncRev = syncRev;
+                    setStored('monthly_configs', locCfgs);
+                  }
+                } catch (eLocRev) {}
+              }
+            }
+          } catch (eP60) {}
+        } else if (action === 'SAVE_ROSTER_ROW') {
+          queueKey = `ROSTER_${String(trackedPayload.monthKey || '').trim()}_${String(trackedPayload.id || '').trim()}`;
+        } else if (action === 'SAVE_USER') {
+          queueKey = `USER_${String(trackedPayload.id || '').trim()}`;
+        }
+
+        if (queueKey) {
+          const map = window.getVerifiedMetaWritesV60();
+          map[queueKey] = {
+            action,
+            payload: trackedPayload,
+            syncRev,
+            expectedMapEntries,
+            queuedAt: nowMs,
+            lastSentAt: nowMs,
+            attempts: 1
+          };
+          window.saveVerifiedMetaWritesV60(map);
+          window.startMetaVerificationLoopV60();
+        }
+
+        return window.dispatchMetaWriteSeriallyV60(action, trackedPayload);
+      };
+
+      // Verify queued meta writes on EVERY cloud response & protect unconfirmed local edits from reverting!
+      const _origHandleCloudDataV60 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && res.status === 'success') {
+          const map = window.getVerifiedMetaWritesV60();
+          const keys = Object.keys(map);
+          if (keys.length > 0) {
+            let mapChanged = false;
+            keys.forEach(k => {
+              const it = map[k];
+              if (!it) { delete map[k]; mapChanged = true; return; }
+              if (window.isMetaWriteConfirmedInCloudV60(it, res)) {
+                delete map[k];
+                mapChanged = true;
+              } else {
+                // NOT YET CONFIRMED IN GOOGLE SHEET: Keep local state protected so background polls NEVER revert it!
+                markLocalUserOrConfigMutatedNow();
+                if (it.action === 'SAVE_MONTHLY_CONFIG' && it.payload && it.payload.monthKey && res.monthlyConfigs) {
+                  const mk = String(it.payload.monthKey).replace(/^'/, '').trim();
+                  try {
+                    const pendingObj = JSON.parse(String(it.payload.configJson || '{}'));
+                    if (mk.startsWith('LEAVE_RECORDS_') || mk.startsWith('DO_APPROVED_DUTIES_') ||
+                        mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_')) {
+                      const cldMap = (res.monthlyConfigs[mk] && typeof res.monthlyConfigs[mk] === 'object') ? { ...res.monthlyConfigs[mk] } : {};
+                      Object.keys(pendingObj).forEach(ek => {
+                        const pv = pendingObj[ek];
+                        const cv = cldMap[ek];
+                        if (!cv || Number((pv && (pv.updatedTs || pv.approvedAt)) || 0) >= Number((cv && (cv.updatedTs || cv.approvedAt)) || 0)) {
+                          cldMap[ek] = pv;
+                        }
+                      });
+                      res.monthlyConfigs[mk] = cldMap;
+                    } else {
+                      res.monthlyConfigs[mk] = { ...(res.monthlyConfigs[mk] || {}), ...pendingObj };
+                    }
+                  } catch (eProt) {}
+                }
+              }
+            });
+            if (mapChanged) window.saveVerifiedMetaWritesV60(map);
+          }
+        }
+        return _origHandleCloudDataV60(res);
+      };
+
+      // Flush any unconfirmed Leave/Swap/Roster/User/Config writes via sendBeacon if tab is closed/reloaded!
+      window.addEventListener('pagehide', () => {
+        try {
+          const map = window.getVerifiedMetaWritesV60();
+          const keys = Object.keys(map);
+          if (keys.length > 0 && navigator.sendBeacon) {
+            keys.forEach(k => {
+              const it = map[k];
+              if (!it || !it.action || !it.payload) return;
+              const params = new URLSearchParams();
+              params.append('action', it.action);
+              params.append('payload', JSON.stringify({ action: it.action, timestamp: new Date().toISOString(), ...it.payload }));
+              navigator.sendBeacon(webhookUrl, params);
+            });
+          }
+        } catch (eBeacon60) {}
+      });
+
+      // Resume verifying any unconfirmed meta writes immediately upon page load!
+      setTimeout(() => {
+        if (window.getPendingMetaWriteCountV60() > 0) {
+          window.startMetaVerificationLoopV60();
+        }
+      }, 1500);
+    } catch (errV60) {
+      console.error('Non-fatal patch v60 warning:', errV60);
     }
 
 window.addEventListener('load', init);
