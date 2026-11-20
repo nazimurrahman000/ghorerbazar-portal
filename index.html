@@ -28712,31 +28712,53 @@ function renderChatHubView() {
           }
         }
 
+        // Standard Portal Actual Daily Target (+5% Working Target ÷ 26) — strict floor, NEVER drops below this!
+        const chKeyForDiv = agentObj
+          ? (getChannelForTeam(agentObj.team) === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK')
+          : (activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK');
+        const portalBaseDivisor = (!window._isExportingSheetWithActualTarget && typeof window.getWorkingDaysDivisorForMonthV59 === 'function')
+          ? (Number(window.getWorkingDaysDivisorForMonthV59(chKeyForDiv, mk)) || 26)
+          : 26;
+        const actualDaily26 = workingTarget > 0 ? Math.round(workingTarget / portalBaseDivisor) : 0;
+
         let status = 'ACTIVE';
         let dailyTarget = 0;
+        let isBoosted = false;
+        let rawRemainingPace = 0;
+
         if (workingTarget <= 0) {
           status = 'NO_TARGET';
           dailyTarget = 0;
         } else if (monthRelation === 'PAST') {
           status = remainingTarget <= 0 ? 'ACHIEVED' : 'PAST';
-          dailyTarget = Math.round(workingTarget / Math.max(1, totalDutyDaysInMonth));
+          dailyTarget = actualDaily26;
         } else if (remainingTarget <= 0) {
+          // Monthly 100%+ achieved: Dashboard shows "100% Hit", inner Portal tabs stay at actualDaily26 (+5% ÷ 26)!
           status = 'ACHIEVED';
           dailyTarget = 0;
         } else if (remainingDutyDays <= 0) {
           status = 'FINAL_BALANCE';
-          dailyTarget = remainingTarget;
+          rawRemainingPace = remainingTarget;
+          isBoosted = remainingTarget > actualDaily26;
+          dailyTarget = Math.max(actualDaily26, remainingTarget);
         } else {
-          dailyTarget = Math.round(remainingTarget / remainingDutyDays);
+          rawRemainingPace = Math.round(remainingTarget / remainingDutyDays);
+          // Increases if behind or Leave/Absent; NEVER drops below actualDaily26 (+5% ÷ 26) if ahead!
+          isBoosted = rawRemainingPace > actualDaily26;
+          dailyTarget = Math.max(actualDaily26, rawRemainingPace);
         }
 
-        const baseDutyDayTarget = workingTarget > 0 ? Math.round(workingTarget / Math.max(1, totalDutyDaysInMonth)) : 0;
-        const tableDailyTarget = (status === 'ACHIEVED' || dailyTarget <= 0) ? baseDutyDayTarget : dailyTarget;
+        const baseDutyDayTarget = actualDaily26;
+        const tableDailyTarget = (status === 'ACHIEVED' || dailyTarget <= 0) ? actualDaily26 : Math.max(actualDaily26, dailyTarget);
 
         return {
           dailyTarget,
           tableDailyTarget,
+          actualDaily26,
           baseDutyDayTarget,
+          portalBaseDivisor,
+          rawRemainingPace,
+          isBoosted,
           workingTarget,
           achieved,
           remainingTarget,
@@ -28756,7 +28778,7 @@ function renderChatHubView() {
       window.getAgentDynamicDailyTargetV62 = function(agentObj, mKey, preloadedMonthSales) {
         const mk = String(mKey || selectedMonthKey || getCurrentMonthKeyStr()).trim();
         if (!agentObj) {
-          return { dailyTarget: 0, tableDailyTarget: 0, baseDutyDayTarget: 0, remainingDutyDays: 0, totalLeaveAbsentDaysInMonth: 0, status: 'NO_TARGET' };
+          return { dailyTarget: 0, tableDailyTarget: 0, actualDaily26: 0, baseDutyDayTarget: 0, portalBaseDivisor: 26, rawRemainingPace: 0, isBoosted: false, remainingDutyDays: 0, totalLeaveAbsentDaysInMonth: 0, status: 'NO_TARGET' };
         }
         const uid = String(agentObj.id).trim();
         const allMonthSales = Array.isArray(preloadedMonthSales)
@@ -28794,10 +28816,12 @@ function renderChatHubView() {
               mode: 'AGENT',
               ...pace,
               tooltip: pace.status === 'ACHIEVED'
-                ? '100% Monthly Working Target Achieved!'
+                ? `100% Monthly Working Target Achieved! (Portal Actual Daily Target: ৳${Number(pace.actualDaily26 || 0).toLocaleString()})`
                 : (pace.monthRelation === 'PAST'
-                    ? `Closed month target ÷ ${pace.totalDutyDaysInMonth} duty days (DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`
-                    : `Remaining ৳${pace.remainingTarget.toLocaleString()} ÷ ${pace.remainingDutyDays} remaining duty days (Roster DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth}) to achieve 100%`)
+                    ? `Closed month Portal Daily Target (+5% ÷ ${pace.portalBaseDivisor}): ৳${Number(pace.actualDaily26 || 0).toLocaleString()}`
+                    : (pace.isBoosted
+                        ? `Adjusted Daily Target (Behind / Leave): Remaining ৳${pace.remainingTarget.toLocaleString()} ÷ ${pace.remainingDutyDays} remaining duty days = ৳${pace.dailyTarget.toLocaleString()} (Base Daily: ৳${Number(pace.actualDaily26 || 0).toLocaleString()} | DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`
+                        : `On Track / Ahead! Minimum Daily Target stays at ৳${Number(pace.actualDaily26 || 0).toLocaleString()} (+5% ÷ ${pace.portalBaseDivisor}) — never drops below actual daily target (${pace.remainingDutyDays} duty days left)`))
             };
           }
         } catch (eT62) {}
@@ -28823,8 +28847,12 @@ function renderChatHubView() {
               subHintHtml = `<span class="block text-[9px] font-black text-emerald-600 leading-none mt-0.5">100% Target Hit!</span>`;
               valueOverrideHtml = `<strong class="text-xs font-black text-emerald-700">✅ 100% Hit</strong>`;
             } else if (meta.status === 'ACTIVE') {
-              const lvBit = meta.totalLeaveAbsentDaysInMonth > 0 ? ` • ${meta.totalLeaveAbsentDaysInMonth}L adj.` : '';
-              subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/80 leading-none mt-0.5">${meta.remainingDutyDays} duty days left${lvBit}</span>`;
+              if (meta.isBoosted) {
+                const lvBit = meta.totalLeaveAbsentDaysInMonth > 0 ? ` • ${meta.totalLeaveAbsentDaysInMonth}L adj.` : '';
+                subHintHtml = `<span class="block text-[9px] font-bold text-rose-600 leading-none mt-0.5">${meta.remainingDutyDays} duty days left${lvBit}</span>`;
+              } else {
+                subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/80 leading-none mt-0.5">On Track • ${meta.remainingDutyDays}d left</span>`;
+              }
             } else if (meta.status === 'FINAL_BALANCE') {
               subHintHtml = `<span class="block text-[9px] font-bold text-rose-600 leading-none mt-0.5">Remaining balance</span>`;
             } else if (meta.status === 'PAST') {
@@ -28885,11 +28913,15 @@ function renderChatHubView() {
             if (idxRem !== -1 && (idxRem - idxRow) < 2200) {
               let subPill = '';
               if (pace.status === 'ACHIEVED') {
-                subPill = `<span class="block text-[9px] font-black text-emerald-600 mt-0.5">✅ 100% Achieved</span>`;
+                const achTip = `100% Target Achieved! Standard Portal Daily Target: ৳${Number(pace.actualDaily26 || 0).toLocaleString()}/day`;
+                subPill = `<span class="block text-[9px] font-black text-emerald-600 mt-0.5" title="${achTip}">✅ 100% Achieved (৳${Number(pace.actualDaily26 || 0).toLocaleString()}/d)</span>`;
               } else if (pace.status === 'ACTIVE') {
                 const lvTag = pace.totalLeaveAbsentDaysInMonth > 0 ? ` • ${pace.totalLeaveAbsentDaysInMonth}L` : '';
-                const tip = `Daily Target to hit 100%: ৳${pace.dailyTarget.toLocaleString()}/day across ${pace.remainingDutyDays} remaining duty days (Roster DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`;
-                subPill = `<span class="block text-[9px] font-black text-emerald-700 mt-0.5" title="${tip}">Daily: ৳${pace.dailyTarget.toLocaleString()}/d (${pace.remainingDutyDays}d${lvTag})</span>`;
+                const pillColCls = pace.isBoosted ? 'text-rose-600' : 'text-emerald-700';
+                const tip = pace.isBoosted
+                  ? `Adjusted Daily Target (Behind/Leave): ৳${pace.dailyTarget.toLocaleString()}/day across ${pace.remainingDutyDays} remaining duty days (Base: ৳${Number(pace.actualDaily26 || 0).toLocaleString()} | DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`
+                  : `On Track / Ahead! Minimum Portal Daily Target stays at ৳${Number(pace.actualDaily26 || 0).toLocaleString()}/day (${pace.remainingDutyDays} duty days left)`;
+                subPill = `<span class="block text-[9px] font-black ${pillColCls} mt-0.5" title="${tip}">Daily: ৳${pace.dailyTarget.toLocaleString()}/d (${pace.remainingDutyDays}d${lvTag})</span>`;
               }
               if (subPill) {
                 const newRemCell = `<td class="p-3.5 font-bold text-slate-500"><div>৳${rem.toLocaleString()}</div>${subPill}</td>`;
