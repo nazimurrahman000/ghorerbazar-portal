@@ -28733,22 +28733,23 @@ function renderChatHubView() {
           status = remainingTarget <= 0 ? 'ACHIEVED' : 'PAST';
           dailyTarget = actualDaily26;
         } else if (remainingTarget <= 0) {
-          // Monthly 100%+ achieved: Dashboard shows "100% Hit", inner Portal tabs stay at actualDaily26 (+5% ÷ 26)!
+          // Monthly 100%+ achieved: Dashboard shows "✅ 100% Hit", inner Portal tabs stay at actualDaily26 (+5% ÷ 26)!
           status = 'ACHIEVED';
           dailyTarget = 0;
         } else if (remainingDutyDays <= 0) {
           status = 'FINAL_BALANCE';
           rawRemainingPace = remainingTarget;
           isBoosted = remainingTarget > actualDaily26;
-          dailyTarget = Math.max(actualDaily26, remainingTarget);
+          dailyTarget = remainingTarget;
         } else {
           rawRemainingPace = Math.round(remainingTarget / remainingDutyDays);
-          // Increases if behind or Leave/Absent; NEVER drops below actualDaily26 (+5% ÷ 26) if ahead!
+          // Dashboard Daily Target is 100% DYNAMIC: increases when behind/leave, DECREASES when ahead!
           isBoosted = rawRemainingPace > actualDaily26;
-          dailyTarget = Math.max(actualDaily26, rawRemainingPace);
+          dailyTarget = rawRemainingPace;
         }
 
         const baseDutyDayTarget = actualDaily26;
+        // Inner Portal tabs (Daily Sales Reports, Monthly Performance date table, Submit Modal) never drop below actualDaily26 (+5% ÷ 26)!
         const tableDailyTarget = (status === 'ACHIEVED' || dailyTarget <= 0) ? actualDaily26 : Math.max(actualDaily26, dailyTarget);
 
         return {
@@ -28821,7 +28822,7 @@ function renderChatHubView() {
                     ? `Closed month Portal Daily Target (+5% ÷ ${pace.portalBaseDivisor}): ৳${Number(pace.actualDaily26 || 0).toLocaleString()}`
                     : (pace.isBoosted
                         ? `Adjusted Daily Target (Behind / Leave): Remaining ৳${pace.remainingTarget.toLocaleString()} ÷ ${pace.remainingDutyDays} remaining duty days = ৳${pace.dailyTarget.toLocaleString()} (Base Daily: ৳${Number(pace.actualDaily26 || 0).toLocaleString()} | DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`
-                        : `On Track / Ahead! Minimum Daily Target stays at ৳${Number(pace.actualDaily26 || 0).toLocaleString()} (+5% ÷ ${pace.portalBaseDivisor}) — never drops below actual daily target (${pace.remainingDutyDays} duty days left)`))
+                        : `Ahead / On Track! Dynamic Daily Target: Remaining ৳${pace.remainingTarget.toLocaleString()} ÷ ${pace.remainingDutyDays} remaining duty days = ৳${pace.dailyTarget.toLocaleString()}/day (Standard Portal Daily: ৳${Number(pace.actualDaily26 || 0).toLocaleString()} | DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`))
             };
           }
         } catch (eT62) {}
@@ -28851,7 +28852,8 @@ function renderChatHubView() {
                 const lvBit = meta.totalLeaveAbsentDaysInMonth > 0 ? ` • ${meta.totalLeaveAbsentDaysInMonth}L adj.` : '';
                 subHintHtml = `<span class="block text-[9px] font-bold text-rose-600 leading-none mt-0.5">${meta.remainingDutyDays} duty days left${lvBit}</span>`;
               } else {
-                subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/80 leading-none mt-0.5">On Track • ${meta.remainingDutyDays}d left</span>`;
+                const lvBitAhead = meta.totalLeaveAbsentDaysInMonth > 0 ? ` • ${meta.totalLeaveAbsentDaysInMonth}L` : '';
+                subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/80 leading-none mt-0.5">Ahead • ${meta.remainingDutyDays}d left${lvBitAhead}</span>`;
               }
             } else if (meta.status === 'FINAL_BALANCE') {
               subHintHtml = `<span class="block text-[9px] font-bold text-rose-600 leading-none mt-0.5">Remaining balance</span>`;
@@ -28920,7 +28922,7 @@ function renderChatHubView() {
                 const pillColCls = pace.isBoosted ? 'text-rose-600' : 'text-emerald-700';
                 const tip = pace.isBoosted
                   ? `Adjusted Daily Target (Behind/Leave): ৳${pace.dailyTarget.toLocaleString()}/day across ${pace.remainingDutyDays} remaining duty days (Base: ৳${Number(pace.actualDaily26 || 0).toLocaleString()} | DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`
-                  : `On Track / Ahead! Minimum Portal Daily Target stays at ৳${Number(pace.actualDaily26 || 0).toLocaleString()}/day (${pace.remainingDutyDays} duty days left)`;
+                  : `Ahead / On Track! Dynamic Daily Needed: ৳${pace.dailyTarget.toLocaleString()}/day across ${pace.remainingDutyDays} remaining duty days (Standard Daily: ৳${Number(pace.actualDaily26 || 0).toLocaleString()})`;
                 subPill = `<span class="block text-[9px] font-black ${pillColCls} mt-0.5" title="${tip}">Daily: ৳${pace.dailyTarget.toLocaleString()}/d (${pace.remainingDutyDays}d${lvTag})</span>`;
               }
               if (subPill) {
