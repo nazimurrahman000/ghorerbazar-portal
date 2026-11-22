@@ -257,7 +257,7 @@
       { id: '10499', name: 'MD Istiaq Ahmed', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A', baseTarget: 1576609 },
       { id: '11078', name: 'MD Birhad Uddin', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'C', baseTarget: 1277213 },
       { id: '10686', name: 'Md. Sazzad Khondoker', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'B', baseTarget: 1377011 },
-      { id: '11640', name: 'MD Rafi', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'C', baseTarget: 1277213 },
+      { id: '10640', name: 'MD Rafi', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'C', baseTarget: 1277213 },
       { id: '10582', name: 'Shahidule Shihab', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A-', baseTarget: 1476810 },
       { id: '10581', name: 'Araful Islam', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A-', baseTarget: 1476810 },
       { id: '10756', name: 'MD. Sakibul Islam', role: 'agent', channel: 'WHATSAPP', team: 'Team Shakib Baksh', pass: '123456', grade: 'A', baseTarget: 1576609 },
@@ -384,7 +384,7 @@
       { id: '10499', name: 'MD Istiaq Ahmed', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
       { id: '11078', name: 'MD Birhad Uddin', team: 'Team Shakib Baksh', sat: 'DO', sun: '7:00 AM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'Night' },
       { id: '10686', name: 'Md. Sazzad Khondoker', team: 'Team Shakib Baksh', sat: 'Night', sun: 'DO', mon: '10:00 AM', tue: '10:00 AM', wed: '7:00 AM', thu: '7:00 AM', fri: '7:00 AM' },
-      { id: '11640', name: 'MD Rafi', team: 'Team Shakib Baksh', sat: '10:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '7:00 AM', wed: 'DO', thu: '3:00 PM', fri: '10:00 AM' },
+      { id: '10640', name: 'MD Rafi', team: 'Team Shakib Baksh', sat: '10:00 AM', sun: '7:00 AM', mon: '7:00 AM', tue: '7:00 AM', wed: 'DO', thu: '3:00 PM', fri: '10:00 AM' },
       { id: '10582', name: 'Shahidule Shihab', team: 'Team Shakib Baksh', sat: 'Night', sun: 'DO', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '7:00 AM', fri: '7:00 AM' },
       { id: '10581', name: 'Araful Islam', team: 'Team Shakib Baksh', sat: '9:00 AM', sun: '9:00 AM', mon: '9:00 AM', tue: '9:00 AM', wed: '9:00 AM', thu: '9:00 AM', fri: 'DO' },
       { id: '10756', name: 'MD. Sakibul Islam', team: 'Team Shakib Baksh', sat: 'DO', sun: '7:00 AM', mon: '7:00 AM', tue: '3:00 PM', wed: '3:00 PM', thu: 'Night', fri: 'Night' },
@@ -2576,6 +2576,7 @@
       e.preventDefault();
       let id = document.getElementById('loginId').value.trim();
       if (id === '10160') id = '10175';
+      if (id === '11640') id = '10640';
       const pass = document.getElementById('loginPass').value.trim();
       const rawUser = getStored('users', DEFAULT_USERS).map(normalizeUserRecord).find(u => String(u.id) === id && u.pass === pass);
       if (!rawUser) { showPortalToast('Login Failed', 'Invalid Employee ID or Password! Please check and try again.', 'error'); return; }
@@ -19807,6 +19808,7 @@ function renderChatHubView() {
 
         let id = (document.getElementById('loginId')?.value || '').trim();
         if (id === '10160') id = '10175';
+      if (id === '11640') id = '10640';
         const pass = (document.getElementById('loginPass')?.value || '').trim();
 
         // If local sales_records cache is empty on a brand-new tab, trigger & await cloud fetch first (up to 3.2s)
@@ -29559,6 +29561,460 @@ function renderChatHubView() {
       };
     } catch (errV65) {
       console.error('Non-fatal patch v65 warning:', errV65);
+    }
+
+
+    // =========================================================================
+    // PATCH V66: ATOMIC EMPLOYEE ID RENAME & MIGRATION ENGINE
+    // - Properly tracks original Employee ID when editing a user in Target Setup & IDs
+    // - Renames oldId -> newId across local stores, Duty Roster, Sales, Attendance,
+    //   Activity Logs, Monthly Configs & sends oldId to Apps Script (v16) so ZERO
+    //   duplicate IDs are created anywhere!
+    // - Auto-migrates legacy typo ID 11640 -> 10640 (MD Rafi) cleanly everywhere!
+    // =========================================================================
+    try {
+      window._editingOriginalUserIdV66 = '';
+
+      window.getRenamedUserIdsMapV66 = function() {
+        const configs = getStored('monthly_configs', {});
+        const cloudMap = (configs && configs['RENAMED_USER_IDS'] && typeof configs['RENAMED_USER_IDS'] === 'object')
+          ? configs['RENAMED_USER_IDS']
+          : {};
+        return { '11640': '10640', ...cloudMap };
+      };
+
+      window.migrateEmployeeIdLocallyV66 = function(oldIdRaw, newIdRaw) {
+        const oldId = String(oldIdRaw || '').trim();
+        const newId = String(newIdRaw || '').trim();
+        if (!oldId || !newId || oldId === newId) return false;
+        let changed = false;
+
+        // 1. gb_users: remove oldId if newId exists, else rename oldId -> newId
+        let users = getStored('users', DEFAULT_USERS);
+        const hasNewU = users.some(u => u && String(u.id).trim() === newId);
+        const nextUsers = [];
+        let seenNewU = false;
+        users.forEach(u => {
+          if (!u) return;
+          const uid = String(u.id).trim();
+          if (uid === oldId) {
+            changed = true;
+            if (!hasNewU && !seenNewU) {
+              nextUsers.push({ ...u, id: newId });
+              seenNewU = true;
+            }
+          } else if (uid === newId) {
+            if (!seenNewU) {
+              nextUsers.push(u);
+              seenNewU = true;
+            } else {
+              changed = true;
+            }
+          } else {
+            nextUsers.push(u);
+          }
+        });
+        if (changed) setStored('users', nextUsers);
+
+        // 2. gb_sales_records
+        let sales = getStored('sales_records', []);
+        let salesChg = false;
+        sales = sales.map(s => {
+          if (s && String(s.userId).trim() === oldId) {
+            salesChg = true;
+            return { ...s, userId: newId };
+          }
+          return s;
+        });
+        if (salesChg) {
+          setStored('sales_records', deduplicateSalesRecordsList(sales));
+          changed = true;
+        }
+
+        // 3. gb_attendance_records
+        let att = getStored('attendance_records', []);
+        let attChg = false;
+        att = att.map(a => {
+          if (a && String(a.userId).trim() === oldId) {
+            attChg = true;
+            return { ...a, userId: newId };
+          }
+          return a;
+        });
+        if (attChg) {
+          setStored('attendance_records', att);
+          changed = true;
+        }
+
+        // 4. gb_roster_records (deduplicated per monthKey + id)
+        let roster = getStored('roster_records', []);
+        let rosChg = false;
+        const seenRos = new Set();
+        const nextRoster = [];
+        roster.forEach(r => {
+          if (!r) return;
+          let rCopy = { ...r };
+          if (String(rCopy.id).trim() === oldId) {
+            rCopy.id = newId;
+            rosChg = true;
+          }
+          const rk = `${String(rCopy.monthKey || '').trim()}_${String(rCopy.id || '').trim()}`;
+          if (String(rCopy.id).trim() === newId) {
+            if (seenRos.has(rk)) { rosChg = true; return; }
+            seenRos.add(rk);
+          }
+          nextRoster.push(rCopy);
+        });
+        if (rosChg) {
+          setStored('roster_records', nextRoster);
+          changed = true;
+        }
+
+        // 5. gb_online_users
+        let online = getStored('online_users', []);
+        const filteredOnline = online.filter(o => !o || String(o.id).trim() !== oldId);
+        if (filteredOnline.length !== online.length) {
+          setStored('online_users', filteredOnline);
+          changed = true;
+        }
+
+        // 6. gb_activity_logs
+        let actLogs = getStored('activity_logs', []);
+        let actChg = false;
+        actLogs = actLogs.map(l => {
+          if (l && String(l.userId).trim() === oldId) {
+            actChg = true;
+            return { ...l, userId: newId };
+          }
+          return l;
+        });
+        if (actChg) {
+          setStored('activity_logs', actLogs);
+          changed = true;
+        }
+
+        // 7. gb_monthly_configs (user overrides, avatars, permissions, leave/DO/swap maps + RENAMED_USER_IDS)
+        let configs = getStored('monthly_configs', {});
+        let cfgChg = false;
+        Object.keys(configs).forEach(cKey => {
+          const obj = configs[cKey];
+          if (!obj || typeof obj !== 'object') return;
+          if (obj.users && typeof obj.users === 'object' && obj.users[oldId]) {
+            if (!obj.users[newId]) obj.users[newId] = obj.users[oldId];
+            delete obj.users[oldId];
+            cfgChg = true;
+          }
+          if (['USER_AVATARS', 'ROLE_PERMISSIONS', 'DEACTIVATED_USERS', 'RESIGNED_USERS'].includes(cKey)) {
+            if (obj[oldId] !== undefined) {
+              if (obj[newId] === undefined) obj[newId] = obj[oldId];
+              delete obj[oldId];
+              cfgChg = true;
+            }
+          }
+          if (cKey.startsWith('LEAVE_RECORDS_') || cKey.startsWith('APPROVED_DO_') || cKey.startsWith('DUTY_SWAPS_')) {
+            Object.keys(obj).forEach(k => {
+              const entry = obj[k];
+              if (entry && typeof entry === 'object') {
+                if (String(entry.userId || '').trim() === oldId) { entry.userId = newId; cfgChg = true; }
+                if (String(entry.partnerId || '').trim() === oldId) { entry.partnerId = newId; cfgChg = true; }
+              }
+              if (k.startsWith(oldId + '_')) {
+                const newK = newId + k.substring(oldId.length);
+                if (!obj[newK]) obj[newK] = entry;
+                delete obj[k];
+                cfgChg = true;
+              }
+            });
+          }
+        });
+        if (!configs['RENAMED_USER_IDS'] || typeof configs['RENAMED_USER_IDS'] !== 'object') {
+          configs['RENAMED_USER_IDS'] = {};
+        }
+        if (configs['RENAMED_USER_IDS'][oldId] !== newId) {
+          configs['RENAMED_USER_IDS'][oldId] = newId;
+          cfgChg = true;
+        }
+        if (cfgChg) {
+          setStored('monthly_configs', configs);
+          changed = true;
+        }
+
+        // 8. Local user edit lock store (if present)
+        try {
+          if (typeof window.getLocalUserEditsLockStore === 'function') {
+            const lStore = window.getLocalUserEditsLockStore();
+            let lMod = false;
+            Object.keys(lStore || {}).forEach(mk => {
+              if (lStore[mk] && lStore[mk][oldId]) {
+                if (!lStore[mk][newId]) lStore[mk][newId] = { ...lStore[mk][oldId], id: newId };
+                delete lStore[mk][oldId];
+                lMod = true;
+              }
+            });
+            if (lMod) {
+              localStorage.setItem('gb_local_user_edits_lock', JSON.stringify(lStore));
+              changed = true;
+            }
+          }
+        } catch (eLockMig) {}
+
+        // 9. Local avatar key & currentUser session
+        try {
+          const oldAv = localStorage.getItem('gb_avatar_' + oldId);
+          if (oldAv) {
+            if (!localStorage.getItem('gb_avatar_' + newId)) {
+              localStorage.setItem('gb_avatar_' + newId, oldAv);
+            }
+            localStorage.removeItem('gb_avatar_' + oldId);
+          }
+        } catch (eAv) {}
+        if (currentUser && String(currentUser.id).trim() === oldId) {
+          currentUser = { ...currentUser, id: newId };
+          setStored('session_user', currentUser);
+        }
+
+        return changed;
+      };
+
+      // Run one-time startup migration for 11640 -> 10640 and any RENAMED_USER_IDS
+      (function autoMigrateRenamedIdsOnBootV66() {
+        const rMap = window.getRenamedUserIdsMapV66();
+        Object.keys(rMap).forEach(oldK => {
+          const newK = String(rMap[oldK] || '').trim();
+          if (oldK && newK && oldK !== newK) {
+            window.migrateEmployeeIdLocallyV66(oldK, newK);
+          }
+        });
+      })();
+
+      // Wrap handleCloudData so any stale renamed old IDs coming from an older sheet are auto-migrated on the fly
+      const _origHandleCloudDataV66 = handleCloudData;
+      handleCloudData = function(res) {
+        try {
+          const rMap = { '11640': '10640' };
+          if (res && res.monthlyConfigs && res.monthlyConfigs['RENAMED_USER_IDS'] && typeof res.monthlyConfigs['RENAMED_USER_IDS'] === 'object') {
+            Object.assign(rMap, res.monthlyConfigs['RENAMED_USER_IDS']);
+          }
+          const localCfgMap = window.getRenamedUserIdsMapV66();
+          Object.assign(rMap, localCfgMap);
+
+          if (res && Array.isArray(res.customUsers)) {
+            const seenU = new Set();
+            const cleanedU = [];
+            // Keep canonical new IDs first so old IDs never overwrite them
+            res.customUsers.forEach(u => {
+              if (!u || !u.id) return;
+              const rawId = String(u.id).trim();
+              if (!rMap[rawId]) {
+                seenU.add(rawId);
+                cleanedU.push(u);
+              }
+            });
+            res.customUsers.forEach(u => {
+              if (!u || !u.id) return;
+              const rawId = String(u.id).trim();
+              if (rMap[rawId]) {
+                const mappedId = String(rMap[rawId]).trim();
+                if (!seenU.has(mappedId)) {
+                  seenU.add(mappedId);
+                  cleanedU.push({ ...u, id: mappedId });
+                }
+              }
+            });
+            res.customUsers = cleanedU;
+          }
+          if (res && Array.isArray(res.salesRecords)) {
+            res.salesRecords = res.salesRecords.map(s => {
+              if (s && s.userId && rMap[String(s.userId).trim()]) {
+                return { ...s, userId: String(rMap[String(s.userId).trim()]).trim() };
+              }
+              return s;
+            });
+          }
+          if (res && Array.isArray(res.rosterRecords)) {
+            const seenR = new Set();
+            const cleanedR = [];
+            res.rosterRecords.forEach(r => {
+              if (!r || !r.id) return;
+              const rawId = String(r.id).trim();
+              const mappedId = rMap[rawId] ? String(rMap[rawId]).trim() : rawId;
+              const rk = `${String(r.monthKey || '').trim()}_${mappedId}`;
+              if (seenR.has(rk)) return;
+              seenR.add(rk);
+              cleanedR.push(mappedId !== rawId ? { ...r, id: mappedId } : r);
+            });
+            res.rosterRecords = cleanedR;
+          }
+          if (res && Array.isArray(res.attendanceRecords)) {
+            res.attendanceRecords = res.attendanceRecords.map(a => {
+              if (a && a.userId && rMap[String(a.userId).trim()]) {
+                return { ...a, userId: String(rMap[String(a.userId).trim()]).trim() };
+              }
+              return a;
+            });
+          }
+          if (res && Array.isArray(res.onlineUsers)) {
+            res.onlineUsers = res.onlineUsers.filter(o => !o || !rMap[String(o.id).trim()]);
+          }
+        } catch (eCloudV66) {}
+        return _origHandleCloudDataV66(res);
+      };
+
+      // Wrap getUsersForMonth & getRosterForMonth to guarantee renamed old IDs never reappear as duplicates
+      const _origGetUsersForMonthV66 = getUsersForMonth;
+      getUsersForMonth = function(mKey, includeAllChannels = false) {
+        const list = _origGetUsersForMonthV66(mKey, includeAllChannels);
+        const rMap = window.getRenamedUserIdsMapV66();
+        return list.filter(u => !u || !rMap[String(u.id).trim()]);
+      };
+
+      const _origGetRosterForMonthV66 = getRosterForMonth;
+      getRosterForMonth = function(mKey) {
+        const list = _origGetRosterForMonthV66(mKey);
+        const rMap = window.getRenamedUserIdsMapV66();
+        return list.filter(r => !r || !rMap[String(r.id).trim()]);
+      };
+
+      // Wrap openUserModal to remember the exact original Employee ID being edited
+      const _origOpenUserModalV66 = openUserModal;
+      openUserModal = function(editId) {
+        window._editingOriginalUserIdV66 = editId ? String(editId).trim() : '';
+        return _origOpenUserModalV66(editId);
+      };
+
+      // Upgrade handleSaveUser to support true Employee ID Renaming (oldId -> newId) without creating duplicates!
+      const _origHandleSaveUserV66 = handleSaveUser;
+      handleSaveUser = async function(e) {
+        const oldId = String(window._editingOriginalUserIdV66 || '').trim();
+        const newId = String(document.getElementById('usrId')?.value || '').trim();
+
+        // Standard path when creating a brand new user OR editing an existing user without changing their Emp ID
+        if (!oldId || !newId || oldId === newId) {
+          return _origHandleSaveUserV66(e);
+        }
+
+        // RENAME PATH: User changed Employee ID from oldId -> newId!
+        e.preventDefault();
+        if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
+
+        const allUsersNow = getUsersForMonth(selectedMonthKey, true);
+        const origUser = allUsersNow.find(u => String(u.id).trim() === oldId);
+        if (origUser && !canEditTargetUser(currentUser, origUser)) {
+          showPortalToast('Permission Denied', 'You do not have permission to rename this Employee ID.', 'error');
+          return;
+        }
+        const conflictUser = allUsersNow.find(u => String(u.id).trim() === newId);
+        if (conflictUser && !isSuperAdmin(currentUser)) {
+          showPortalToast('Employee ID Already Exists', `ID ${newId} already belongs to ${conflictUser.name}. Only Super Admin can merge/overwrite it.`, 'error');
+          return;
+        }
+
+        const roleVal = document.getElementById('usrRole').value;
+        if (roleVal === 'admin' && !isSuperAdmin(currentUser) && oldId !== String(currentUser.id)) {
+          showPortalToast('Permission Denied', 'Only Nazim (Super Admin) can assign Admin role.', 'error');
+          return;
+        }
+
+        const rawGradeVal = roleVal === 'supervisor' ? 'Supervisor' : (document.getElementById('usrGrade').value || (roleVal === 'admin' ? 'TL' : 'A'));
+        const rawName = document.getElementById('usrName').value.trim();
+        const selectedTeamVal = normalizeTeamNameAlias(document.getElementById('usrTeam').value || currentUser.team);
+        const allowedNonSuperTeams = [normalizeTeamNameAlias(currentUser.team), 'Floating', 'WA Floating', 'All Teams'];
+        let finalTeamVal = isSuperAdmin(currentUser)
+          ? selectedTeamVal
+          : (allowedNonSuperTeams.includes(selectedTeamVal) ? selectedTeamVal : normalizeTeamNameAlias(currentUser.team));
+
+        if (finalTeamVal === 'Floating' && window.userModalSelectedScaleChannel === 'WHATSAPP') finalTeamVal = 'WA Floating';
+        else if (finalTeamVal === 'WA Floating' && window.userModalSelectedScaleChannel === 'FACEBOOK') finalTeamVal = 'Floating';
+
+        const canEditTargetAmount = hasFeatureAccess(currentUser, 'feat_edit_grades_targets');
+        const rawTargetInputVal = Number(document.getElementById('usrTarget').value) || 0;
+        let finalGradeVal = rawGradeVal;
+        let finalTargetVal = rawTargetInputVal;
+        const scaleChForSave = window.userModalSelectedScaleChannel || getChannelForTeam(finalTeamVal);
+        const officialGradeMap = window.getGradeMapForChannelScale(scaleChForSave, selectedMonthKey);
+
+        if (roleVal === 'supervisor') {
+          finalGradeVal = 'Supervisor';
+          finalTargetVal = 0;
+        } else if (!canEditTargetAmount) {
+          finalTargetVal = finalGradeVal === 'Pending' ? 0 : Number(officialGradeMap[finalGradeVal] || 0);
+        } else if (finalGradeVal === 'Pending') {
+          finalTargetVal = rawTargetInputVal > 0 ? rawTargetInputVal : 0;
+        } else if (finalTargetVal <= 0) {
+          finalTargetVal = Number(officialGradeMap[finalGradeVal] || 0);
+        }
+
+        const nowTs = Date.now();
+        const renamedUserObj = {
+          ...normalizeUserRecord({
+            id: newId,
+            name: rawName,
+            team: finalTeamVal,
+            channel: getChannelForTeam(finalTeamVal),
+            grade: finalGradeVal,
+            role: roleVal,
+            pass: document.getElementById('usrPass').value.trim(),
+            baseTarget: finalTargetVal
+          }),
+          team: finalTeamVal,
+          channel: getChannelForTeam(finalTeamVal),
+          grade: finalGradeVal,
+          baseTarget: finalTargetVal,
+          updatedTs: nowTs
+        };
+
+        openConfirmWarningModal(
+          `Rename Employee ID: ${oldId} → ${newId}?`,
+          `<strong>Agent:</strong> ${renamedUserObj.name}<br><strong>Old ID:</strong> <span class="text-rose-600 font-black">${oldId}</span> ➔ <strong>New ID:</strong> <span class="text-emerald-600 font-black">${newId}</span><br><br>This will automatically update the ID across <strong>Users List, Duty Roster, Sales Reports, Attendance, Leave/Swaps & Google Sheets</strong> — with <strong>ZERO duplicate IDs</strong>.`,
+          'Confirm Employee ID Rename',
+          async () => {
+            window.migrateEmployeeIdLocallyV66(oldId, newId);
+
+            let users = [...getStored('users', DEFAULT_USERS)].filter(u => u && String(u.id).trim() !== oldId);
+            const idx = users.findIndex(u => String(u.id).trim() === newId);
+            if (idx !== -1) users[idx] = { ...users[idx], ...renamedUserObj, updatedTs: nowTs };
+            else users.push(renamedUserObj);
+            setStored('users', users);
+            if (typeof window.saveLocalUserEditLock === 'function') {
+              window.saveLocalUserEditLock(selectedMonthKey, renamedUserObj);
+            }
+            markLocalUserOrConfigMutatedNow();
+
+            const { effKey, monthConfigObj, otherKey, otherConfigObj } = syncAgentTeamForSelectedMonthOnly(
+              renamedUserObj.id,
+              renamedUserObj.name,
+              renamedUserObj.team,
+              renamedUserObj.grade,
+              renamedUserObj.baseTarget
+            );
+
+            const logMeta = recordActivityLog(
+              'Renamed Employee ID',
+              `Renamed Employee ID ${oldId} → ${newId} for ${renamedUserObj.name} (${renamedUserObj.team}, Grade: ${renamedUserObj.grade})`
+            );
+
+            window._editingOriginalUserIdV66 = '';
+            closeModal('userModal');
+            renderAppLayout();
+            showPortalToast('Employee ID Renamed & Synced!', `${renamedUserObj.name}: ${oldId} → ${newId} updated across Portal, Roster & Google Sheets!`, 'success');
+
+            await postToSheet('SAVE_USER', {
+              ...renamedUserObj,
+              oldId: oldId,
+              monthKey: selectedMonthKey,
+              ...logMeta
+            }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+            if (otherConfigObj) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+            }
+          },
+          'Yes, Rename & Migrate ID',
+          true
+        );
+      };
+    } catch (errV66) {
+      console.error('Non-fatal patch v66 warning:', errV66);
     }
 
 window.addEventListener('load', init);
