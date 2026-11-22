@@ -12327,7 +12327,8 @@ function renderRankingAndComparison() {
       const wrapper = document.getElementById('bellNotificationWrapper');
       if (wrapper && !wrapper.contains(e.target)) {
         notificationDropdownOpen = false;
-        renderAppLayout();
+        const menuEl = document.getElementById('notificationDropdownMenu');
+        if (menuEl) menuEl.classList.add('hidden');
       }
     });
 
@@ -30440,11 +30441,34 @@ function renderChatHubView() {
         return _origHandleCloudDataV67(res);
       };
 
-      // Helper actions for Bell Dropdown
+      // Helper: Re-render ONLY the Bell Notification widget in-place (ZERO full-page flicker & ZERO re-pop jump!)
+      window._bellJustOpenedV67 = false;
+
+      window.refreshBellWidgetInPlaceV67 = function(isFreshOpen = false) {
+        window._bellJustOpenedV67 = Boolean(isFreshOpen);
+        const existingWrap = document.getElementById('bellNotificationWrapper');
+        if (existingWrap && typeof renderHeaderBellNotificationWidget === 'function') {
+          const temp = document.createElement('div');
+          temp.innerHTML = renderHeaderBellNotificationWidget().trim();
+          const freshWrap = temp.firstElementChild;
+          if (freshWrap) {
+            existingWrap.replaceWith(freshWrap);
+            window._bellJustOpenedV67 = false;
+            return true;
+          }
+        }
+        window._bellJustOpenedV67 = false;
+        renderAppLayout();
+        return false;
+      };
+
+      // Helper actions for Bell Dropdown (Instant, Smooth In-Place Tab Switching!)
       window.setBellFilterTabV67 = function(tabName, e) {
         if (e) e.stopPropagation();
-        window.bellActiveFilterV67 = tabName || 'ALL';
-        renderAppLayout();
+        const nextTab = tabName || 'ALL';
+        if (window.bellActiveFilterV67 === nextTab) return;
+        window.bellActiveFilterV67 = nextTab;
+        window.refreshBellWidgetInPlaceV67(false);
       };
 
       window.dismissSingleBellNotifV67 = function(notifId, e) {
@@ -30467,14 +30491,17 @@ function renderChatHubView() {
 
         window.saveBellUserStateV67(bState, true);
         saveNotificationsForCurrentUser(myNotifs.filter(n => n.id !== notifId));
-        renderAppLayout();
+        window.refreshBellWidgetInPlaceV67(false);
       };
 
       toggleBellNotificationDropdown = function(e) {
         if (e) e.stopPropagation();
-        notificationDropdownOpen = !notificationDropdownOpen;
-        if (notificationDropdownOpen) {
+        const willOpen = !notificationDropdownOpen;
+        notificationDropdownOpen = willOpen;
+        if (willOpen) {
           profileMenuDropdownOpen = false;
+          const profMenu = document.getElementById('profileActionDropdownMenu');
+          if (profMenu) profMenu.classList.add('hidden');
           // Auto mark-all-read on open AND persist permanently to cloud!
           const bState = window.getBellUserStateV67(currentUser.id);
           const myNotifs = getNotificationsForCurrentUser();
@@ -30493,7 +30520,13 @@ function renderChatHubView() {
             saveNotificationsForCurrentUser(myNotifs.map(n => ({ ...n, read: true })));
           }
         }
-        renderAppLayout();
+        window.refreshBellWidgetInPlaceV67(willOpen);
+      };
+
+      closeBellNotificationDropdown = function(e) {
+        if (e) e.stopPropagation();
+        notificationDropdownOpen = false;
+        window.refreshBellWidgetInPlaceV67(false);
       };
 
       markAllNotificationsRead = function(e) {
@@ -30512,7 +30545,7 @@ function renderChatHubView() {
         bState.readBeforeTs = Math.max(bState.readBeforeTs || 0, maxTs);
         window.saveBellUserStateV67(bState, true);
         saveNotificationsForCurrentUser(myNotifs.map(n => ({ ...n, read: true })));
-        renderAppLayout();
+        window.refreshBellWidgetInPlaceV67(false);
         showPortalToast('All Marked as Read', 'Your read status is synced — these will stay read after login.', 'success');
       };
 
@@ -30530,7 +30563,6 @@ function renderChatHubView() {
             if (rawNid) bState.clearedNoticeIds.push(rawNid);
           }
         });
-        // Also record all currently existing Official Notice IDs in hub as cleared so they never come back!
         try {
           const hub = getChatAndNoticeHubStore();
           (hub.notices || []).forEach(nt => {
@@ -30542,20 +30574,20 @@ function renderChatHubView() {
         bState.readBeforeTs = Math.max(bState.readBeforeTs || 0, maxTs);
         window.saveBellUserStateV67(bState, true);
         saveNotificationsForCurrentUser([]);
-        renderAppLayout();
+        window.refreshBellWidgetInPlaceV67(false);
         showPortalToast('Notifications Cleared', 'Cleared permanently — they will NOT reappear after logout/login.', 'success');
       };
 
-      // Close Bell dropdown smoothly when clicking outside
+      // Close Bell dropdown smoothly when clicking outside (without full-page re-render!)
       document.addEventListener('click', (ev) => {
         if (notificationDropdownOpen && !ev.target.closest('#bellNotificationWrapper')) {
           notificationDropdownOpen = false;
           const menuEl = document.getElementById('notificationDropdownMenu');
           if (menuEl) menuEl.classList.add('hidden');
         }
-      });
+      }, true);
 
-      // Clean, Categorized, Compact Bell Widget Renderer
+      // Clean, Categorized, Smooth Bell Widget Renderer (Zero Bounce on Tab Switch!)
       renderHeaderBellNotificationWidget = function() {
         const myNotifs = getNotificationsForCurrentUser();
         const importantUnreadCount = myNotifs.filter(n => window.isBellNotifImportantForBadgeV67(n)).length;
@@ -30567,7 +30599,9 @@ function renderChatHubView() {
         const dataCount = myNotifs.filter(n => window.classifyBellNotifCategoryV67(n) === 'DATA').length;
         const authCount = myNotifs.filter(n => window.classifyBellNotifCategoryV67(n) === 'AUTH').length;
 
-        const curFilter = window.bellActiveFilterV67 || 'ALL';
+        let curFilter = window.bellActiveFilterV67 || 'ALL';
+        if (!isAdminOrSup && curFilter === 'AUTH') curFilter = 'ALL';
+
         const visibleNotifs = myNotifs.filter(n => {
           if (curFilter === 'ALL') return true;
           return window.classifyBellNotifCategoryV67(n) === curFilter;
@@ -30575,22 +30609,25 @@ function renderChatHubView() {
 
         const tabBtn = (key, label, cnt) => {
           const active = curFilter === key;
-          return `<button type="button" onclick="setBellFilterTabV67('${key}', event)" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-colors flex items-center gap-1 cursor-pointer ${active ? 'bg-slate-900 text-white shadow-2xs' : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'}">
+          return `<button type="button" onclick="setBellFilterTabV67('${key}', event)" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-colors duration-150 flex items-center gap-1 cursor-pointer ${active ? 'bg-slate-900 text-white shadow-2xs' : 'bg-white text-slate-600 hover:bg-slate-200/70 border border-slate-200'}">
             <span>${label}</span>
             <span class="px-1.5 py-0 rounded-full text-[9px] font-black ${active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}">${cnt}</span>
           </button>`;
         };
 
+        // Subtle fade ONLY when opening for the first time — NEVER bounce/re-animate while switching tabs!
+        const openAnimClass = window._bellJustOpenedV67 ? 'modal-card-anim' : '';
+
         return `
           <div class="relative" id="bellNotificationWrapper">
-            <button type="button" onclick="toggleBellNotificationDropdown(event)" title="${isAdminOrSup ? 'Organized Floor Notifications (Notices, Sales & Data, Login/Break)' : 'Notifications & Duty Reminders'}" class="w-8 h-8 rounded-xl ${importantUnreadCount > 0 ? 'bg-blue-50 border border-blue-200 text-blue-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} flex items-center justify-center relative transition-colors cursor-pointer shrink-0">
+            <button type="button" onclick="toggleBellNotificationDropdown(event)" title="${isAdminOrSup ? 'Organized Floor Notifications (Notices, Sales & Data, Login/Break)' : 'My Notifications & Duty Reminders'}" class="w-8 h-8 rounded-xl ${importantUnreadCount > 0 ? 'bg-blue-50 border border-blue-200 text-blue-600' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} flex items-center justify-center relative transition-colors cursor-pointer shrink-0">
               <i class="fa-solid fa-bell text-xs ${importantUnreadCount > 0 ? 'bell-ring' : ''}"></i>
               <span id="headerBellUnreadDot" class="${importantUnreadCount > 0 ? 'flex' : 'hidden'} absolute -top-1 -right-1 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[9px] font-black rounded-full items-center justify-center shadow-md ring-2 ring-white">
                 ${importantUnreadCount}
               </span>
             </button>
 
-            <div id="notificationDropdownMenu" onclick="event.stopPropagation()" class="${notificationDropdownOpen ? '' : 'hidden'} fixed right-4 sm:right-24 top-14 w-[340px] sm:w-[440px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-[85] overflow-hidden modal-card-anim">
+            <div id="notificationDropdownMenu" onclick="event.stopPropagation()" class="${notificationDropdownOpen ? '' : 'hidden'} fixed right-4 sm:right-24 top-14 w-[340px] sm:w-[440px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-[85] overflow-hidden ${openAnimClass}">
               <!-- Dark Header -->
               <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
                 <div class="flex items-center gap-2">
@@ -30615,7 +30652,7 @@ function renderChatHubView() {
                 <div class="flex flex-wrap items-center gap-1">
                   ${tabBtn('ALL', 'All', myNotifs.length)}
                   ${tabBtn('NOTICES', 'Notices', noticeCount)}
-                  ${tabBtn('DATA', 'Sales & Data', dataCount)}
+                  ${tabBtn('DATA', isAdminOrSup ? 'Sales & Data' : 'Duty & Alerts', dataCount)}
                   ${isAdminOrSup ? tabBtn('AUTH', 'Login/Break', authCount) : ''}
                 </div>
                 ${isAdminOrSup ? `<button type="button" onclick="notificationDropdownOpen=false; setTab('activity_logs');" class="text-[10px] font-extrabold text-blue-600 hover:underline cursor-pointer">Logs →</button>` : ''}
@@ -30636,8 +30673,8 @@ function renderChatHubView() {
               </div>
               ` : ''}
 
-              <!-- Compact Scrollable List -->
-              <div class="max-h-[400px] overflow-y-auto divide-y divide-slate-100">
+              <!-- Compact Steady Scrollable List -->
+              <div class="min-h-[168px] max-h-[400px] overflow-y-auto divide-y divide-slate-100">
                 ${visibleNotifs.length === 0 ? `
                   <div class="p-8 text-center">
                     <div class="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
@@ -30645,7 +30682,9 @@ function renderChatHubView() {
                     </div>
                     <p class="text-xs font-extrabold text-slate-600">${curFilter === 'ALL' ? 'No pending notifications' : 'No alerts in this category'}</p>
                     <p class="text-[11px] font-semibold text-slate-400 mt-0.5">
-                      Cleared & read notifications stay synced permanently across logins.
+                      ${currentUser && currentUser.role === 'agent'
+                        ? 'You will receive Official Notices, Chat Messages & a "Submit Report" alert 5 mins before shift end.'
+                        : 'Cleared & read notifications stay synced permanently across logins.'}
                     </p>
                   </div>
                 ` : visibleNotifs.map(n => {
