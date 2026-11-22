@@ -30144,10 +30144,10 @@ function renderChatHubView() {
         }
         const mk = mKey || selectedMonthKey;
         const ck = `${mk}|${includeAllChannels ? '1' : '0'}|${activeChannel}`;
-        if (_usersCacheMapV67.has(ck)) return _usersCacheMapV67.get(ck);
+        if (_usersCacheMapV67.has(ck)) return _usersCacheMapV67.get(ck).slice();
         const res = _origGetUsersForMonthV67(mk, includeAllChannels);
         _usersCacheMapV67.set(ck, res);
-        return res;
+        return res.slice();
       };
 
       // -----------------------------------------------------------------------
@@ -30415,15 +30415,24 @@ function renderChatHubView() {
         return res;
       };
 
-      // Preserve & merge USER_BELL_STATE cleanly in handleCloudData
+      // Preserve & merge incoming cloud USER_BELL_STATE directly BEFORE _origHandleCloudDataV67 runs
+      // so even on a brand-new browser/incognito login, cleared notifications NEVER flash on the 1st poll!
       const _origHandleCloudDataV67 = handleCloudData;
       handleCloudData = function(res) {
         try {
           if (res && res.monthlyConfigs && res.monthlyConfigs['USER_BELL_STATE'] && currentUser) {
             const uid = String(currentUser.id).trim();
             const cld = res.monthlyConfigs['USER_BELL_STATE'][uid];
-            if (cld) {
-              const merged = window.getBellUserStateV67(uid);
+            if (cld && typeof cld === 'object') {
+              const loc = window.getBellUserStateV67(uid);
+              const merged = {
+                readBeforeTs: Math.max(Number(loc.readBeforeTs || 0), Number(cld.readBeforeTs || 0)),
+                clearedBeforeTs: Math.max(Number(loc.clearedBeforeTs || 0), Number(cld.clearedBeforeTs || 0)),
+                clearedNoticeIds: Array.from(new Set([...(loc.clearedNoticeIds || []), ...(Array.isArray(cld.clearedNoticeIds) ? cld.clearedNoticeIds : [])])).slice(-80),
+                readNoticeIds: Array.from(new Set([...(loc.readNoticeIds || []), ...(Array.isArray(cld.readNoticeIds) ? cld.readNoticeIds : [])])).slice(-80),
+                dismissedKeys: Array.from(new Set([...(loc.dismissedKeys || []), ...(Array.isArray(cld.dismissedKeys) ? cld.dismissedKeys : [])])).slice(-200),
+                updatedTs: Math.max(Number(loc.updatedTs || 0), Number(cld.updatedTs || 0))
+              };
               try { localStorage.setItem('gb_bell_state_v67_' + uid, JSON.stringify(merged)); } catch (e) {}
             }
           }
