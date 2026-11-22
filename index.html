@@ -28864,7 +28864,129 @@ function renderChatHubView() {
               subHintHtml = `<span class="block text-[9px] font-bold text-slate-500 leading-none mt-0.5">${meta.totalDutyDaysInMonth} duty days</span>`;
             }
           } else if (meta.mode === 'TEAM') {
-            subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/75 leading-none mt-0.5">${meta.calDays}-day month avg</span>`;
+            // Team-wise Dynamic Daily Target ONLY when a specific team is selected inside a channel!
+            // Channel-wise (dashboardScope === 'ALL') & All Channels (activeChannel === 'ALL_CHANNELS') stay static month avg.
+            const isSpecificTeamView = (
+              activeChannel !== 'ALL_CHANNELS' &&
+              dashboardScope &&
+              dashboardScope !== 'ALL'
+            );
+            if (isSpecificTeamView) {
+              const mk = String(selectedMonthKey || getCurrentMonthKeyStr()).trim();
+              const parts = mk.split('/');
+              const mm = parseInt(parts[0], 10) || (new Date().getMonth() + 1);
+              const yyyy = parseInt(parts[1], 10) || new Date().getFullYear();
+              const daysInMonth = new Date(yyyy, mm, 0).getDate() || 30;
+              const now = new Date();
+              const curY = now.getFullYear();
+              const curM = now.getMonth() + 1;
+              const curD = now.getDate();
+
+              let monthRelation = 'CURRENT';
+              if (yyyy < curY || (yyyy === curY && mm < curM)) monthRelation = 'PAST';
+              else if (yyyy > curY || (yyyy === curY && mm > curM)) monthRelation = 'FUTURE';
+
+              const teamNorm = normalizeTeamNameAlias(dashboardScope);
+              const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
+                .filter(s => String(s.date || '').endsWith(mk) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+              const teamMonthSales = allMonthSales.filter(s => normalizeTeamNameAlias(s.team) === teamNorm);
+              const teamAchieved = teamMonthSales.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+              const teamWorkTgt = Number(tInfo.workingTarget) || 0;
+              const teamRemaining = Math.max(0, teamWorkTgt - teamAchieved);
+              const avgDaily = daysInMonth > 0 ? Math.round(teamWorkTgt / daysInMonth) : 0;
+
+              let remainingDays = daysInMonth;
+              let allTodayDutySubmitted = false;
+
+              if (monthRelation === 'CURRENT') {
+                const todayStr = `${String(curD).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${yyyy}`;
+                const allUsersRaw = (typeof window._rawGetUsersForMonthV62 === 'function')
+                  ? window._rawGetUsersForMonthV62(mk, true)
+                  : getUsersForMonth(mk, true);
+                const teamAgents = allUsersRaw.filter(a => a && a.role === 'agent' && !isPendingOrFloatingAgent(a) && normalizeTeamNameAlias(a.team) === teamNorm);
+                const roster = (typeof getRosterForMonth === 'function') ? getRosterForMonth(mk) : [];
+                const leaveStore = (typeof getLeaveRecordsStoreForMonth === 'function') ? getLeaveRecordsStoreForMonth(mk) : {};
+                const doApprovedStore = (typeof window.getApprovedDayOffDutiesStore === 'function') ? window.getApprovedDayOffDutiesStore(mk) : {};
+                const dutySwapsStore = (typeof window.getDutySwapsStoreForMonth === 'function') ? window.getDutySwapsStoreForMonth(mk) : {};
+                const dayKeyByDow = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                const todayDKey = dayKeyByDow[new Date(yyyy, mm - 1, curD).getDay()];
+
+                const todayDutyAgentIds = [];
+                teamAgents.forEach(ag => {
+                  const agUid = String(ag.id).trim();
+                  const rRow = roster.find(r => String(r.id).trim() === agUid);
+                  const rawShift = rRow ? String(rRow[todayDKey] || '3:00 PM').trim() : '3:00 PM';
+                  const isBaseDo = rawShift.toUpperCase() === 'DO';
+                  let isSwapCov = false;
+                  Object.keys(dutySwapsStore || {}).forEach(sk => {
+                    const sw = dutySwapsStore[sk];
+                    if (!sw || sw.isRemoved) return;
+                    if (sw.swapMode === 'SELF' && String(sw.userId).trim() === agUid && String(sw.coveredDate || '').trim() === todayStr) isSwapCov = true;
+                    if (sw.swapMode === 'TEAMMATE' && String(sw.partnerId).trim() === agUid && String(sw.coveredDate || '').trim() === todayStr) isSwapCov = true;
+                  });
+                  const directDo = doApprovedStore[`${agUid}_${todayStr}`];
+                  const isApprovedDoWork = Boolean((directDo && !directDo.isRemoved) || isSwapCov);
+                  const lv = leaveStore[`${agUid}_${todayStr}`];
+                  const hasLv = Boolean(lv && !lv.isRemoved);
+                  const lvTypeLow = hasLv ? String(lv.leaveType || '').toLowerCase() : '';
+                  const isSwapOff = hasLv && (lvTypeLow.includes('extra day off') || lvTypeLow.includes('swap'));
+                  const isLeaveAbs = hasLv && !isSwapOff;
+                  const effIsDo = (isBaseDo && !isApprovedDoWork) || isSwapOff;
+                  if (!effIsDo && !isLeaveAbs) {
+                    todayDutyAgentIds.push(agUid);
+                  }
+                });
+
+                if (todayDutyAgentIds.length > 0) {
+                  allTodayDutySubmitted = todayDutyAgentIds.every(agUid =>
+                    teamMonthSales.some(s => String(s.userId).trim() === agUid && String(s.date || '').replace(/^'/, '').trim() === todayStr)
+                  );
+                }
+                remainingDays = allTodayDutySubmitted ? Math.max(0, daysInMonth - curD) : Math.max(1, daysInMonth - curD + 1);
+              } else if (monthRelation === 'PAST') {
+                remainingDays = 0;
+              }
+
+              let dynVal = avgDaily;
+              let dynTip = meta.tooltip || '';
+
+              if (teamWorkTgt <= 0) {
+                subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/75 leading-none mt-0.5">${daysInMonth}-day month avg</span>`;
+              } else if (monthRelation === 'PAST') {
+                if (teamRemaining <= 0) {
+                  subHintHtml = `<span class="block text-[9px] font-black text-emerald-600 leading-none mt-0.5">100% Target Hit!</span>`;
+                  valueOverrideHtml = `<strong class="text-xs font-black text-emerald-700 shrink-0">✅ 100% Hit</strong>`;
+                  dynTip = `${teamNorm} 100% Monthly Working Target Achieved! (${daysInMonth}-day Avg: ৳${avgDaily.toLocaleString()}/day)`;
+                } else {
+                  subHintHtml = `<span class="block text-[9px] font-bold text-slate-500 leading-none mt-0.5">${daysInMonth}-day month avg</span>`;
+                  valueOverrideHtml = `<strong class="text-xs font-black text-emerald-900 shrink-0">৳${avgDaily.toLocaleString()}</strong>`;
+                }
+              } else if (teamRemaining <= 0) {
+                subHintHtml = `<span class="block text-[9px] font-black text-emerald-600 leading-none mt-0.5">100% Target Hit!</span>`;
+                valueOverrideHtml = `<strong class="text-xs font-black text-emerald-700 shrink-0">✅ 100% Hit</strong>`;
+                dynTip = `${teamNorm} 100% Monthly Working Target Achieved! (${daysInMonth}-day Avg: ৳${avgDaily.toLocaleString()}/day)`;
+              } else if (remainingDays <= 0) {
+                dynVal = teamRemaining;
+                subHintHtml = `<span class="block text-[9px] font-bold text-rose-600 leading-none mt-0.5">Remaining balance</span>`;
+                valueOverrideHtml = `<strong class="text-xs font-black text-rose-700 shrink-0">৳${dynVal.toLocaleString()}</strong>`;
+                dynTip = `${teamNorm} Final Remaining Balance: ৳${teamRemaining.toLocaleString()} (${daysInMonth}-day Avg: ৳${avgDaily.toLocaleString()}/day)`;
+              } else {
+                dynVal = Math.round(teamRemaining / remainingDays);
+                const isTeamBoosted = dynVal > avgDaily;
+                if (isTeamBoosted) {
+                  subHintHtml = `<span class="block text-[9px] font-bold text-rose-600 leading-none mt-0.5">${remainingDays} days left</span>`;
+                  valueOverrideHtml = `<strong class="text-xs font-black text-emerald-900 shrink-0">৳${dynVal.toLocaleString()}</strong>`;
+                  dynTip = `${teamNorm} Dynamic Daily Target (Behind): Remaining ৳${teamRemaining.toLocaleString()} ÷ ${remainingDays} remaining days = ৳${dynVal.toLocaleString()}/day (${daysInMonth}-day Avg: ৳${avgDaily.toLocaleString()}/day)`;
+                } else {
+                  subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/80 leading-none mt-0.5">Ahead • ${remainingDays}d left</span>`;
+                  valueOverrideHtml = `<strong class="text-xs font-black text-emerald-900 shrink-0">৳${dynVal.toLocaleString()}</strong>`;
+                  dynTip = `${teamNorm} Ahead / On Track! Dynamic Daily Target: Remaining ৳${teamRemaining.toLocaleString()} ÷ ${remainingDays} remaining days = ৳${dynVal.toLocaleString()}/day (${daysInMonth}-day Avg: ৳${avgDaily.toLocaleString()}/day)`;
+                }
+              }
+              meta.tooltip = dynTip;
+            } else {
+              subHintHtml = `<span class="block text-[9px] font-bold text-emerald-700/75 leading-none mt-0.5">${meta.calDays}-day month avg</span>`;
+            }
           }
 
           const safeTip = String(meta.tooltip || '').replace(/"/g, '&quot;');
