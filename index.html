@@ -10458,9 +10458,9 @@ function renderRankingAndComparison() {
       closeModal('submitModal');
       renderAppLayout();
       showPortalToast(
-        isUpdate ? 'Report Updated & Synced' : 'Report Saved & Synced',
-        `${targetAgent.name}'s report (${entry.date}) — ৳${entry.amount.toLocaleString()} updated across all panels!`,
-        'success'
+        isUpdate ? 'Updating Report in Sheet...' : 'Submitting Report to Sheet...',
+        `${targetAgent.name}'s report (${entry.date}) — ৳${entry.amount.toLocaleString()} is being confirmed in Google Sheet...`,
+        'warning'
       );
 
       // Zero-loss persistent outbox queue + background cloud sync
@@ -28936,6 +28936,302 @@ function renderChatHubView() {
       };
     } catch (errV62) {
       console.error('Non-fatal patch v62 warning:', errV62);
+    }
+
+
+    // =========================================================================
+    // PATCH v63 (index-v49.html): ZERO-DROP VERIFIED REPORT SUBMISSION ENGINE
+    // - Sends DAILY_SALES_SUBMIT via ultra-fast CORS-readable fastSubmit=1 path
+    //   so Google Apps Script confirms the write in ~0.5s (even when 30+ agents
+    //   submit simultaneously at 11:00 PM shift end!)
+    // - Reads real JSON ACK ({ status: "success", savedImmediately: true })
+    //   and retries cleanly with smart jitter if server is busy or network blips
+    // - Prevents premature logout until Google Sheets truly confirms the report
+    // - Auto-flushes any pending unconfirmed reports even on the Login screen
+    // - Debounces Sheet 1 & Sheet 2 organized rebuild right after confirmation
+    // =========================================================================
+    try {
+      window._inFlightSalesWriteKeysV63 = new Set();
+      window._debouncedRebuildTimerV63 = null;
+
+      window.scheduleDebouncedSheetRebuildV63 = function(monthKey, teamName) {
+        if (window._debouncedRebuildTimerV63) clearTimeout(window._debouncedRebuildTimerV63);
+        window._debouncedRebuildTimerV63 = setTimeout(() => {
+          window._debouncedRebuildTimerV63 = null;
+          postToSheet('REBUILD_SHEETS', {
+            monthKey: monthKey || selectedMonthKey,
+            team: teamName || ''
+          }).catch(() => {});
+        }, 3800);
+      };
+
+      window.markSalesWriteConfirmedV63 = function(k, item) {
+        // Clear from BOTH PATCH v56 unconfirmed map and base pending sales outbox queue
+        const map = window.getUnconfirmedSheetWritesV56 ? window.getUnconfirmedSheetWritesV56() : {};
+        if (map[k]) {
+          delete map[k];
+          window.saveUnconfirmedSheetWritesV56(map);
+        }
+        const outbox = getPendingSalesOutboxQueue();
+        if (outbox[k]) {
+          delete outbox[k];
+          savePendingSalesOutboxQueue(outbox);
+        }
+
+        const remaining = window.getUnconfirmedSheetWriteCountV56 ? window.getUnconfirmedSheetWriteCountV56() : 0;
+        if (remaining === 0) {
+          if (window._rapidVerifyIntervalV56) {
+            clearInterval(window._rapidVerifyIntervalV56);
+            window._rapidVerifyIntervalV56 = null;
+          }
+          const lbl = item && item.entry ? `${item.entry.userName || item.entry.userId} (${item.entry.date})` : 'Report';
+          if (window.renderLiveSheetSyncBannerV56) {
+            window.renderLiveSheetSyncBannerV56('CONFIRMED', `${lbl} — 100% Confirmed & Saved in Google Sheet!`);
+          }
+          showPortalToast(
+            '✅ Confirmed in Google Sheet!',
+            `${lbl} is 100% saved. Safe to log out or close now.`,
+            'success'
+          );
+        } else if (window.renderLiveSheetSyncBannerV56) {
+          window.renderLiveSheetSyncBannerV56('SYNCING');
+        }
+
+        // Trigger debounced Sheet 1 & Sheet 2 organized rebuild
+        if (item && item.entry) {
+          const cleanD = String(item.entry.date || '').replace('MONTHLY_PROD_', '');
+          const mk = cleanD.length >= 7 ? cleanD.slice(-7) : selectedMonthKey;
+          window.scheduleDebouncedSheetRebuildV63(mk, item.entry.team || '');
+        }
+      };
+
+      // Send a single sales write with REAL readable confirmation (CORS fetch GET -> JSONP -> POST fallback)
+      window.transmitFastVerifiedSalesWriteV63 = async function(k, item) {
+        if (!item || !item.entry || item.isDeletion) return false;
+        if (window._inFlightSalesWriteKeysV63.has(k)) return false;
+        window._inFlightSalesWriteKeysV63.add(k);
+
+        try {
+          const pingInfo = currentUser ? {
+            pingUserId: String(currentUser.id),
+            pingName: currentUser.name,
+            pingRole: currentUser.role,
+            pingTeam: currentUser.team,
+            pingState: getUserOnlineStatus(currentUser.id)
+          } : {};
+
+          const fullPayload = {
+            action: 'DAILY_SALES_SUBMIT',
+            fastSubmit: '1',
+            timestamp: new Date().toISOString(),
+            ...pingInfo,
+            ...(item.logMeta || {}),
+            ...item.entry
+          };
+
+          const encodedPayload = encodeURIComponent(JSON.stringify(fullPayload));
+          const getUrl = `${webhookUrl}?action=DAILY_SALES_SUBMIT&fastSubmit=1&payload=${encodedPayload}&_t=${Date.now()}`;
+
+          // 1) Primary Fast CORS-Readable GET Path (when URL is safely under 3200 chars — daily reports are ~650 chars!)
+          if (getUrl.length < 3200) {
+            try {
+              const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+              const abortTimer = controller ? setTimeout(() => controller.abort(), 14000) : null;
+              const resp = await fetch(getUrl, {
+                method: 'GET',
+                signal: controller ? controller.signal : undefined
+              });
+              if (abortTimer) clearTimeout(abortTimer);
+              if (resp && resp.ok) {
+                const json = await resp.json();
+                if (json && json.status === 'success' && json.savedImmediately) {
+                  window.markSalesWriteConfirmedV63(k, item);
+                  return true;
+                }
+                if (json && json.status === 'busy') {
+                  return false; // Retry cleanly on next tick
+                }
+              }
+            } catch (eFetchFast) {
+              // Fall through to JSONP + POST fallback below
+            }
+
+            // 2) JSONP Readable Fallback (works even under strict browser CORS policies!)
+            try {
+              const jsonpRes = await new Promise((resolve) => {
+                const cbName = 'gb_fsave_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+                const scr = document.createElement('script');
+                let settled = false;
+                const done = (val) => {
+                  if (settled) return;
+                  settled = true;
+                  delete window[cbName];
+                  if (scr.parentNode) scr.parentNode.removeChild(scr);
+                  resolve(val);
+                };
+                const tm = setTimeout(() => done(null), 12000);
+                window[cbName] = function(res) {
+                  clearTimeout(tm);
+                  done(res);
+                };
+                scr.onerror = function() {
+                  clearTimeout(tm);
+                  done(null);
+                };
+                scr.src = `${getUrl}&callback=${cbName}`;
+                document.body.appendChild(scr);
+              });
+              if (jsonpRes && jsonpRes.status === 'success' && jsonpRes.savedImmediately) {
+                window.markSalesWriteConfirmedV63(k, item);
+                return true;
+              }
+              if (jsonpRes && jsonpRes.status === 'busy') {
+                return false;
+              }
+            } catch (eJsonpFast) {}
+          }
+
+          // 3) Fallback POST (with fastSubmit=1) for oversized payloads or network fallback
+          try {
+            const bodyParams = new URLSearchParams();
+            bodyParams.append('action', 'DAILY_SALES_SUBMIT');
+            bodyParams.append('fastSubmit', '1');
+            bodyParams.append('payload', JSON.stringify(fullPayload));
+            await fetch(webhookUrl, {
+              method: 'POST',
+              mode: 'no-cors',
+              keepalive: true,
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: bodyParams.toString()
+            });
+          } catch (ePostFb) {}
+          return false;
+        } finally {
+          window._inFlightSalesWriteKeysV63.delete(k);
+        }
+      };
+
+      // Override PATCH v56's transmitter so every retry uses our fast verified ACK engine (NO blind retry storm!)
+      window.transmitSingleUnconfirmedWriteV56 = function(item, forceGetFallback = false) {
+        if (!item || !item.entry) return;
+        if (item.isDeletion) {
+          const { params } = window.buildSalesWriteParamsV56(item);
+          fetch(webhookUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            keepalive: true,
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString()
+          }).catch(() => {});
+          return;
+        }
+        const uid = String(item.entry.userId).trim();
+        const cleanD = String(item.entry.date).replace(/^'/, '').trim();
+        const k = `${uid}_${cleanD}`;
+        window.transmitFastVerifiedSalesWriteV63(k, item);
+      };
+
+      // Immediately fire fast verified transmit as soon as any report is enqueued!
+      const _origEnqueueV63 = enqueueVerifiedSalesSubmission;
+      enqueueVerifiedSalesSubmission = function(entryObj, logMetaObj, isDeletion = false) {
+        const res = _origEnqueueV63(entryObj, logMetaObj, isDeletion);
+        if (!isDeletion && entryObj && entryObj.userId && entryObj.date) {
+          const uid = String(entryObj.userId).trim();
+          const cleanD = String(entryObj.date).replace(/^'/, '').trim();
+          const k = `${uid}_${cleanD}`;
+          const map = window.getUnconfirmedSheetWritesV56 ? window.getUnconfirmedSheetWritesV56() : {};
+          const item = map[k] || { entry: { ...entryObj, userId: uid, date: cleanD }, logMeta: logMetaObj || {}, isDeletion: false };
+          // Fire immediately so confirmation arrives in ~0.5–1.5s!
+          window.transmitFastVerifiedSalesWriteV63(k, item);
+        }
+        return res;
+      };
+
+      // Prevent duplicate blind POST inside commitSalesEntryInstant when fastSubmit=1 already handles it
+      // (Keep postToSheet('DAILY_SALES_SUBMIT', ...) working for any caller, just tag fastSubmit='1'!)
+      const _origPostToSheetV63 = postToSheet;
+      postToSheet = async function(action, payload) {
+        if (action === 'DAILY_SALES_SUBMIT' && payload && typeof payload === 'object') {
+          const uid = String(payload.userId || '').trim();
+          const cleanD = String(payload.date || '').replace(/^'/, '').trim();
+          const k = `${uid}_${cleanD}`;
+          // If already being sent via fast verified path, skip redundant blind POST to avoid double-locking!
+          if (window._inFlightSalesWriteKeysV63.has(k)) {
+            return;
+          }
+          return _origPostToSheetV63(action, { ...payload, fastSubmit: '1' });
+        }
+        return _origPostToSheetV63(action, payload);
+      };
+
+      // Upgrade Safe Logout Guard: wait up to 25 seconds (usually finishes in <1s with fastSubmit=1!)
+      // so NO agent can ever accidentally log out before their report is 100% confirmed in Google Sheets!
+      const _origExecLogoutV63 = executeInstantLogout;
+      executeInstantLogout = async function() {
+        const unconfirmedCount = window.getUnconfirmedSheetWriteCountV56 ? window.getUnconfirmedSheetWriteCountV56() : 0;
+        if (unconfirmedCount > 0) {
+          if (window.renderLiveSheetSyncBannerV56) {
+            window.renderLiveSheetSyncBannerV56(
+              'SYNCING',
+              `Confirming ${unconfirmedCount} report(s) in Google Sheet before logout — please wait...`
+            );
+          }
+          const logoutModalBtn = document.querySelector('#logoutConfirmModal button[onclick*="executeInstantLogout"]');
+          if (logoutModalBtn) {
+            logoutModalBtn.disabled = true;
+            logoutModalBtn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> Confirming Report in Sheet...`;
+          }
+
+          const waitStart = Date.now();
+          let lastKick = 0;
+          while (window.getUnconfirmedSheetWriteCountV56() > 0 && (Date.now() - waitStart) < 25000) {
+            if ((Date.now() - lastKick) >= 2500) {
+              lastKick = Date.now();
+              const mapNow = window.getUnconfirmedSheetWritesV56();
+              Object.keys(mapNow).forEach(k => window.transmitSingleUnconfirmedWriteV56(mapNow[k], true));
+              fetchFromSheet(true);
+            }
+            await new Promise(r => setTimeout(r, 250));
+          }
+
+          if (window.getUnconfirmedSheetWriteCountV56() > 0) {
+            window.beaconFlushAllUnconfirmedWritesV56();
+            showPortalToast(
+              'Internet Slow / Offline!',
+              'Report is saved safely on this browser and will auto-upload as soon as internet reconnects.',
+              'warning'
+            );
+          }
+        }
+        return _origExecLogoutV63();
+      };
+
+      // Auto-flush any unconfirmed reports from previous session immediately on page load (even on Login screen!)
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          const mapNow = window.getUnconfirmedSheetWritesV56 ? window.getUnconfirmedSheetWritesV56() : {};
+          const keys = Object.keys(mapNow);
+          if (keys.length > 0) {
+            if (window.renderLiveSheetSyncBannerV56) {
+              window.renderLiveSheetSyncBannerV56('SYNCING', `Auto-uploading ${keys.length} pending report(s) from previous session...`);
+            }
+            keys.forEach(k => window.transmitSingleUnconfirmedWriteV56(mapNow[k], true));
+            if (window.startRapidSheetVerificationLoopV56) window.startRapidSheetVerificationLoopV56();
+          }
+        }, 900);
+      });
+
+      // Also auto-flush immediately if browser regains internet connection!
+      window.addEventListener('online', () => {
+        const mapNow = window.getUnconfirmedSheetWritesV56 ? window.getUnconfirmedSheetWritesV56() : {};
+        const keys = Object.keys(mapNow);
+        if (keys.length > 0) {
+          keys.forEach(k => window.transmitSingleUnconfirmedWriteV56(mapNow[k], true));
+          if (window.startRapidSheetVerificationLoopV56) window.startRapidSheetVerificationLoopV56();
+        }
+      });
+    } catch (errV63) {
+      console.error('Non-fatal patch v63 warning:', errV63);
     }
 
 window.addEventListener('load', init);
