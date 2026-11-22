@@ -18068,7 +18068,7 @@ function renderChatHubView() {
 
           rows.push(['MONTHLY TOTAL (' + agSales.length + ' Days)', ag.id, ag.name, ag.team, ag.grade, totL, totO, totConv, totAmt, workTgt, totAch]);
           rows.push(['', '', '', '', '', '', '', '', '', '', '']);
-          rows.push(['MONTHLY TARGET SUMMARY', 'Base Target: ' + baseTgt.toLocaleString(), 'Working Target (+5%): ' + workTgt.toLocaleString(), 'Achieved Revenue: ' + totAmt.toLocaleString(), 'Remaining Target: ' + totRem.toLocaleString(), 'Monthly Achievement: ' + totAch, 'Active Days: ' + agSales.length, '', '', '', '']);
+          rows.push(['MONTHLY TARGET SUMMARY', 'Monthly Target: ' + workTgt.toLocaleString(), 'Achieved Revenue: ' + totAmt.toLocaleString(), 'Remaining Target: ' + totRem.toLocaleString(), 'Monthly Achievement: ' + totAch, 'Active Days: ' + agSales.length, '', '', '', '', '']);
 
           const safeMonth = selectedMonthKey.replace('/', '-');
           downloadPortalCsvFile(`Monthly_Performance_${ag.name.replace(/\s+/g, '_')}_${safeMonth}.csv`, headers, rows);
@@ -26660,6 +26660,9 @@ function renderChatHubView() {
       // -----------------------------------------------------------------------
       calcWorkingTargetFromBase = function(baseTargetVal, teamOrChannel, mKey) {
         const base = Number(baseTargetVal) || 0;
+        if (window._isExportingSheetWithActualTarget) {
+          return Math.round(base);
+        }
         const bufPct = window.getBufferPctForMonthV59(teamOrChannel, mKey || selectedMonthKey);
         return Math.round(base * (1 + (bufPct / 100)));
       };
