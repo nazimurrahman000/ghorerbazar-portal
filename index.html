@@ -1,4 +1,105 @@
 <!DOCTYPE html>
+<!--
+================================================================================
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v64)
+================================================================================
+AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
+1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
+   - If the user explicitly asks to change any existing rule below, apply the
+     requested change AND update this header comment in the same edit.
+   - Whenever any new feature, tab, modal, or fix is added, ALWAYS update this
+     header comment in the same edit so the latest file always carries the full
+     up-to-date rulebook across future chats.
+2. MINIMAL SURGICAL EDITS: Never blindly append overlapping patches that silently
+   overwrite existing function guards. Edit the ACTIVE function version listed in
+   Section C below, preserve all existing guards, and run a unified diff + full
+   regression check before delivering the file.
+3. UI DIALOGS: Never use native browser alert, confirm, or prompt dialogs.
+   Always use openConfirmWarningModal() and showPortalToast().
+4. WEBHOOK SAFETY: Never change DEFAULT_WEBHOOK_URL unless explicitly instructed.
+
+[SECTION A — PORTAL ARCHITECTURE & CHANNELS]
+- Single-file frontend (GitHub + Vercel) backed by Google Apps Script + Google Sheets.
+- 2 Active Sales Channels + Omni View:
+  * FACEBOOK: Team Nazim (TL 10122), Team Samad (TL 10107), Floating
+  * WHATSAPP: Team Saikat (TL 10061), Team Parvaj (TL 10144), Team Shakib Baksh (TL 10175), WA Floating
+  * ALL_CHANNELS: Combined Executive Overview (Supervisor 10001 & TLs).
+- 15 Sidebar Tabs:
+  dashboard, monthly_perf, sprint_target, drive_product, incentive, reports,
+  missing_reports, ranking, roster, attendance, fraud_checker, chat,
+  activity_logs, agents, role_management (Super Admin Nazim 10122 ONLY).
+- Special Monthly_Configs cloud keys (NEVER break or overwrite structure):
+  CHAT_AND_NOTICES, DEACTIVATED_USERS, DELETED_USERS, FRAUD_API_CONFIG,
+  MIRROR_SHEET_CONFIG, PORTAL_MASTER_CONFIG, RENAMED_USER_IDS, RESIGNED_USERS,
+  ROLE_PERMISSIONS, USER_AVATARS, USER_BELL_STATE, LEAVE_RECORDS_<MM/YYYY>.
+
+[SECTION B — ACTIVE BUSINESS & CALCULATION RULES]
+1. TARGET +5% BUFFER RULE (STRICT PORTAL vs EXTERNAL SEPARATION):
+   - INSIDE PORTAL UI: Working Target = Base Target + Buffer % (default +5%).
+     Applies to BOTH Facebook and WhatsApp channels inside the Portal.
+   - OUTSIDE PORTAL (ALL CSV/EXCEL EXPORTS & GOOGLE SHEETS SYNC):
+     ALWAYS 100% ORIGINAL BASE TARGET (NO +5%).
+     * calcWorkingTargetFromBase() MUST ALWAYS keep:
+       if (window._isExportingSheetWithActualTarget) return Math.round(base);
+     * downloadPortalCsvFile() strips +5% duplicate columns & labels.
+     * Single-agent Monthly Performance CSV summary row displays clean "Monthly Target"
+       (original Base Target, no +5% label).
+2. DAILY TARGET ISOLATION RULE (STRICT SEPARATION):
+   - ONLY the Dashboard top green "DAILY TARGET" pill uses dynamic pace:
+     * Agent Panel: Remaining Working Target / Remaining Duty Days (excl. today,
+       Roster DO + Leave/Absent aware). Rises if behind/on leave, lowers if ahead,
+       shows "✅ 100% Hit" if >=100%.
+     * Specific Team View (inside FB/WA): Team Remaining / Remaining Calendar Days (excl. today).
+     * Channel-Wide / All-Channels View: Working Target / exact calendar days (28/29/30/31).
+   - ALL OTHER PORTAL PLACES strictly use standard Working Target (+5%) / 26 (workingDaysDivisor):
+     * Monthly Performance (top summary card, date-wise table rows, footer; NO dynamic sub-line in Remaining column).
+     * Daily Sales Reports table & footer.
+     * Submit Daily Report modal (liveDailyTarget & liveDailyAch).
+     * Dashboard purple KPI card ("Daily: ...") & bottom Monthly Total card ("Daily Target:").
+   - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
+3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
+   - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
+     Mark Read, Clear All, or single dismiss MUST update IN-PLACE via
+     refreshBellWidgetInPlaceV67(false) — NEVER call full renderAppLayout() on tab switch,
+     and ONLY apply modal-card-anim on fresh dropdown open (ZERO jump/re-pop animation).
+   - Read/Cleared/Dismissed states persist permanently in cloud USER_BELL_STATE across logins.
+   - Agent panel Bell shows ONLY Official Notices, Shift-End Duty Reminder (5m before shift end,
+     skipped on DO), and Chat/DM alerts (NEVER floor login/logout/activity logs).
+     Tabs for agents: All | Notices | Duty & Alerts.
+4. ULTRA-FAST ZERO-LAG SYNC & SUBMIT (V64 / V65 / V67):
+   - 3.5s real-time cloud polling (pauses ONLY when tab is hidden, resumes on focus).
+   - Memoized O(1) caches for sidebar missing badge, getUserOnlineStatus, getUsersForMonth.
+   - Non-blocking serialized submit queue (fastSubmit=1) + zero-loss localStorage outbox queue.
+   - Smooth 1-2s submit confirmation without blocking UI or losing scroll/focus position.
+5. ACCESS CONTROL, ANTI-POACHING & PRIVACY:
+   - Super Admin Nazim (10122) exclusively owns Role & Feature Access, permanent Delete User ID,
+     and Critical Master Controls (Grade Target amounts, Drive Products, Sprint Targets/Rewards)
+     unless explicitly delegated.
+   - Cross-channel TLs viewing another channel are strictly Read-Only.
+   - Duty Roster Add Member modal enforces anti-poaching (only Unassigned/Floating pool selectable).
+   - Atomic Employee ID Rename & Migration (V66) keeps historical sales/roster/attendance intact.
+   - Mutual Shift Swap Request & Acceptance System (V61) preserved.
+   - Resigned/Deleted agents hidden from active lists without corrupting historical months.
+6. AI SMART ERP IMPORTER:
+   - Supports Ctrl+V screenshot paste & upload, decimal weight parsing (0.2/0.25/0.5/7.5/11.5/24.15 kg),
+     per-product AI keywords, and one-click batch import without lock collisions.
+
+[SECTION C — ACTIVE FUNCTION OVERRIDE MAP (EDIT AT ACTIVE VERSION)]
+- calcWorkingTargetFromBase                 => V59 (keep _isExportingSheetWithActualTarget guard)
+- getTargetData                             => V62 (agent res.dailyTarget = actualDaily26; meta.dailyTarget = dynamic)
+- computeAgentRosterLeaveDailyTargetV62     => V62 (tableDailyTarget = actualDaily26)
+- renderDashboard                           => V62 (updates ONLY top green DAILY TARGET pill)
+- renderMonthlyPerformanceView              => V44 (clean, NO dynamic daily target sub-line)
+- renderHeaderBellNotificationWidget        => V67 (in-place refreshBellWidgetInPlaceV67)
+- getUsersForMonth / getUserOnlineStatus    => V67 (memoized O(1) caches)
+- getQuickMissingReportBadgeCountForSidebar => V67 (memoized O(1) cache)
+- fetchFromSheet / handleCloudData          => V67 (hidden-tab pause + USER_BELL_STATE pre-merge)
+- postToSheet / handleSalesSubmit           => V64/V65 (serialized fastSubmit queue)
+- downloadPortalCsvFile                     => V57 (strips +5% labels/columns)
+- exportMonthlyPerformanceCsv / DateWise / Sprint / Ranking / DailySales / Incentive
+  => wrapped via V52 wrapExportWithActualTarget()
+================================================================================
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
