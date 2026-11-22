@@ -4966,7 +4966,7 @@
           .sort((a, b) => (parseInt(a.date.split('/')[0], 10) || 0) - (parseInt(b.date.split('/')[0], 10) || 0));
         const baseTgt = Number(ag.baseTarget) || 0;
         const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
-        const dailyTgt = Math.round(workTgt / ((typeof window.getCalendarDaysInMonthKeyV62 === 'function') ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey) : 30));
+        const dailyTgt = Math.round(workTgt / ((typeof window.getWorkingDaysDivisorForMonthV59 === 'function') ? window.getWorkingDaysDivisorForMonthV59(ag.team, selectedMonthKey) : 26));
 
         const headers = [
           'Date', 'Emp ID', 'Agent Name', 'Team', 'Grade',
@@ -18044,7 +18044,7 @@ function renderChatHubView() {
             .sort((a, b) => (parseInt(a.date.split('/')[0], 10) || 0) - (parseInt(b.date.split('/')[0], 10) || 0));
           const baseTgt = Number(ag.baseTarget) || 0;
           const workTgt = calcWorkingTargetFromBase(baseTgt, getChannelForTeam(ag.team));
-          const dailyTgt = Math.round(workTgt / ((typeof window.getCalendarDaysInMonthKeyV62 === 'function') ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey) : 30));
+          const dailyTgt = Math.round(workTgt / ((typeof window.getWorkingDaysDivisorForMonthV59 === 'function') ? window.getWorkingDaysDivisorForMonthV59(ag.team, selectedMonthKey) : 26));
 
           const headers = [
             'Date', 'Emp ID', 'Agent Name', 'Team', 'Grade',
@@ -28756,8 +28756,8 @@ function renderChatHubView() {
         }
 
         const baseDutyDayTarget = actualDaily26;
-        // Inner Portal tabs (Daily Sales Reports, Monthly Performance date table, Submit Modal) never drop below actualDaily26 (+5% ÷ 26)!
-        const tableDailyTarget = (status === 'ACHIEVED' || dailyTarget <= 0) ? actualDaily26 : Math.max(actualDaily26, dailyTarget);
+        // All inner Portal tabs (Monthly Performance, Daily Sales Reports, Submit Modal) strictly use standard Working Target (+5%) ÷ 26!
+        const tableDailyTarget = actualDaily26;
 
         return {
           dailyTarget,
@@ -28819,7 +28819,9 @@ function renderChatHubView() {
             const allUsers = window._rawGetUsersForMonthV62(mk, true);
             const freshUser = allUsers.find(u => String(u.id) === String(user.id)) || user;
             const pace = window.getAgentDynamicDailyTargetV62(freshUser, mk);
-            res.dailyTarget = pace.dailyTarget;
+            // Keep res.dailyTarget as standard Working Target (+5%) ÷ 26 for KPI cards & Monthly Total box;
+            // ONLY the Dashboard top green DAILY TARGET pill displays pace.dailyTarget (dynamic remaining pace)!
+            res.dailyTarget = pace.actualDaily26;
             res.dailyTargetMetaV62 = {
               mode: 'AGENT',
               ...pace,
@@ -28853,9 +28855,10 @@ function renderChatHubView() {
           if (meta.mode === 'AGENT') {
             if (meta.status === 'ACHIEVED') {
               subHintHtml = `<span class="block text-[9px] font-black text-emerald-600 leading-none mt-0.5">100% Target Hit!</span>`;
-              valueOverrideHtml = `<strong class="text-xs font-black text-emerald-700">✅ 100% Hit</strong>`;
+              valueOverrideHtml = `<strong class="text-xs font-black text-emerald-700 shrink-0">✅ 100% Hit</strong>`;
             } else if (meta.status === 'ACTIVE') {
               const todayTag = meta.monthRelation === 'CURRENT' ? ' (excl. today)' : '';
+              valueOverrideHtml = `<strong class="text-xs font-black text-emerald-900 shrink-0">৳${Number(meta.dailyTarget || 0).toLocaleString()}</strong>`;
               if (meta.isBoosted) {
                 const lvBit = meta.totalLeaveAbsentDaysInMonth > 0 ? ` • ${meta.totalLeaveAbsentDaysInMonth}L` : '';
                 subHintHtml = `<span class="block text-[9px] font-bold text-rose-600 leading-none mt-0.5">${meta.remainingDutyDays}d left${todayTag}${lvBit}</span>`;
@@ -28865,8 +28868,10 @@ function renderChatHubView() {
               }
             } else if (meta.status === 'FINAL_BALANCE') {
               subHintHtml = `<span class="block text-[9px] font-bold text-rose-600 leading-none mt-0.5">Remaining balance</span>`;
+              valueOverrideHtml = `<strong class="text-xs font-black text-rose-700 shrink-0">৳${Number(meta.dailyTarget || 0).toLocaleString()}</strong>`;
             } else if (meta.status === 'PAST') {
               subHintHtml = `<span class="block text-[9px] font-bold text-slate-500 leading-none mt-0.5">${meta.totalDutyDaysInMonth} duty days</span>`;
+              valueOverrideHtml = `<strong class="text-xs font-black text-emerald-900 shrink-0">৳${Number(meta.actualDaily26 || 0).toLocaleString()}</strong>`;
             }
           } else if (meta.mode === 'TEAM') {
             // Team-wise Dynamic Daily Target ONLY when a specific team is selected inside a channel!
@@ -28975,52 +28980,7 @@ function renderChatHubView() {
         return htmlOut;
       };
 
-      // Subtle 1-line Roster+Leave Daily Target under each agent's Remaining cell in Monthly Performance table (for TL visibility)
-      const _origRenderMonthlyPerfV62 = renderMonthlyPerformanceView;
-      renderMonthlyPerformanceView = function() {
-        let htmlOut = _origRenderMonthlyPerfV62();
-        try {
-          const allMonthSales = deduplicateSalesRecordsList(getStored('sales_records', []))
-            .filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
-          const allUsers = window._rawGetUsersForMonthV62(selectedMonthKey, true);
-
-          allUsers.forEach(ag => {
-            if (!ag || ag.role === 'supervisor') return;
-            const uid = String(ag.id).trim();
-            const rowMarker = `setMonthlyPerfAgent('${uid}')`;
-            const idxRow = htmlOut.indexOf(rowMarker);
-            if (idxRow === -1) return;
-
-            const agSales = allMonthSales.filter(s => String(s.userId).trim() === uid);
-            const rev = agSales.reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
-            const workTgt = calcWorkingTargetFromBase(Number(ag.baseTarget) || 0, getChannelForTeam(ag.team));
-            const rem = Math.max(0, workTgt - rev);
-            const pace = window.computeAgentRosterLeaveDailyTargetV62(ag, workTgt, rev, selectedMonthKey, agSales);
-
-            const remCellStr = `<td class="p-3.5 font-bold text-slate-500">৳${rem.toLocaleString()}</td>`;
-            const idxRem = htmlOut.indexOf(remCellStr, idxRow);
-            if (idxRem !== -1 && (idxRem - idxRow) < 2200) {
-              let subPill = '';
-              if (pace.status === 'ACHIEVED') {
-                const achTip = `100% Target Achieved! Standard Portal Daily Target: ৳${Number(pace.actualDaily26 || 0).toLocaleString()}/day`;
-                subPill = `<span class="block text-[9px] font-black text-emerald-600 mt-0.5" title="${achTip}">✅ 100% Achieved (৳${Number(pace.actualDaily26 || 0).toLocaleString()}/d)</span>`;
-              } else if (pace.status === 'ACTIVE') {
-                const lvTag = pace.totalLeaveAbsentDaysInMonth > 0 ? ` • ${pace.totalLeaveAbsentDaysInMonth}L` : '';
-                const pillColCls = pace.isBoosted ? 'text-rose-600' : 'text-emerald-700';
-                const tip = pace.isBoosted
-                  ? `Adjusted Daily Target (Behind/Leave): ৳${pace.dailyTarget.toLocaleString()}/day across ${pace.remainingDutyDays} remaining duty days (Base: ৳${Number(pace.actualDaily26 || 0).toLocaleString()} | DO: ${pace.totalDoDaysInMonth}, Leave/Absent: ${pace.totalLeaveAbsentDaysInMonth})`
-                  : `Ahead / On Track! Dynamic Daily Needed: ৳${pace.dailyTarget.toLocaleString()}/day across ${pace.remainingDutyDays} remaining duty days (Standard Daily: ৳${Number(pace.actualDaily26 || 0).toLocaleString()})`;
-                subPill = `<span class="block text-[9px] font-black ${pillColCls} mt-0.5" title="${tip}">Daily: ৳${pace.dailyTarget.toLocaleString()}/d (${pace.remainingDutyDays}d${lvTag})</span>`;
-              }
-              if (subPill) {
-                const newRemCell = `<td class="p-3.5 font-bold text-slate-500"><div>৳${rem.toLocaleString()}</div>${subPill}</td>`;
-                htmlOut = htmlOut.slice(0, idxRem) + newRemCell + htmlOut.slice(idxRem + remCellStr.length);
-              }
-            }
-          });
-        } catch (eMp62) {}
-        return htmlOut;
-      };
+      // [Cleaned in V68] Dynamic Daily Target applies ONLY to the Dashboard's top green DAILY TARGET box; Monthly Performance & Daily Sales Reports stay standard (+5% ÷ 26).
     } catch (errV62) {
       console.error('Non-fatal patch v62 warning:', errV62);
     }
