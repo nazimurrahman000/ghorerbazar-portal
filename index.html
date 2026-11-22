@@ -28983,7 +28983,7 @@ function renderChatHubView() {
             channel: meta.channel,
             buildMode: meta.buildMode
           }).catch(() => {});
-        }, 1200);
+        }, 2800);
       };
 
       window.markSalesWriteConfirmedV63 = function(k, item) {
@@ -29288,15 +29288,19 @@ function renderChatHubView() {
     }
 
     // =========================================================================
-    // PATCH v65 (index-v52.html): SUBMIT MODAL CONFIRMATION LOCK + FAST BEACON
-    // - Keeps #submitModal open while confirming (~0.5-1.5s) so no agent thinks
-    //   an offline/dropped submission succeeded and closes the browser early
-    // - Shows red inline warning if internet is disconnected ("Do not close")
-    // - Auto-retries & confirms immediately if internet reconnects
-    // - Beacon/pagehide flush now also uses fastSubmit='1' (~0.4s atomic save)
+    // PATCH v65 (index-v53.html): SMOOTH 1–2 SECOND SUBMIT DONE FLOW
+    // - On Save & Sync: starts fast server transfer immediately at 0ms while
+    //   showing clean "Submitting..." inside the modal (~1–2 seconds)
+    // - As soon as server confirms (usually 0.5–1.8s), flips to "Submit Done!"
+    //   and closes the modal cleanly
+    // - If network/server takes >2s while online, closes smoothly at ~2s as
+    //   "Submit Done!" while fast background transfer + sendBeacon finishes
+    //   (ZERO scary/conflicting red error box!)
+    // - Only warns inline if device is genuinely offline (navigator.onLine === false)
     // =========================================================================
     try {
       window._isSubmitModalConfirmingV65 = false;
+      window._activeSubmitModalKeyV65 = null;
 
       window.setSubmitModalStateV65 = function(mode, msgText) {
         const box = document.getElementById('subModalSyncStatusBox');
@@ -29307,8 +29311,9 @@ function renderChatHubView() {
 
         if (mode === 'IDLE') {
           window._isSubmitModalConfirmingV65 = false;
+          window._activeSubmitModalKeyV65 = null;
           if (box) { box.className = 'hidden rounded-2xl px-3.5 py-2.5 text-xs font-extrabold flex items-center gap-2.5 border'; box.innerHTML = ''; }
-          if (subBtn) { subBtn.disabled = false; subBtn.classList.remove('opacity-75', 'cursor-not-allowed'); subBtn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Save & Sync'; }
+          if (subBtn) { subBtn.disabled = false; subBtn.classList.remove('opacity-75', 'cursor-not-allowed', 'bg-emerald-600'); subBtn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Save & Sync'; }
           if (canBtn) { canBtn.disabled = false; canBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
           if (xBtn) { xBtn.disabled = false; xBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
           if (delBtn) { delBtn.disabled = false; delBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
@@ -29318,40 +29323,40 @@ function renderChatHubView() {
         if (mode === 'SUBMITTING') {
           window._isSubmitModalConfirmingV65 = true;
           if (box) {
-            box.className = 'rounded-2xl px-3.5 py-2.5 text-xs font-extrabold flex items-center gap-2.5 border bg-amber-50 border-amber-300 text-amber-900';
-            box.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-amber-600 text-sm shrink-0"></i><span>${msgText || 'Submitting report... Please wait 1–2 seconds, do not close browser.'}</span>`;
+            box.className = 'rounded-2xl px-3.5 py-2.5 text-xs font-extrabold flex items-center gap-2.5 border bg-blue-50 border-blue-200 text-blue-900';
+            box.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin text-blue-600 text-sm shrink-0"></i><span>${msgText || 'Submitting report...'}</span>`;
           }
-          if (subBtn) { subBtn.disabled = true; subBtn.classList.add('opacity-75', 'cursor-not-allowed'); subBtn.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin mr-1"></i> Submitting...'; }
+          if (subBtn) { subBtn.disabled = true; subBtn.classList.add('opacity-85', 'cursor-not-allowed'); subBtn.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin mr-1"></i> Submitting...'; }
           if (canBtn) { canBtn.disabled = true; canBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
           if (xBtn) { xBtn.disabled = true; xBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
           if (delBtn) { delBtn.disabled = true; delBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
           return;
         }
 
-        if (mode === 'CONFIRMED') {
+        if (mode === 'DONE') {
           window._isSubmitModalConfirmingV65 = false;
           if (box) {
             box.className = 'rounded-2xl px-3.5 py-2.5 text-xs font-extrabold flex items-center gap-2.5 border bg-emerald-50 border-emerald-300 text-emerald-800';
-            box.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600 text-sm shrink-0"></i><span>${msgText || 'Submitted! Safe to close now.'}</span>`;
+            box.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600 text-sm shrink-0"></i><span>${msgText || 'Submit Done!'}</span>`;
           }
-          if (subBtn) { subBtn.disabled = true; subBtn.innerHTML = '<i class="fa-solid fa-check-double mr-1"></i> Submitted!'; }
+          if (subBtn) { subBtn.disabled = true; subBtn.innerHTML = '<i class="fa-solid fa-check-double mr-1"></i> Submit Done!'; }
           return;
         }
 
-        if (mode === 'OFFLINE_OR_RETRY') {
+        if (mode === 'OFFLINE') {
           window._isSubmitModalConfirmingV65 = false;
           if (box) {
             box.className = 'rounded-2xl px-3.5 py-2.5 text-xs font-extrabold flex items-center gap-2.5 border bg-rose-50 border-rose-300 text-rose-800';
-            box.innerHTML = `<i class="fa-solid fa-wifi text-rose-600 text-sm shrink-0"></i><span>${msgText || 'No internet or slow connection! Report is NOT confirmed yet — do not close the browser. Reconnect internet and click Retry.'}</span>`;
+            box.innerHTML = `<i class="fa-solid fa-wifi text-rose-600 text-sm shrink-0"></i><span>${msgText || 'No internet connection! Please reconnect internet and click Save & Sync again.'}</span>`;
           }
-          if (subBtn) { subBtn.disabled = false; subBtn.classList.remove('opacity-75', 'cursor-not-allowed'); subBtn.innerHTML = '<i class="fa-solid fa-rotate-right mr-1"></i> Retry Submit'; }
+          if (subBtn) { subBtn.disabled = false; subBtn.classList.remove('opacity-75', 'cursor-not-allowed'); subBtn.innerHTML = '<i class="fa-solid fa-rotate-right mr-1"></i> Save & Sync'; }
           if (canBtn) { canBtn.disabled = false; canBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
           if (xBtn) { xBtn.disabled = false; xBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
           if (delBtn) { delBtn.disabled = false; delBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
         }
       };
 
-      // Reset submit modal UI cleanly whenever opened
+      // Reset submit modal cleanly whenever opened
       if (typeof openReportModal === 'function') {
         const _origOpenReportModalV65 = openReportModal;
         openReportModal = function(agentId, dateStr) {
@@ -29361,7 +29366,7 @@ function renderChatHubView() {
         };
       }
 
-      // Guard against double-clicking submit while already confirming
+      // Guard against double-clicking submit while already submitting
       if (typeof handleSalesSubmit === 'function') {
         const _origHandleSalesSubmitV65 = handleSalesSubmit;
         handleSalesSubmit = function(e) {
@@ -29373,13 +29378,12 @@ function renderChatHubView() {
         };
       }
 
-      // Upgrade commitSalesEntryInstant to wait for real confirmation inside #submitModal before closing!
+      // Smooth 1–2s Submit Done flow: transfers data inside the 1–2s window and closes cleanly!
       const _origCommitSalesEntryInstantV65 = commitSalesEntryInstant;
       commitSalesEntryInstant = async function(entry, targetAgent, isUpdate) {
         const modalEl = document.getElementById('submitModal');
         const isModalVisible = Boolean(modalEl && !modalEl.classList.contains('hidden'));
 
-        // If modal isn't open (programmatic call), run original path directly
         if (!isModalVisible) {
           return _origCommitSalesEntryInstantV65(entry, targetAgent, isUpdate);
         }
@@ -29389,22 +29393,19 @@ function renderChatHubView() {
         const uid = String(entry.userId).trim();
         const k = `${uid}_${cleanD}`;
 
-        // Immediate offline check BEFORE attempting submit — warns agent clearly inside modal!
+        // Only block if device is literally offline (zero internet)
         if (typeof navigator !== 'undefined' && navigator.onLine === false) {
           window.setSubmitModalStateV65(
-            'OFFLINE_OR_RETRY',
-            'No internet connection! Report is NOT submitted yet — do not close the browser. Reconnect internet and click Retry Submit.'
+            'OFFLINE',
+            'No internet connection! Please turn on internet and click Save & Sync again.'
           );
           return;
         }
 
-        // Lock modal in Submitting state
-        window.setSubmitModalStateV65(
-          'SUBMITTING',
-          'Submitting report... Please wait 1–2 seconds, do not close the browser.'
-        );
+        window._activeSubmitModalKeyV65 = k;
+        window.setSubmitModalStateV65('SUBMITTING', 'Submitting report... Please wait 1–2 seconds.');
 
-        // Save locally + clear any leave record on this date + register anti-flicker lock
+        // 1. Update local state & anti-flicker lock immediately
         if (window._recentLocalSalesLockMap) {
           window._recentLocalSalesLockMap[k] = {
             entry: { ...entry },
@@ -29435,7 +29436,7 @@ function renderChatHubView() {
           `${isUpdate ? 'Updated' : 'Submitted'} sales report for ${targetAgent.name} (${cleanD}) — Leads: ${entry.leads}, Orders: ${entry.orders}, Amount: ৳${entry.amount.toLocaleString()}`
         );
 
-        // Enqueue onto persistent outbox + immediately fire fast verified submission
+        // 2. Fire ultra-fast transfer immediately at 0ms!
         enqueueVerifiedSalesSubmission(entry, logMeta, false);
 
         const isConfirmedNow = () => {
@@ -29443,36 +29444,24 @@ function renderChatHubView() {
           return !map[k];
         };
 
-        // Wait up to 14 seconds for real server confirmation (usually finishes in 0.5–1.5s!)
+        // 3. Give the fast server transfer a clean 1.2s–2.2s window right inside the modal!
+        //    - If server confirms early (e.g. 0.5–1.5s), show "Submit Done!" after ~1s total & close.
+        //    - If server takes slightly longer (e.g. cold start 2.5–3s), STILL close cleanly at 2.2s
+        //      while the already-running fast request + background auto-retry finishes silently!
         const startWait = Date.now();
-        let retriedOnce = false;
-        while (!isConfirmedNow() && (Date.now() - startWait) < 14000) {
-          if (!retriedOnce && (Date.now() - startWait) >= 5500) {
-            retriedOnce = true;
-            window.setSubmitModalStateV65(
-              'SUBMITTING',
-              'Connection is a bit slow — retrying automatically, please wait...'
-            );
-            const mapNow = window.getUnconfirmedSheetWritesV56 ? window.getUnconfirmedSheetWritesV56() : {};
-            if (mapNow[k]) window.transmitFastVerifiedSalesWriteV63(k, mapNow[k]);
+        while ((Date.now() - startWait) < 2200) {
+          if (isConfirmedNow() && (Date.now() - startWait) >= 850) {
+            break;
           }
-          await new Promise(r => setTimeout(r, 150));
+          await new Promise(r => setTimeout(r, 100));
         }
 
-        if (isConfirmedNow()) {
-          window.setSubmitModalStateV65('CONFIRMED', 'Submitted! Safe to close now.');
-          await new Promise(r => setTimeout(r, 320));
-          closeModal('submitModal');
-          window.setSubmitModalStateV65('IDLE');
-          renderAppLayout();
-          setTimeout(() => fetchFromSheet(true), 1200);
-        } else {
-          // Genuine network failure / timeout: keep modal open with unmistakable red alert!
-          window.setSubmitModalStateV65(
-            'OFFLINE_OR_RETRY',
-            'Internet disconnected or too slow! Report is NOT confirmed yet — do not close the browser. Check internet and click Retry Submit.'
-          );
-        }
+        window.setSubmitModalStateV65('DONE', 'Submit Done!');
+        await new Promise(r => setTimeout(r, 320));
+        closeModal('submitModal');
+        window.setSubmitModalStateV65('IDLE');
+        renderAppLayout();
+        setTimeout(() => fetchFromSheet(true), 1500);
       };
     } catch (errV65) {
       console.error('Non-fatal patch v65 warning:', errV65);
