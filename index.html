@@ -25751,11 +25751,19 @@ function renderChatHubView() {
         }
 
         const totalMonthlySales = s1Sales + s2Sales + s3Sales;
-        if (totalMonthlySales >= workTgt && Number(rewardSpec.total100) > sprintMoney) {
-          return {
-            sprintMoney: Number(rewardSpec.total100),
-            sprintBadges: [`🎯 100% Monthly Target Achieved: ৳${Number(rewardSpec.total100).toLocaleString()}`]
-          };
+        if (hitCount < 3 && totalMonthlySales >= workTgt && Number(rewardSpec.total100) > 0) {
+          const comboExtra = (hitCount === 2 && Number(rewardSpec.any2Extra) > 0) ? Number(rewardSpec.any2Extra) : 0;
+          const monthly100Total = Number(rewardSpec.total100) + comboExtra;
+          if (monthly100Total > sprintMoney) {
+            const mBadges = [`🎯 100% Monthly Target Achieved: ৳${Number(rewardSpec.total100).toLocaleString()}`];
+            if (comboExtra > 0) {
+              mBadges.push(`🔥 2-Sprint Combo Bonus: +৳${comboExtra.toLocaleString()}`);
+            }
+            return {
+              sprintMoney: monthly100Total,
+              sprintBadges: mBadges
+            };
+          }
         }
         return { sprintMoney, sprintBadges };
       };
@@ -26788,11 +26796,19 @@ function renderChatHubView() {
         }
 
         const totalMonthlySales = s1Sales + s2Sales + s3Sales;
-        if (totalMonthlySales >= workTgt && Number(rewardSpec.total100) > sprintMoney) {
-          return {
-            sprintMoney: Number(rewardSpec.total100),
-            sprintBadges: [`🎯 100% Monthly Target Achieved: ৳${Number(rewardSpec.total100).toLocaleString()}`]
-          };
+        if (hitCount < 3 && totalMonthlySales >= workTgt && Number(rewardSpec.total100) > 0) {
+          const comboExtra = (hitCount === 2 && Number(rewardSpec.any2Extra) > 0) ? Number(rewardSpec.any2Extra) : 0;
+          const monthly100Total = Number(rewardSpec.total100) + comboExtra;
+          if (monthly100Total > sprintMoney) {
+            const mBadges = [`🎯 100% Monthly Target Achieved: ৳${Number(rewardSpec.total100).toLocaleString()}`];
+            if (comboExtra > 0) {
+              mBadges.push(`🔥 2-Sprint Combo Bonus: +৳${comboExtra.toLocaleString()}`);
+            }
+            return {
+              sprintMoney: monthly100Total,
+              sprintBadges: mBadges
+            };
+          }
         }
         return { sprintMoney, sprintBadges };
       };
