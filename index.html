@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v72)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v73)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -66,12 +66,14 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      toggle, click-to-filter, and Include TL Sales sync.
    - TAB-SWITCH SPEED FIX (V70): Eliminated V33 double renderAppLayout() on setTab/init and
      V27 double localStorage.setItem() inside renderReports (zero change to Cloud Sync / modals).
-   - 100% ACCURATE LIVE ONLINE PRESENCE ENGINE (V71 / V72):
-     * Live heartbeat-only getUserOnlineStatus() (ZERO stale Attendance/Activity fallbacks).
-     * Inline Web Worker sends zero-lock ~15ms PRESENCE_PING every 45s while tab is hidden
-       (immune to browser background-tab timer throttling; ZERO extra active-tab traffic).
-     * Multi-Tab Smart Guard (gb_open_tabs_v72_<uid>) sends silent Offline beacon on tab
-       close ONLY when the user's LAST open portal tab is closed (never on 1-of-2 close).
+   - HYBRID SMART ONLINE PRESENCE ENGINE (V71 / V72 / V73):
+     * Explicit tab-close/Logout beacons mark `explicitOffline: true` (6h RAM TTL) -> instant
+       Offline that NEVER gets revived by Attendance_Logs.
+     * Open background tabs (Web Worker 45s ~15ms PRESENCE_PING, older pre-v72 tabs, or Chrome
+       Memory Saver tabs) remain Online smoothly via safe Attendance/Login fallback ONLY when
+       `explicitOffline` is NOT set and latest auth is not Logout.
+     * Multi-Tab Smart Guard (gb_open_tabs_v72_<uid>) sends Offline beacon only on LAST tab close.
+     * handleHardRefreshPortal preserves 5m fresh + explicitOffline entries (no count drop).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -1457,12 +1459,14 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           await Promise.all(names.map(name => caches.delete(name)));
         }
       } catch (e) {}
-      // Keep fresh online users (< 35s old) in localStorage so the Online count stays 100% accurate
-      // during the 1-2s reload, while pruning any expired/offline records!
+      // V73: Keep fresh online users (< 5m) AND explicitOffline markers during Hard Refresh reload
       try {
         const now = Date.now();
         const existingOnline = getStored('online_users', []);
-        const freshOnly = existingOnline.filter(o => o && o.state !== 'Offline' && o.lastSeen && (now - Number(o.lastSeen)) < 35000);
+        const freshOnly = existingOnline.filter(o => o && (
+          o.explicitOffline === true ||
+          (o.state !== 'Offline' && Number(o.clientReceivedAt || o.lastSeen || 0) > 0 && (now - Number(o.clientReceivedAt || o.lastSeen || 0)) < 300000)
+        ));
         setStored('online_users', freshOnly);
       } catch (e) {}
       setTimeout(() => {
@@ -2338,8 +2342,8 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
     function hasOnlineStateChanged(cloudList, localList) {
       if (!Array.isArray(cloudList) || !Array.isArray(localList)) return false;
       const getActiveSet = (arr) => arr
-        .filter(o => o && o.state !== 'Offline' && Number(o.lastSeen) > 0)
-        .map(o => `${o.id}_${o.state === 'On Break' ? 'On Break' : 'Online'}`)
+        .filter(o => o && (o.explicitOffline === true || (o.state !== 'Offline' && Number(o.lastSeen) > 0)))
+        .map(o => o.explicitOffline === true ? `${o.id}_EXPOFF` : `${o.id}_${o.state === 'On Break' ? 'On Break' : 'Online'}`)
         .sort()
         .join('|');
       return getActiveSet(cloudList) !== getActiveSet(localList);
@@ -30748,9 +30752,24 @@ function renderChatHubView() {
             if (!_todayAttMapV67.has(k)) _todayAttMapV67.set(k, a);
           }
         }
+        const actLogs = getStored('activity_logs', []);
+        for (let i = 0; i < actLogs.length; i++) {
+          const l = actLogs[i];
+          if (!l || !l.userId) continue;
+          if (String(l.date || '').replace(/^'/, '').trim() !== today) continue;
+          const actStr = String(l.action || '');
+          if (actStr.includes('Login') || actStr.includes('Logout')) {
+            const k = String(l.userId).trim();
+            if (!_todayAuthMapV67.has(k)) _todayAuthMapV67.set(k, actStr);
+          }
+        }
       }
 
-      // V71: 100% Live Heartbeat-Only Online Presence (NO stale Attendance_Logs / Activity_Logs fallbacks!)
+      // V73: Hybrid Smart Online Presence
+      // 1) Explicit tab-close / Logout (`explicitOffline: true` with 6h server TTL) => IMMEDIATELY Offline!
+      // 2) Live RAM heartbeat (< 5m) => Online / On Break.
+      // 3) Open background tabs (older un-refreshed tabs or Chrome Memory Saver tabs) => Online ONLY if
+      //    NOT explicitOffline AND today's Attendance/Login is active without Logout!
       getUserOnlineStatus = function(userId) {
         const uid = String(userId || '').trim();
         if (!uid) return 'Offline';
@@ -30766,12 +30785,38 @@ function renderChatHubView() {
 
         const now = Date.now();
         const oRec = _onlineRecMapV67.get(uid);
+
+        // Rule 1: Explicit tab-close or Logout always wins immediately (stops ghost Online!)
+        if (oRec && oRec.explicitOffline === true) {
+          return 'Offline';
+        }
+
+        // Rule 2: Active live RAM heartbeat within 5 minutes
         if (oRec && oRec.state !== 'Offline' && Number(oRec.lastSeen) > 0) {
           const refTs = Number(oRec.clientReceivedAt || oRec.lastSeen || 0);
           if (refTs > 0 && (now - refTs) < 300000) {
             return oRec.state === 'On Break' ? 'On Break' : 'Online';
           }
         }
+
+        // Rule 3: Safe fallback for open background tabs (e.g. working in FB/WA/ERP or pre-v72 tabs)
+        const lastAuth = _todayAuthMapV67.get(uid) || '';
+        if (lastAuth.includes('Logout')) {
+          return 'Offline';
+        }
+
+        const todayAtt = _todayAttMapV67.get(uid);
+        if (todayAtt && todayAtt.status && todayAtt.status !== 'Completed') {
+          const logoutClean = String(todayAtt.logoutTime || '--:--').trim();
+          if (logoutClean === '--:--' || logoutClean === '' || logoutClean === '-') {
+            return todayAtt.status === 'On Break' ? 'On Break' : 'Online';
+          }
+        }
+
+        if (lastAuth.includes('Login')) {
+          return 'Online';
+        }
+
         return 'Offline';
       };
 
