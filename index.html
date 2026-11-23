@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v67)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v68)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -9384,11 +9384,6 @@ function renderRankingAndComparison() {
           compMode = getChannelForTeam(logsFilterScope);
         }
 
-        const usersById = new Map();
-        (allUsersOmni || []).forEach(usr => {
-          if (usr && usr.id) usersById.set(String(usr.id).trim(), usr);
-        });
-
         // Build clean stats for any team name
         function computeTeamDailyStat(teamName) {
           const normT = normalizeTeamNameAlias(teamName);
@@ -9414,7 +9409,7 @@ function renderRankingAndComparison() {
           const amount = tSales.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
           const orders = tSales.reduce((acc, s) => acc + (Number(s.orders) || 0), 0);
           const leads = tSales.reduce((acc, s) => acc + (Number(s.leads) || 0), 0);
-          const conv = leads > 0 ? ((orders / leads) * 100).toFixed(1) : '0.0';
+          const conv = leads > 0 ? ((orders / leads) * 100).toFixed(2) : '0.00';
           const achPct = teamDailyTarget > 0 ? Math.round((amount / teamDailyTarget) * 100) : 0;
 
           return {
@@ -9433,36 +9428,66 @@ function renderRankingAndComparison() {
 
         function getCardThemeV70(teamName, isSelected) {
           const t = normalizeTeamNameAlias(teamName);
-          const ring = isSelected ? 'ring-2 ring-offset-1 ring-slate-900 shadow-md' : 'hover:shadow-sm';
-          if (t === 'Team Nazim') return { wrap: `bg-orange-50/55 border-orange-200 ${ring}`, dot: 'bg-orange-500', bar: 'bg-orange-500', amt: 'text-orange-700', pill: 'bg-orange-500 text-white' };
-          if (t === 'Team Samad') return { wrap: `bg-blue-50/55 border-blue-200 ${ring}`, dot: 'bg-blue-600', bar: 'bg-blue-600', amt: 'text-blue-700', pill: 'bg-blue-600 text-white' };
-          if (t === 'Team Saikat') return { wrap: `bg-cyan-50/55 border-cyan-200 ${ring}`, dot: 'bg-cyan-600', bar: 'bg-cyan-600', amt: 'text-cyan-800', pill: 'bg-cyan-700 text-white' };
-          if (t === 'Team Parvaj') return { wrap: `bg-teal-50/55 border-teal-200 ${ring}`, dot: 'bg-teal-600', bar: 'bg-teal-600', amt: 'text-teal-800', pill: 'bg-teal-600 text-white' };
-          if (t === 'Team Shakib Baksh') return { wrap: `bg-emerald-50/55 border-emerald-200 ${ring}`, dot: 'bg-emerald-600', bar: 'bg-emerald-600', amt: 'text-emerald-800', pill: 'bg-emerald-600 text-white' };
-          return { wrap: `bg-indigo-50/55 border-indigo-200 ${ring}`, dot: 'bg-indigo-600', bar: 'bg-indigo-600', amt: 'text-indigo-800', pill: 'bg-indigo-600 text-white' };
+          const ring = isSelected ? 'ring-2 ring-offset-1 ring-slate-900 shadow-md border-slate-400' : 'border-slate-200/90 hover:border-slate-300 hover:shadow-sm';
+          if (t === 'Team Nazim') return { card: `bg-white border border-t-4 border-t-orange-500 ${ring}`, bar: 'bg-orange-500', amt: 'text-orange-600', pill: 'bg-orange-500 text-white', soft: 'bg-orange-50 text-orange-700 border-orange-200' };
+          if (t === 'Team Samad') return { card: `bg-white border border-t-4 border-t-blue-600 ${ring}`, bar: 'bg-blue-600', amt: 'text-blue-700', pill: 'bg-blue-600 text-white', soft: 'bg-blue-50 text-blue-700 border-blue-200' };
+          if (t === 'Team Saikat') return { card: `bg-white border border-t-4 border-t-cyan-600 ${ring}`, bar: 'bg-cyan-600', amt: 'text-cyan-700', pill: 'bg-cyan-700 text-white', soft: 'bg-cyan-50 text-cyan-800 border-cyan-200' };
+          if (t === 'Team Parvaj') return { card: `bg-white border border-t-4 border-t-teal-600 ${ring}`, bar: 'bg-teal-600', amt: 'text-teal-700', pill: 'bg-teal-600 text-white', soft: 'bg-teal-50 text-teal-800 border-teal-200' };
+          if (t === 'Team Shakib Baksh') return { card: `bg-white border border-t-4 border-t-emerald-600 ${ring}`, bar: 'bg-emerald-600', amt: 'text-emerald-700', pill: 'bg-emerald-600 text-white', soft: 'bg-emerald-50 text-emerald-800 border-emerald-200' };
+          return { card: `bg-white border border-t-4 border-t-indigo-600 ${ring}`, bar: 'bg-indigo-600', amt: 'text-indigo-700', pill: 'bg-indigo-600 text-white', soft: 'bg-indigo-50 text-indigo-800 border-indigo-200' };
+        }
+
+        function render4MetricBoxesV70(leads, orders, conv, submittedCount, expectedCount, isCompact) {
+          const pad = isCompact ? 'px-2 py-1.5' : 'px-2.5 py-2';
+          const valCls = isCompact ? 'text-[13px]' : 'text-sm';
+          const lblCls = 'text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block leading-none mb-1';
+          return `
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-slate-100">
+              <div class="${pad} rounded-xl bg-slate-50 border border-slate-200/70 text-center">
+                <span class="${lblCls}">Leads</span>
+                <strong class="${valCls} font-black text-slate-900">${Number(leads || 0).toLocaleString()}</strong>
+              </div>
+              <div class="${pad} rounded-xl bg-blue-50/50 border border-blue-100 text-center">
+                <span class="${lblCls} text-blue-500">Orders</span>
+                <strong class="${valCls} font-black text-blue-700">${Number(orders || 0).toLocaleString()}</strong>
+              </div>
+              <div class="${pad} rounded-xl bg-emerald-50/50 border border-emerald-100 text-center">
+                <span class="${lblCls} text-emerald-600">Conv. Ratio</span>
+                <strong class="${valCls} font-black text-emerald-700">${conv}%</strong>
+              </div>
+              <div class="${pad} rounded-xl bg-indigo-50/50 border border-indigo-100 text-center">
+                <span class="${lblCls} text-indigo-500">Submitted</span>
+                <strong class="${valCls} font-black text-indigo-700">${submittedCount}<span class="text-[11px] font-bold text-slate-400"> / ${expectedCount}</span></strong>
+              </div>
+            </div>
+          `;
         }
 
         // ---------------------------------------------------------------------
-        // MODE A: ALL CHANNELS COMBINED (Facebook vs WhatsApp + Compact Team Pills)
+        // MODE A: ALL CHANNELS COMBINED (Facebook vs WhatsApp + Ranked 5 Teams)
         // ---------------------------------------------------------------------
         if (compMode === 'ALL_CHANNELS') {
           const fbTeams = getDynamicTeamsForChannel('FACEBOOK').map(computeTeamDailyStat);
           const waTeams = getDynamicTeamsForChannel('WHATSAPP').map(computeTeamDailyStat);
-          const allStats = [...fbTeams, ...waTeams];
+          const allStatsRanked = [...fbTeams, ...waTeams].sort((a, b) => b.amount - a.amount || b.orders - a.orders);
 
           const fbAmt = fbTeams.reduce((s, t) => s + t.amount, 0);
           const fbOrd = fbTeams.reduce((s, t) => s + t.orders, 0);
           const fbLds = fbTeams.reduce((s, t) => s + t.leads, 0);
           const fbSub = fbTeams.reduce((s, t) => s + t.submittedCount, 0);
           const fbExp = fbTeams.reduce((s, t) => s + t.expectedCount, 0);
-          const fbConv = fbLds > 0 ? ((fbOrd / fbLds) * 100).toFixed(1) : '0.0';
+          const fbTgt = fbTeams.reduce((s, t) => s + t.teamDailyTarget, 0);
+          const fbAch = fbTgt > 0 ? Math.round((fbAmt / fbTgt) * 100) : 0;
+          const fbConv = fbLds > 0 ? ((fbOrd / fbLds) * 100).toFixed(2) : '0.00';
 
           const waAmt = waTeams.reduce((s, t) => s + t.amount, 0);
           const waOrd = waTeams.reduce((s, t) => s + t.orders, 0);
           const waLds = waTeams.reduce((s, t) => s + t.leads, 0);
           const waSub = waTeams.reduce((s, t) => s + t.submittedCount, 0);
           const waExp = waTeams.reduce((s, t) => s + t.expectedCount, 0);
-          const waConv = waLds > 0 ? ((waOrd / waLds) * 100).toFixed(1) : '0.0';
+          const waTgt = waTeams.reduce((s, t) => s + t.teamDailyTarget, 0);
+          const waAch = waTgt > 0 ? Math.round((waAmt / waTgt) * 100) : 0;
+          const waConv = waLds > 0 ? ((waOrd / waLds) * 100).toFixed(2) : '0.00';
 
           const grandAmt = fbAmt + waAmt;
           const fbShare = grandAmt > 0 ? Math.round((fbAmt / grandAmt) * 100) : 50;
@@ -9472,74 +9497,114 @@ function renderRankingAndComparison() {
             ? `<span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-[11px] font-bold">No submissions yet</span>`
             : (diffAmt === 0
               ? `<span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-black">🤝 Channels Tied</span>`
-              : `<span class="px-2.5 py-1 rounded-lg ${fbAmt > waAmt ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'} text-[11px] font-black">🏆 ${fbAmt > waAmt ? 'Facebook' : 'WhatsApp'} leads by ৳${diffAmt.toLocaleString()}</span>`);
+              : `<span class="px-2.5 py-1 rounded-lg ${fbAmt > waAmt ? 'bg-blue-50 text-blue-800 border border-blue-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'} text-[11px] font-black">🏆 ${fbAmt > waAmt ? 'Facebook' : 'WhatsApp'} leads by ৳${diffAmt.toLocaleString()}</span>`);
+
+          function renderOmniChCard(chKey, title, iconCls, amt, tgt, ach, share, lds, ord, conv, sub, exp, isLead, isBehind) {
+            const isFbCard = chKey === 'ALL_FB';
+            const isSel = logsFilterScope === chKey;
+            const ringCls = isSel ? 'ring-2 ring-offset-1 ring-slate-900 shadow-md border-slate-400' : 'border-slate-200/90 hover:border-slate-300 hover:shadow-sm';
+            const topBorder = isFbCard ? 'border-t-blue-600' : 'border-t-emerald-600';
+            const pillBg = isFbCard ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white';
+            const amtCol = isFbCard ? 'text-blue-700' : 'text-emerald-700';
+            const barCol = isFbCard ? 'bg-blue-600' : 'bg-emerald-600';
+            const gapPill = grandAmt === 0 ? '' : (isLead
+              ? `<span class="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black shadow-2xs">🏆 +৳${diffAmt.toLocaleString()}</span>`
+              : (isBehind ? `<span class="px-2.5 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-black">-৳${diffAmt.toLocaleString()}</span>` : ''));
+
+            return `
+              <div onclick="setLogsScope('${isSel ? 'ALL' : chKey}')" title="Click to filter table to ${title}" class="p-4 rounded-2xl bg-white border border-t-4 ${topBorder} ${ringCls} cursor-pointer transition-all space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5">
+                    <span class="px-2.5 py-1 rounded-lg ${pillBg} text-[10px] font-black uppercase inline-flex items-center gap-1"><i class="${iconCls}"></i> ${title}</span>
+                    ${isSel ? `<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px] font-black">Filtered</span>` : ''}
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    ${gapPill}
+                    <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-extrabold">${share}% Share</span>
+                  </div>
+                </div>
+
+                <div class="flex items-end justify-between gap-2">
+                  <div>
+                    <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block">Channel Sales</span>
+                    <span class="text-2xl font-black ${amtCol} leading-tight">৳${amt.toLocaleString()}</span>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block">Daily Target</span>
+                    <div class="flex items-baseline justify-end gap-1.5">
+                      <strong class="text-sm font-black ${ach >= 100 ? 'text-emerald-600' : 'text-slate-800'}">${ach}%</strong>
+                      <span class="text-[10px] font-bold text-slate-400">of ৳${tgt.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div class="${barCol} h-1.5 rounded-full transition-all" style="width:${Math.min(100, ach)}%"></div>
+                </div>
+
+                ${render4MetricBoxesV70(lds, ord, conv, sub, exp, false)}
+              </div>
+            `;
+          }
 
           return `
-            <div class="card-dynamic p-4 bg-white border border-slate-200/90 shadow-xs space-y-3">
-              <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-                <div class="flex items-center gap-2">
-                  <span class="px-2.5 py-0.5 rounded-lg bg-purple-600 text-white text-[10px] font-black uppercase"><i class="fa-solid fa-scale-balanced mr-1"></i>Daily Channel & Team Comparison</span>
-                  <span class="text-xs font-extrabold text-slate-600">${dateLabel}</span>
+            <div class="card-dynamic p-4 sm:p-5 bg-slate-50/70 border border-slate-200/90 shadow-xs space-y-3.5">
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/80">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-1 rounded-lg bg-purple-600 text-white text-[10px] font-black uppercase inline-flex items-center gap-1.5"><i class="fa-solid fa-scale-balanced"></i>Daily Channel & Team Comparison</span>
+                  <span class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-extrabold text-slate-700"><i class="fa-regular fa-calendar text-purple-600 mr-1"></i>${dateLabel}</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                   ${leaderBanner}
-                  <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-black">Floor Total: ৳${grandAmt.toLocaleString()}</span>
+                  <span class="px-3 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-black shadow-2xs">Floor Total: ৳${grandAmt.toLocaleString()}</span>
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-3">
-                <div onclick="setLogsScope('${logsFilterScope === 'ALL_FB' ? 'ALL' : 'ALL_FB'}')" class="p-3.5 rounded-2xl border bg-blue-50/55 border-blue-200 cursor-pointer transition-all ${logsFilterScope === 'ALL_FB' ? 'ring-2 ring-slate-900 shadow-md' : 'hover:shadow-sm'}">
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="px-2.5 py-0.5 rounded-lg bg-blue-600 text-white text-[10px] font-black uppercase"><i class="fa-brands fa-facebook-f mr-1"></i>Facebook (${fbTeams.length} Teams)</span>
-                    <span class="text-[10px] font-extrabold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-blue-200">${fbSub}/${fbExp} Submitted</span>
-                  </div>
-                  <div class="flex items-baseline justify-between mt-2">
-                    <span class="text-xl font-black text-blue-800">৳${fbAmt.toLocaleString()}</span>
-                    <span class="text-[11px] font-extrabold text-slate-600">${fbLds.toLocaleString()} Leads • ${fbOrd} Ord • ${fbConv}%</span>
-                  </div>
+              <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-stretch gap-3">
+                ${renderOmniChCard('ALL_FB', `Facebook (${fbTeams.length} Teams)`, 'fa-brands fa-facebook-f', fbAmt, fbTgt, fbAch, fbShare, fbLds, fbOrd, fbConv, fbSub, fbExp, fbAmt > waAmt, waAmt > fbAmt)}
+                <div class="hidden lg:flex items-center justify-center">
+                  <div class="w-10 h-10 rounded-full bg-slate-900 text-amber-300 font-black text-xs flex items-center justify-center shadow-md ring-4 ring-white">VS</div>
                 </div>
-
-                <div class="hidden md:flex w-9 h-9 rounded-full bg-slate-900 text-amber-300 font-black text-[11px] items-center justify-center shadow-sm shrink-0">VS</div>
-
-                <div onclick="setLogsScope('${logsFilterScope === 'ALL_WA' ? 'ALL' : 'ALL_WA'}')" class="p-3.5 rounded-2xl border bg-emerald-50/55 border-emerald-200 cursor-pointer transition-all ${logsFilterScope === 'ALL_WA' ? 'ring-2 ring-slate-900 shadow-md' : 'hover:shadow-sm'}">
-                  <div class="flex items-center justify-between gap-2">
-                    <span class="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase"><i class="fa-brands fa-whatsapp mr-1"></i>WhatsApp (${waTeams.length} Teams)</span>
-                    <span class="text-[10px] font-extrabold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-emerald-200">${waSub}/${waExp} Submitted</span>
-                  </div>
-                  <div class="flex items-baseline justify-between mt-2">
-                    <span class="text-xl font-black text-emerald-800">৳${waAmt.toLocaleString()}</span>
-                    <span class="text-[11px] font-extrabold text-slate-600">${waLds.toLocaleString()} Leads • ${waOrd} Ord • ${waConv}%</span>
-                  </div>
-                </div>
+                ${renderOmniChCard('ALL_WA', `WhatsApp (${waTeams.length} Teams)`, 'fa-brands fa-whatsapp', waAmt, waTgt, waAch, waShare, waLds, waOrd, waConv, waSub, waExp, waAmt > fbAmt, fbAmt > waAmt)}
               </div>
 
               ${grandAmt > 0 ? `
-              <div class="space-y-1">
+              <div class="bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 space-y-1.5">
                 <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden flex">
                   <div class="bg-blue-600 h-2 transition-all" style="width:${fbShare}%"></div>
                   <div class="bg-emerald-500 h-2 transition-all" style="width:${waShare}%"></div>
                 </div>
-                <div class="flex justify-between text-[10px] font-extrabold text-slate-500">
-                  <span class="text-blue-700">Facebook ${fbShare}%</span>
-                  <span class="text-emerald-700">WhatsApp ${waShare}%</span>
+                <div class="flex justify-between items-center text-[10px] font-extrabold text-slate-500">
+                  <span class="text-blue-700"><i class="fa-brands fa-facebook-f mr-1"></i>Facebook: ${fbShare}% (৳${fbAmt.toLocaleString()})</span>
+                  <span class="text-slate-400 hidden sm:inline font-bold">Click any channel or team card to filter table</span>
+                  <span class="text-emerald-700"><i class="fa-brands fa-whatsapp mr-1"></i>WhatsApp: ${waShare}% (৳${waAmt.toLocaleString()})</span>
                 </div>
               </div>
               ` : ''}
 
-              <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-${Math.min(5, Math.max(2, allStats.length))} gap-2 pt-1">
-                ${allStats.map(st => {
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                ${allStatsRanked.map((st, idx) => {
                   const isSel = normalizeTeamNameAlias(logsFilterScope) === st.teamName;
                   const th = getCardThemeV70(st.teamName, isSel);
                   const escName = st.teamName.replace(/'/g, "\'");
+                  const rankLbl = idx === 0 && st.amount > 0 ? '🏆 #1' : `#${idx + 1}`;
                   return `
-                    <div onclick="window.toggleDailyCompTeamFilterV70('${escName}')" title="Click to filter table by ${st.teamName}" class="px-3 py-2 rounded-xl border ${th.wrap} cursor-pointer transition-all">
+                    <div onclick="window.toggleDailyCompTeamFilterV70('${escName}')" title="Click to filter table by ${st.teamName}" class="p-3 rounded-xl ${th.card} cursor-pointer transition-all space-y-2">
                       <div class="flex items-center justify-between gap-1">
-                        <span class="text-[10px] font-black text-slate-800 truncate">${st.teamName}</span>
-                        <span class="text-[9px] font-extrabold text-slate-500 shrink-0">${st.submittedCount}/${st.expectedCount}</span>
+                        <span class="text-[10px] font-black text-slate-900 truncate"><span class="text-slate-400 mr-1">${rankLbl}</span>${st.teamName}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[9px] font-black shrink-0">${st.submittedCount}/${st.expectedCount}</span>
                       </div>
-                      <div class="flex items-baseline justify-between mt-1">
-                        <strong class="text-sm font-black ${th.amt}">৳${st.amount.toLocaleString()}</strong>
-                        <span class="text-[9px] font-bold text-slate-500">${st.orders} ord</span>
+                      <div class="flex items-baseline justify-between gap-1">
+                        <strong class="text-base font-black ${th.amt}">৳${st.amount.toLocaleString()}</strong>
+                        <span class="text-[10px] font-black ${st.achPct >= 100 ? 'text-emerald-600' : 'text-slate-600'}">${st.achPct}%</span>
+                      </div>
+                      <div class="w-full h-1 rounded-full bg-slate-100 overflow-hidden">
+                        <div class="${th.bar} h-1 rounded-full" style="width:${Math.min(100, st.achPct)}%"></div>
+                      </div>
+                      <div class="grid grid-cols-3 gap-1 bg-slate-50 rounded-lg py-1.5 px-1 text-center border border-slate-100">
+                        <div><span class="text-[8px] font-extrabold text-slate-400 uppercase block leading-none">Leads</span><strong class="text-[10px] font-black text-slate-800">${st.leads.toLocaleString()}</strong></div>
+                        <div class="border-x border-slate-200/80"><span class="text-[8px] font-extrabold text-blue-400 uppercase block leading-none">Ord</span><strong class="text-[10px] font-black text-blue-700">${st.orders}</strong></div>
+                        <div><span class="text-[8px] font-extrabold text-emerald-500 uppercase block leading-none">Conv</span><strong class="text-[10px] font-black text-emerald-700">${Number(st.conv).toFixed(1)}%</strong></div>
                       </div>
                     </div>
                   `;
@@ -9561,7 +9626,7 @@ function renderRankingAndComparison() {
         const chIcon = isFb ? 'fa-brands fa-facebook-f' : 'fa-brands fa-whatsapp';
         const chLabel = isFb ? 'Facebook' : 'WhatsApp';
 
-        // 2-Team Head-to-Head Battle Strip (e.g. Facebook: Team Nazim VS Team Samad)
+        // 2-Team Executive Head-to-Head Battle Strip (e.g. Facebook: Team Nazim VS Team Samad)
         if (teamStats.length === 2) {
           const left = teamStats[0];
           const right = teamStats[1];
@@ -9572,76 +9637,96 @@ function renderRankingAndComparison() {
           const rightShare = channelTotalAmt > 0 ? (100 - leftShare) : 50;
 
           const topStatusPill = channelTotalAmt === 0
-            ? `<span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-[11px] font-bold">No reports submitted yet</span>`
+            ? `<span class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-500 text-[11px] font-bold">No reports submitted yet</span>`
             : (gap === 0
               ? `<span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-black">🤝 Both Teams Tied</span>`
-              : `<span class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-black">🏆 ${leftLeads ? left.teamName : right.teamName} leads by ৳${gap.toLocaleString()}</span>`);
+              : `<span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-black">🏆 ${leftLeads ? left.teamName : right.teamName} leads by ৳${gap.toLocaleString()}</span>`);
 
-          function renderVsSideCard(st, isLeading, isBehind) {
+          function renderVsSideCard(st, isLeading, isBehind, sharePct) {
             const isSel = normalizeTeamNameAlias(logsFilterScope) === st.teamName;
             const th = getCardThemeV70(st.teamName, isSel);
             const escName = st.teamName.replace(/'/g, "\'");
             const gapPill = channelTotalAmt === 0
-              ? ''
+              ? `<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-400 text-[10px] font-bold">Waiting</span>`
               : (isLeading
-                ? `<span class="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black">🏆 +৳${gap.toLocaleString()}</span>`
+                ? `<span class="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black shadow-2xs">🏆 Leading +৳${gap.toLocaleString()}</span>`
                 : (isBehind
-                  ? `<span class="px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 text-[10px] font-black">-৳${gap.toLocaleString()}</span>`
-                  : `<span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-black">Tied</span>`));
+                  ? `<span class="px-2.5 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-black">Behind -৳${gap.toLocaleString()}</span>`
+                  : `<span class="px-2.5 py-0.5 rounded-lg bg-amber-100 text-amber-800 text-[10px] font-black">🤝 Tied</span>`));
 
             return `
-              <div onclick="window.toggleDailyCompTeamFilterV70('${escName}')" title="Click to ${isSel ? 'show all teams' : `filter table to ${st.teamName}`}" class="p-3.5 rounded-2xl border ${th.wrap} cursor-pointer transition-all">
+              <div onclick="window.toggleDailyCompTeamFilterV70('${escName}')" title="Click to ${isSel ? 'show all teams' : `filter table to ${st.teamName}`}" class="p-4 rounded-2xl ${th.card} cursor-pointer transition-all space-y-3">
+                <!-- Card Top: Team Badge + Lead/Gap Status -->
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex items-center gap-1.5 min-w-0">
-                    <span class="px-2.5 py-0.5 rounded-lg ${th.pill} text-[10px] font-black uppercase truncate">${st.teamName}</span>
-                    ${isSel ? `<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px] font-black">Filtered</span>` : ''}
+                    <span class="px-2.5 py-1 rounded-lg ${th.pill} text-[11px] font-black uppercase tracking-wide truncate">${st.teamName}</span>
+                    ${isSel ? `<span class="px-2 py-0.5 rounded-md bg-slate-900 text-white text-[9px] font-black">Filtered</span>` : ''}
                   </div>
                   <div class="flex items-center gap-1.5 shrink-0">
                     ${gapPill}
-                    <span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-extrabold text-slate-600">${st.submittedCount}/${st.expectedCount} Sub</span>
                   </div>
                 </div>
-                <div class="flex items-baseline justify-between gap-2 mt-2.5">
-                  <span class="text-2xl font-black ${th.amt}">৳${st.amount.toLocaleString()}</span>
-                  <span class="px-2 py-0.5 rounded-md ${st.achPct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-white border border-slate-200 text-slate-700'} text-[11px] font-black">${st.achPct}% Target</span>
+
+                <!-- Card Middle: Big Sales Amount & Daily Target Progress -->
+                <div class="flex items-end justify-between gap-3">
+                  <div>
+                    <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block">Today's Sales</span>
+                    <div class="flex items-baseline gap-2">
+                      <span class="text-2xl font-black ${th.amt} leading-tight">৳${st.amount.toLocaleString()}</span>
+                      ${channelTotalAmt > 0 ? `<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-extrabold">${sharePct}% Share</span>` : ''}
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block">Daily Target</span>
+                    <div class="flex items-baseline justify-end gap-1.5">
+                      <strong class="text-base font-black ${st.achPct >= 100 ? 'text-emerald-600' : 'text-slate-900'}">${st.achPct}%</strong>
+                      <span class="text-[11px] font-bold text-slate-500">/ ৳${st.teamDailyTarget.toLocaleString()}</span>
+                    </div>
+                  </div>
                 </div>
-                <div class="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-200/70 text-[11px] font-bold text-slate-600">
-                  <span>${st.leads.toLocaleString()} Leads • <strong class="text-slate-800">${st.orders} Ord</strong> • ${st.conv}% Conv</span>
-                  <span class="text-[10px] text-slate-400">Goal: ৳${st.teamDailyTarget.toLocaleString()}</span>
+
+                <!-- Target Progress Bar -->
+                <div class="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div class="${th.bar} h-1.5 rounded-full transition-all" style="width:${Math.min(100, st.achPct)}%"></div>
                 </div>
+
+                <!-- Structured 4-Tile KPI Grid (Crystal Clear at First Glance!) -->
+                ${render4MetricBoxesV70(st.leads, st.orders, st.conv, st.submittedCount, st.expectedCount, false)}
               </div>
             `;
           }
 
           return `
-            <div class="card-dynamic p-4 bg-white border border-slate-200/90 shadow-xs space-y-3">
-              <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-                <div class="flex items-center gap-2">
-                  <span class="px-2.5 py-0.5 rounded-lg ${chBadgeCls} text-[10px] font-black uppercase"><i class="${chIcon} mr-1"></i>${chLabel} Daily Comparison</span>
-                  <span class="text-xs font-extrabold text-slate-600">${dateLabel}</span>
+            <div class="card-dynamic p-4 sm:p-5 bg-slate-50/70 border border-slate-200/90 shadow-xs space-y-3.5">
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/80">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="px-2.5 py-1 rounded-lg ${chBadgeCls} text-[10px] font-black uppercase inline-flex items-center gap-1.5"><i class="${chIcon}"></i>${chLabel} Daily Comparison</span>
+                  <span class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-extrabold text-slate-700"><i class="fa-regular fa-calendar text-blue-600 mr-1"></i>${dateLabel}</span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                   ${topStatusPill}
-                  <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-black">Combined: ৳${channelTotalAmt.toLocaleString()}</span>
+                  <span class="px-3 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-black shadow-2xs">Combined: ৳${channelTotalAmt.toLocaleString()}</span>
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-3">
-                ${renderVsSideCard(left, leftLeads, rightLeads)}
-                <div class="hidden md:flex w-9 h-9 rounded-full bg-slate-900 text-amber-300 font-black text-[11px] items-center justify-center shadow-sm shrink-0">VS</div>
-                ${renderVsSideCard(right, rightLeads, leftLeads)}
+              <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-stretch gap-3">
+                ${renderVsSideCard(left, leftLeads, rightLeads, leftShare)}
+                <div class="hidden lg:flex items-center justify-center">
+                  <div class="w-10 h-10 rounded-full bg-slate-900 text-amber-300 font-black text-xs flex items-center justify-center shadow-md ring-4 ring-white">VS</div>
+                </div>
+                ${renderVsSideCard(right, rightLeads, leftLeads, rightShare)}
               </div>
 
               ${channelTotalAmt > 0 ? `
-              <div class="space-y-1">
+              <div class="bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 space-y-1.5">
                 <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden flex">
                   <div class="${getCardThemeV70(left.teamName, false).bar} h-2 transition-all" style="width:${leftShare}%"></div>
                   <div class="${getCardThemeV70(right.teamName, false).bar} h-2 transition-all" style="width:${rightShare}%"></div>
                 </div>
-                <div class="flex justify-between text-[10px] font-extrabold text-slate-500">
-                  <span>${left.teamName}: <strong>${leftShare}%</strong></span>
-                  <span class="text-slate-400 font-bold">Click a team card to filter table</span>
-                  <span>${right.teamName}: <strong>${rightShare}%</strong></span>
+                <div class="flex justify-between items-center text-[10px] font-extrabold text-slate-600">
+                  <span>${left.teamName}: <strong class="text-slate-900">${leftShare}%</strong> (৳${left.amount.toLocaleString()})</span>
+                  <span class="text-slate-400 hidden sm:inline font-bold">Click any team card to filter table</span>
+                  <span>${right.teamName}: <strong class="text-slate-900">${rightShare}%</strong> (৳${right.amount.toLocaleString()})</span>
                 </div>
               </div>
               ` : ''}
@@ -9649,32 +9734,32 @@ function renderRankingAndComparison() {
           `;
         }
 
-        // 3+ Team Ranked Comparison Strip (e.g. WhatsApp: Team Saikat vs Team Parvaj vs Team Shakib Baksh)
+        // 3+ Team Executive Ranked Comparison Strip (e.g. WhatsApp: Team Saikat vs Team Shakib Baksh vs Team Parvaj)
         const rankedStats = teamStats.slice().sort((a, b) => b.amount - a.amount || b.orders - a.orders);
         const topTeam = rankedStats[0];
         const secondTeam = rankedStats[1];
         const leadOverSecond = Math.max(0, (topTeam ? topTeam.amount : 0) - (secondTeam ? secondTeam.amount : 0));
 
         const topStatusPill3 = channelTotalAmt === 0
-          ? `<span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-[11px] font-bold">No reports submitted yet</span>`
+          ? `<span class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-500 text-[11px] font-bold">No reports submitted yet</span>`
           : (leadOverSecond === 0
             ? `<span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-black">🤝 Top Teams Tied</span>`
-            : `<span class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-black">🏆 ${topTeam.teamName} leads #2 by ৳${leadOverSecond.toLocaleString()}</span>`);
+            : `<span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-black">🏆 ${topTeam.teamName} leads #2 by ৳${leadOverSecond.toLocaleString()}</span>`);
 
         return `
-          <div class="card-dynamic p-4 bg-white border border-slate-200/90 shadow-xs space-y-3">
-            <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-              <div class="flex items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-lg ${chBadgeCls} text-[10px] font-black uppercase"><i class="${chIcon} mr-1"></i>${chLabel} Daily Team Comparison</span>
-                <span class="text-xs font-extrabold text-slate-600">${dateLabel}</span>
+          <div class="card-dynamic p-4 sm:p-5 bg-slate-50/70 border border-slate-200/90 shadow-xs space-y-3.5">
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/80">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="px-2.5 py-1 rounded-lg ${chBadgeCls} text-[10px] font-black uppercase inline-flex items-center gap-1.5"><i class="${chIcon}"></i>${chLabel} Daily Team Comparison</span>
+                <span class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-extrabold text-slate-700"><i class="fa-regular fa-calendar text-emerald-600 mr-1"></i>${dateLabel}</span>
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 ${topStatusPill3}
-                <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-black">Combined: ৳${channelTotalAmt.toLocaleString()}</span>
+                <span class="px-3 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-black shadow-2xs">Combined: ৳${channelTotalAmt.toLocaleString()}</span>
               </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-${Math.min(3, rankedStats.length)} gap-3">
+            <div class="grid grid-cols-1 lg:grid-cols-${Math.min(3, rankedStats.length)} gap-3">
               ${rankedStats.map((st, idx) => {
                 const isSel = normalizeTeamNameAlias(logsFilterScope) === st.teamName;
                 const th = getCardThemeV70(st.teamName, isSel);
@@ -9682,38 +9767,64 @@ function renderRankingAndComparison() {
                 const gapFromTop = Math.max(0, (topTeam ? topTeam.amount : 0) - st.amount);
                 const sharePct = channelTotalAmt > 0 ? Math.round((st.amount / channelTotalAmt) * 100) : 0;
                 const rankBadge = idx === 0 && st.amount > 0
-                  ? `<span class="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black">🏆 #1 Leading</span>`
+                  ? `<span class="px-2 py-0.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black shadow-2xs">🏆 #1 Leading</span>`
                   : (st.amount > 0 && gapFromTop > 0
-                    ? `<span class="px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 text-[10px] font-black">#${idx + 1} • -৳${gapFromTop.toLocaleString()}</span>`
-                    : `<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-black">#${idx + 1}</span>`);
+                    ? `<span class="px-2 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-black">#${idx + 1} • -৳${gapFromTop.toLocaleString()}</span>`
+                    : `<span class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 text-[10px] font-black">#${idx + 1}</span>`);
 
                 return `
-                  <div onclick="window.toggleDailyCompTeamFilterV70('${escName}')" title="Click to ${isSel ? 'show all teams' : `filter table to ${st.teamName}`}" class="p-3.5 rounded-2xl border ${th.wrap} cursor-pointer transition-all flex flex-col justify-between">
+                  <div onclick="window.toggleDailyCompTeamFilterV70('${escName}')" title="Click to ${isSel ? 'show all teams' : `filter table to ${st.teamName}`}" class="p-4 rounded-2xl ${th.card} cursor-pointer transition-all flex flex-col justify-between space-y-3">
                     <div class="flex items-center justify-between gap-1.5">
                       <div class="flex items-center gap-1.5 min-w-0">
-                        <span class="px-2 py-0.5 rounded-lg ${th.pill} text-[10px] font-black uppercase truncate">${st.teamName}</span>
+                        <span class="px-2.5 py-1 rounded-lg ${th.pill} text-[10px] font-black uppercase truncate">${st.teamName}</span>
                         ${isSel ? `<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px] font-black">Filtered</span>` : ''}
                       </div>
-                      <span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-extrabold text-slate-600 shrink-0">${st.submittedCount}/${st.expectedCount} Sub</span>
+                      <div class="shrink-0">${rankBadge}</div>
                     </div>
 
-                    <div class="flex items-baseline justify-between gap-2 mt-2.5">
-                      <span class="text-xl font-black ${th.amt}">৳${st.amount.toLocaleString()}</span>
-                      ${rankBadge}
+                    <div class="flex items-end justify-between gap-2">
+                      <div>
+                        <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block">Sales (${sharePct}% Share)</span>
+                        <span class="text-2xl font-black ${th.amt} leading-tight">৳${st.amount.toLocaleString()}</span>
+                      </div>
+                      <div class="text-right">
+                        <span class="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 block">Daily Target</span>
+                        <div class="flex items-baseline justify-end gap-1">
+                          <strong class="text-sm font-black ${st.achPct >= 100 ? 'text-emerald-600' : 'text-slate-900'}">${st.achPct}%</strong>
+                          <span class="text-[10px] font-bold text-slate-400">/ ৳${st.teamDailyTarget.toLocaleString()}</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div class="w-full h-1.5 rounded-full bg-white/90 border border-slate-200/70 overflow-hidden mt-2">
-                      <div class="${th.bar} h-1.5 rounded-full" style="width:${Math.min(100, st.achPct)}%"></div>
+                    <div class="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div class="${th.bar} h-1.5 rounded-full transition-all" style="width:${Math.min(100, st.achPct)}%"></div>
                     </div>
 
-                    <div class="flex items-center justify-between gap-2 mt-2 text-[10px] font-bold text-slate-600">
-                      <span>${st.leads.toLocaleString()} Leads • <strong class="text-slate-800">${st.orders} Ord</strong> (${st.conv}%)</span>
-                      <span class="font-black text-slate-700">${st.achPct}% • ${sharePct}% share</span>
-                    </div>
+                    ${render4MetricBoxesV70(st.leads, st.orders, st.conv, st.submittedCount, st.expectedCount, true)}
                   </div>
                 `;
               }).join('')}
             </div>
+
+            ${channelTotalAmt > 0 ? `
+            <div class="bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 space-y-1.5">
+              <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden flex">
+                ${rankedStats.map(st => {
+                  const pct = channelTotalAmt > 0 ? ((st.amount / channelTotalAmt) * 100).toFixed(1) : 0;
+                  return `<div class="${getCardThemeV70(st.teamName, false).bar} h-2 transition-all" style="width:${pct}%" title="${st.teamName}: ${Math.round(Number(pct))}%"></div>`;
+                }).join('')}
+              </div>
+              <div class="flex flex-wrap justify-between items-center gap-2 text-[10px] font-extrabold text-slate-600">
+                <div class="flex flex-wrap items-center gap-3">
+                  ${rankedStats.map(st => {
+                    const pct = channelTotalAmt > 0 ? Math.round((st.amount / channelTotalAmt) * 100) : 0;
+                    return `<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full ${getCardThemeV70(st.teamName, false).bar}"></span>${st.teamName}: <strong class="text-slate-900">${pct}%</strong></span>`;
+                  }).join('')}
+                </div>
+                <span class="text-slate-400 font-bold">Click any team card to filter table</span>
+              </div>
+            </div>
+            ` : ''}
           </div>
         `;
       } catch (errV70) {
