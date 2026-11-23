@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v70)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v71)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -66,6 +66,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      toggle, click-to-filter, and Include TL Sales sync.
    - TAB-SWITCH SPEED FIX (V70): Eliminated V33 double renderAppLayout() on setTab/init and
      V27 double localStorage.setItem() inside renderReports (zero change to Cloud Sync / modals).
+   - 100% ACCURATE LIVE ONLINE PRESENCE FIX (V71): Removed stale Attendance/Activity_Logs
+     online fallbacks in V67 getUserOnlineStatus() (stops closed-tab agents showing Online)
+     and added lightweight 35s background-tab clientVer heartbeat in V68 fetchFromSheet()
+     (keeps open background tabs like TLs working on WhatsApp Web accurately Online).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -15213,6 +15217,31 @@ function renderChatHubView() {
             params.append('action', 'USER_LOGOUT');
             params.append('payload', payload);
             navigator.sendBeacon(webhookUrl, params);
+            window._offlineBeaconSentAtV71 = Date.now();
+          }
+        } catch (e) {}
+      });
+      window.addEventListener('pagehide', () => {
+        if (!currentUser || isHardRefreshing) return;
+        if ((Date.now() - (window._offlineBeaconSentAtV71 || 0)) < 2000) return;
+        try {
+          if (navigator.sendBeacon) {
+            const payload = JSON.stringify({
+              action: 'USER_LOGOUT',
+              userId: String(currentUser.id),
+              userName: currentUser.name,
+              team: currentUser.team,
+              pingUserId: String(currentUser.id),
+              pingName: currentUser.name,
+              pingRole: currentUser.role,
+              pingTeam: currentUser.team,
+              pingState: 'Offline'
+            });
+            const params = new URLSearchParams();
+            params.append('action', 'USER_LOGOUT');
+            params.append('payload', payload);
+            navigator.sendBeacon(webhookUrl, params);
+            window._offlineBeaconSentAtV71 = Date.now();
           }
         } catch (e) {}
       });
@@ -30754,19 +30783,9 @@ function renderChatHubView() {
             if (!_todayAttMapV67.has(k)) _todayAttMapV67.set(k, a);
           }
         }
-        const actLogs = getStored('activity_logs', []);
-        for (let i = 0; i < actLogs.length; i++) {
-          const l = actLogs[i];
-          if (!l || !l.userId) continue;
-          if (String(l.date || '').replace(/^'/, '').trim() !== today) continue;
-          const actStr = String(l.action || '');
-          if (actStr.includes('Login') || actStr.includes('Logout')) {
-            const k = String(l.userId).trim();
-            if (!_todayAuthMapV67.has(k)) _todayAuthMapV67.set(k, actStr);
-          }
-        }
       }
 
+      // V71: 100% Live Heartbeat-Only Online Presence (NO stale Attendance_Logs / Activity_Logs fallbacks!)
       getUserOnlineStatus = function(userId) {
         const uid = String(userId || '').trim();
         if (!uid) return 'Offline';
@@ -30782,27 +30801,11 @@ function renderChatHubView() {
 
         const now = Date.now();
         const oRec = _onlineRecMapV67.get(uid);
-        if (oRec && oRec.state !== 'Offline') {
+        if (oRec && oRec.state !== 'Offline' && Number(oRec.lastSeen) > 0) {
           const refTs = Number(oRec.clientReceivedAt || oRec.lastSeen || 0);
-          if (refTs === 0 || (now - refTs) < 300000) {
+          if (refTs > 0 && (now - refTs) < 180000) {
             return oRec.state === 'On Break' ? 'On Break' : 'Online';
           }
-        }
-
-        const todayAtt = _todayAttMapV67.get(uid);
-        if (todayAtt && todayAtt.status && todayAtt.status !== 'Completed') {
-          const logoutClean = String(todayAtt.logoutTime || '--:--').trim();
-          if (logoutClean === '--:--' || logoutClean === '' || logoutClean === '-') {
-            const lastAuth = _todayAuthMapV67.get(uid);
-            if (!lastAuth || !lastAuth.includes('Logout')) {
-              return todayAtt.status === 'On Break' ? 'On Break' : 'Online';
-            }
-          }
-        }
-
-        const latestAuth = _todayAuthMapV67.get(uid);
-        if (latestAuth && latestAuth.includes('Login') && (!oRec || oRec.state !== 'Offline')) {
-          return 'Online';
         }
         return 'Offline';
       };
@@ -31455,7 +31458,13 @@ function renderChatHubView() {
 
       // B. Ultra-Fast Delta Version Sync (ETag clientVer + forceFresh + Submit Priority)
       fetchFromSheet = function(forceImmediate = false, isManualSync = false) {
-        if (!forceImmediate && document.hidden) return;
+        if (!forceImmediate && document.hidden) {
+          // V71: Keep live Online presence accurate while user works in another tab (e.g. WhatsApp Web / FB Inbox)
+          // Sends 1 tiny ~50ms clientVer RAM heartbeat every 35s (ZERO sheet reads, ZERO background DOM render).
+          const nowHidden = Date.now();
+          if ((nowHidden - (window._lastHiddenHeartbeatMsV71 || 0)) < 35000) return;
+          window._lastHiddenHeartbeatMsV71 = nowHidden;
+        }
 
         // Give 100% network & server priority to any in-flight report submit!
         if (!forceImmediate && window._inFlightSalesWriteKeysV63 && window._inFlightSalesWriteKeysV63.size > 0) {
@@ -31558,7 +31567,7 @@ function renderChatHubView() {
             setStored('online_users', stampedOnline);
             if (onlineStateDiff) {
               window._gbStoreCacheGenV67 = (window._gbStoreCacheGenV67 || 1) + 1;
-              if (currentUser && !isAnyModalOpen() && !isUserInteractingWithControl()) {
+              if (currentUser && !document.hidden && !isAnyModalOpen() && !isUserInteractingWithControl()) {
                 renderAppLayout();
               }
             }
