@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v66)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v67)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -60,6 +60,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      Remaining calculates Sprint Remaining / Remaining Duty Days inside the selected Sprint
      (S1/S2/S3), excluding Roster DO & Leave/Absent days (includes today if today's report
      is not yet submitted, excludes today once today's report is submitted).
+   - DAILY SALES REPORTS TAB (V70): Clean Team-vs-Team Daily Comparison strip above the
+     table for TL / Admin / Supervisor (canViewAll) showing same-channel rival team totals,
+     lead gap, submitted agent count, Leads/Orders/Conv%, and Daily Target % for the selected
+     date (click any team card to filter/toggle table; respects Include TL Sales checkbox).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -104,6 +108,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 - postToSheet / handleSalesSubmit           => V64/V65 (serialized fastSubmit queue)
 - downloadPortalCsvFile                     => V57 (strips +5% labels/columns)
 - renderSprintTargetView / exportSprintTargetCsv => Base + V69 (Sprint Daily Target excl. DO) + V58 button + V52 actual CSV
+- renderReports                             => Base + V70 (Daily Team Comparison strip for TL/Admin/Sup) + V27 TL toggle + V41 CSV header
 - exportMonthlyPerformanceCsv / DateWise / Sprint / Ranking / DailySales / Incentive
   => wrapped via V52 wrapExportWithActualTarget()
 ================================================================================
@@ -9331,6 +9336,392 @@ function renderRankingAndComparison() {
       `;
     }
 
+    // =========================================================================
+    // V70: CLEAN DAILY TEAM-VS-TEAM COMPARISON STRIP (TL / ADMIN / SUPERVISOR)
+    // Shows same-channel team totals, lead gap, submitted count & daily target %
+    // for the currently selected date in Daily Sales Reports (click to filter).
+    // =========================================================================
+    window.toggleDailyCompTeamFilterV70 = function(teamName) {
+      const target = String(teamName || '').trim();
+      if (!target) return;
+      if (normalizeTeamNameAlias(logsFilterScope) === normalizeTeamNameAlias(target)) {
+        setLogsScope('ALL');
+      } else {
+        setLogsScope(target);
+      }
+    };
+
+    window.renderDailyTeamComparisonStripV70 = function(u, allUsersOmni, allRawSalesOmni) {
+      try {
+        if (!u || !canViewAll(u)) return '';
+        const isDateAll = (reportsDateFilter === 'ALL');
+        const effDateStr = isDateAll ? getTodayFormatted() : reportsDateFilter;
+        const dateLabel = isDateAll ? `Full Month (${selectedMonthKey})` : cleanDisplayDate(effDateStr);
+        const includeTl = Boolean(window.showTlInSalesTables);
+
+        // Deduplicated sales for the selected date across all channels (already respects Include TL Sales!)
+        const dedupMap = new Map();
+        (allRawSalesOmni || []).forEach(s => {
+          if (!s || !s.userId || !s.date) return;
+          const dClean = String(s.date).replace(/^'/, '').trim();
+          if (dClean.startsWith('MONTHLY_PROD_')) return;
+          const matchDate = isDateAll ? dClean.endsWith(selectedMonthKey) : (dClean === effDateStr);
+          if (!matchDate) return;
+          const k = `${String(s.userId).trim()}_${dClean}`;
+          if (!dedupMap.has(k)) dedupMap.set(k, { ...s, date: dClean });
+        });
+        const daySalesOmni = Array.from(dedupMap.values());
+
+        // Determine which channel mode to display in the comparison strip
+        let compMode = activeChannel; // 'FACEBOOK' | 'WHATSAPP' | 'ALL_CHANNELS'
+        if (logsFilterScope === 'ALL_OMNI') {
+          compMode = 'ALL_CHANNELS';
+        } else if (logsFilterScope === 'ALL_FB') {
+          compMode = 'FACEBOOK';
+        } else if (logsFilterScope === 'ALL_WA') {
+          compMode = 'WHATSAPP';
+        } else if (logsFilterScope !== 'ALL' && logsFilterScope !== 'MINE') {
+          compMode = getChannelForTeam(logsFilterScope);
+        }
+
+        const usersById = new Map();
+        (allUsersOmni || []).forEach(usr => {
+          if (usr && usr.id) usersById.set(String(usr.id).trim(), usr);
+        });
+
+        // Build clean stats for any team name
+        function computeTeamDailyStat(teamName) {
+          const normT = normalizeTeamNameAlias(teamName);
+          const teamMembers = (allUsersOmni || []).filter(usr => {
+            if (!usr || usr.role === 'supervisor') return false;
+            if (normalizeTeamNameAlias(usr.team) !== normT) return false;
+            if (typeof isUserAccountDeactivated === 'function' && isUserAccountDeactivated(usr)) return false;
+            if (usr.role === 'admin') return includeTl;
+            return !isPendingOrFloatingAgent(usr);
+          });
+
+          const teamDailyTarget = teamMembers.reduce((sum, m) => {
+            const baseTgt = Number(m.baseTarget) || 0;
+            const workTgt = calcWorkingTargetFromBase(baseTgt, m.team);
+            const dt = (typeof window.getAgentDynamicDailyTargetV62 === 'function')
+              ? window.getAgentDynamicDailyTargetV62(m, selectedMonthKey).tableDailyTarget
+              : Math.round(workTgt / 26);
+            return sum + (Number(dt) || 0);
+          }, 0);
+
+          const tSales = daySalesOmni.filter(s => normalizeTeamNameAlias(s.team) === normT);
+          const uniqueSubmitters = new Set(tSales.map(s => String(s.userId).trim()));
+          const amount = tSales.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+          const orders = tSales.reduce((acc, s) => acc + (Number(s.orders) || 0), 0);
+          const leads = tSales.reduce((acc, s) => acc + (Number(s.leads) || 0), 0);
+          const conv = leads > 0 ? ((orders / leads) * 100).toFixed(1) : '0.0';
+          const achPct = teamDailyTarget > 0 ? Math.round((amount / teamDailyTarget) * 100) : 0;
+
+          return {
+            teamName: normT,
+            channel: getChannelForTeam(normT),
+            amount,
+            orders,
+            leads,
+            conv,
+            submittedCount: uniqueSubmitters.size,
+            expectedCount: teamMembers.length,
+            teamDailyTarget,
+            achPct
+          };
+        }
+
+        function getCardThemeV70(teamName, isSelected) {
+          const t = normalizeTeamNameAlias(teamName);
+          const ring = isSelected ? 'ring-2 ring-offset-1 ring-slate-900 shadow-md' : 'hover:shadow-sm';
+          if (t === 'Team Nazim') return { wrap: `bg-orange-50/55 border-orange-200 ${ring}`, dot: 'bg-orange-500', bar: 'bg-orange-500', amt: 'text-orange-700', pill: 'bg-orange-500 text-white' };
+          if (t === 'Team Samad') return { wrap: `bg-blue-50/55 border-blue-200 ${ring}`, dot: 'bg-blue-600', bar: 'bg-blue-600', amt: 'text-blue-700', pill: 'bg-blue-600 text-white' };
+          if (t === 'Team Saikat') return { wrap: `bg-cyan-50/55 border-cyan-200 ${ring}`, dot: 'bg-cyan-600', bar: 'bg-cyan-600', amt: 'text-cyan-800', pill: 'bg-cyan-700 text-white' };
+          if (t === 'Team Parvaj') return { wrap: `bg-teal-50/55 border-teal-200 ${ring}`, dot: 'bg-teal-600', bar: 'bg-teal-600', amt: 'text-teal-800', pill: 'bg-teal-600 text-white' };
+          if (t === 'Team Shakib Baksh') return { wrap: `bg-emerald-50/55 border-emerald-200 ${ring}`, dot: 'bg-emerald-600', bar: 'bg-emerald-600', amt: 'text-emerald-800', pill: 'bg-emerald-600 text-white' };
+          return { wrap: `bg-indigo-50/55 border-indigo-200 ${ring}`, dot: 'bg-indigo-600', bar: 'bg-indigo-600', amt: 'text-indigo-800', pill: 'bg-indigo-600 text-white' };
+        }
+
+        // ---------------------------------------------------------------------
+        // MODE A: ALL CHANNELS COMBINED (Facebook vs WhatsApp + Compact Team Pills)
+        // ---------------------------------------------------------------------
+        if (compMode === 'ALL_CHANNELS') {
+          const fbTeams = getDynamicTeamsForChannel('FACEBOOK').map(computeTeamDailyStat);
+          const waTeams = getDynamicTeamsForChannel('WHATSAPP').map(computeTeamDailyStat);
+          const allStats = [...fbTeams, ...waTeams];
+
+          const fbAmt = fbTeams.reduce((s, t) => s + t.amount, 0);
+          const fbOrd = fbTeams.reduce((s, t) => s + t.orders, 0);
+          const fbLds = fbTeams.reduce((s, t) => s + t.leads, 0);
+          const fbSub = fbTeams.reduce((s, t) => s + t.submittedCount, 0);
+          const fbExp = fbTeams.reduce((s, t) => s + t.expectedCount, 0);
+          const fbConv = fbLds > 0 ? ((fbOrd / fbLds) * 100).toFixed(1) : '0.0';
+
+          const waAmt = waTeams.reduce((s, t) => s + t.amount, 0);
+          const waOrd = waTeams.reduce((s, t) => s + t.orders, 0);
+          const waLds = waTeams.reduce((s, t) => s + t.leads, 0);
+          const waSub = waTeams.reduce((s, t) => s + t.submittedCount, 0);
+          const waExp = waTeams.reduce((s, t) => s + t.expectedCount, 0);
+          const waConv = waLds > 0 ? ((waOrd / waLds) * 100).toFixed(1) : '0.0';
+
+          const grandAmt = fbAmt + waAmt;
+          const fbShare = grandAmt > 0 ? Math.round((fbAmt / grandAmt) * 100) : 50;
+          const waShare = grandAmt > 0 ? (100 - fbShare) : 50;
+          const diffAmt = Math.abs(fbAmt - waAmt);
+          const leaderBanner = grandAmt === 0
+            ? `<span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-[11px] font-bold">No submissions yet</span>`
+            : (diffAmt === 0
+              ? `<span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-black">🤝 Channels Tied</span>`
+              : `<span class="px-2.5 py-1 rounded-lg ${fbAmt > waAmt ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'} text-[11px] font-black">🏆 ${fbAmt > waAmt ? 'Facebook' : 'WhatsApp'} leads by ৳${diffAmt.toLocaleString()}</span>`);
+
+          return `
+            <div class="card-dynamic p-4 bg-white border border-slate-200/90 shadow-xs space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-lg bg-purple-600 text-white text-[10px] font-black uppercase"><i class="fa-solid fa-scale-balanced mr-1"></i>Daily Channel & Team Comparison</span>
+                  <span class="text-xs font-extrabold text-slate-600">${dateLabel}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  ${leaderBanner}
+                  <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-black">Floor Total: ৳${grandAmt.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-3">
+                <div onclick="setLogsScope('${logsFilterScope === 'ALL_FB' ? 'ALL' : 'ALL_FB'}')" class="p-3.5 rounded-2xl border bg-blue-50/55 border-blue-200 cursor-pointer transition-all ${logsFilterScope === 'ALL_FB' ? 'ring-2 ring-slate-900 shadow-md' : 'hover:shadow-sm'}">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="px-2.5 py-0.5 rounded-lg bg-blue-600 text-white text-[10px] font-black uppercase"><i class="fa-brands fa-facebook-f mr-1"></i>Facebook (${fbTeams.length} Teams)</span>
+                    <span class="text-[10px] font-extrabold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-blue-200">${fbSub}/${fbExp} Submitted</span>
+                  </div>
+                  <div class="flex items-baseline justify-between mt-2">
+                    <span class="text-xl font-black text-blue-800">৳${fbAmt.toLocaleString()}</span>
+                    <span class="text-[11px] font-extrabold text-slate-600">${fbLds.toLocaleString()} Leads • ${fbOrd} Ord • ${fbConv}%</span>
+                  </div>
+                </div>
+
+                <div class="hidden md:flex w-9 h-9 rounded-full bg-slate-900 text-amber-300 font-black text-[11px] items-center justify-center shadow-sm shrink-0">VS</div>
+
+                <div onclick="setLogsScope('${logsFilterScope === 'ALL_WA' ? 'ALL' : 'ALL_WA'}')" class="p-3.5 rounded-2xl border bg-emerald-50/55 border-emerald-200 cursor-pointer transition-all ${logsFilterScope === 'ALL_WA' ? 'ring-2 ring-slate-900 shadow-md' : 'hover:shadow-sm'}">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase"><i class="fa-brands fa-whatsapp mr-1"></i>WhatsApp (${waTeams.length} Teams)</span>
+                    <span class="text-[10px] font-extrabold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-emerald-200">${waSub}/${waExp} Submitted</span>
+                  </div>
+                  <div class="flex items-baseline justify-between mt-2">
+                    <span class="text-xl font-black text-emerald-800">৳${waAmt.toLocaleString()}</span>
+                    <span class="text-[11px] font-extrabold text-slate-600">${waLds.toLocaleString()} Leads • ${waOrd} Ord • ${waConv}%</span>
+                  </div>
+                </div>
+              </div>
+
+              ${grandAmt > 0 ? `
+              <div class="space-y-1">
+                <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden flex">
+                  <div class="bg-blue-600 h-2 transition-all" style="width:${fbShare}%"></div>
+                  <div class="bg-emerald-500 h-2 transition-all" style="width:${waShare}%"></div>
+                </div>
+                <div class="flex justify-between text-[10px] font-extrabold text-slate-500">
+                  <span class="text-blue-700">Facebook ${fbShare}%</span>
+                  <span class="text-emerald-700">WhatsApp ${waShare}%</span>
+                </div>
+              </div>
+              ` : ''}
+
+              <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-${Math.min(5, Math.max(2, allStats.length))} gap-2 pt-1">
+                ${allStats.map(st => {
+                  const isSel = normalizeTeamNameAlias(logsFilterScope) === st.teamName;
+                  const th = getCardThemeV70(st.teamName, isSel);
+                  const escName = st.teamName.replace(/'/g, "\'");
+                  return `
+                    <div onclick="window.toggleDailyCompTeamFilterV70('${escName}')" title="Click to filter table by ${st.teamName}" class="px-3 py-2 rounded-xl border ${th.wrap} cursor-pointer transition-all">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="text-[10px] font-black text-slate-800 truncate">${st.teamName}</span>
+                        <span class="text-[9px] font-extrabold text-slate-500 shrink-0">${st.submittedCount}/${st.expectedCount}</span>
+                      </div>
+                      <div class="flex items-baseline justify-between mt-1">
+                        <strong class="text-sm font-black ${th.amt}">৳${st.amount.toLocaleString()}</strong>
+                        <span class="text-[9px] font-bold text-slate-500">${st.orders} ord</span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        // ---------------------------------------------------------------------
+        // MODE B: SINGLE CHANNEL (FACEBOOK 2-TEAM VS BATTLE / WHATSAPP 3+ TEAM RANKING)
+        // ---------------------------------------------------------------------
+        const channelTeams = getDynamicTeamsForChannel(compMode);
+        if (!channelTeams || channelTeams.length < 2) return '';
+        const teamStats = channelTeams.map(computeTeamDailyStat);
+        const channelTotalAmt = teamStats.reduce((s, t) => s + t.amount, 0);
+        const isFb = compMode === 'FACEBOOK';
+        const chBadgeCls = isFb ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white';
+        const chIcon = isFb ? 'fa-brands fa-facebook-f' : 'fa-brands fa-whatsapp';
+        const chLabel = isFb ? 'Facebook' : 'WhatsApp';
+
+        // 2-Team Head-to-Head Battle Strip (e.g. Facebook: Team Nazim VS Team Samad)
+        if (teamStats.length === 2) {
+          const left = teamStats[0];
+          const right = teamStats[1];
+          const gap = Math.abs(left.amount - right.amount);
+          const leftLeads = left.amount > right.amount;
+          const rightLeads = right.amount > left.amount;
+          const leftShare = channelTotalAmt > 0 ? Math.round((left.amount / channelTotalAmt) * 100) : 50;
+          const rightShare = channelTotalAmt > 0 ? (100 - leftShare) : 50;
+
+          const topStatusPill = channelTotalAmt === 0
+            ? `<span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-[11px] font-bold">No reports submitted yet</span>`
+            : (gap === 0
+              ? `<span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-black">🤝 Both Teams Tied</span>`
+              : `<span class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-black">🏆 ${leftLeads ? left.teamName : right.teamName} leads by ৳${gap.toLocaleString()}</span>`);
+
+          function renderVsSideCard(st, isLeading, isBehind) {
+            const isSel = normalizeTeamNameAlias(logsFilterScope) === st.teamName;
+            const th = getCardThemeV70(st.teamName, isSel);
+            const escName = st.teamName.replace(/'/g, "\'");
+            const gapPill = channelTotalAmt === 0
+              ? ''
+              : (isLeading
+                ? `<span class="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black">🏆 +৳${gap.toLocaleString()}</span>`
+                : (isBehind
+                  ? `<span class="px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 text-[10px] font-black">-৳${gap.toLocaleString()}</span>`
+                  : `<span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-black">Tied</span>`));
+
+            return `
+              <div onclick="window.toggleDailyCompTeamFilterV70('${escName}')" title="Click to ${isSel ? 'show all teams' : `filter table to ${st.teamName}`}" class="p-3.5 rounded-2xl border ${th.wrap} cursor-pointer transition-all">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="px-2.5 py-0.5 rounded-lg ${th.pill} text-[10px] font-black uppercase truncate">${st.teamName}</span>
+                    ${isSel ? `<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px] font-black">Filtered</span>` : ''}
+                  </div>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    ${gapPill}
+                    <span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-extrabold text-slate-600">${st.submittedCount}/${st.expectedCount} Sub</span>
+                  </div>
+                </div>
+                <div class="flex items-baseline justify-between gap-2 mt-2.5">
+                  <span class="text-2xl font-black ${th.amt}">৳${st.amount.toLocaleString()}</span>
+                  <span class="px-2 py-0.5 rounded-md ${st.achPct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-white border border-slate-200 text-slate-700'} text-[11px] font-black">${st.achPct}% Target</span>
+                </div>
+                <div class="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-slate-200/70 text-[11px] font-bold text-slate-600">
+                  <span>${st.leads.toLocaleString()} Leads • <strong class="text-slate-800">${st.orders} Ord</strong> • ${st.conv}% Conv</span>
+                  <span class="text-[10px] text-slate-400">Goal: ৳${st.teamDailyTarget.toLocaleString()}</span>
+                </div>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="card-dynamic p-4 bg-white border border-slate-200/90 shadow-xs space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-lg ${chBadgeCls} text-[10px] font-black uppercase"><i class="${chIcon} mr-1"></i>${chLabel} Daily Comparison</span>
+                  <span class="text-xs font-extrabold text-slate-600">${dateLabel}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  ${topStatusPill}
+                  <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-black">Combined: ৳${channelTotalAmt.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-3">
+                ${renderVsSideCard(left, leftLeads, rightLeads)}
+                <div class="hidden md:flex w-9 h-9 rounded-full bg-slate-900 text-amber-300 font-black text-[11px] items-center justify-center shadow-sm shrink-0">VS</div>
+                ${renderVsSideCard(right, rightLeads, leftLeads)}
+              </div>
+
+              ${channelTotalAmt > 0 ? `
+              <div class="space-y-1">
+                <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden flex">
+                  <div class="${getCardThemeV70(left.teamName, false).bar} h-2 transition-all" style="width:${leftShare}%"></div>
+                  <div class="${getCardThemeV70(right.teamName, false).bar} h-2 transition-all" style="width:${rightShare}%"></div>
+                </div>
+                <div class="flex justify-between text-[10px] font-extrabold text-slate-500">
+                  <span>${left.teamName}: <strong>${leftShare}%</strong></span>
+                  <span class="text-slate-400 font-bold">Click a team card to filter table</span>
+                  <span>${right.teamName}: <strong>${rightShare}%</strong></span>
+                </div>
+              </div>
+              ` : ''}
+            </div>
+          `;
+        }
+
+        // 3+ Team Ranked Comparison Strip (e.g. WhatsApp: Team Saikat vs Team Parvaj vs Team Shakib Baksh)
+        const rankedStats = teamStats.slice().sort((a, b) => b.amount - a.amount || b.orders - a.orders);
+        const topTeam = rankedStats[0];
+        const secondTeam = rankedStats[1];
+        const leadOverSecond = Math.max(0, (topTeam ? topTeam.amount : 0) - (secondTeam ? secondTeam.amount : 0));
+
+        const topStatusPill3 = channelTotalAmt === 0
+          ? `<span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 text-[11px] font-bold">No reports submitted yet</span>`
+          : (leadOverSecond === 0
+            ? `<span class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-[11px] font-black">🤝 Top Teams Tied</span>`
+            : `<span class="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-black">🏆 ${topTeam.teamName} leads #2 by ৳${leadOverSecond.toLocaleString()}</span>`);
+
+        return `
+          <div class="card-dynamic p-4 bg-white border border-slate-200/90 shadow-xs space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-lg ${chBadgeCls} text-[10px] font-black uppercase"><i class="${chIcon} mr-1"></i>${chLabel} Daily Team Comparison</span>
+                <span class="text-xs font-extrabold text-slate-600">${dateLabel}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                ${topStatusPill3}
+                <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-[11px] font-black">Combined: ৳${channelTotalAmt.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-${Math.min(3, rankedStats.length)} gap-3">
+              ${rankedStats.map((st, idx) => {
+                const isSel = normalizeTeamNameAlias(logsFilterScope) === st.teamName;
+                const th = getCardThemeV70(st.teamName, isSel);
+                const escName = st.teamName.replace(/'/g, "\'");
+                const gapFromTop = Math.max(0, (topTeam ? topTeam.amount : 0) - st.amount);
+                const sharePct = channelTotalAmt > 0 ? Math.round((st.amount / channelTotalAmt) * 100) : 0;
+                const rankBadge = idx === 0 && st.amount > 0
+                  ? `<span class="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black">🏆 #1 Leading</span>`
+                  : (st.amount > 0 && gapFromTop > 0
+                    ? `<span class="px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 text-[10px] font-black">#${idx + 1} • -৳${gapFromTop.toLocaleString()}</span>`
+                    : `<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-black">#${idx + 1}</span>`);
+
+                return `
+                  <div onclick="window.toggleDailyCompTeamFilterV70('${escName}')" title="Click to ${isSel ? 'show all teams' : `filter table to ${st.teamName}`}" class="p-3.5 rounded-2xl border ${th.wrap} cursor-pointer transition-all flex flex-col justify-between">
+                    <div class="flex items-center justify-between gap-1.5">
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="px-2 py-0.5 rounded-lg ${th.pill} text-[10px] font-black uppercase truncate">${st.teamName}</span>
+                        ${isSel ? `<span class="px-1.5 py-0.5 rounded bg-slate-900 text-white text-[9px] font-black">Filtered</span>` : ''}
+                      </div>
+                      <span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-extrabold text-slate-600 shrink-0">${st.submittedCount}/${st.expectedCount} Sub</span>
+                    </div>
+
+                    <div class="flex items-baseline justify-between gap-2 mt-2.5">
+                      <span class="text-xl font-black ${th.amt}">৳${st.amount.toLocaleString()}</span>
+                      ${rankBadge}
+                    </div>
+
+                    <div class="w-full h-1.5 rounded-full bg-white/90 border border-slate-200/70 overflow-hidden mt-2">
+                      <div class="${th.bar} h-1.5 rounded-full" style="width:${Math.min(100, st.achPct)}%"></div>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2 mt-2 text-[10px] font-bold text-slate-600">
+                      <span>${st.leads.toLocaleString()} Leads • <strong class="text-slate-800">${st.orders} Ord</strong> (${st.conv}%)</span>
+                      <span class="font-black text-slate-700">${st.achPct}% • ${sharePct}% share</span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } catch (errV70) {
+        console.error('Non-fatal V70 daily team comparison error:', errV70);
+        return '';
+      }
+    };
+
     function renderReports() {
       const u = currentUser;
       const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
@@ -9459,6 +9850,8 @@ function renderRankingAndComparison() {
               </div>
             </div>
           </div>
+
+          ${window.renderDailyTeamComparisonStripV70 ? window.renderDailyTeamComparisonStripV70(u, allUsersOmni, allRawSalesOmni) : ''}
 
           <div class="card-dynamic overflow-hidden overflow-x-auto">
             <table class="w-full text-left text-xs whitespace-nowrap">
