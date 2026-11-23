@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v64)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v65)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -66,10 +66,13 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
    - Agent panel Bell shows ONLY Official Notices, Shift-End Duty Reminder (5m before shift end,
      skipped on DO), and Chat/DM alerts (NEVER floor login/logout/activity logs).
      Tabs for agents: All | Notices | Duty & Alerts.
-4. ULTRA-FAST ZERO-LAG SYNC & SUBMIT (V64 / V65 / V67):
-   - 3.5s real-time cloud polling (pauses ONLY when tab is hidden, resumes on focus).
+4. ULTRA-FAST ZERO-LAG SYNC & SUBMIT (V64 / V65 / V67 / V68):
+   - 3.5s real-time cloud polling (pauses when tab is hidden OR while a report submit is in-flight).
+   - V68 Delta Version Sync (clientVer ETag): unchanged polls return in ~50ms with live RAM
+     onlineUsers and skip all heavy JSON/DOM reprocessing; header Sync button sends forceFresh=1.
    - Memoized O(1) caches for sidebar missing badge, getUserOnlineStatus, getUsersForMonth.
    - Non-blocking serialized submit queue (fastSubmit=1) + zero-loss localStorage outbox queue.
+   - Lazy-loaded tesseract.js OCR (loads only when AI ERP Import opens, zero startup overhead).
    - Smooth 1-2s submit confirmation without blocking UI or losing scroll/focus position.
 5. ACCESS CONTROL, ANTI-POACHING & PRIVACY:
    - Super Admin Nazim (10122) exclusively owns Role & Feature Access, permanent Delete User ID,
@@ -93,7 +96,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 - renderHeaderBellNotificationWidget        => V67 (in-place refreshBellWidgetInPlaceV67)
 - getUsersForMonth / getUserOnlineStatus    => V67 (memoized O(1) caches)
 - getQuickMissingReportBadgeCountForSidebar => V67 (memoized O(1) cache)
-- fetchFromSheet / handleCloudData          => V67 (hidden-tab pause + USER_BELL_STATE pre-merge)
+- fetchFromSheet / handleCloudData          => V68 (ETag clientVer delta sync + submit priority + V67 bell pre-merge)
 - postToSheet / handleSalesSubmit           => V64/V65 (serialized fastSubmit queue)
 - downloadPortalCsvFile                     => V57 (strips +5% labels/columns)
 - exportMonthlyPerformanceCsv / DateWise / Sprint / Ranking / DailySales / Incentive
@@ -107,7 +110,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
   <title>Ghorerbazar Portal - Dynamic Sales & Incentive Portal</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <!-- tesseract.js is lazy-loaded on demand by Patch V68 when AI ERP Import is opened -->
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; color: #0f172a; }
@@ -3104,7 +3107,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <span>${activeOnlineUsers.length} Online</span>
                 </button>
 
-                <button onclick="fetchFromSheet()" class="h-8 px-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-extrabold rounded-xl inline-flex items-center gap-1 hover:bg-emerald-100 transition-colors cursor-pointer shrink-0" title="Sync data from Google Sheet">
+                <button onclick="fetchFromSheet(true, true)" class="h-8 px-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-extrabold rounded-xl inline-flex items-center gap-1 hover:bg-emerald-100 transition-colors cursor-pointer shrink-0" title="Force fresh sync directly from Google Sheet">
                   <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
                   <span class="hidden lg:inline">Sync</span>
                 </button>
@@ -30784,6 +30787,192 @@ function renderChatHubView() {
       };
     } catch (errV67) {
       console.error('Non-fatal patch v67 warning:', errV67);
+    }
+
+
+    // =========================================================================
+    // PATCH V68: ZERO-COMPROMISE DELTA SYNC (ETAG) + SUBMIT PRIORITY + LAZY OCR
+    // 1. Sends clientVer ETag on 3.5s live polls -> ~50ms unchanged responses
+    //    with live RAM onlineUsers & zero heavy JSON/DOM reprocessing!
+    // 2. Manual Sync button sends forceFresh=1 to pull fresh directly from Sheets.
+    // 3. Pauses background poll while a fastSubmit report write is in-flight.
+    // 4. Lazy-loads tesseract.js only when AI ERP Import modal opens (~zero lag!).
+    // =========================================================================
+    try {
+      window._lastCloudDataVersionV68 = '';
+      window._hasReceivedFullCloudSyncV68 = false;
+      window._tesseractLoadPromiseV68 = null;
+
+      // A. Bulletproof Lazy Loader for Tesseract.js (AI ERP OCR)
+      window.ensureTesseractLoadedV68 = function() {
+        if (window.Tesseract && (typeof window.Tesseract.createWorker === 'function' || typeof window.Tesseract.recognize === 'function')) {
+          return Promise.resolve(window.Tesseract);
+        }
+        if (window._tesseractLoadPromiseV68) return window._tesseractLoadPromiseV68;
+        window._tesseractLoadPromiseV68 = new Promise((resolve, reject) => {
+          const scr = document.createElement('script');
+          scr.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js';
+          scr.async = true;
+          scr.onload = () => resolve(window.Tesseract);
+          scr.onerror = (err) => {
+            window._tesseractLoadPromiseV68 = null;
+            reject(err);
+          };
+          document.head.appendChild(scr);
+        });
+        return window._tesseractLoadPromiseV68;
+      };
+
+      // Pre-load Tesseract silently the moment Admin/TL opens AI ERP Import modal
+      if (typeof openAiImportModal === 'function') {
+        const _origOpenAiImportV68 = openAiImportModal;
+        openAiImportModal = function() {
+          window.ensureTesseractLoadedV68().catch(() => {});
+          return _origOpenAiImportV68.apply(this, arguments);
+        };
+      }
+
+      // Guarantee Tesseract is loaded before running OCR scan
+      if (typeof runSafeTesseractOcr === 'function') {
+        const _origRunSafeOcrV68 = runSafeTesseractOcr;
+        runSafeTesseractOcr = async function(imageDataUrl) {
+          try {
+            await window.ensureTesseractLoadedV68();
+          } catch (eTess) {
+            showPortalToast('OCR Engine Failed to Load', 'Please check your internet connection and try again.', 'error');
+            return '';
+          }
+          return _origRunSafeOcrV68(imageDataUrl);
+        };
+      }
+
+      // B. Ultra-Fast Delta Version Sync (ETag clientVer + forceFresh + Submit Priority)
+      fetchFromSheet = function(forceImmediate = false, isManualSync = false) {
+        if (!forceImmediate && document.hidden) return;
+
+        // Give 100% network & server priority to any in-flight report submit!
+        if (!forceImmediate && window._inFlightSalesWriteKeysV63 && window._inFlightSalesWriteKeysV63.size > 0) {
+          return;
+        }
+
+        const now = Date.now();
+        if (!forceImmediate && (now - (window._lastWritePostTimestamp || 0)) < 2600) {
+          return;
+        }
+        if (!forceImmediate && (now - (window._lastSalesMutationEpochMs || 0)) < 2600) {
+          return;
+        }
+        if (!forceImmediate && isFetchingCloud && (now - lastCloudFetchTime) < 6000) {
+          return;
+        }
+
+        isFetchingCloud = true;
+        lastCloudFetchTime = now;
+        window._cloudFetchSeqCounter = (window._cloudFetchSeqCounter || 0) + 1;
+        const myReqSeqId = window._cloudFetchSeqCounter;
+        window._latestIssuedFetchSeqId = myReqSeqId;
+        const reqStartedAtMs = now;
+
+        let pingQuery = '';
+        const liveCalendarMonthKey = getCurrentMonthKeyStr();
+        if (currentUser) {
+          const st = getUserOnlineStatus(currentUser.id);
+          pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}&monthKey=${encodeURIComponent(liveCalendarMonthKey)}`;
+        } else {
+          pingQuery = `&monthKey=${encodeURIComponent(liveCalendarMonthKey)}`;
+        }
+
+        // Attach clientVer ETag ONLY when we already have a full snapshot AND zero unconfirmed pending writes!
+        const hasPendingSales = (typeof window.getUnconfirmedSheetWriteCountV56 === 'function') ? (window.getUnconfirmedSheetWriteCountV56() > 0) : false;
+        const hasPendingMeta = (typeof window.getPendingMetaWriteCountV60 === 'function') ? (window.getPendingMetaWriteCountV60() > 0) : false;
+
+        if (isManualSync) {
+          pingQuery += `&forceFresh=1`;
+        } else if (window._hasReceivedFullCloudSyncV68 && window._lastCloudDataVersionV68 && !hasPendingSales && !hasPendingMeta) {
+          pingQuery += `&clientVer=${encodeURIComponent(window._lastCloudDataVersionV68)}`;
+        }
+
+        let handled = false;
+        const onSuccess = (res) => {
+          if (handled) return;
+          handled = true;
+          if (myReqSeqId === window._latestIssuedFetchSeqId) {
+            isFetchingCloud = false;
+          }
+          if (myReqSeqId < (window._highestAppliedFetchSeqId || 0) || reqStartedAtMs < (window._lastSalesMutationEpochMs || 0)) {
+            return;
+          }
+          window._highestAppliedFetchSeqId = myReqSeqId;
+          if (res && res.status === 'success') {
+            handleCloudData(res);
+            if (isManualSync) {
+              showPortalToast('Cloud Synced!', 'Latest data refreshed directly from Google Sheets.', 'success');
+            }
+          }
+        };
+
+        fetch(`${webhookUrl}?t=${now}${pingQuery}`)
+          .then(r => r.json())
+          .then(onSuccess)
+          .catch(() => {
+            const cbName = 'gb_cb_' + now + '_' + myReqSeqId;
+            const script = document.createElement('script');
+            window[cbName] = function(res) {
+              delete window[cbName];
+              if (script.parentNode) script.parentNode.removeChild(script);
+              onSuccess(res);
+            };
+            script.src = `${webhookUrl}?callback=${cbName}&t=${now}${pingQuery}`;
+            script.onerror = function() {
+              delete window[cbName];
+              if (script.parentNode) script.parentNode.removeChild(script);
+              if (myReqSeqId === window._latestIssuedFetchSeqId) isFetchingCloud = false;
+            };
+            document.body.appendChild(script);
+          });
+      };
+
+      // C. Zero-Overhead Fast Handler for Unchanged Delta Responses
+      const _origHandleCloudDataV68 = handleCloudData;
+      handleCloudData = function(res) {
+        if (res && res.dataVersion) {
+          window._lastCloudDataVersionV68 = String(res.dataVersion);
+        }
+        if (res && res.unchanged === true) {
+          window._hasReceivedFullCloudSyncV68 = true;
+          if (Array.isArray(res.onlineUsers)) {
+            const nowClient = Date.now();
+            const stampedOnline = res.onlineUsers.map(o => ({
+              ...o,
+              clientReceivedAt: (o && o.state !== 'Offline' && Number(o.lastSeen) > 0) ? nowClient : 0
+            }));
+            const localOnline = getStored('online_users', []);
+            const onlineStateDiff = hasOnlineStateChanged(stampedOnline, localOnline);
+            setStored('online_users', stampedOnline);
+            if (onlineStateDiff) {
+              window._gbStoreCacheGenV67 = (window._gbStoreCacheGenV67 || 1) + 1;
+              if (currentUser && !isAnyModalOpen() && !isUserInteractingWithControl()) {
+                renderAppLayout();
+              }
+            }
+          }
+          return;
+        }
+        window._hasReceivedFullCloudSyncV68 = true;
+        return _origHandleCloudDataV68(res);
+      };
+
+      // D. Reset Delta Version on Logout so next login pulls full fresh snapshot immediately
+      if (typeof executeInstantLogout === 'function') {
+        const _origLogoutV68 = executeInstantLogout;
+        executeInstantLogout = function() {
+          window._lastCloudDataVersionV68 = '';
+          window._hasReceivedFullCloudSyncV68 = false;
+          return _origLogoutV68.apply(this, arguments);
+        };
+      }
+    } catch (errV68) {
+      console.error('Non-fatal patch v68 warning:', errV68);
     }
 
 window.addEventListener('load', init);
