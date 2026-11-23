@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v69)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v70)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -60,10 +60,12 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      Remaining calculates Sprint Remaining / Remaining Duty Days inside the selected Sprint
      (S1/S2/S3), excluding Roster DO & Leave/Absent days (includes today if today's report
      is not yet submitted, excludes today once today's report is submitted).
-   - DAILY SALES REPORTS TAB (V70): Clean Team-vs-Team Daily Comparison strip above the
-     table for TL / Admin / Supervisor (canViewAll) showing same-channel rival team totals,
-     lead gap, submitted agent count, Leads/Orders/Conv%, and Daily Target % for the selected
-     date (click any team card to filter/toggle table; respects Include TL Sales checkbox).
+   - DAILY SALES REPORTS TAB (V70): Compact 2-row header + Slim Team-vs-Team Daily
+     Comparison strip above the table for TL / Admin / Supervisor (canViewAll) with VS
+     dividers (2-3 teams), auto-responsive grid (1 or 4+ / All-Channels teams), Hide/Show
+     toggle, click-to-filter, and Include TL Sales sync.
+   - TAB-SWITCH SPEED FIX (V70): Eliminated V33 double renderAppLayout() on setTab/init and
+     V27 double localStorage.setItem() inside renderReports (zero change to Cloud Sync / modals).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -9382,6 +9384,7 @@ function renderRankingAndComparison() {
           if (!dedupMap.has(k)) dedupMap.set(k, { ...s, date: dClean });
         });
         const daySalesOmni = Array.from(dedupMap.values());
+        const monthSalesPreloadedV70 = deduplicateSalesRecordsList(allRawSalesOmni || []).filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
 
         // Determine which channel mode to display in the comparison strip
         let compMode = activeChannel; // 'FACEBOOK' | 'WHATSAPP' | 'ALL_CHANNELS'
@@ -9410,7 +9413,7 @@ function renderRankingAndComparison() {
             const baseTgt = Number(m.baseTarget) || 0;
             const workTgt = calcWorkingTargetFromBase(baseTgt, m.team);
             const dt = (typeof window.getAgentDynamicDailyTargetV62 === 'function')
-              ? window.getAgentDynamicDailyTargetV62(m, selectedMonthKey).tableDailyTarget
+              ? window.getAgentDynamicDailyTargetV62(m, selectedMonthKey, monthSalesPreloadedV70).tableDailyTarget
               : Math.round(workTgt / 26);
             return sum + (Number(dt) || 0);
           }, 0);
@@ -9445,7 +9448,26 @@ function renderRankingAndComparison() {
           if (t === 'Team Saikat') return { card: `bg-white border border-t-[3px] border-t-cyan-600 ${ring}`, bar: 'bg-cyan-600', amt: 'text-cyan-700', pill: 'bg-cyan-700 text-white' };
           if (t === 'Team Parvaj') return { card: `bg-white border border-t-[3px] border-t-teal-600 ${ring}`, bar: 'bg-teal-600', amt: 'text-teal-700', pill: 'bg-teal-600 text-white' };
           if (t === 'Team Shakib Baksh') return { card: `bg-white border border-t-[3px] border-t-emerald-600 ${ring}`, bar: 'bg-emerald-600', amt: 'text-emerald-700', pill: 'bg-emerald-600 text-white' };
-          return { card: `bg-white border border-t-[3px] border-t-indigo-600 ${ring}`, bar: 'bg-indigo-600', amt: 'text-indigo-700', pill: 'bg-indigo-600 text-white' };
+          const extraPal = [
+            { top: 'border-t-indigo-600', bar: 'bg-indigo-600', amt: 'text-indigo-700', pill: 'bg-indigo-600 text-white' },
+            { top: 'border-t-violet-600', bar: 'bg-violet-600', amt: 'text-violet-700', pill: 'bg-violet-600 text-white' },
+            { top: 'border-t-rose-600',   bar: 'bg-rose-600',   amt: 'text-rose-700',   pill: 'bg-rose-600 text-white' },
+            { top: 'border-t-amber-600',  bar: 'bg-amber-600',  amt: 'text-amber-700',  pill: 'bg-amber-600 text-white' },
+            { top: 'border-t-sky-600',    bar: 'bg-sky-600',    amt: 'text-sky-700',    pill: 'bg-sky-600 text-white' }
+          ];
+          const h = Array.from(t).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+          const p = extraPal[h % extraPal.length];
+          return { card: `bg-white border border-t-[3px] ${p.top} ${ring}`, bar: p.bar, amt: p.amt, pill: p.pill };
+        }
+
+        function getResponsiveGridClassV70(cnt) {
+          if (cnt <= 1) return 'grid-cols-1';
+          if (cnt === 2) return 'grid-cols-1 sm:grid-cols-2';
+          if (cnt === 3) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+          if (cnt === 4) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4';
+          if (cnt === 5) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5';
+          if (cnt === 6) return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6';
+          return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
         }
 
         const collapseBtnHtml = `
@@ -9562,7 +9584,7 @@ function renderRankingAndComparison() {
 
               ${!isCollapsed ? `
               <!-- Equal-Sized Uniform Row for ALL Teams (Both FB & WA Treated Equally!) -->
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(5, Math.max(2, allStatsRanked.length))} gap-2">
+              <div class="grid ${getResponsiveGridClassV70(allStatsRanked.length)} gap-2">
                 ${allStatsRanked.map((st, idx) => {
                   const gapFromTop = Math.max(0, (topTeam ? topTeam.amount : 0) - st.amount);
                   const badgeHtml = idx === 0 && st.amount > 0
@@ -9595,7 +9617,7 @@ function renderRankingAndComparison() {
         // UNIFIED COMPACT DESIGN WITH "VS" BADGES BETWEEN EVERY TEAM!
         // ---------------------------------------------------------------------
         const channelTeams = getDynamicTeamsForChannel(compMode);
-        if (!channelTeams || channelTeams.length < 2) return '';
+        if (!channelTeams || channelTeams.length === 0) return '';
         const rawStats = channelTeams.map(computeTeamDailyStat);
         const channelTotalAmt = rawStats.reduce((s, t) => s + t.amount, 0);
         const isFb = compMode === 'FACEBOOK';
@@ -9611,7 +9633,7 @@ function renderRankingAndComparison() {
         const sortedForLead = rawStats.slice().sort((a, b) => b.amount - a.amount || b.orders - a.orders);
         const leaderTeam = sortedForLead[0];
         const runnerUpTeam = sortedForLead[1];
-        const leadGap = Math.max(0, (leaderTeam ? leaderTeam.amount : 0) - (runnerUpTeam ? runnerUpTeam.amount : 0));
+        const leadGap = runnerUpTeam ? Math.max(0, (leaderTeam ? leaderTeam.amount : 0) - runnerUpTeam.amount) : 0;
 
         const topStatusPill = channelTotalAmt === 0
           ? `<span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-500 text-[10px] font-bold">No reports yet</span>`
@@ -9639,7 +9661,7 @@ function renderRankingAndComparison() {
           }
 
           const cardHtml = renderCompactTeamCardV70(st, { dense: isThreeOrMore, showChannelIcon: false, statusBadgeHtml: badgeHtml });
-          const vsDividerHtml = (idx < displayStats.length - 1)
+          const vsDividerHtml = (displayStats.length <= 3 && idx < displayStats.length - 1)
             ? `<div class="hidden lg:flex items-center justify-center shrink-0"><div class="w-7 h-7 rounded-full bg-slate-900 text-amber-300 font-black text-[9px] flex items-center justify-center shadow-xs ring-2 ring-white">VS</div></div>`
             : '';
           return cardHtml + vsDividerHtml;
@@ -9661,8 +9683,8 @@ function renderRankingAndComparison() {
             </div>
 
             ${!isCollapsed ? `
-            <!-- Compact Side-by-Side Team Cards with VS Badges Between Every Team -->
-            <div class="flex flex-col lg:flex-row items-stretch gap-2">
+            <!-- Compact Side-by-Side Team Cards (VS row for 2-3 teams, Auto-Grid for 1 or 4+ teams) -->
+            <div class="${displayStats.length >= 2 && displayStats.length <= 3 ? 'flex flex-col lg:flex-row items-stretch gap-2' : `grid ${getResponsiveGridClassV70(displayStats.length)} gap-2`}">
               ${cardsWithVsHtml}
             </div>
 
@@ -9738,11 +9760,12 @@ function renderRankingAndComparison() {
       sales = Array.from(uniqueMap.values()).sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0) || (Number(b.orders) || 0) - (Number(a.orders) || 0));
 
       let sumLeads = 0, sumOrders = 0, sumAmount = 0, sumDailyTgt = 0;
+      const monthSalesPreloadedRR = deduplicateSalesRecordsList(allRawSalesOmni).filter(r => String(r.date || '').endsWith(selectedMonthKey) && !String(r.date || '').startsWith('MONTHLY_PROD_'));
 
       sales.forEach(s => {
         const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
         const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
-        const agDailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(agObj, selectedMonthKey).tableDailyTarget : Math.round(agWorkTarget / 26);
+        const agDailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(agObj, selectedMonthKey, monthSalesPreloadedRR).tableDailyTarget : Math.round(agWorkTarget / 26);
 
         sumLeads += Number(s.leads) || 0;
         sumOrders += Number(s.orders) || 0;
@@ -9756,62 +9779,57 @@ function renderRankingAndComparison() {
       const totalAgentsCount = allUsers.filter(usr => usr.role === 'agent').length;
 
       return `
-        <div class="space-y-6">
-          <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
-            <!-- Row 1: Title & Primary Action Buttons -->
-            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3.5 border-b border-slate-100">
-              <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-blue-100 text-blue-800 border border-blue-200"><i class="fa-solid fa-fire text-amber-500 mr-1"></i>Live Floor Competition</span>
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">${sales.length} Entries (${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)})</span>
-                </div>
-                <h2 class="text-xl font-black text-slate-900 mt-1">
-                  <i class="fa-solid fa-file-invoice text-blue-600 mr-2"></i>
-                  Daily Sales & Conversion Leaderboard (${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)})
+        <div class="space-y-3">
+          <div class="card-dynamic px-4 py-2.5 bg-white border border-slate-200/90 shadow-xs space-y-2">
+            <!-- Row 1: Compact Title, Inline Badges & Primary Action Buttons -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
+              <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <h2 class="text-base font-black text-slate-900 inline-flex items-center gap-1.5">
+                  <i class="fa-solid fa-file-invoice text-blue-600"></i>
+                  <span>Daily Sales & Conversion Leaderboard</span>
                 </h2>
-                <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  Showing daily sales reports for <strong>${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}</strong> sorted by highest achieved sales amount.
-                </p>
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-blue-50 text-blue-700 border border-blue-200"><i class="fa-solid fa-fire text-amber-500 mr-1"></i>Live</span>
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">${sales.length} Entries • ${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}</span>
               </div>
 
-              <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+              <div class="flex flex-wrap items-center gap-2 shrink-0">
                 ${hasFeatureAccess(u, 'feat_ai_erp_import') ? `
-                <button onclick="openAiImportModal()" class="h-9 px-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
+                <button onclick="openAiImportModal()" class="h-8 px-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
                   <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> AI ERP Import
                 </button>
                 ` : ''}
                 ${hasFeatureAccess(u, 'feat_manage_all_sales') || hasFeatureAccess(u, 'feat_submit_own_sales') ? `
-                <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="h-9 px-4 tab-active text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
+                <button onclick="openReportModal('', '${reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter}')" class="h-8 px-3.5 tab-active text-white rounded-xl text-[11px] font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
                   <i class="fa-solid fa-plus-circle"></i> ${u.role === 'agent' ? 'Submit My Report' : 'Add New Report'}
                 </button>
                 ` : ''}
               </div>
             </div>
 
-            <!-- Row 2: Date Picker, Include TL Toggle & Team/Scope Filter -->
-            <div class="flex flex-wrap items-center justify-between gap-2.5">
+            <!-- Row 2: Slim Date Picker, Include TL Toggle & Dynamic Scope Filter -->
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <div class="flex flex-wrap items-center gap-2">
-                <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl shadow-2xs">
-                  <i class="fa-solid fa-calendar-day text-blue-600 text-xs"></i>
+                <div class="h-8 flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 rounded-xl shadow-2xs">
+                  <i class="fa-solid fa-calendar-day text-blue-600 text-[11px]"></i>
                   <span class="text-[10px] font-extrabold uppercase text-slate-500">Date:</span>
                   <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer">
                 </div>
               </div>
 
               <div class="flex flex-wrap items-center gap-2">
-                <div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">
-                  <i class="fa-solid fa-users-viewfinder text-indigo-600 text-xs"></i>
+                <div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs" style="height:32px;padding-top:0;padding-bottom:0;">
+                  <i class="fa-solid fa-users-viewfinder text-indigo-600 text-[11px]"></i>
                   <span class="text-[10px] font-extrabold uppercase text-slate-400">Scope:</span>
                   <select onchange="setLogsScope(this.value)" class="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer">
                     <option value="ALL" ${logsFilterScope === 'ALL' ? 'selected' : ''}>All ${getActiveChannelMeta().name} Agents (${allUsersActiveCh.filter(usr => usr.role === 'agent').length})</option>
                     ${canViewAll(u) ? `
                       <optgroup label="Facebook Channel">
                         <option value="ALL_FB" ${logsFilterScope === 'ALL_FB' ? 'selected' : ''}>All Facebook Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'FACEBOOK').length})</option>
-                        ${CHANNEL_META.FACEBOOK.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                        ${getDynamicTeamsForChannel('FACEBOOK').map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
                       </optgroup>
                       <optgroup label="WhatsApp Channel">
                         <option value="ALL_WA" ${logsFilterScope === 'ALL_WA' ? 'selected' : ''}>All WhatsApp Agents (${allUsersOmni.filter(usr => usr.role === 'agent' && getChannelForTeam(usr.team) === 'WHATSAPP').length})</option>
-                        ${CHANNEL_META.WHATSAPP.teams.map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
+                        ${getDynamicTeamsForChannel('WHATSAPP').map(tn => `<option value="${tn}" ${logsFilterScope === tn ? 'selected' : ''}>${tn}</option>`).join('')}
                       </optgroup>
                       <optgroup label="All Channels Combined">
                         <option value="ALL_OMNI" ${logsFilterScope === 'ALL_OMNI' ? 'selected' : ''}>🌐 All Facebook + WhatsApp Teams (${allUsersOmni.filter(usr => usr.role === 'agent').length})</option>
@@ -9848,7 +9866,7 @@ function renderRankingAndComparison() {
                 ${sales.map((s, idx) => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
                   const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
-                  const agDailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(agObj, selectedMonthKey).tableDailyTarget : Math.round(agWorkTarget / 26);
+                  const agDailyTarget = (typeof window.getAgentDynamicDailyTargetV62 === 'function') ? window.getAgentDynamicDailyTargetV62(agObj, selectedMonthKey, monthSalesPreloadedRR).tableDailyTarget : Math.round(agWorkTarget / 26);
                   const convRatio = Number(s.leads) > 0 ? ((Number(s.orders) / Number(s.leads)) * 100).toFixed(2) : '0.00';
                   const dailyAchPct = agDailyTarget > 0 ? Math.round((Number(s.amount) / agDailyTarget) * 100) : 0;
                   const isMe = String(s.userId) === String(u.id);
@@ -15985,11 +16003,15 @@ function renderChatHubView() {
         let htmlOut = '';
         if (shouldHideTlRowsInTable) {
           const filteredForTable = allRawSales.filter(s => !window.isUserTeamLeaderRecord(s.userId));
-          setStored('sales_records', filteredForTable);
+          const _origGetStoredRepV70 = getStored;
+          getStored = function(k, defVal) {
+            if (k === 'sales_records') return filteredForTable;
+            return _origGetStoredRepV70(k, defVal);
+          };
           try {
             htmlOut = _origRenderReportsBase();
           } finally {
-            setStored('sales_records', allRawSales);
+            getStored = _origGetStoredRepV70;
           }
         } else {
           htmlOut = _origRenderReportsBase();
@@ -15997,12 +16019,12 @@ function renderChatHubView() {
 
         if (isAdminOrSup) {
           const checkboxHtml = `
-            <label class="flex items-center gap-2 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-3 py-2 rounded-xl shadow-2xs cursor-pointer select-none transition-colors" title="Tick to include Team Leaders' personal sales in the table & bottom total">
-              <input type="checkbox" ${window.showTlInSalesTables ? 'checked' : ''} onchange="toggleShowTlInSalesTables(this)" class="w-4 h-4 accent-orange-600 rounded cursor-pointer">
-              <span class="text-xs font-black text-orange-900"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>Include TL Sales</span>
+            <label class="h-8 flex items-center gap-1.5 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2.5 rounded-xl shadow-2xs cursor-pointer select-none transition-colors" title="Tick to include Team Leaders' personal sales in the table & bottom total">
+              <input type="checkbox" ${window.showTlInSalesTables ? 'checked' : ''} onchange="toggleShowTlInSalesTables(this)" class="w-3.5 h-3.5 accent-orange-600 rounded cursor-pointer">
+              <span class="text-[11px] font-black text-orange-900"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>Include TL Sales</span>
             </label>
           `;
-          htmlOut = htmlOut.replace('<div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">', checkboxHtml + '<div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs">');
+          htmlOut = htmlOut.replace('<div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs"', checkboxHtml + '<div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-2xs"');
         }
         return htmlOut;
       };
@@ -18281,9 +18303,16 @@ function renderChatHubView() {
 
       const _origInitV33 = init;
       init = function() {
-        _origInitV33();
+        const _prevRenderInit = renderAppLayout;
+        let _initRendered = false;
+        renderAppLayout = function() { _initRendered = true; };
+        try {
+          _origInitV33();
+        } finally {
+          renderAppLayout = _prevRenderInit;
+        }
         window.ensureValidChannelScopeForActor();
-        if (currentUser) renderAppLayout();
+        if (currentUser && _initRendered) renderAppLayout();
       };
 
       const _origRenderDashboardV33 = renderDashboard;
@@ -18294,9 +18323,18 @@ function renderChatHubView() {
 
       const _origSetTabV33 = setTab;
       setTab = function(tab) {
-        _origSetTabV33(tab);
+        const _prevRenderTab = renderAppLayout;
+        let _tabRendered = false;
+        renderAppLayout = function() { _tabRendered = true; };
+        try {
+          _origSetTabV33(tab);
+        } finally {
+          renderAppLayout = _prevRenderTab;
+        }
         window.ensureValidChannelScopeForActor();
-        renderAppLayout();
+        if (_tabRendered) renderAppLayout();
+        const mainElAfterTab = document.getElementById('mainScrollContainer');
+        if (mainElAfterTab) mainElAfterTab.scrollTop = 0;
       };
     } catch (patchV33Err) {
       console.error('Non-fatal patch v33 warning:', patchV33Err);
