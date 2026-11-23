@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v65)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v66)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -56,6 +56,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      * Daily Sales Reports table & footer.
      * Submit Daily Report modal (liveDailyTarget & liveDailyAch).
      * Dashboard purple KPI card ("Daily: ...") & bottom Monthly Total card ("Daily Target:").
+   - SPRINT TARGET TAB (V69): Dedicated "Daily Target (Excl. Roster DO)" column beside
+     Remaining calculates Sprint Remaining / Remaining Duty Days inside the selected Sprint
+     (S1/S2/S3), excluding Roster DO & Leave/Absent days (includes today if today's report
+     is not yet submitted, excludes today once today's report is submitted).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -99,6 +103,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 - fetchFromSheet / handleCloudData          => V68 (ETag clientVer delta sync + submit priority + V67 bell pre-merge)
 - postToSheet / handleSalesSubmit           => V64/V65 (serialized fastSubmit queue)
 - downloadPortalCsvFile                     => V57 (strips +5% labels/columns)
+- renderSprintTargetView / exportSprintTargetCsv => Base + V69 (Sprint Daily Target excl. DO) + V58 button + V52 actual CSV
 - exportMonthlyPerformanceCsv / DateWise / Sprint / Ranking / DailySales / Incentive
   => wrapped via V52 wrapExportWithActualTarget()
 ================================================================================
@@ -7526,6 +7531,167 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       renderAppLayout();
     }
 
+    // =========================================================================
+    // SPRINT ROSTER-AWARE DAILY TARGET CALCULATOR (V69)
+    // Divides Sprint Remaining by remaining duty days inside S1/S2/S3 excluding
+    // Roster DO & Leave/Absent (and respecting approved DO work / duty swaps).
+    // If today's report is NOT yet submitted, today counts as a remaining duty day;
+    // once today's report IS submitted, remaining duty days start from tomorrow.
+    // =========================================================================
+    window.buildSprintDailySharedCtxV69 = function(mKey, chKey, preloadedMonthSales) {
+      const mk = String(mKey || selectedMonthKey || getCurrentMonthKeyStr()).trim();
+      const ch = chKey || activeChannel;
+      const roster = (typeof getRosterForMonth === 'function') ? getRosterForMonth(mk) : [];
+      const rosterById = new Map();
+      for (let i = 0; i < roster.length; i++) {
+        if (roster[i] && roster[i].id) rosterById.set(String(roster[i].id).trim(), roster[i]);
+      }
+      const leaveStore = (typeof getLeaveRecordsStoreForMonth === 'function') ? getLeaveRecordsStoreForMonth(mk) : {};
+      const doApprovedStore = (typeof window.getApprovedDayOffDutiesStore === 'function') ? window.getApprovedDayOffDutiesStore(mk) : {};
+      const dutySwapsStore = (typeof window.getDutySwapsStoreForMonth === 'function') ? window.getDutySwapsStoreForMonth(mk) : {};
+      const coveredDatesByUid = new Map();
+      Object.keys(dutySwapsStore || {}).forEach(sk => {
+        const sw = dutySwapsStore[sk];
+        if (!sw || sw.isRemoved || !sw.coveredDate) return;
+        const cDate = String(sw.coveredDate).trim();
+        const targetUid = sw.swapMode === 'SELF'
+          ? String(sw.userId || '').trim()
+          : (sw.swapMode === 'TEAMMATE' ? String(sw.partnerId || '').trim() : '');
+        if (!targetUid) return;
+        if (!coveredDatesByUid.has(targetUid)) coveredDatesByUid.set(targetUid, new Set());
+        coveredDatesByUid.get(targetUid).add(cDate);
+      });
+      const spRng = (typeof window.getSprintDateRangesForMonthV59 === 'function')
+        ? window.getSprintDateRangesForMonthV59(ch, mk)
+        : { s1End: 10, s2End: 20 };
+      const allSalesSrc = Array.isArray(preloadedMonthSales)
+        ? preloadedMonthSales
+        : deduplicateSalesRecordsList(getStored('sales_records', [])).filter(s => String(s.date || '').endsWith(mk) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
+      return { mk, rosterById, leaveStore, doApprovedStore, coveredDatesByUid, spRng, allSalesSrc };
+    };
+
+    window.computeAgentSprintDailyTargetV69 = function(agentObj, effPhase, sprintGoalVal, sprintSalesVal, mKey, sharedCtx) {
+      const ctx = sharedCtx || window.buildSprintDailySharedCtxV69(mKey || selectedMonthKey, activeChannel);
+      const mk = ctx.mk;
+      const parts = mk.split('/');
+      const mm = parseInt(parts[0], 10) || (new Date().getMonth() + 1);
+      const yyyy = parseInt(parts[1], 10) || new Date().getFullYear();
+      const daysInMonth = new Date(yyyy, mm, 0).getDate() || 30;
+
+      const s1End = Math.min(Number(ctx.spRng && ctx.spRng.s1End) || 10, daysInMonth);
+      const s2End = Math.min(Number(ctx.spRng && ctx.spRng.s2End) || 20, daysInMonth);
+      const sprintStartDay = effPhase === 'S1' ? 1 : (effPhase === 'S2' ? (s1End + 1) : (s2End + 1));
+      const sprintEndDay = effPhase === 'S1' ? s1End : (effPhase === 'S2' ? s2End : daysInMonth);
+
+      const now = new Date();
+      const curY = now.getFullYear();
+      const curM = now.getMonth() + 1;
+      const curD = now.getDate();
+
+      let sprintRelation = 'CURRENT';
+      if (yyyy < curY || (yyyy === curY && mm < curM) || (yyyy === curY && mm === curM && curD > sprintEndDay)) {
+        sprintRelation = 'PAST';
+      } else if (yyyy > curY || (yyyy === curY && mm > curM) || (yyyy === curY && mm === curM && curD < sprintStartDay)) {
+        sprintRelation = 'FUTURE';
+      }
+
+      const uid = agentObj ? String(agentObj.id).trim() : '';
+      const todayStr = `${String(curD).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${yyyy}`;
+      const submittedToday = (sprintRelation === 'CURRENT' && uid)
+        ? ctx.allSalesSrc.some(s => String(s.userId).trim() === uid && String(s.date || '').replace(/^'/, '').trim() === todayStr)
+        : false;
+
+      let calcStartDay = sprintStartDay;
+      if (sprintRelation === 'PAST') {
+        calcStartDay = sprintEndDay + 1;
+      } else if (sprintRelation === 'CURRENT') {
+        calcStartDay = submittedToday ? (curD + 1) : curD;
+      }
+
+      const rosterRow = uid ? ctx.rosterById.get(uid) : null;
+      const coveredSet = (uid && ctx.coveredDatesByUid.get(uid)) ? ctx.coveredDatesByUid.get(uid) : null;
+      const dayKeyByDow = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+      let totalSprintDutyDays = 0;
+      let totalSprintDoDays = 0;
+      let totalSprintLeaveDays = 0;
+      let remainingDutyDays = 0;
+      let remainingDoDays = 0;
+      let remainingLeaveDays = 0;
+
+      for (let d = sprintStartDay; d <= sprintEndDay; d++) {
+        const dStr = `${String(d).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${yyyy}`;
+        const dow = new Date(yyyy, mm - 1, d).getDay();
+        const dKey = dayKeyByDow[dow];
+        const rawShift = rosterRow ? String(rosterRow[dKey] || '3:00 PM').trim() : '3:00 PM';
+        const upShift = rawShift.toUpperCase();
+        const isBaseDo = upShift === 'DO' || upShift.includes('OFF');
+
+        const directDoAppr = ctx.doApprovedStore[`${uid}_${dStr}`];
+        const isApprovedDoWork = Boolean((directDoAppr && !directDoAppr.isRemoved) || (coveredSet && coveredSet.has(dStr)));
+
+        const lv = ctx.leaveStore[`${uid}_${dStr}`];
+        const hasLeaveEntry = Boolean(lv && !lv.isRemoved);
+        const lvTypeLow = hasLeaveEntry ? String(lv.leaveType || '').toLowerCase() : '';
+        const isSwapExtraOff = hasLeaveEntry && (lvTypeLow.includes('extra day off') || lvTypeLow.includes('swap'));
+        const isLeaveOrAbsent = hasLeaveEntry && !isSwapExtraOff;
+
+        const effectiveIsDo = (isBaseDo && !isApprovedDoWork) || isSwapExtraOff;
+        const effectiveIsDuty = !effectiveIsDo && !isLeaveOrAbsent;
+
+        if (effectiveIsDo) totalSprintDoDays++;
+        if (isLeaveOrAbsent) totalSprintLeaveDays++;
+        if (effectiveIsDuty) totalSprintDutyDays++;
+
+        if (d >= calcStartDay) {
+          if (effectiveIsDuty) remainingDutyDays++;
+          else if (isLeaveOrAbsent) remainingLeaveDays++;
+          else if (effectiveIsDo) remainingDoDays++;
+        }
+      }
+
+      const sprintGoal = Number(sprintGoalVal) || 0;
+      const sprintSales = Number(sprintSalesVal) || 0;
+      const remainingTarget = Math.max(0, sprintGoal - sprintSales);
+      const originalDailyAvg = totalSprintDutyDays > 0 ? Math.round(sprintGoal / totalSprintDutyDays) : sprintGoal;
+
+      let status = 'ACTIVE';
+      let dailyTarget = 0;
+      if (sprintGoal <= 0) {
+        status = 'NO_TARGET';
+        dailyTarget = 0;
+      } else if (remainingTarget <= 0) {
+        status = 'ACHIEVED';
+        dailyTarget = 0;
+      } else if (sprintRelation === 'PAST') {
+        status = 'ENDED';
+        dailyTarget = 0;
+      } else if (remainingDutyDays <= 0) {
+        status = 'FINAL_BALANCE';
+        dailyTarget = remainingTarget;
+      } else {
+        status = 'ACTIVE';
+        dailyTarget = Math.round(remainingTarget / remainingDutyDays);
+      }
+
+      return {
+        dailyTarget,
+        status,
+        sprintRelation,
+        remainingTarget,
+        remainingDutyDays,
+        remainingDoDays,
+        remainingLeaveDays,
+        totalSprintDutyDays,
+        totalSprintDoDays,
+        totalSprintLeaveDays,
+        originalDailyAvg,
+        submittedToday,
+        sprintStartDay,
+        sprintEndDay
+      };
+    };
+
     function exportSprintTargetCsv() {
       const allUsers = getUsersForMonth(selectedMonthKey);
       const allAgents = allUsers.filter(u => u.role === 'agent');
@@ -7546,6 +7712,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         ? allAgents
         : allAgents.filter(a => a.team === sprintTabTeamScope);
 
+      const sprintDailyCtxCsv = window.buildSprintDailySharedCtxV69(selectedMonthKey, activeChannel, monthSales);
       const rows = filteredAgents.map(ag => {
         const baseTgt = Number(ag.baseTarget) || 0;
         const workTgt = calcWorkingTargetFromBase(baseTgt, activeChannel);
@@ -7569,9 +7736,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         const curRem = Math.max(0, curGoal - curSales);
         const curPct = curGoal > 0 ? Number(((curSales / curGoal) * 100).toFixed(2)) : 0;
         const convRatio = activeSprintLeads > 0 ? ((activeSprintOrders / activeSprintLeads) * 100).toFixed(2) + '%' : '0.00%';
+        const sprintDaily = window.computeAgentSprintDailyTargetV69(ag, effPhase, curGoal, curSales, selectedMonthKey, sprintDailyCtxCsv);
 
         return {
-          ag, workTgt, curGoal, curSales, curRem, curPct, activeSprintOrders, activeSprintLeads, convRatio
+          ag, workTgt, curGoal, curSales, curRem, curPct, activeSprintOrders, activeSprintLeads, convRatio, sprintDaily
         };
       }).sort((a, b) => {
         if (getEffectiveSprintSortBy() === 'AMOUNT') {
@@ -7584,13 +7752,17 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       const headers = [
         'Rank', 'Emp ID', 'Agent Name', 'Team', 'Grade', 'Monthly Working Target (+5%)',
         `${phaseMeta.label} Leads`, `${phaseMeta.label} Orders`, `${phaseMeta.label} Conv. Ratio`,
-        `${phaseMeta.label} Goal (BDT)`, `${phaseMeta.label} Achieved (BDT)`, `${phaseMeta.label} Remaining (BDT)`, `${phaseMeta.label} Achieved (%)`
+        `${phaseMeta.label} Goal (BDT)`, `${phaseMeta.label} Achieved (BDT)`, `${phaseMeta.label} Remaining (BDT)`,
+        `${phaseMeta.label} Daily Target (Excl. DO)`, `${phaseMeta.label} Duty Days Left`, `${phaseMeta.label} Achieved (%)`
       ];
 
       const csvRows = rows.map((r, i) => [
         i + 1, r.ag.id, r.ag.name, r.ag.team, r.ag.grade, r.workTgt,
         r.activeSprintLeads, r.activeSprintOrders, r.convRatio,
-        r.curGoal, r.curSales, r.curRem, `${r.curPct}%`
+        r.curGoal, r.curSales, r.curRem,
+        r.sprintDaily ? r.sprintDaily.dailyTarget : 0,
+        r.sprintDaily ? r.sprintDaily.remainingDutyDays : 0,
+        `${r.curPct}%`
       ]);
 
       const safeMonth = selectedMonthKey.replace('/', '-');
@@ -7654,9 +7826,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         ? allAgents
         : allAgents.filter(a => a.team === sprintTabTeamScope);
 
-      let sumWorkTgt = 0, sumCurGoal = 0, sumCurSales = 0;
+      let sumWorkTgt = 0, sumCurGoal = 0, sumCurSales = 0, sumCurDailyTarget = 0;
       let sumS1Goal = 0, sumS2Goal = 0, sumS3Goal = 0;
       let sumS1 = 0, sumS2 = 0, sumS3 = 0;
+      const sprintDailyCtxView = window.buildSprintDailySharedCtxV69(selectedMonthKey, activeChannel, monthSales);
 
       const rankedSprintAgents = filteredAgents.map(ag => {
         const baseTgt = Number(ag.baseTarget) || 0;
@@ -7692,9 +7865,12 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         const s3Pct = s3Goal > 0 ? Math.round((s3Sales / s3Goal) * 100) : 0;
         const conv = sprintLeads > 0 ? ((sprintOrders / sprintLeads) * 100).toFixed(1) : '0.0';
 
+        const sprintDaily = window.computeAgentSprintDailyTargetV69(ag, effPhase, curGoal, curSales, selectedMonthKey, sprintDailyCtxView);
+
         sumWorkTgt += workTgt;
         sumCurGoal += curGoal;
         sumCurSales += curSales;
+        sumCurDailyTarget += (Number(sprintDaily.dailyTarget) || 0);
         sumS1Goal += s1Goal;
         sumS2Goal += s2Goal;
         sumS3Goal += s3Goal;
@@ -7704,7 +7880,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 
         return {
           ...ag, workTgt, s1Goal, s1Sales, s1Pct, s2Goal, s2Sales, s2Pct, s3Goal, s3Sales, s3Pct,
-          curGoal, curSales, curRem, curPct, sprintOrders, sprintLeads, conv
+          curGoal, curSales, curRem, curPct, sprintOrders, sprintLeads, conv, sprintDaily
         };
       }).sort((a, b) => {
         if (getEffectiveSprintSortBy() === 'AMOUNT') {
@@ -7878,6 +8054,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <th class="p-3.5 bg-blue-50/60 text-blue-900">${phaseInfo.short} Target</th>
                   <th class="p-3.5 bg-blue-50/60 text-blue-900">${phaseInfo.short} Achieved</th>
                   <th class="p-3.5 bg-blue-50/60 text-blue-900">Remaining</th>
+                  <th class="p-3.5 bg-indigo-50/70 text-indigo-900">Daily Target<br><span class="text-[9px] text-indigo-600 font-extrabold">Excl. Roster DO</span></th>
                   <th class="p-3.5 bg-blue-50/60 text-blue-900 text-center">${phaseInfo.short} Progress</th>
                   <th onclick="setSprintTabPhase('S1')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S1' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 1">Sprint 1 (40%)<br><span class="text-[9px] text-slate-400">Days 1–10</span></th>
                   <th onclick="setSprintTabPhase('S2')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S2' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 2">Sprint 2 (35%)<br><span class="text-[9px] text-slate-400">Days 11–20</span></th>
@@ -7914,6 +8091,31 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                       <td class="p-3.5 font-extrabold text-slate-700 bg-blue-50/30">৳${ag.curGoal.toLocaleString()}</td>
                       <td class="p-3.5 font-black text-emerald-600 text-sm bg-blue-50/30">৳${ag.curSales.toLocaleString()}</td>
                       <td class="p-3.5 font-bold text-slate-500 bg-blue-50/30">${ag.curRem === 0 && ag.curGoal > 0 ? `<span class="text-emerald-600 font-black">Completed 🔥</span>` : `৳${ag.curRem.toLocaleString()}`}</td>
+                      <td class="p-3.5 bg-indigo-50/35" title="${(() => {
+                        const sd = ag.sprintDaily || {};
+                        if (sd.status === 'ACHIEVED') return `${phaseInfo.short} 100% Target Completed!`;
+                        if (sd.status === 'ENDED') return `${phaseInfo.short} ended. Original roster pace: ৳${Number(sd.originalDailyAvg || 0).toLocaleString()}/day across ${sd.totalSprintDutyDays || 0} duty day(s) (DO: ${sd.totalSprintDoDays || 0}, Leave: ${sd.totalSprintLeaveDays || 0}).`;
+                        if (sd.status === 'FINAL_BALANCE') return `No duty days left in ${phaseInfo.short} (DO: ${sd.remainingDoDays || 0}, Leave: ${sd.remainingLeaveDays || 0}). Full remaining balance: ৳${Number(sd.remainingTarget || 0).toLocaleString()}.`;
+                        if (sd.status === 'ACTIVE') return `Remaining ৳${Number(sd.remainingTarget || 0).toLocaleString()} ÷ ${sd.remainingDutyDays} duty day(s) left in ${phaseInfo.short} (Excl. ${sd.remainingDoDays || 0} DO${sd.remainingLeaveDays ? `, ${sd.remainingLeaveDays} Leave` : ''}${sd.submittedToday ? '; Today submitted' : '; Incl. Today'}) = ৳${Number(sd.dailyTarget || 0).toLocaleString()}/day`;
+                        return 'No sprint target set';
+                      })()}">
+                        ${(() => {
+                          const sd = ag.sprintDaily || {};
+                          if (sd.status === 'ACHIEVED') {
+                            return `<span class="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-black text-[11px]">Done ✅</span>`;
+                          }
+                          if (sd.status === 'NO_TARGET') {
+                            return `<span class="text-slate-400 font-bold">—</span>`;
+                          }
+                          if (sd.status === 'ENDED') {
+                            return `<span class="text-[11px] font-extrabold text-slate-400">Ended</span><span class="block text-[9px] font-bold text-slate-400">Avg: ৳${Number(sd.originalDailyAvg || 0).toLocaleString()}/d</span>`;
+                          }
+                          if (sd.status === 'FINAL_BALANCE') {
+                            return `<span class="font-black text-rose-600 text-sm">৳${Number(sd.dailyTarget || 0).toLocaleString()}</span><span class="block text-[9px] font-extrabold text-rose-500">Final Balance</span>`;
+                          }
+                          return `<span class="font-black text-indigo-700 text-sm">৳${Number(sd.dailyTarget || 0).toLocaleString()}</span><span class="block text-[10px] font-bold text-slate-500">${sd.remainingDutyDays}d left${sd.remainingDoDays > 0 ? ` • ${sd.remainingDoDays} DO` : ''}${sd.remainingLeaveDays > 0 ? ` • ${sd.remainingLeaveDays} Lv` : ''}</span>`;
+                        })()}
+                      </td>
                       <td class="p-3.5 bg-blue-50/30">
                         <div class="flex flex-col items-center min-w-[115px]">
                           <span class="px-2 py-0.5 rounded-md border text-[11px] font-black ${statusColor}">${ag.curPct}%</span>
@@ -7943,6 +8145,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <td class="p-4 text-blue-200">৳${sumCurGoal.toLocaleString()}</td>
                   <td class="p-4 text-emerald-400 text-sm">৳${sumCurSales.toLocaleString()}</td>
                   <td class="p-4 text-slate-300">৳${Math.max(0, sumCurGoal - sumCurSales).toLocaleString()}</td>
+                  <td class="p-4 text-indigo-300">৳${sumCurDailyTarget.toLocaleString()}<span class="block text-[9px] text-slate-400 font-bold">Daily Pace Sum</span></td>
                   <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black">${overallCurPct}%</span></td>
                   <td class="p-4 text-center text-slate-300">৳${sumS1.toLocaleString()}</td>
                   <td class="p-4 text-center text-slate-300">৳${sumS2.toLocaleString()}</td>
