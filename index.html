@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v76)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v78)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -77,9 +77,14 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
    - TL DASHBOARD PRODUCT CARD CLARITY (V75): On TL / Supervisor dashboard product cards,
      displays crisp "Per-Agent Bonus:" label (agent panel keeps "Bonus:") so team totals
      are never confused with TL personal rewards (0% logic/sync change).
-   - SUPERVISOR TARGET SETUP VIEW (V76): Supervisors can view Team Leaders (role === 'admin')
-     alongside Agents & Supervisors in Target Setup & IDs in strict View-Only mode (no passwords,
-     no edit/action controls, zero permission changes).
+   - SUPERVISOR TARGET SETUP VIEW & CLEAN UI (V76 / V77): Supervisors can view Team Leaders
+     alongside Agents & Supervisors in Target Setup & IDs (still strictly View-Only in permissions,
+     no passwords/edit controls). Default 10001 renamed cleanly to "Supervisor", yellow "VIEW-ONLY"
+     header badge hidden for Supervisors, and Supervisor creation enforces Team="All Teams".
+   - DO APPROVAL / LEAVE / SWAP CLOUD RECONCILIATION (V78): Fixed NaN timestamp comparison bug on
+     string `approvedAt` values, aligned Approved DO badge channel filtering, and added auto-push
+     reconciliation so any locally-trapped TL Day Off approvals / Leave / Swap entries sync cleanly
+     to Google Sheets and match 100% identically across all TL & Supervisor panels.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -351,7 +356,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 
     const DEFAULT_USERS = [
       // Supervisor & Facebook Channel (Team Nazim & Team Samad)
-      { id: '10001', name: 'Floor Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
+      { id: '10001', name: 'Supervisor', role: 'supervisor', team: 'All Teams', pass: 'sup123', grade: 'Supervisor', baseTarget: 0 },
       { id: '10122', name: 'Md. Nazimur Rahman', role: 'admin', team: 'Team Nazim', pass: '123nazim', grade: 'TL', baseTarget: 522328 },
       { id: '10107', name: 'Md Abdus Samad', role: 'admin', team: 'Team Samad', pass: 'admin123', grade: 'TL', baseTarget: 522328 },
       
@@ -712,9 +717,11 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       renderAppLayout();
       showPortalToast(
         `Switched to ${CHANNEL_META[chKey].fullTitle}`,
-        isCurrentChannelReadOnlyForUser(currentUser)
-          ? `Viewing ${CHANNEL_META[chKey].fullTitle} in View-Only Mode.`
-          : `Full Management Mode active for ${CHANNEL_META[chKey].fullTitle}.`,
+        isSupervisor(currentUser)
+          ? `Now viewing ${CHANNEL_META[chKey].fullTitle}.`
+          : (isCurrentChannelReadOnlyForUser(currentUser)
+            ? `Viewing ${CHANNEL_META[chKey].fullTitle} in View-Only Mode.`
+            : `Full Management Mode active for ${CHANNEL_META[chKey].fullTitle}.`),
         'success'
       );
     }
@@ -755,6 +762,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       } else if (copy.role === 'supervisor' || uid === '10001') {
         copy.role = 'supervisor';
         copy.grade = 'Supervisor';
+        if (uid === '10001' && (copy.name === 'Facebook Supervisor' || copy.name === 'Floor Supervisor')) {
+          copy.name = 'Supervisor';
+        }
       } else if (!copy.grade || copy.grade === 'SUP' || copy.grade === 'TL') {
         copy.grade = 'A';
       }
@@ -3114,7 +3124,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   </select>
                 </div>
 
-                ${isCurrentChannelReadOnlyForUser(u) ? `
+                ${(isCurrentChannelReadOnlyForUser(u) && !isSupervisor(u)) ? `
                 <span class="h-7 px-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-300 text-[9px] font-black uppercase inline-flex items-center gap-1 shrink-0" title="View-Only Mode">
                   <i class="fa-solid fa-eye"></i><span class="hidden 2xl:inline">View-Only</span>
                 </span>
@@ -18115,7 +18125,7 @@ function renderChatHubView() {
         });
 
         const approvedStore = window.getApprovedDayOffDutiesStore(selectedMonthKey);
-        const approvedCount = Object.values(approvedStore).filter(x => x && !x.isRemoved && (missingReportsTeamScope === 'ALL' || normalizeTeamNameAlias(x.team) === normalizeTeamNameAlias(missingReportsTeamScope))).length;
+        const approvedCount = Object.values(approvedStore).filter(x => x && !x.isRemoved && (activeChannel === 'ALL_CHANNELS' || getChannelForTeam(x.team) === activeChannel) && (missingReportsTeamScope === 'ALL' || normalizeTeamNameAlias(x.team) === normalizeTeamNameAlias(missingReportsTeamScope))).length;
 
         let htmlOut = _origRenderMissingBaseV31();
 
@@ -20402,14 +20412,14 @@ function renderChatHubView() {
 
           // Preserve DO_APPROVED_DUTIES_* & USER_AVATARS & LEAVE_RECORDS_*
           Object.keys({ ...localCfg, ...(res.monthlyConfigs || {}) }).forEach(cfgK => {
-            if (cfgK.startsWith('LEAVE_RECORDS_') || cfgK.startsWith('DO_APPROVED_DUTIES_')) {
+            if (cfgK.startsWith('LEAVE_RECORDS_') || (cfgK.startsWith('DO_APPROVED_DUTIES_') && (!currentUser || hasFeatureAccess(currentUser, 'feat_manage_all_sales')))) {
               const locLv = (localCfg[cfgK] && typeof localCfg[cfgK] === 'object') ? localCfg[cfgK] : {};
               const cldLv = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
               const combinedLv = { ...cldLv };
               Object.keys(locLv).forEach(lk => {
                 const lItem = locLv[lk];
                 const cItem = cldLv[lk];
-                if (!cItem || Number(lItem.updatedTs || lItem.approvedAt || 0) >= Number(cItem.updatedTs || cItem.approvedAt || 0)) {
+                const lTsSafe = (lItem && Number.isFinite(Number(lItem.updatedTs))) ? Number(lItem.updatedTs) : 0; const cTsSafe = (cItem && Number.isFinite(Number(cItem.updatedTs))) ? Number(cItem.updatedTs) : 0; if (!cItem || lTsSafe >= cTsSafe) {
                   if (lItem && lItem.isRemoved) delete combinedLv[lk];
                   else combinedLv[lk] = lItem;
                 }
@@ -22243,6 +22253,7 @@ function renderChatHubView() {
                         <option value="${myTeamNorm}" selected>${myTeamNorm} (Assign to Your Team)</option>
                         <option value="Floating">🔵 Floating Pool (Facebook Scale)</option>
                         <option value="WA Floating">🟢 WA Floating Pool (WhatsApp Scale)</option>
+                        <option value="All Teams">All Teams (Supervisor)</option>
                       `}
                     </select>
                   </div>
@@ -24377,6 +24388,7 @@ function renderChatHubView() {
         const officialGradeMap = window.getGradeMapForChannelScale(scaleChForSave, selectedMonthKey);
 
         if (roleVal === 'supervisor') {
+          finalTeamVal = 'All Teams';
           finalGradeVal = 'Supervisor';
           finalTargetVal = 0;
         } else if (!canEditTargetAmount) {
@@ -28295,7 +28307,7 @@ function renderChatHubView() {
               if (exp.isRemoved) {
                 return !cld || Boolean(cld.isRemoved) || Number(cld.updatedTs || 0) >= Number(exp.updatedTs || 0);
               }
-              return Boolean(cld && !cld.isRemoved && Number(cld.updatedTs || cld.approvedAt || 0) >= Number(exp.updatedTs || exp.approvedAt || 0));
+              const cldTs = (cld && Number.isFinite(Number(cld.updatedTs))) ? Number(cld.updatedTs) : 0; const expTs = (exp && Number.isFinite(Number(exp.updatedTs))) ? Number(exp.updatedTs) : 0; return Boolean(cld && !cld.isRemoved && cldTs >= expTs);
             });
           }
 
@@ -28423,15 +28435,24 @@ function renderChatHubView() {
               if (mk.startsWith('LEAVE_RECORDS_') || mk.startsWith('DO_APPROVED_DUTIES_') ||
                   mk.startsWith('DUTY_SWAPS_') || mk.startsWith('SHIFT_TIME_SWAPS_') || mk.startsWith('SWAP_REQUESTS_')) {
                 expectedMapEntries = {};
+                let patchedLegacyTs = false;
                 Object.keys(parsedObj).forEach(ek => {
                   const ev = parsedObj[ek];
                   if (ev && typeof ev === 'object') {
+                    const safeTs = (Number.isFinite(Number(ev.updatedTs)) && Number(ev.updatedTs) > 0) ? Number(ev.updatedTs) : nowMs;
+                    if (!Number.isFinite(Number(ev.updatedTs)) || Number(ev.updatedTs) <= 0) {
+                      ev.updatedTs = safeTs;
+                      patchedLegacyTs = true;
+                    }
                     expectedMapEntries[ek] = {
                       isRemoved: Boolean(ev.isRemoved),
-                      updatedTs: Number(ev.updatedTs || ev.approvedAt || nowMs)
+                      updatedTs: safeTs
                     };
                   }
                 });
+                if (patchedLegacyTs) {
+                  trackedPayload.configJson = JSON.stringify(parsedObj);
+                }
               } else {
                 parsedObj._syncRev = syncRev;
                 trackedPayload.configJson = JSON.stringify(parsedObj);
@@ -28497,7 +28518,7 @@ function renderChatHubView() {
                       Object.keys(pendingObj).forEach(ek => {
                         const pv = pendingObj[ek];
                         const cv = cldMap[ek];
-                        if (!cv || Number((pv && (pv.updatedTs || pv.approvedAt)) || 0) >= Number((cv && (cv.updatedTs || cv.approvedAt)) || 0)) {
+                        const pvTs = (pv && Number.isFinite(Number(pv.updatedTs))) ? Number(pv.updatedTs) : 0; const cvTs = (cv && Number.isFinite(Number(cv.updatedTs))) ? Number(cv.updatedTs) : 0; if (!cv || pvTs >= cvTs) {
                           cldMap[ek] = pv;
                         }
                       });
@@ -30600,6 +30621,7 @@ function renderChatHubView() {
         const officialGradeMap = window.getGradeMapForChannelScale(scaleChForSave, selectedMonthKey);
 
         if (roleVal === 'supervisor') {
+          finalTeamVal = 'All Teams';
           finalGradeVal = 'Supervisor';
           finalTargetVal = 0;
         } else if (!canEditTargetAmount) {
@@ -31566,6 +31588,49 @@ function renderChatHubView() {
           return;
         }
         window._hasReceivedFullCloudSyncV68 = true;
+        // V78: Auto-reconcile any locally-saved DO_APPROVED_DUTIES / LEAVE_RECORDS / DUTY_SWAPS / SHIFT_TIME_SWAPS
+        // that were previously stuck in a TL/Admin browser's localStorage so Google Sheets & Supervisor panels match 100%!
+        try {
+          if (res && res.monthlyConfigs && typeof res.monthlyConfigs === 'object' && currentUser && hasFeatureAccess(currentUser, 'feat_manage_all_sales')) {
+            const locCfgsNow = getStored('monthly_configs', {});
+            const nowRecMs = Date.now();
+            window._autoReconcileCfgTsV78 = window._autoReconcileCfgTsV78 || {};
+            const pendingMetaMap = (typeof window.getVerifiedMetaWritesV60 === 'function') ? window.getVerifiedMetaWritesV60() : {};
+            Object.keys(locCfgsNow).forEach(cfgK => {
+              if (!cfgK.startsWith('DO_APPROVED_DUTIES_') && !cfgK.startsWith('LEAVE_RECORDS_') &&
+                  !cfgK.startsWith('DUTY_SWAPS_') && !cfgK.startsWith('SHIFT_TIME_SWAPS_')) return;
+              if (pendingMetaMap[`CFG_${cfgK}`]) return;
+              const lastPush = window._autoReconcileCfgTsV78[cfgK] || 0;
+              if ((nowRecMs - lastPush) < 45000) return;
+
+              const locMap = (locCfgsNow[cfgK] && typeof locCfgsNow[cfgK] === 'object') ? locCfgsNow[cfgK] : {};
+              const cldMap = (res.monthlyConfigs[cfgK] && typeof res.monthlyConfigs[cfgK] === 'object') ? res.monthlyConfigs[cfgK] : {};
+              let hasUnsyncedLocal = false;
+              const mergedToPush = { ...cldMap };
+              Object.keys(locMap).forEach(ek => {
+                const lv = locMap[ek];
+                if (!lv || typeof lv !== 'object' || lv.isRemoved) return;
+                const cv = cldMap[ek];
+                if (!cv || cv.isRemoved) {
+                  hasUnsyncedLocal = true;
+                  const safeTs = (Number.isFinite(Number(lv.updatedTs)) && Number(lv.updatedTs) > 0) ? Number(lv.updatedTs) : nowRecMs;
+                  mergedToPush[ek] = { ...lv, updatedTs: safeTs };
+                }
+              });
+              if (hasUnsyncedLocal) {
+                window._autoReconcileCfgTsV78[cfgK] = nowRecMs;
+                locCfgsNow[cfgK] = mergedToPush;
+                setStored('monthly_configs', locCfgsNow);
+                setTimeout(() => {
+                  postToSheet('SAVE_MONTHLY_CONFIG', {
+                    monthKey: cfgK,
+                    configJson: JSON.stringify(mergedToPush)
+                  }).catch(() => {});
+                }, 400);
+              }
+            });
+          }
+        } catch (eRecV78) {}
         return _origHandleCloudDataV68(res);
       };
 
