@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v74)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v75)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -74,6 +74,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
        every 45s (using cache:'no-store' without keepalive 302-redirect quirks) + fresh <3m lastTick check.
      * Multi-Tab Smart Guard (gb_open_tabs_v72_<uid>) sends Offline beacon only on LAST tab close.
      * handleHardRefreshPortal preserves 5m fresh + explicitOffline entries (no count drop).
+   - TL DASHBOARD PRODUCT CARD CLARITY (V75): On TL / Supervisor dashboard product cards,
+     displays crisp "Per-Agent Bonus:" label (agent panel keeps "Bonus:") so team totals
+     are never confused with TL personal rewards (0% logic/sync change).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -26836,7 +26839,10 @@ function renderChatHubView() {
               if (bonusIdx !== -1 && (bonusIdx - idxCard) < 1800) {
                 const endStrong = htmlOut.indexOf('</strong>', bonusIdx);
                 if (endStrong !== -1) {
-                  htmlOut = htmlOut.slice(0, bonusIdx) + `Bonus: <strong>${bonusLine}` + htmlOut.slice(endStrong);
+                  const bonusPrefix = (currentUser && canViewAll(currentUser))
+                    ? '<span class="text-blue-700 font-black" title="Individual per-agent incentive (Not for TL)">Per-Agent Bonus:</span>'
+                    : 'Bonus:';
+                  htmlOut = htmlOut.slice(0, bonusIdx) + `${bonusPrefix} <strong>${bonusLine}` + htmlOut.slice(endStrong);
                 }
               }
             }
