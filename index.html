@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v80)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v81)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -85,9 +85,11 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      aligned Approved DO badge channel filtering, and upgraded auto-reconcile to CORS-readable GET +
      POST fast push (clears stale V60 meta locks & reconciles immediately on Sync) paired with
      appscript-v26.js 0.2s map fast-path & duplicate Monthly_Configs row cleanup.
-   - HEADER MANUAL SYNC BUTTON ACCESS (V80): Visible & active ONLY for Team Leaders (role='admin')
-     and Super Admin (10122); hidden from Agents and Supervisors to protect server RAM cache during
-     peak hours (3.5s auto delta-sync continues seamlessly for all roles).
+   - HEADER MANUAL SYNC BUTTON ACCESS & COOLDOWN (V80 / V81): Visible & active ONLY for Team Leaders
+     (role='admin') and Super Admin (10122); hidden from Agents and Supervisors to protect server RAM
+     cache during peak hours. Includes a 6-second cooldown guard (with remaining-seconds toast) to
+     prevent accidental double-click / rapid forceFresh cache resets (3.5s auto delta-sync continues
+     seamlessly for all roles).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -31490,6 +31492,19 @@ function renderChatHubView() {
         }
 
         const now = Date.now();
+        const canForceFreshSyncV80 = Boolean(currentUser && (isSuperAdmin(currentUser) || currentUser.role === 'admin'));
+        if (isManualSync) {
+          if (!canForceFreshSyncV80) return;
+          const lastManualMsV81 = window._lastManualSyncClickMsV81 || 0;
+          const cooldownMsV81 = 6000;
+          const elapsedManualV81 = now - lastManualMsV81;
+          if (elapsedManualV81 < cooldownMsV81) {
+            const waitSecV81 = Math.max(1, Math.ceil((cooldownMsV81 - elapsedManualV81) / 1000));
+            showPortalToast('Sync Cooldown Active', `Please wait ${waitSecV81}s before syncing again.`, 'warning');
+            return;
+          }
+          window._lastManualSyncClickMsV81 = now;
+        }
         if (!forceImmediate && (now - (window._lastWritePostTimestamp || 0)) < 2600) {
           return;
         }
@@ -31520,7 +31535,6 @@ function renderChatHubView() {
         const hasPendingSales = (typeof window.getUnconfirmedSheetWriteCountV56 === 'function') ? (window.getUnconfirmedSheetWriteCountV56() > 0) : false;
         const hasPendingMeta = (typeof window.getPendingMetaWriteCountV60 === 'function') ? (window.getPendingMetaWriteCountV60() > 0) : false;
 
-        const canForceFreshSyncV80 = Boolean(currentUser && (isSuperAdmin(currentUser) || currentUser.role === 'admin'));
         if (isManualSync && canForceFreshSyncV80) {
           window._autoReconcileCfgTsV78 = {};
           pingQuery += `&forceFresh=1`;
@@ -31694,6 +31708,7 @@ function renderChatHubView() {
         executeInstantLogout = function() {
           window._lastCloudDataVersionV68 = '';
           window._hasReceivedFullCloudSyncV68 = false;
+          window._lastManualSyncClickMsV81 = 0;
           return _origLogoutV68.apply(this, arguments);
         };
       }
