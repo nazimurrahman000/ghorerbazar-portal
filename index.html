@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v79)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v80)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -85,6 +85,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      aligned Approved DO badge channel filtering, and upgraded auto-reconcile to CORS-readable GET +
      POST fast push (clears stale V60 meta locks & reconciles immediately on Sync) paired with
      appscript-v26.js 0.2s map fast-path & duplicate Monthly_Configs row cleanup.
+   - HEADER MANUAL SYNC BUTTON ACCESS (V80): Visible & active ONLY for Team Leaders (role='admin')
+     and Super Admin (10122); hidden from Agents and Supervisors to protect server RAM cache during
+     peak hours (3.5s auto delta-sync continues seamlessly for all roles).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -3145,10 +3148,12 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <span>${activeOnlineUsers.length} Online</span>
                 </button>
 
+                ${(isSuperAdmin(u) || u.role === 'admin') ? `
                 <button onclick="fetchFromSheet(true, true)" class="h-8 px-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-extrabold rounded-xl inline-flex items-center gap-1 hover:bg-emerald-100 transition-colors cursor-pointer shrink-0" title="Force fresh sync directly from Google Sheet">
                   <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
                   <span class="hidden lg:inline">Sync</span>
                 </button>
+                ` : ''}
 
                 <button onclick="handleHardRefreshPortal()" title="Hard Refresh (Ctrl + F5)" class="w-8 h-8 bg-slate-100 hover:bg-indigo-600 text-slate-600 hover:text-white border border-slate-200 hover:border-indigo-600 rounded-xl inline-flex items-center justify-center transition-colors shadow-2xs shrink-0 cursor-pointer">
                   <i class="fa-solid fa-rotate-right text-xs"></i>
@@ -31515,7 +31520,8 @@ function renderChatHubView() {
         const hasPendingSales = (typeof window.getUnconfirmedSheetWriteCountV56 === 'function') ? (window.getUnconfirmedSheetWriteCountV56() > 0) : false;
         const hasPendingMeta = (typeof window.getPendingMetaWriteCountV60 === 'function') ? (window.getPendingMetaWriteCountV60() > 0) : false;
 
-        if (isManualSync) {
+        const canForceFreshSyncV80 = Boolean(currentUser && (isSuperAdmin(currentUser) || currentUser.role === 'admin'));
+        if (isManualSync && canForceFreshSyncV80) {
           window._autoReconcileCfgTsV78 = {};
           pingQuery += `&forceFresh=1`;
         } else if (window._hasReceivedFullCloudSyncV68 && window._lastCloudDataVersionV68 && !hasPendingSales && !hasPendingMeta) {
@@ -31535,7 +31541,7 @@ function renderChatHubView() {
           window._highestAppliedFetchSeqId = myReqSeqId;
           if (res && res.status === 'success') {
             handleCloudData(res);
-            if (isManualSync) {
+            if (isManualSync && canForceFreshSyncV80) {
               showPortalToast('Cloud Synced!', 'Latest data refreshed directly from Google Sheets.', 'success');
             }
           }
