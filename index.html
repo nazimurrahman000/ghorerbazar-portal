@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v84)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v85)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -94,13 +94,13 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      in Daily Sales Reports Row 2 beside Date picker. Groups 7 AM, 9 AM & 10 AM under Morning, 3 PM under
      Evening, and Night (11 PM) under Night (respecting Same-Day Shift Swaps & Duty Swaps). Automatically
      updates the top Team Daily VS comparison cards, table rows, footer sum & CSV export accordingly.
-   - SPRINT TARGET DEDICATED REWARD COLUMN & TABLE CSV PLACEMENT (V83 / V84): Restores clean 100%
-     centered Progress column (% badge + bar) and adds a dedicated, crisp "Sprint Reward" column right
-     beside it displaying each agent's Grade & Channel Sprint cash bonus, smart 2-Sprint Combo (+৳500)
-     / All-3 Grand Reward sub-line, hover tooltip, footer Won/Pool totals, Agent top slot-card reward
-     pill, and CSV reward columns. Moves Sprint "Download CSV" button from the top page card down into
-     the dark table header bar (matching all other tabs) and strictly restricts it to Admin/TL &
-     Supervisor only (never visible or accessible to Agents).
+   - SPRINT TARGET DEDICATED REWARD COLUMN & TABLE CSV PLACEMENT (V83 / V84 / V85): Restores clean
+     100% centered Progress column (% badge + bar) and adds a dedicated "Sprint Reward" column right
+     beside it with clean human-readable states: Achieved (on completed sprints without repeating
+     +500 across S1/S2), Missed (on ended missed sprints), and On 100% / +৳500 Bonus / All 3 = ৳X
+     on running sprints, plus full monthly breakdown on hover, footer Won/Pool totals, Agent slot-card
+     reward pills, and CSV reward columns. Keeps Sprint "Download CSV" button inside the dark table
+     header bar for Admin/TL & Supervisor only (strictly hidden & blocked for Agents).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -7781,13 +7781,30 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       const totalHits = (s1Hit ? 1 : 0) + (s2Hit ? 1 : 0) + (s3Hit ? 1 : 0);
       const otherHits = totalHits - (isHit ? 1 : 0);
 
+      const s1Amt = Number(spec.s1) || 0;
+      const s2Amt = Number(spec.s2) || 0;
+      const s3Amt = Number(spec.s3) || 0;
+      let earnedSoFar = 0;
+      const hitParts = [];
+      if (totalHits === 3 && all3Reward > 0) {
+        earnedSoFar = all3Reward;
+        hitParts.push(`All 3 Sprints = ৳${all3Reward.toLocaleString()}`);
+      } else {
+        if (s1Hit) { earnedSoFar += s1Amt; hitParts.push(`S1 ৳${s1Amt.toLocaleString()}`); }
+        if (s2Hit) { earnedSoFar += s2Amt; hitParts.push(`S2 ৳${s2Amt.toLocaleString()}`); }
+        if (s3Hit) { earnedSoFar += s3Amt; hitParts.push(`S3 ৳${s3Amt.toLocaleString()}`); }
+        if (totalHits === 2 && any2Extra > 0) {
+          earnedSoFar += any2Extra;
+          hitParts.push(`2-Sprint Bonus ৳${any2Extra.toLocaleString()}`);
+        }
+      }
+
       const chLabel = chKey === 'WHATSAPP' ? 'WhatsApp' : 'Facebook';
       const phName = effPhase === 'S1' ? 'Sprint 1' : (effPhase === 'S2' ? 'Sprint 2' : 'Sprint 3');
-      const statusText = isHit ? 'UNLOCKED' : 'Target 100%';
-      const tooltip = `Grade ${gradeKey} (${chLabel}) • ${phName} Reward: ৳${baseReward.toLocaleString()} (${statusText})`
-        + (any2Extra > 0 ? ` | Any 2 Sprints Combo: +৳${any2Extra.toLocaleString()}` : '')
-        + (all3Reward > 0 ? ` | All 3 Sprints Grand Total: ৳${all3Reward.toLocaleString()}` : '')
-        + (total100Reward > 0 ? ` | 100% Monthly Bonus: ৳${total100Reward.toLocaleString()}` : '');
+      const tooltip = `Grade ${gradeKey} (${chLabel}) • ${phName}: ৳${baseReward.toLocaleString()}`
+        + (earnedSoFar > 0 ? ` | Earned So Far: ৳${earnedSoFar.toLocaleString()} (${hitParts.join(' + ')})` : '')
+        + (any2Extra > 0 && totalHits < 2 ? ` | Any 2 Sprints Bonus: +৳${any2Extra.toLocaleString()}` : '')
+        + (all3Reward > 0 && totalHits < 3 ? ` | All 3 Sprints Total: ৳${all3Reward.toLocaleString()}` : '');
 
       return {
         hasReward: baseReward > 0,
@@ -8272,16 +8289,14 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                       <td class="p-3.5 bg-amber-50/35 text-center" title="${(ag.sprintReward && ag.sprintReward.tooltip) ? ag.sprintReward.tooltip : ''}">
                         ${(() => {
                           const rw = ag.sprintReward || {};
+                          const sd = ag.sprintDaily || {};
                           if (!rw.hasReward) {
                             return `<span class="text-slate-400 font-bold">—</span>`;
                           }
                           if (rw.isHit) {
-                            let subHtml = `<span class="block text-[10px] font-bold text-emerald-600 mt-0.5">Unlocked</span>`;
-                            if (rw.totalHits === 3 && rw.all3Reward > 0) {
-                              subHtml = `<span class="block text-[10px] font-extrabold text-emerald-700 mt-0.5">🏆 All-3: ৳${rw.all3Reward.toLocaleString()}</span>`;
-                            } else if (rw.totalHits === 2 && rw.any2Extra > 0) {
-                              subHtml = `<span class="block text-[10px] font-extrabold text-emerald-700 mt-0.5">+৳${rw.any2Extra.toLocaleString()} Combo</span>`;
-                            }
+                            const subHtml = (rw.totalHits === 3 && effPhase === 'S3' && rw.all3Reward > 0)
+                              ? `<span class="block text-[10px] font-extrabold text-emerald-700 mt-0.5">🏆 All 3 = ৳${rw.all3Reward.toLocaleString()}</span>`
+                              : `<span class="block text-[10px] font-bold text-emerald-600 mt-0.5">Achieved</span>`;
                             return `
                               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[11px] font-black shadow-2xs">
                                 <i class="fa-solid fa-check text-[9px]"></i>৳${rw.baseReward.toLocaleString()}
@@ -8289,11 +8304,17 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                               ${subHtml}
                             `;
                           }
-                          let pendingSubHtml = `<span class="block text-[10px] font-bold text-slate-400 mt-0.5">On 100% Hit</span>`;
+                          if (sd.status === 'ENDED') {
+                            return `
+                              <span class="font-extrabold text-slate-400 text-sm">৳${rw.baseReward.toLocaleString()}</span>
+                              <span class="block text-[10px] font-bold text-slate-400 mt-0.5">Missed</span>
+                            `;
+                          }
+                          let pendingSubHtml = `<span class="block text-[10px] font-bold text-slate-400 mt-0.5">On 100%</span>`;
                           if (rw.otherHits === 2 && rw.all3Reward > 0) {
-                            pendingSubHtml = `<span class="block text-[10px] font-extrabold text-indigo-600 mt-0.5">All-3 → ৳${rw.all3Reward.toLocaleString()}</span>`;
+                            pendingSubHtml = `<span class="block text-[10px] font-extrabold text-indigo-600 mt-0.5">All 3 = ৳${rw.all3Reward.toLocaleString()}</span>`;
                           } else if (rw.otherHits === 1 && rw.any2Extra > 0) {
-                            pendingSubHtml = `<span class="block text-[10px] font-extrabold text-blue-600 mt-0.5">+৳${rw.any2Extra.toLocaleString()} Combo</span>`;
+                            pendingSubHtml = `<span class="block text-[10px] font-extrabold text-blue-600 mt-0.5">+৳${rw.any2Extra.toLocaleString()} Bonus</span>`;
                           }
                           return `
                             <span class="font-black text-amber-700 text-sm">৳${rw.baseReward.toLocaleString()}</span>
