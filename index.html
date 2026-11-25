@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v88)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v89)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -111,6 +111,11 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
    - DASHBOARD MONTHLY TOTAL CARD LAYOUT CLARITY (V88): Swapped Base Target and Working Target (+5%)
      display positions inside the green Monthly Total card so Base Target appears in the top card
      header while Working Target (+5%) sits directly beside Achieved Sales (0% formula/sync change).
+   - 3-TIER TL ACHIEVEMENT MILESTONE SYSTEM (V89): Upgraded TL Milestones globally to 3 tiers:
+     80% = ৳8,000 | 90% = ৳10,000 | 100% = ৳12,000 across Dashboard TL Milestone card (3-column
+     grid + 80% & 90% progress markers), Dashboard TL Incentive Summary card, Incentive Tab KPI
+     & TL table (with 90% Goal column), Incentive CSV export, and Super Admin Edit TL Rewards modal
+     (syncs r80/r90/r100 cleanly via Monthly_Configs to Google Sheets without Apps Script changes).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -4317,23 +4322,26 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             ${canViewAll(u) ? (() => {
               const target80 = Math.round(tInfo.workingTarget * 0.80);
+              const target90 = Math.round(tInfo.workingTarget * 0.90);
               const target100 = tInfo.workingTarget;
               const rem80 = Math.max(0, target80 - monthTotalAmount);
+              const rem90 = Math.max(0, target90 - monthTotalAmount);
               const rem100 = Math.max(0, target100 - monthTotalAmount);
               const hit80 = monthTotalAmount >= target80 && target80 > 0;
+              const hit90 = monthTotalAmount >= target90 && target90 > 0;
               const hit100 = monthTotalAmount >= target100 && target100 > 0;
               const rawPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
               return `
-              <div class="sprint-banner p-4 rounded-2xl shadow-sm border-2 ${hit100 ? 'border-emerald-400' : (hit80 ? 'border-amber-400' : 'border-blue-200')}">
+              <div class="sprint-banner p-4 rounded-2xl shadow-sm border-2 ${hit100 ? 'border-emerald-400' : (hit90 ? 'border-purple-400' : (hit80 ? 'border-amber-400' : 'border-blue-200'))}">
                 <div class="flex justify-between items-start gap-2">
                   <div>
                     <div class="flex items-center gap-1.5">
-                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-indigo-600 text-white')}">
-                        ${hit100 ? '🏆 100% Unlocked' : (hit80 ? '🔥 80% Unlocked' : 'TL Milestone')}
+                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${hit100 ? 'bg-emerald-600 text-white' : (hit90 ? 'bg-purple-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-indigo-600 text-white'))}">
+                        ${hit100 ? '🏆 100% Unlocked' : (hit90 ? '⚡ 90% Unlocked' : (hit80 ? '🔥 80% Unlocked' : 'TL Milestone'))}
                       </span>
                     </div>
                     <h3 class="text-base font-black text-slate-900 mt-1">
-                      ${dashboardScope === 'ALL' ? 'Floor Milestone (80% / 100%)' : `${dashboardScope} — Milestone`}
+                      ${dashboardScope === 'ALL' ? 'Floor Milestone (80% / 90% / 100%)' : `${dashboardScope} — Milestone`}
                     </h3>
                   </div>
                   <button onclick="setTab('sprint_target')" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 shrink-0 transition-colors" title="View all agents' live 10-day Sprint performance">
@@ -4341,18 +4349,25 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   </button>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2.5 mt-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
                   <div class="p-2.5 rounded-xl bg-white/90 border ${hit80 ? 'border-emerald-400 bg-emerald-50/40' : 'border-blue-200'}">
                     <div class="flex items-center justify-between">
                       <span class="text-[10px] font-black uppercase ${hit80 ? 'text-emerald-700' : 'text-blue-700'}">🎯 80% Reward Goal</span>
-                      <span class="text-[10px] font-black ${hit80 ? 'text-emerald-600' : 'text-amber-600'}">${hit80 ? '✅ Achieved' : `Need ৳${rem80.toLocaleString()}`}</span>
+                      <span class="text-[10px] font-black ${hit80 ? 'text-emerald-600' : 'text-amber-600'}">${hit80 ? '✅ Hit' : `Need ৳${rem80.toLocaleString()}`}</span>
                     </div>
                     <strong class="text-sm font-black text-slate-900 block mt-0.5">৳${target80.toLocaleString()}</strong>
+                  </div>
+                  <div class="p-2.5 rounded-xl bg-white/90 border ${hit90 ? 'border-emerald-400 bg-emerald-50/40' : 'border-purple-200'}">
+                    <div class="flex items-center justify-between">
+                      <span class="text-[10px] font-black uppercase ${hit90 ? 'text-emerald-700' : 'text-purple-700'}">⚡ 90% Reward Goal</span>
+                      <span class="text-[10px] font-black ${hit90 ? 'text-emerald-600' : 'text-purple-600'}">${hit90 ? '✅ Hit' : `Need ৳${rem90.toLocaleString()}`}</span>
+                    </div>
+                    <strong class="text-sm font-black text-slate-900 block mt-0.5">৳${target90.toLocaleString()}</strong>
                   </div>
                   <div class="p-2.5 rounded-xl bg-white/90 border ${hit100 ? 'border-emerald-400 bg-emerald-50/40' : 'border-indigo-200'}">
                     <div class="flex items-center justify-between">
                       <span class="text-[10px] font-black uppercase ${hit100 ? 'text-emerald-700' : 'text-indigo-700'}">🏆 100% Full Target</span>
-                      <span class="text-[10px] font-black ${hit100 ? 'text-emerald-600' : 'text-indigo-600'}">${hit100 ? '✅ Achieved' : `Need ৳${rem100.toLocaleString()}`}</span>
+                      <span class="text-[10px] font-black ${hit100 ? 'text-emerald-600' : 'text-indigo-600'}">${hit100 ? '✅ Hit' : `Need ৳${rem100.toLocaleString()}`}</span>
                     </div>
                     <strong class="text-sm font-black text-slate-900 block mt-0.5">৳${target100.toLocaleString()}</strong>
                   </div>
@@ -4362,10 +4377,11 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <div class="relative progress-track h-2.5 bg-white border border-blue-200/60">
                     <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 h-2.5 rounded-full transition-all" style="width: ${monthPct}%"></div>
                     <div class="absolute top-0 bottom-0 w-0.5 bg-amber-500" style="left: 80%" title="80% Reward Threshold"></div>
+                    <div class="absolute top-0 bottom-0 w-0.5 bg-purple-600" style="left: 90%" title="90% Reward Threshold"></div>
                   </div>
                   <div class="flex justify-between items-center mt-1 text-[10px] font-extrabold text-slate-600">
                     <span>Achieved: <strong class="text-indigo-700">৳${monthTotalAmount.toLocaleString()} (${rawPct}%)</strong></span>
-                    <span class="text-amber-700">80% Mark: ৳${target80.toLocaleString()} | 100%: ৳${target100.toLocaleString()}</span>
+                    <span class="text-amber-700">80%: ৳${target80.toLocaleString()} | 90%: ৳${target90.toLocaleString()} | 100%: ৳${target100.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -7894,17 +7910,19 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           const tlBase = tTLs.reduce((s, tl) => s + (Number(tl.baseTarget) || (activeChannel === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET)), 0);
           const totalWorkTgt = calcWorkingTargetFromBase(agentsBase + tlBase, activeChannel);
           const target80 = Math.round(totalWorkTgt * 0.80);
+          const target90 = Math.round(totalWorkTgt * 0.90);
           const target100 = totalWorkTgt;
           const achieved = monthSales.filter(s => normalizeTeamNameAlias(s.team) === teamName).reduce((s, c) => s + (Number(c.amount) || 0), 0);
           const pct = target100 > 0 ? Number(((achieved / target100) * 100).toFixed(1)) : 0;
           const rem80 = Math.max(0, target80 - achieved);
+          const rem90 = Math.max(0, target90 - achieved);
           const rem100 = Math.max(0, target100 - achieved);
           const themes = [
             { border: 'border-t-orange-500', pill: 'bg-orange-100 text-orange-800', bar: 'from-orange-500 to-amber-500' },
             { border: 'border-t-blue-600', pill: 'bg-blue-100 text-blue-800', bar: 'from-blue-600 to-indigo-600' },
             { border: 'border-t-emerald-600', pill: 'bg-emerald-100 text-emerald-800', bar: 'from-emerald-600 to-teal-500' }
           ];
-          return { teamName, tlName, agentCount: tAgents.length, target80, target100, achieved, pct, rem80, rem100, theme: themes[idx % themes.length] };
+          return { teamName, tlName, agentCount: tAgents.length, target80, target90, target100, achieved, pct, rem80, rem90, rem100, theme: themes[idx % themes.length] };
         });
       }
 
@@ -16439,7 +16457,7 @@ function renderChatHubView() {
           ? [normalizeTeamNameAlias(teamScopeFilter)]
           : chTeams;
 
-        // 1. Compute TL Team Milestone Rewards (80% = ৳7,000 | 100% = ৳10,000)
+        // 1. Compute TL Team Milestone Rewards (80% = ৳8,000 | 90% = ৳10,000 | 100% = ৳12,000)
         const tlRows = [];
         scopedTeams.forEach(tName => {
           const cleanT = normalizeTeamNameAlias(tName);
@@ -16452,6 +16470,7 @@ function renderChatHubView() {
           const totalBaseTgt = agentsBaseSum + tlBaseSum;
           const totalWorkTgt = calcWorkingTargetFromBase(totalBaseTgt, ch);
           const target80 = Math.round(totalWorkTgt * 0.80);
+          const target90 = Math.round(totalWorkTgt * 0.90);
           const target100 = totalWorkTgt;
 
           const teamSalesList = dailyMonthSales.filter(s => normalizeTeamNameAlias(s.team) === cleanT);
@@ -16459,12 +16478,17 @@ function renderChatHubView() {
           const teamAchPct = totalWorkTgt > 0 ? Number(((teamRev / totalWorkTgt) * 100).toFixed(1)) : 0;
 
           const hit100 = target100 > 0 && teamRev >= target100;
+          const hit90 = target90 > 0 && teamRev >= target90;
           const hit80 = target80 > 0 && teamRev >= target80;
-          const tlRewBase = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function') ? window.getTlMilestoneRewardsForMonthV58(ch, mk) : { r80: 7000, r100: 12000 };
-          const tlRewardMoney = hit100 ? tlRewBase.r100 : (hit80 ? tlRewBase.r80 : 0);
+          const tlRewBase = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function') ? window.getTlMilestoneRewardsForMonthV58(ch, mk) : { r80: 8000, r90: 10000, r100: 12000 };
+          const tlRewardMoney = hit100 ? tlRewBase.r100 : (hit90 ? tlRewBase.r90 : (hit80 ? tlRewBase.r80 : 0));
           const tlStatusLabel = hit100
             ? `🏆 100% Target Hit (৳${tlRewBase.r100.toLocaleString()} Unlocked)`
-            : (hit80 ? `🔥 80% Target Hit (৳${tlRewBase.r80.toLocaleString()} Unlocked)` : `⏳ In Progress (${teamAchPct}% — Need ৳${Math.max(0, target80 - teamRev).toLocaleString()} for 80%)`);
+            : (hit90
+              ? `⚡ 90% Target Hit (৳${tlRewBase.r90.toLocaleString()} Unlocked • Need ৳${Math.max(0, target100 - teamRev).toLocaleString()} for 100%)`
+              : (hit80
+                ? `🔥 80% Target Hit (৳${tlRewBase.r80.toLocaleString()} Unlocked • Need ৳${Math.max(0, target90 - teamRev).toLocaleString()} for 90%)`
+                : `⏳ In Progress (${teamAchPct}% — Need ৳${Math.max(0, target80 - teamRev).toLocaleString()} for 80%)`));
 
           tTLs.forEach(tlObj => {
             if (memberFilter !== 'ALL' && memberFilter !== 'TLS_ONLY' && String(tlObj.id) !== String(memberFilter)) {
@@ -16481,10 +16505,12 @@ function renderChatHubView() {
               tlOwnSales,
               teamWorkTgt: totalWorkTgt,
               target80,
+              target90,
               target100,
               teamRev,
               teamAchPct,
               hit80,
+              hit90,
               hit100,
               tlRewardMoney,
               tlStatusLabel
@@ -16583,7 +16609,7 @@ function renderChatHubView() {
         const headers = [
           'Role', 'Emp ID', 'Name', 'Team', 'Grade',
           'Monthly Working Target (BDT)', 'Achieved Sales (BDT)', 'Target Achieved (%)',
-          'TL Milestone Bonus (80%/100%)', 'Sprint Bonus (BDT)', 'Drive Product Cash Bonus (BDT)',
+          'TL Milestone Bonus (80%/90%/100%)', 'Sprint Bonus (BDT)', 'Drive Product Cash Bonus (BDT)',
           'Total Cash Incentive (BDT)', 'Product Gifts Earned', 'Incentive Breakdown (For What)'
         ];
         const rows = [];
@@ -16677,7 +16703,7 @@ function renderChatHubView() {
                   <i class="fa-solid fa-award text-amber-500 mr-2"></i>Earned Incentives & Gifts (${monthLabel})
                 </h2>
                 <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  TL Milestone: 80% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()}
+                  ${(() => { const r = window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:8000,r90:10000,r100:12000}; return `TL Milestone: 80% = ৳${r.r80.toLocaleString()} • 90% = ৳${r.r90.toLocaleString()} • 100% = ৳${r.r100.toLocaleString()}`; })()}
                 </p>
               </div>
 
@@ -16713,12 +16739,12 @@ function renderChatHubView() {
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
               <div class="p-4 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-700 text-white shadow-md flex flex-col justify-between">
                 <div class="flex items-center justify-between">
-                  <span class="text-[10px] font-black uppercase text-indigo-100">TL Milestone Bonus (80% / 100%)</span>
+                  <span class="text-[10px] font-black uppercase text-indigo-100">TL Milestone Bonus (80% / 90% / 100%)</span>
                   <div class="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-xs"><i class="fa-solid fa-crown text-amber-300"></i></div>
                 </div>
                 <div class="mt-2.5">
                   <p class="text-2xl font-black">৳${data.totalTlMoney.toLocaleString()}</p>
-                  <p class="text-[10px] font-bold text-indigo-100 mt-0.5">80% Team Goal = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()}</p>
+                  <p class="text-[10px] font-bold text-indigo-100 mt-0.5">${(() => { const r = window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:8000,r90:10000,r100:12000}; return `80%: ৳${r.r80.toLocaleString()} • 90%: ৳${r.r90.toLocaleString()} • 100%: ৳${r.r100.toLocaleString()}`; })()}</p>
                 </div>
               </div>
 
@@ -16756,12 +16782,14 @@ function renderChatHubView() {
               </div>
             </div>
 
-            <!-- Section 1: Team Leader (TL) Milestone Incentive Table (80% = ৳7,000 | 100% = ৳10,000) -->
-            ${data.tlRows.length > 0 ? `
+            <!-- Section 1: Team Leader (TL) Milestone Incentive Table (80% = ৳8,000 | 90% = ৳10,000 | 100% = ৳12,000) -->
+            ${data.tlRows.length > 0 ? (() => {
+              const _tlTblRew = window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : { r80: 8000, r90: 10000, r100: 12000 };
+              return `
             <div class="card-dynamic overflow-hidden overflow-x-auto border-2 border-indigo-200">
               <div class="px-5 py-3 bg-gradient-to-r from-indigo-700 to-blue-700 text-white flex flex-wrap items-center justify-between gap-2">
                 <span class="text-xs font-black uppercase tracking-wider">
-                  <i class="fa-solid fa-crown text-amber-300 mr-1.5"></i>Team Leader (TL) Milestone Rewards (Team + TL Combined Target: 80% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()})
+                  <i class="fa-solid fa-crown text-amber-300 mr-1.5"></i>Team Leader (TL) Milestone Rewards (80% = ৳${_tlTblRew.r80.toLocaleString()} • 90% = ৳${_tlTblRew.r90.toLocaleString()} • 100% = ৳${_tlTblRew.r100.toLocaleString()})
                 </span>
                 <span class="text-[11px] font-bold text-indigo-100">${data.tlRows.length} Team Leader(s)</span>
               </div>
@@ -16771,8 +16799,9 @@ function renderChatHubView() {
                     <th class="p-3.5">TL Name & ID</th>
                     <th class="p-3.5">Team</th>
                     <th class="p-3.5">Total Team Target (+5%)</th>
-                    <th class="p-3.5">80% Goal (৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()})</th>
-                    <th class="p-3.5">100% Goal (৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()})</th>
+                    <th class="p-3.5">80% Goal (৳${_tlTblRew.r80.toLocaleString()})</th>
+                    <th class="p-3.5">90% Goal (৳${_tlTblRew.r90.toLocaleString()})</th>
+                    <th class="p-3.5">100% Goal (৳${_tlTblRew.r100.toLocaleString()})</th>
                     <th class="p-3.5">Team Achieved Revenue</th>
                     <th class="p-3.5 text-center">Achievement %</th>
                     <th class="p-3.5">Earned TL Bonus</th>
@@ -16794,10 +16823,11 @@ function renderChatHubView() {
                       <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${getTeamBadgeClasses(tl.team)}">${tl.team}</span></td>
                       <td class="p-3.5 font-bold text-slate-700">৳${tl.teamWorkTgt.toLocaleString()}</td>
                       <td class="p-3.5 font-bold text-amber-700">৳${tl.target80.toLocaleString()}</td>
+                      <td class="p-3.5 font-bold text-purple-700">৳${(tl.target90 || Math.round(tl.teamWorkTgt * 0.90)).toLocaleString()}</td>
                       <td class="p-3.5 font-bold text-indigo-700">৳${tl.target100.toLocaleString()}</td>
                       <td class="p-3.5 font-black text-emerald-600 text-sm">৳${tl.teamRev.toLocaleString()}</td>
                       <td class="p-3.5 text-center">
-                        <span class="px-2.5 py-1 rounded-lg ${tl.hit100 ? 'bg-emerald-100 text-emerald-800' : (tl.hit80 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700')} font-black">${tl.teamAchPct}%</span>
+                        <span class="px-2.5 py-1 rounded-lg ${tl.hit100 ? 'bg-emerald-100 text-emerald-800' : (tl.hit90 ? 'bg-purple-100 text-purple-800' : (tl.hit80 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'))} font-black">${tl.teamAchPct}%</span>
                       </td>
                       <td class="p-3.5">
                         <span class="px-3 py-1 rounded-xl ${tl.tlRewardMoney > 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'} font-black text-sm">
@@ -16810,7 +16840,8 @@ function renderChatHubView() {
                 </tbody>
               </table>
             </div>
-            ` : ''}
+            `;
+            })() : ''}
 
             <!-- Section 2: Agent-Wise Earned Incentives & Product Gifts Breakdown Table -->
             ${data.agentRows.length > 0 ? `
@@ -17058,11 +17089,13 @@ function renderChatHubView() {
 
         const monthTotalAmount = scopedSales.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
         const target80 = Math.round(tInfo.workingTarget * 0.80);
+        const target90 = Math.round(tInfo.workingTarget * 0.90);
         const target100 = tInfo.workingTarget;
         const hit100 = target100 > 0 && monthTotalAmount >= target100;
+        const hit90 = target90 > 0 && monthTotalAmount >= target90;
         const hit80 = target80 > 0 && monthTotalAmount >= target80;
-        const _tlRewDyn = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function') ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : { r80: 7000, r100: 12000 };
-        const tlPersonalEarned = hit100 ? _tlRewDyn.r100 : (hit80 ? _tlRewDyn.r80 : 0);
+        const _tlRewDyn = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function') ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : { r80: 8000, r90: 10000, r100: 12000 };
+        const tlPersonalEarned = hit100 ? _tlRewDyn.r100 : (hit90 ? _tlRewDyn.r90 : (hit80 ? _tlRewDyn.r80 : 0));
         const exactPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
         const scopeLabel = dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope;
 
@@ -17099,13 +17132,13 @@ function renderChatHubView() {
                     <span class="text-[10px] font-black uppercase text-indigo-800">
                       <i class="fa-solid fa-crown text-amber-500 mr-1"></i>TL Personal Reward (${dashboardScope === 'ALL' ? 'Floor' : dashboardScope})
                     </span>
-                    <span class="px-2 py-0.5 rounded-md text-[10px] font-black ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-indigo-100 text-indigo-800')}">
-                      ${hit100 ? '100% Unlocked' : (hit80 ? '80% Unlocked' : `${exactPct}% Achieved`)}
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-black ${hit100 ? 'bg-emerald-600 text-white' : (hit90 ? 'bg-purple-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-indigo-100 text-indigo-800'))}">
+                      ${hit100 ? '100% Unlocked' : (hit90 ? '90% Unlocked' : (hit80 ? '80% Unlocked' : `${exactPct}% Achieved`))}
                     </span>
                   </div>
                   <div class="flex items-baseline justify-between mt-1.5">
                     <strong class="text-lg font-black ${tlPersonalEarned > 0 ? 'text-emerald-600' : 'text-indigo-950'}">৳${tlPersonalEarned.toLocaleString()} <span class="text-[11px] font-bold text-slate-500">Earned</span></strong>
-                    <span class="text-[10px] font-extrabold text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">80%: ৳${_tlRewDyn.r80.toLocaleString()} • 100%: ৳${_tlRewDyn.r100.toLocaleString()}</span>
+                    <span class="text-[10px] font-extrabold text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">80%: ৳${_tlRewDyn.r80.toLocaleString()} • 90%: ৳${_tlRewDyn.r90.toLocaleString()} • 100%: ৳${_tlRewDyn.r100.toLocaleString()}</span>
                   </div>
                 </div>
 
@@ -17143,15 +17176,16 @@ function renderChatHubView() {
       const _origRenderDashboardV29 = renderDashboard;
       renderDashboard = function() {
         let htmlOut = _origRenderDashboardV29();
+        const _v29TlR = window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : { r80: 8000, r90: 10000, r100: 12000 };
         htmlOut = htmlOut.replace(
           '🎯 80% Reward Goal</span>',
-          `🎯 80% Goal (TL Reward: ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()})</span>`
+          `🎯 80% Goal (৳${_v29TlR.r80.toLocaleString()})</span>`
+        ).replace(
+          '⚡ 90% Reward Goal</span>',
+          `⚡ 90% Goal (৳${_v29TlR.r90.toLocaleString()})</span>`
         ).replace(
           '🏆 100% Full Target</span>',
-          `🏆 100% Goal (TL Reward: ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()})</span>`
-        ).replace(
-          '80% & 100% Milestones',
-          `80% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()} TL Reward`
+          `🏆 100% Goal (৳${_v29TlR.r100.toLocaleString()})</span>`
         );
         return htmlOut;
       };
@@ -19662,11 +19696,13 @@ function renderChatHubView() {
 
         const monthTotalAmount = scopedSales.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
         const target80 = Math.round(tInfo.workingTarget * 0.80);
+        const target90 = Math.round(tInfo.workingTarget * 0.90);
         const target100 = tInfo.workingTarget;
         const hit100 = target100 > 0 && monthTotalAmount >= target100;
+        const hit90 = target90 > 0 && monthTotalAmount >= target90;
         const hit80 = target80 > 0 && monthTotalAmount >= target80;
-        const _tlRewDyn = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function') ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : { r80: 7000, r100: 12000 };
-        const tlPersonalEarned = hit100 ? _tlRewDyn.r100 : (hit80 ? _tlRewDyn.r80 : 0);
+        const _tlRewDyn = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function') ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : { r80: 8000, r90: 10000, r100: 12000 };
+        const tlPersonalEarned = hit100 ? _tlRewDyn.r100 : (hit90 ? _tlRewDyn.r90 : (hit80 ? _tlRewDyn.r80 : 0));
         const exactPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
         const scopeLabel = dashboardScope === 'ALL' ? `All ${getActiveChannelMeta().name} Teams` : dashboardScope;
 
@@ -19696,22 +19732,24 @@ function renderChatHubView() {
 
               <!-- Middle 5 Cols: 2 Clean, Spacious Sub-Cards (Zero Cramped Wrapping!) -->
               <div class="xl:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <!-- Sub-Card 1: TL Personal Reward -->
-                <div class="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200/80 flex flex-col justify-between gap-2">
+                <!-- Sub-Card 1: TL Personal Reward (80% / 90% / 100%) -->
+                <div class="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200/80 flex flex-col justify-between gap-1.5">
                   <div class="flex items-center justify-between gap-2">
                     <span class="text-[10px] font-black uppercase text-indigo-900 whitespace-nowrap">
                       <i class="fa-solid fa-crown text-amber-500 mr-1"></i>TL Reward (${dashboardScope === 'ALL' ? 'Floor' : dashboardScope})
                     </span>
-                    <span class="px-2 py-0.5 rounded-md text-[10px] font-black whitespace-nowrap ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-white text-indigo-700 border border-indigo-200')}">
-                      ${hit100 ? '100% Unlocked' : (hit80 ? '80% Unlocked' : `${exactPct}%`)}
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-black whitespace-nowrap ${hit100 ? 'bg-emerald-600 text-white' : (hit90 ? 'bg-purple-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-white text-indigo-700 border border-indigo-200'))}">
+                      ${hit100 ? '100% Unlocked' : (hit90 ? '90% Unlocked' : (hit80 ? '80% Unlocked' : `${exactPct}%`))}
                     </span>
                   </div>
-                  <div class="flex items-baseline justify-between gap-2 pt-1 border-t border-indigo-200/50">
-                    <div>
-                      <strong class="text-lg font-black ${tlPersonalEarned > 0 ? 'text-emerald-600' : 'text-slate-900'}">৳${tlPersonalEarned.toLocaleString()}</strong>
-                      <span class="text-[10px] font-bold text-slate-500 ml-1">Earned</span>
+                  <div class="pt-1 border-t border-indigo-200/50 space-y-0.5">
+                    <div class="flex items-baseline gap-1.5">
+                      <strong class="text-lg font-black leading-tight ${tlPersonalEarned > 0 ? 'text-emerald-600' : 'text-slate-900'}">৳${tlPersonalEarned.toLocaleString()}</strong>
+                      <span class="text-[10px] font-bold text-slate-500">Earned</span>
                     </div>
-                    <span class="text-[10px] font-extrabold text-indigo-700 whitespace-nowrap">80%: ৳${_tlRewDyn.r80.toLocaleString()} • 100%: ৳${_tlRewDyn.r100.toLocaleString()}</span>
+                    <div class="text-[9.5px] font-extrabold text-indigo-700 tracking-tight">
+                      80%: ৳${_tlRewDyn.r80.toLocaleString()} • 90%: ৳${_tlRewDyn.r90.toLocaleString()} • 100%: ৳${_tlRewDyn.r100.toLocaleString()}
+                    </div>
                   </div>
                 </div>
 
@@ -20117,15 +20155,21 @@ function renderChatHubView() {
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
               ${canViewAll(u) ? (() => {
                 const target80 = Math.round(tInfo.workingTarget * 0.80);
+                const target90 = Math.round(tInfo.workingTarget * 0.90);
                 const target100 = tInfo.workingTarget;
                 const rem80 = Math.max(0, target80 - monthTotalAmount);
+                const rem90 = Math.max(0, target90 - monthTotalAmount);
                 const rem100 = Math.max(0, target100 - monthTotalAmount);
                 const hit80 = monthTotalAmount >= target80 && target80 > 0;
+                const hit90 = monthTotalAmount >= target90 && target90 > 0;
                 const hit100 = monthTotalAmount >= target100 && target100 > 0;
                 const rawPct = target100 > 0 ? ((monthTotalAmount / target100) * 100).toFixed(1) : '0.0';
+                const _tlRewDash = (typeof window.getTlMilestoneRewardsForMonthV58 === 'function')
+                  ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey)
+                  : { r80: 8000, r90: 10000, r100: 12000 };
                 return `
-                <!-- Left Card: Redesigned Clean, Spacious TL / Floor Milestone Card (Zero Clutter!) -->
-                <div class="card-dynamic p-5 bg-gradient-to-br from-blue-50/70 via-white to-indigo-50/60 border-2 ${hit100 ? 'border-emerald-400' : (hit80 ? 'border-amber-400' : 'border-blue-200/90')} flex flex-col justify-between space-y-4">
+                <!-- Left Card: Clean 3-Tier TL / Floor Milestone Card (80% / 90% / 100%) -->
+                <div class="card-dynamic p-5 bg-gradient-to-br from-blue-50/70 via-white to-indigo-50/60 border-2 ${hit100 ? 'border-emerald-400' : (hit90 ? 'border-purple-400' : (hit80 ? 'border-amber-400' : 'border-blue-200/90'))} flex flex-col justify-between space-y-4">
                   <!-- Top Header Row -->
                   <div class="flex items-center justify-between gap-3">
                     <div class="flex items-center gap-3 min-w-0">
@@ -20135,12 +20179,12 @@ function renderChatHubView() {
                       <div class="min-w-0">
                         <div class="flex items-center gap-1.5">
                           <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-indigo-600 text-white">TL / Team Milestone</span>
-                          <span class="px-2 py-0.5 rounded-md text-[9px] font-extrabold ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-indigo-100 text-indigo-800')}">
-                            ${hit100 ? '🏆 100% Unlocked!' : (hit80 ? '🔥 80% Unlocked!' : `${rawPct}% Completed`)}
+                          <span class="px-2 py-0.5 rounded-md text-[9px] font-extrabold ${hit100 ? 'bg-emerald-600 text-white' : (hit90 ? 'bg-purple-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-indigo-100 text-indigo-800'))}">
+                            ${hit100 ? '🏆 100% Unlocked!' : (hit90 ? '⚡ 90% Unlocked!' : (hit80 ? '🔥 80% Unlocked!' : `${rawPct}% Completed`))}
                           </span>
                         </div>
                         <h3 class="text-base font-black text-slate-900 mt-0.5 truncate">
-                          ${dashboardScope === 'ALL' ? 'Overall Floor Milestone (80% & 100%)' : `${dashboardScope} — TL Reward Milestone`}
+                          ${dashboardScope === 'ALL' ? 'Floor Milestone (80% / 90% / 100%)' : `${dashboardScope} — TL Reward Milestone`}
                         </h3>
                       </div>
                     </div>
@@ -20150,52 +20194,67 @@ function renderChatHubView() {
                     </button>
                   </div>
 
-                  <!-- Middle 2 Structured Milestone Boxes (Clean 3-Row Stack inside each box — No Cramped Text!) -->
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <!-- Middle 3 Symmetrical Milestone Boxes (80% / 90% / 100%) -->
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <!-- 80% Milestone Box -->
-                    <div class="p-3.5 rounded-2xl bg-white border ${hit80 ? 'border-emerald-400 ring-2 ring-emerald-400/15' : 'border-blue-200/90'} shadow-2xs space-y-1.5">
-                      <div class="flex items-center justify-between gap-1.5">
-                        <span class="text-[11px] font-black uppercase ${hit80 ? 'text-emerald-700' : 'text-blue-700'}">
-                          🎯 80% Milestone
-                        </span>
-                        <span class="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/70 text-[10px] font-black">
-                          Reward: ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()}
+                    <div class="p-3 rounded-2xl bg-white border ${hit80 ? 'border-emerald-400 ring-2 ring-emerald-400/15' : 'border-blue-200/90'} shadow-2xs space-y-1.5">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="text-[10px] font-black uppercase ${hit80 ? 'text-emerald-700' : 'text-blue-700'}">🎯 80%</span>
+                        <span class="px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/70 text-[10px] font-black">
+                          ৳${_tlRewDash.r80.toLocaleString()}
                         </span>
                       </div>
-                      <p class="text-lg font-black text-slate-900 tracking-tight">৳${target80.toLocaleString()}</p>
-                      <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] font-extrabold">
+                      <p class="text-[15px] font-black text-slate-900 tracking-tight">৳${target80.toLocaleString()}</p>
+                      <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[10px] font-extrabold">
                         <span class="text-slate-400">Status:</span>
-                        <span class="${hit80 ? 'text-emerald-600' : 'text-amber-600'}">${hit80 ? '✅ Achieved!' : `Need ৳${rem80.toLocaleString()}`}</span>
+                        <span class="${hit80 ? 'text-emerald-600' : 'text-amber-600'} truncate">${hit80 ? '✅ Achieved' : `Need ৳${rem80.toLocaleString()}`}</span>
+                      </div>
+                    </div>
+
+                    <!-- 90% Milestone Box -->
+                    <div class="p-3 rounded-2xl bg-white border ${hit90 ? 'border-emerald-400 ring-2 ring-emerald-400/15' : 'border-purple-200/90'} shadow-2xs space-y-1.5">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="text-[10px] font-black uppercase ${hit90 ? 'text-emerald-700' : 'text-purple-700'}">⚡ 90%</span>
+                        <span class="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200/70 text-[10px] font-black">
+                          ৳${_tlRewDash.r90.toLocaleString()}
+                        </span>
+                      </div>
+                      <p class="text-[15px] font-black text-slate-900 tracking-tight">৳${target90.toLocaleString()}</p>
+                      <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[10px] font-extrabold">
+                        <span class="text-slate-400">Status:</span>
+                        <span class="${hit90 ? 'text-emerald-600' : 'text-purple-600'} truncate">${hit90 ? '✅ Achieved' : `Need ৳${rem90.toLocaleString()}`}</span>
                       </div>
                     </div>
 
                     <!-- 100% Full Target Box -->
-                    <div class="p-3.5 rounded-2xl bg-white border ${hit100 ? 'border-emerald-400 ring-2 ring-emerald-400/15' : 'border-indigo-200/90'} shadow-2xs space-y-1.5">
-                      <div class="flex items-center justify-between gap-1.5">
-                        <span class="text-[11px] font-black uppercase ${hit100 ? 'text-emerald-700' : 'text-indigo-700'}">
-                          🏆 100% Full Target
-                        </span>
-                        <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/70 text-[10px] font-black">
-                          Reward: ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()}
+                    <div class="p-3 rounded-2xl bg-white border ${hit100 ? 'border-emerald-400 ring-2 ring-emerald-400/15' : 'border-indigo-200/90'} shadow-2xs space-y-1.5">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="text-[10px] font-black uppercase ${hit100 ? 'text-emerald-700' : 'text-indigo-700'}">🏆 100%</span>
+                        <span class="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/70 text-[10px] font-black">
+                          ৳${_tlRewDash.r100.toLocaleString()}
                         </span>
                       </div>
-                      <p class="text-lg font-black text-slate-900 tracking-tight">৳${target100.toLocaleString()}</p>
-                      <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] font-extrabold">
+                      <p class="text-[15px] font-black text-slate-900 tracking-tight">৳${target100.toLocaleString()}</p>
+                      <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[10px] font-extrabold">
                         <span class="text-slate-400">Status:</span>
-                        <span class="${hit100 ? 'text-emerald-600' : 'text-indigo-600'}">${hit100 ? '✅ Achieved!' : `Need ৳${rem100.toLocaleString()}`}</span>
+                        <span class="${hit100 ? 'text-emerald-600' : 'text-indigo-600'} truncate">${hit100 ? '✅ Achieved' : `Need ৳${rem100.toLocaleString()}`}</span>
                       </div>
                     </div>
                   </div>
 
-                  <!-- Bottom Progress Bar & Clean Single-Line Summary -->
+                  <!-- Bottom Progress Bar with 80% & 90% Markers -->
                   <div class="space-y-1.5">
                     <div class="relative progress-track h-2.5 bg-white border border-blue-200/80">
                       <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 h-2.5 rounded-full transition-all" style="width: ${monthPct}%"></div>
-                      <div class="absolute top-0 bottom-0 w-0.5 bg-amber-500" style="left: 80%" title="80% Milestone Mark"></div>
+                      <div class="absolute top-0 bottom-0 w-0.5 bg-amber-500" style="left: 80%" title="80% Milestone (৳${_tlRewDash.r80.toLocaleString()})"></div>
+                      <div class="absolute top-0 bottom-0 w-0.5 bg-purple-600" style="left: 90%" title="90% Milestone (৳${_tlRewDash.r90.toLocaleString()})"></div>
                     </div>
                     <div class="flex justify-between items-center text-[11px] font-extrabold text-slate-600">
                       <span>Achieved Revenue: <strong class="text-indigo-700">৳${monthTotalAmount.toLocaleString()} (${rawPct}%)</strong></span>
-                      <span class="text-amber-700">│ 80% Milestone Marker</span>
+                      <span class="flex items-center gap-2 text-[10px]">
+                        <span class="text-amber-700">│ 80%</span>
+                        <span class="text-purple-700">│ 90% Markers</span>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -26542,8 +26601,13 @@ function renderChatHubView() {
         const configs = getStored('monthly_configs', {});
         const effKey = ch === 'WHATSAPP' ? `WA_${mk}` : mk;
         const saved = (configs[effKey] && configs[effKey].tlRewards) || (configs[mk] && configs[mk].tlRewards) || {};
+        const isLegacyDefault7000 = !saved.v89 && (saved.r90 === undefined || saved.r90 === null) && Number(saved.r80) === 7000 && Number(saved.r100) === 12000;
+        if (isLegacyDefault7000) {
+          return { r80: 8000, r90: 10000, r100: 12000 };
+        }
         return {
-          r80: (saved.r80 !== undefined && saved.r80 !== null) ? Number(saved.r80) : 7000,
+          r80: (saved.r80 !== undefined && saved.r80 !== null) ? Number(saved.r80) : 8000,
+          r90: (saved.r90 !== undefined && saved.r90 !== null) ? Number(saved.r90) : 10000,
           r100: (saved.r100 !== undefined && saved.r100 !== null) ? Number(saved.r100) : 12000
         };
       };
@@ -26658,7 +26722,7 @@ function renderChatHubView() {
         return { sprintMoney, sprintBadges };
       };
 
-      // Also apply dynamic TL 80%/100% Milestone rewards in computeFloorIncentiveBreakdown
+      // Also apply dynamic TL 80%/90%/100% Milestone rewards in computeFloorIncentiveBreakdown
       const _origComputeFloorIncentiveV58 = window.computeFloorIncentiveBreakdown;
       window.computeFloorIncentiveBreakdown = function(mKey, teamScopeFilter = 'ALL', memberFilter = 'ALL') {
         const res = _origComputeFloorIncentiveV58(mKey, teamScopeFilter, memberFilter);
@@ -26666,10 +26730,18 @@ function renderChatHubView() {
         let newTlTotal = 0;
         (res.tlRows || []).forEach(tl => {
           const tlRew = window.getTlMilestoneRewardsForMonthV58(tl.channel, mk);
-          tl.tlRewardMoney = tl.hit100 ? tlRew.r100 : (tl.hit80 ? tlRew.r80 : 0);
+          const t90 = tl.target90 || Math.round((Number(tl.teamWorkTgt) || 0) * 0.90);
+          const h90 = (tl.hit90 !== undefined) ? tl.hit90 : (t90 > 0 && Number(tl.teamRev || 0) >= t90);
+          tl.target90 = t90;
+          tl.hit90 = h90;
+          tl.tlRewardMoney = tl.hit100 ? tlRew.r100 : (h90 ? tlRew.r90 : (tl.hit80 ? tlRew.r80 : 0));
           tl.tlStatusLabel = tl.hit100
             ? `🏆 100% Target Hit (৳${tlRew.r100.toLocaleString()} Unlocked)`
-            : (tl.hit80 ? `🔥 80% Target Hit (৳${tlRew.r80.toLocaleString()} Unlocked)` : tl.tlStatusLabel);
+            : (h90
+              ? `⚡ 90% Target Hit (৳${tlRew.r90.toLocaleString()} Unlocked • Need ৳${Math.max(0, Number(tl.target100 || 0) - Number(tl.teamRev || 0)).toLocaleString()} for 100%)`
+              : (tl.hit80
+                ? `🔥 80% Target Hit (৳${tlRew.r80.toLocaleString()} Unlocked • Need ৳${Math.max(0, t90 - Number(tl.teamRev || 0)).toLocaleString()} for 90%)`
+                : tl.tlStatusLabel));
           newTlTotal += tl.tlRewardMoney;
         });
         res.totalTlMoney = newTlTotal;
@@ -27230,7 +27302,7 @@ function renderChatHubView() {
                 <div>
                   <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-100 text-blue-800">Dynamic Monthly Sprint & TL Reward Setup</span>
                   <h3 class="text-base font-black text-slate-900 mt-1">Edit Sprint Rewards, Sprint % & TL Milestones (${selectedMonthKey})</h3>
-                  <p class="text-xs font-bold text-slate-500">Customize Sprint percentages, cash rewards per grade, and TL 80%/100% milestone payouts for ${selectedMonthKey} — zero code edits needed!</p>
+                  <p class="text-xs font-bold text-slate-500">Customize Sprint percentages, cash rewards per grade, and TL 80%/90%/100% milestone payouts for ${selectedMonthKey}.</p>
                 </div>
                 <button type="button" onclick="closeModal('sprintRewardsConfigModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
               </div>
@@ -27270,13 +27342,17 @@ function renderChatHubView() {
                       <span class="text-[11px] font-black uppercase text-indigo-900"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>TL Milestone Rewards (৳)</span>
                       <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${isSuperAdmin(currentUser) ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-600'}">${isSuperAdmin(currentUser) ? 'Super Admin Control' : 'Super Admin Only'}</span>
                     </div>
-                    <div class="grid grid-cols-2 gap-2">
+                    <div class="grid grid-cols-3 gap-2">
                       <div>
-                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">80% Team Milestone (৳)</label>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">80% Goal (৳)</label>
                         <input type="number" min="0" id="cfg_tl_r80" value="${tlRew.r80}" required ${isSuperAdmin(currentUser) ? '' : 'readonly'} class="w-full px-2.5 py-1.5 ${isSuperAdmin(currentUser) ? 'bg-white' : 'bg-slate-100 text-slate-500 cursor-not-allowed'} border border-indigo-200 rounded-lg text-xs font-black text-slate-900">
                       </div>
                       <div>
-                        <label class="block text-[10px] font-bold text-slate-600 mb-0.5">100% Team Milestone (৳)</label>
+                        <label class="block text-[10px] font-bold text-purple-700 mb-0.5">90% Goal (৳)</label>
+                        <input type="number" min="0" id="cfg_tl_r90" value="${tlRew.r90}" required ${isSuperAdmin(currentUser) ? '' : 'readonly'} class="w-full px-2.5 py-1.5 ${isSuperAdmin(currentUser) ? 'bg-white' : 'bg-slate-100 text-slate-500 cursor-not-allowed'} border border-purple-200 rounded-lg text-xs font-black text-slate-900">
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-emerald-700 mb-0.5">100% Goal (৳)</label>
                         <input type="number" min="0" id="cfg_tl_r100" value="${tlRew.r100}" required ${isSuperAdmin(currentUser) ? '' : 'readonly'} class="w-full px-2.5 py-1.5 ${isSuperAdmin(currentUser) ? 'bg-white' : 'bg-slate-100 text-slate-500 cursor-not-allowed'} border border-indigo-200 rounded-lg text-xs font-black text-slate-900">
                       </div>
                     </div>
@@ -27349,7 +27425,9 @@ function renderChatHubView() {
         }
         const draftTlRew = isSuperAdmin(currentUser) ? {
           r80: Number(document.getElementById('cfg_tl_r80')?.value) || 0,
-          r100: Number(document.getElementById('cfg_tl_r100')?.value) || 0
+          r90: Number(document.getElementById('cfg_tl_r90')?.value) || 0,
+          r100: Number(document.getElementById('cfg_tl_r100')?.value) || 0,
+          v89: true
         } : null;
 
         const srMap = {};
@@ -27367,7 +27445,7 @@ function renderChatHubView() {
         });
 
         const rngPreview = draftRanges ? `<br><strong>Calendar Dates:</strong> S1 (1–${draftRanges.s1End}) • S2 (${draftRanges.s1End+1}–${draftRanges.s2End}) • S3 (${draftRanges.s2End+1}–End)` : '';
-        const tlPreview = draftTlRew ? `<br><strong>TL Milestones (80% / 100%):</strong> ৳${draftTlRew.r80.toLocaleString()} / ৳${draftTlRew.r100.toLocaleString()}` : '';
+        const tlPreview = draftTlRew ? `<br><strong>TL Milestones (80% / 90% / 100%):</strong> ৳${draftTlRew.r80.toLocaleString()} / ৳${draftTlRew.r90.toLocaleString()} / ৳${draftTlRew.r100.toLocaleString()}` : '';
 
         openConfirmWarningModal(
           `Confirm ${ch === 'WHATSAPP' ? 'WhatsApp' : 'Facebook'} Sprint Targets & Rewards (${selectedMonthKey})?`,
@@ -27386,7 +27464,7 @@ function renderChatHubView() {
             markLocalUserOrConfigMutatedNow();
 
             const rngInfo = configs[effKey].sprintRanges ? ` | Days: 1-${configs[effKey].sprintRanges.s1End}/${configs[effKey].sprintRanges.s1End+1}-${configs[effKey].sprintRanges.s2End}/${configs[effKey].sprintRanges.s2End+1}-End` : '';
-            const tlRewInfo = configs[effKey].tlRewards ? ` | TL 80%/100%: ৳${Number(configs[effKey].tlRewards.r80||0).toLocaleString()}/৳${Number(configs[effKey].tlRewards.r100||0).toLocaleString()}` : '';
+            const tlRewInfo = configs[effKey].tlRewards ? ` | TL 80%/90%/100%: ৳${Number(configs[effKey].tlRewards.r80||0).toLocaleString()}/৳${Number(configs[effKey].tlRewards.r90||10000).toLocaleString()}/৳${Number(configs[effKey].tlRewards.r100||0).toLocaleString()}` : '';
             const logMeta = recordActivityLog(
               'Updated Sprint Targets & Rewards',
               `${currentUser.name} (${currentUser.id}) updated ${ch} Sprint Program (${selectedMonthKey}): ${configs[effKey].sprintPcts.s1}/${configs[effKey].sprintPcts.s2}/${configs[effKey].sprintPcts.s3}%${rngInfo}${tlRewInfo}`
@@ -29498,7 +29576,7 @@ function renderChatHubView() {
           let htmlOut = _origRenderIncTabV61();
           if (currentUser && isSuperAdmin(currentUser)) {
             const btnEditTl = `
-                <button type="button" onclick="openSprintRewardsConfigModal()" class="h-9 px-3.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Super Admin Only: Change Monthly TL 80%/100% Milestone Rewards">
+                <button type="button" onclick="openSprintRewardsConfigModal()" class="h-9 px-3.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Super Admin Only: Change Monthly TL 80%/90%/100% Milestone Rewards">
                   <i class="fa-solid fa-crown text-amber-300"></i> Edit TL Rewards
                 </button>`;
             htmlOut = htmlOut.replace(
