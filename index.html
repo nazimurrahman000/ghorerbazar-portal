@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v90)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v91)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -121,6 +121,11 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      the Team Leader's daily target regardless of the "Include TL Sales" checkbox, while unchecking
      "Include TL Sales" hides TL names, TL rows & TL personal sales amounts across the VS cards,
      table, footer sum & CSV export.
+   - DAILY SALES REPORTS TEAM VS CARD CALENDAR-DAY DIVISOR (V91):
+     In Daily Sales Reports top Team VS comparison boxes, Team Daily Target uses Team Working
+     Target (+5%, incl. TL) ÷ exact calendar days of the selected month (28/29/30/31) so it
+     matches Dashboard & Date-Wise Team tables, while individual agent rows in the table below
+     continue using ÷ 26.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -9651,14 +9656,14 @@ function renderRankingAndComparison() {
             });
           }
 
-          const teamDailyTarget = teamTargetMembers.reduce((sum, m) => {
+          const calDaysInMonthV91 = (typeof window.getCalendarDaysInMonthKeyV62 === 'function')
+            ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey)
+            : 30;
+          const teamWorkTargetSumV91 = teamTargetMembers.reduce((sum, m) => {
             const baseTgt = Number(m.baseTarget) || 0;
-            const workTgt = calcWorkingTargetFromBase(baseTgt, m.team);
-            const dt = (typeof window.getAgentDynamicDailyTargetV62 === 'function')
-              ? window.getAgentDynamicDailyTargetV62(m, selectedMonthKey, monthSalesPreloadedV70).tableDailyTarget
-              : Math.round(workTgt / 26);
-            return sum + (Number(dt) || 0);
+            return sum + calcWorkingTargetFromBase(baseTgt, m.team);
           }, 0);
+          const teamDailyTarget = calDaysInMonthV91 > 0 ? Math.round(teamWorkTargetSumV91 / calDaysInMonthV91) : 0;
 
           const teamSubmitterMembers = teamTargetMembers.filter(usr => usr.role !== 'admin' || includeTl);
 
