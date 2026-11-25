@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v87)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v88)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -108,6 +108,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      (default collapsed). Kept Sidebar FREE badge, Live Cloud Sync box, Top Header active tab name,
      and Chat Hub notice banner / search hint intact as requested (0% change to formulas, Apps
      Script, sync, or permissions).
+   - DASHBOARD MONTHLY TOTAL CARD LAYOUT CLARITY (V88): Swapped Base Target and Working Target (+5%)
+     display positions inside the green Monthly Total card so Base Target appears in the top card
+     header while Working Target (+5%) sits directly beside Achieved Sales (0% formula/sync change).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -4441,8 +4444,8 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             <div class="monthly-banner p-4 rounded-2xl shadow-sm">
               <div class="flex justify-between items-start">
                 <div>
-                  <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-600 text-white">Monthly Total (+5% Return Buffer)</span>
-                  <h3 class="text-base font-black text-slate-900 mt-1">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</h3>
+                  <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-600 text-white">Monthly Total (Excl. +5%)</span>
+                  <h3 class="text-base font-black text-slate-900 mt-1">Base Target: ৳${tInfo.baseTarget.toLocaleString()}</h3>
                 </div>
                 <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm shadow-sm">
                   <i class="fa-solid fa-chart-line"></i>
@@ -4450,7 +4453,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
               </div>
               <div class="mt-3">
                 <div class="flex justify-between text-xs font-extrabold mb-1">
-                  <span class="text-slate-600">Base Target: <strong class="text-slate-900">৳${tInfo.baseTarget.toLocaleString()}</strong></span>
+                  <span class="text-slate-600">Working Target (+5%): <strong class="text-slate-900">৳${tInfo.workingTarget.toLocaleString()}</strong></span>
                   <span class="text-slate-600">Revenue: <strong class="text-emerald-700">৳${monthTotalAmount.toLocaleString()}</strong></span>
                 </div>
                 <div class="progress-track h-2 bg-white">
@@ -20279,7 +20282,7 @@ function renderChatHubView() {
               </div>
               `)}
 
-              <!-- Right Card: Symmetrical Monthly Target (+5% Return Buffer) Card -->
+              <!-- Right Card: Symmetrical Monthly Target Card (Base Target on top, Working Target beside Achieved Sales) -->
               <div class="card-dynamic p-5 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/60 border-2 border-emerald-200/90 flex flex-col justify-between space-y-4">
                 <div class="flex items-center justify-between gap-3">
                   <div class="flex items-center gap-3 min-w-0">
@@ -20288,10 +20291,10 @@ function renderChatHubView() {
                     </div>
                     <div class="min-w-0">
                       <div class="flex items-center gap-1.5">
-                        <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-emerald-600 text-white">Monthly Total (+5% Buffer)</span>
+                        <span class="px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-emerald-600 text-white">Monthly Total (Excl. +5%)</span>
                         <span class="px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-emerald-100 text-emerald-800">${monthPct}% Achieved</span>
                       </div>
-                      <h3 class="text-base font-black text-slate-900 mt-0.5 truncate">Working Target: ৳${tInfo.workingTarget.toLocaleString()}</h3>
+                      <h3 class="text-base font-black text-slate-900 mt-0.5 truncate">Base Target: ৳${tInfo.baseTarget.toLocaleString()}</h3>
                     </div>
                   </div>
                   <button onclick="setTab('monthly_perf')" class="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer">
@@ -20304,10 +20307,10 @@ function renderChatHubView() {
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div class="p-3.5 rounded-2xl bg-white border border-emerald-200/90 shadow-2xs space-y-1.5">
                     <div class="flex items-center justify-between gap-1.5">
-                      <span class="text-[11px] font-black uppercase text-slate-600">📊 Base Target</span>
-                      <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-black">Excl. +5%</span>
+                      <span class="text-[11px] font-black uppercase text-slate-600">📊 Working Target</span>
+                      <span class="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/70 text-[10px] font-black">Incl. +5%</span>
                     </div>
-                    <p class="text-lg font-black text-slate-900 tracking-tight">৳${tInfo.baseTarget.toLocaleString()}</p>
+                    <p class="text-lg font-black text-slate-900 tracking-tight">৳${tInfo.workingTarget.toLocaleString()}</p>
                     <div class="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] font-extrabold">
                       <span class="text-slate-400">Daily Target:</span>
                       <span class="text-slate-700">৳${tInfo.dailyTarget.toLocaleString()}</span>
@@ -28402,7 +28405,8 @@ function renderChatHubView() {
             htmlOut = htmlOut
               .replace(/\(\+5% Buffer\)/g, `(+${buf}% Buffer)`)
               .replace(/\(\+5%\)/g, `(+${buf}%)`)
-              .replace(/Excl\. \+5%/g, `Excl. +${buf}%`);
+              .replace(/Excl\. \+5%/g, `Excl. +${buf}%`)
+              .replace(/Incl\. \+5%/g, `Incl. +${buf}%`);
           }
           // Clean Daily Target label (no ÷26 suffix shown anywhere)
         } catch (eLbl) {}
