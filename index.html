@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v83)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v84)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -94,11 +94,13 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      in Daily Sales Reports Row 2 beside Date picker. Groups 7 AM, 9 AM & 10 AM under Morning, 3 PM under
      Evening, and Night (11 PM) under Night (respecting Same-Day Shift Swaps & Duty Swaps). Automatically
      updates the top Team Daily VS comparison cards, table rows, footer sum & CSV export accordingly.
-   - SPRINT TARGET PROGRESS & REWARD DISPLAY (V83): Inside the Sprint Target leaderboard's Progress
-     column, displays each agent's exact Grade & Channel Sprint cash reward beside the % badge, smart
-     2-Sprint Combo (+৳500) / All-3 Grand Reward cue under the progress bar, rich hover tooltip, footer
-     Won/Pool reward totals, Agent top slot-card reward pill, and CSV reward column (reads live values
-     from getSprintRewardProgramForMonthV58).
+   - SPRINT TARGET DEDICATED REWARD COLUMN & TABLE CSV PLACEMENT (V83 / V84): Restores clean 100%
+     centered Progress column (% badge + bar) and adds a dedicated, crisp "Sprint Reward" column right
+     beside it displaying each agent's Grade & Channel Sprint cash bonus, smart 2-Sprint Combo (+৳500)
+     / All-3 Grand Reward sub-line, hover tooltip, footer Won/Pool totals, Agent top slot-card reward
+     pill, and CSV reward columns. Moves Sprint "Download CSV" button from the top page card down into
+     the dark table header bar (matching all other tabs) and strictly restricts it to Admin/TL &
+     Supervisor only (never visible or accessible to Agents).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -142,7 +144,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 - fetchFromSheet / handleCloudData          => V68 (ETag clientVer delta sync + submit priority + V67 bell pre-merge)
 - postToSheet / handleSalesSubmit           => V64/V65 (serialized fastSubmit queue)
 - downloadPortalCsvFile                     => V57 (strips +5% labels/columns)
-- renderSprintTargetView / exportSprintTargetCsv => Base + V83 (Sprint Progress & Reward display) + V69 (Sprint Daily Target excl. DO) + V58 button + V52 actual CSV
+- renderSprintTargetView / exportSprintTargetCsv => Base + V84 (Dedicated Sprint Reward col & table-header CSV for TL/Sup only) + V69 (Sprint Daily Target excl. DO) + V58 button + V52 actual CSV
 - renderReports                             => Base + V82 (Shift-wise filter All/Morning/Evening/Night) + V70 (Daily Team Comparison strip) + V27 TL toggle + V41 CSV header
 - exportMonthlyPerformanceCsv / DateWise / Sprint / Ranking / DailySales / Incentive
   => wrapped via V52 wrapExportWithActualTarget()
@@ -8104,9 +8106,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                     <option value="AMOUNT" ${sprintTabSortMode === 'AMOUNT' ? 'selected' : ''}>Sales Amount Wise</option>
                   </select>
                 </div>
-                <button onclick="exportSprintTargetCsv()" class="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer">
-                  <i class="fa-solid fa-file-excel text-xs"></i> Download CSV
-                </button>
+                <!-- V58_SPRINT_EDIT_BTN_SLOT -->
               </div>
             </div>
 
@@ -8179,7 +8179,14 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                 <i class="fa-solid fa-bolt text-amber-400"></i>
                 <span class="text-xs font-black uppercase tracking-wider">${phaseInfo.name} — Live Agent Leaderboard (${rankedSprintAgents.length} Agents)</span>
               </div>
-              <span class="text-[11px] font-bold text-slate-300">Sorted by highest ${phaseInfo.short} Sales • Floor ${phaseInfo.short} Achieved: <strong class="text-amber-300">${overallCurPct}%</strong></span>
+              <div class="flex flex-wrap items-center gap-3">
+                <span class="text-[11px] font-bold text-slate-300">Sorted by highest ${phaseInfo.short} Sales • Floor ${phaseInfo.short} Achieved: <strong class="text-amber-300">${overallCurPct}%</strong></span>
+                ${(u && (u.role === 'admin' || u.role === 'supervisor')) ? `
+                <button type="button" onclick="exportSprintTargetCsv()" class="h-7 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-black shadow-xs inline-flex items-center gap-1 cursor-pointer transition-colors">
+                  <i class="fa-solid fa-file-csv"></i> Download CSV
+                </button>
+                ` : ''}
+              </div>
             </div>
             <table class="w-full text-left text-xs whitespace-nowrap">
               <thead class="table-header-light uppercase font-extrabold">
@@ -8192,7 +8199,8 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <th class="p-3.5 bg-blue-50/60 text-blue-900">${phaseInfo.short} Achieved</th>
                   <th class="p-3.5 bg-blue-50/60 text-blue-900">Remaining</th>
                   <th class="p-3.5 bg-indigo-50/70 text-indigo-900">Daily Target<br><span class="text-[9px] text-indigo-600 font-extrabold">Excl. Roster DO</span></th>
-                  <th class="p-3.5 bg-blue-50/60 text-blue-900 text-center">${phaseInfo.short} Progress<br><span class="text-[9px] text-amber-600 font-extrabold">& Cash Reward</span></th>
+                  <th class="p-3.5 bg-blue-50/60 text-blue-900 text-center">${phaseInfo.short} Progress</th>
+                  <th class="p-3.5 bg-amber-50/75 text-amber-900 text-center">Sprint Reward<br><span class="text-[9px] text-amber-600 font-extrabold">Grade Cash Bonus</span></th>
                   <th onclick="setSprintTabPhase('S1')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S1' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 1">Sprint 1 (40%)<br><span class="text-[9px] text-slate-400">Days 1–10</span></th>
                   <th onclick="setSprintTabPhase('S2')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S2' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 2">Sprint 2 (35%)<br><span class="text-[9px] text-slate-400">Days 11–20</span></th>
                   <th onclick="setSprintTabPhase('S3')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S3' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 3">Sprint 3 (35%)<br><span class="text-[9px] text-slate-400">Days 21–31</span></th>
@@ -8253,53 +8261,43 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                           return `<span class="font-black text-indigo-700 text-sm">৳${Number(sd.dailyTarget || 0).toLocaleString()}</span><span class="block text-[10px] font-bold text-slate-500">${sd.remainingDutyDays}d left${sd.remainingDoDays > 0 ? ` • ${sd.remainingDoDays} DO` : ''}${sd.remainingLeaveDays > 0 ? ` • ${sd.remainingLeaveDays} Lv` : ''}</span>`;
                         })()}
                       </td>
-                      <td class="p-3.5 bg-blue-50/30" title="${(ag.sprintReward && ag.sprintReward.tooltip) ? ag.sprintReward.tooltip : ''}">
+                      <td class="p-3.5 bg-blue-50/30">
+                        <div class="flex flex-col items-center min-w-[115px]">
+                          <span class="px-2 py-0.5 rounded-md border text-[11px] font-black ${statusColor}">${ag.curPct}%</span>
+                          <div class="w-full progress-track h-1.5 bg-white mt-1.5">
+                            <div class="${ag.curPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'} h-1.5 rounded-full" style="width:${barPct}%"></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td class="p-3.5 bg-amber-50/35 text-center" title="${(ag.sprintReward && ag.sprintReward.tooltip) ? ag.sprintReward.tooltip : ''}">
                         ${(() => {
                           const rw = ag.sprintReward || {};
                           if (!rw.hasReward) {
+                            return `<span class="text-slate-400 font-bold">—</span>`;
+                          }
+                          if (rw.isHit) {
+                            let subHtml = `<span class="block text-[10px] font-bold text-emerald-600 mt-0.5">Unlocked</span>`;
+                            if (rw.totalHits === 3 && rw.all3Reward > 0) {
+                              subHtml = `<span class="block text-[10px] font-extrabold text-emerald-700 mt-0.5">🏆 All-3: ৳${rw.all3Reward.toLocaleString()}</span>`;
+                            } else if (rw.totalHits === 2 && rw.any2Extra > 0) {
+                              subHtml = `<span class="block text-[10px] font-extrabold text-emerald-700 mt-0.5">+৳${rw.any2Extra.toLocaleString()} Combo</span>`;
+                            }
                             return `
-                              <div class="flex flex-col items-center min-w-[132px]">
-                                <span class="px-2 py-0.5 rounded-md border text-[11px] font-black ${statusColor}">${ag.curPct}%</span>
-                                <div class="w-full progress-track h-1.5 bg-white mt-1.5">
-                                  <div class="${ag.curPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'} h-1.5 rounded-full" style="width:${barPct}%"></div>
-                                </div>
-                              </div>
+                              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[11px] font-black shadow-2xs">
+                                <i class="fa-solid fa-check text-[9px]"></i>৳${rw.baseReward.toLocaleString()}
+                              </span>
+                              ${subHtml}
                             `;
                           }
-                          const rwPillHtml = rw.isHit
-                            ? `<span class="px-1.5 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black shadow-2xs inline-flex items-center gap-0.5"><i class="fa-solid fa-check text-[8px]"></i>৳${rw.baseReward.toLocaleString()}</span>`
-                            : `<span class="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-black inline-flex items-center gap-0.5"><i class="fa-solid fa-gift text-[8px] text-amber-500"></i>৳${rw.baseReward.toLocaleString()}</span>`;
-
-                          let subCaptionHtml = '';
-                          if (rw.isHit) {
-                            if (rw.totalHits === 3 && rw.all3Reward > 0) {
-                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-emerald-700 mt-1 leading-none">🏆 All-3: ৳${rw.all3Reward.toLocaleString()}</span>`;
-                            } else if (rw.totalHits === 2 && rw.any2Extra > 0) {
-                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-emerald-700 mt-1 leading-none">✓ Won • +৳${rw.any2Extra.toLocaleString()} Combo</span>`;
-                            } else {
-                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-emerald-600 mt-1 leading-none">✓ Reward Unlocked</span>`;
-                            }
-                          } else {
-                            if (rw.otherHits === 2 && rw.all3Reward > 0) {
-                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-indigo-600 mt-1 leading-none">Hit → 🏆 All-3: ৳${rw.all3Reward.toLocaleString()}</span>`;
-                            } else if (rw.otherHits === 1 && rw.any2Extra > 0) {
-                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-blue-600 mt-1 leading-none">+৳${rw.any2Extra.toLocaleString()} Combo on Hit</span>`;
-                            } else {
-                              subCaptionHtml = `<span class="text-[9px] font-bold text-slate-400 mt-1 leading-none">on 100% Hit</span>`;
-                            }
+                          let pendingSubHtml = `<span class="block text-[10px] font-bold text-slate-400 mt-0.5">On 100% Hit</span>`;
+                          if (rw.otherHits === 2 && rw.all3Reward > 0) {
+                            pendingSubHtml = `<span class="block text-[10px] font-extrabold text-indigo-600 mt-0.5">All-3 → ৳${rw.all3Reward.toLocaleString()}</span>`;
+                          } else if (rw.otherHits === 1 && rw.any2Extra > 0) {
+                            pendingSubHtml = `<span class="block text-[10px] font-extrabold text-blue-600 mt-0.5">+৳${rw.any2Extra.toLocaleString()} Combo</span>`;
                           }
-
                           return `
-                            <div class="flex flex-col items-center min-w-[138px]">
-                              <div class="w-full flex items-center justify-between gap-1.5">
-                                <span class="px-1.5 py-0.5 rounded-md border text-[10px] font-black ${statusColor}">${ag.curPct}%</span>
-                                ${rwPillHtml}
-                              </div>
-                              <div class="w-full progress-track h-1.5 bg-white mt-1.5">
-                                <div class="${ag.curPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'} h-1.5 rounded-full" style="width:${barPct}%"></div>
-                              </div>
-                              ${subCaptionHtml}
-                            </div>
+                            <span class="font-black text-amber-700 text-sm">৳${rw.baseReward.toLocaleString()}</span>
+                            ${pendingSubHtml}
                           `;
                         })()}
                       </td>
@@ -8325,9 +8323,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <td class="p-4 text-emerald-400 text-sm">৳${sumCurSales.toLocaleString()}</td>
                   <td class="p-4 text-slate-300">৳${Math.max(0, sumCurGoal - sumCurSales).toLocaleString()}</td>
                   <td class="p-4 text-indigo-300">৳${sumCurDailyTarget.toLocaleString()}<span class="block text-[9px] text-slate-400 font-bold">Daily Pace Sum</span></td>
+                  <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black">${overallCurPct}%</span></td>
                   <td class="p-4 text-center">
-                    <span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black">${overallCurPct}%</span>
-                    ${sumCurRewardPool > 0 ? `<span class="block text-[9px] text-emerald-300 font-extrabold mt-1">Won: ৳${sumCurRewardWon.toLocaleString()} / ৳${sumCurRewardPool.toLocaleString()}</span>` : ''}
+                    <span class="text-emerald-300 font-black text-sm">৳${sumCurRewardWon.toLocaleString()}</span>
+                    ${sumCurRewardPool > 0 ? `<span class="block text-[9px] text-slate-400 font-bold">of ৳${sumCurRewardPool.toLocaleString()} pool</span>` : ''}
                   </td>
                   <td class="p-4 text-center text-slate-300">৳${sumS1.toLocaleString()}</td>
                   <td class="p-4 text-center text-slate-300">৳${sumS2.toLocaleString()}</td>
@@ -27545,10 +27544,14 @@ function renderChatHubView() {
                 <button onclick="openSprintRewardsConfigModal()" class="h-9 px-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 cursor-pointer">
                   <i class="fa-solid fa-sliders text-amber-300"></i> Edit Sprint Targets & Rewards
                 </button>`;
-          htmlOut = htmlOut.replace(
-            /(<button onclick="exportSprintTargetCsv\(\)")/,
-            `${btnSprintTab}\n                $1`
-          );
+          if (htmlOut.includes('<!-- V58_SPRINT_EDIT_BTN_SLOT -->')) {
+            htmlOut = htmlOut.replace('<!-- V58_SPRINT_EDIT_BTN_SLOT -->', btnSprintTab);
+          } else {
+            htmlOut = htmlOut.replace(
+              /(<button onclick="exportSprintTargetCsv\(\)")/,
+              `${btnSprintTab}\n                $1`
+            );
+          }
         }
         return htmlOut;
       };
