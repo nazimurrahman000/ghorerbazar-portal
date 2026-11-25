@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v91)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v92)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -121,11 +121,14 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      the Team Leader's daily target regardless of the "Include TL Sales" checkbox, while unchecking
      "Include TL Sales" hides TL names, TL rows & TL personal sales amounts across the VS cards,
      table, footer sum & CSV export.
-   - DAILY SALES REPORTS TEAM VS CARD CALENDAR-DAY DIVISOR (V91):
-     In Daily Sales Reports top Team VS comparison boxes, Team Daily Target uses Team Working
-     Target (+5%, incl. TL) ÷ exact calendar days of the selected month (28/29/30/31) so it
-     matches Dashboard & Date-Wise Team tables, while individual agent rows in the table below
-     continue using ÷ 26.
+   - DAILY SALES REPORTS TEAM VS CARD EXACT DASHBOARD PARITY (V91 / V92):
+     In Daily Sales Reports top Team VS comparison boxes, Team Daily Target ALWAYS preserves
+     Resigned/Deactivated team members' monthly targets (matching Dashboard, Date-Wise Tables,
+     Ranking & Incentive 100%), sums baseTarget first before applying calcWorkingTargetFromBase
+     (+5%) ÷ exact calendar days (eliminating ৳1 rounding drift), and keeps SUB expected count
+     limited to active non-deactivated submitters. Also synced _rawGetUsersForMonthV62 after
+     V66/V67 rename-dedup & cache wrappers, aligned exportDateWiseSummaryCsv floating filter,
+     and fixed WA TL fallback in Monthly Performance footer.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -5260,7 +5263,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       const isChannelTotal = !targetScope || targetScope === 'CHANNEL_TOTAL';
       const scopeLabel = isChannelTotal ? `${chMeta.fullTitle} Total (${chMeta.teams.length} Teams Combined)` : targetScope;
 
-      const scopeAgents = allUsers.filter(u => u.role === 'agent' && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === targetScope));
+      const scopeAgents = allUsers.filter(u => u.role === 'agent' && !isPendingOrFloatingAgent(u) && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === targetScope));
       const scopeTLs = allUsers.filter(u => u.role === 'admin' && (isChannelTotal ? true : normalizeTeamNameAlias(u.team) === targetScope));
       const defaultTlBase = activeChannel === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
       const baseTargetSum = scopeAgents.reduce((s, a) => s + (Number(a.baseTarget) || 0), 0) +
@@ -5712,7 +5715,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   const relevantTLs = (canViewAll(u) && monthlyPerfAgentId === 'ALL')
                     ? allMonthUsers.filter(usr => usr.role === 'admin' && (monthlyPerfTeamScope === 'ALL' ? true : usr.team === monthlyPerfTeamScope))
                     : [];
-                  const tlBaseSum = relevantTLs.reduce((sum, tl) => sum + (Number(tl.baseTarget) || TL_DEFAULT_BASE_TARGET), 0);
+                  const tlBaseSum = relevantTLs.reduce((sum, tl) => sum + (Number(tl.baseTarget) || (getChannelForTeam(tl.team) === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET)), 0);
                   const tlWorkSum = calcWorkingTargetFromBase(tlBaseSum, activeChannel);
                   const grandBase = totBase + tlBaseSum;
                   const grandWork = totWork + tlWorkSum;
@@ -9639,33 +9642,44 @@ function renderRankingAndComparison() {
           compMode = getChannelForTeam(logsFilterScope);
         }
 
-        // Build clean stats for any team name (V90: Team Daily Target +5% ALWAYS includes TL, while TL sales & rows obey Include TL Sales!)
+        // Build clean stats for any team name (V92: 100% parity with Dashboard — preserves Resigned/Deactivated team targets + TL, exact rounding, active SUB count!)
         function computeTeamDailyStat(teamName) {
           const normT = normalizeTeamNameAlias(teamName);
-          let teamTargetMembers = (allUsersOmni || []).filter(usr => {
+          const normCh = getChannelForTeam(normT);
+          const defaultTlBaseV92 = normCh === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
+
+          const allTeamMembersV92 = (allUsersOmni || []).filter(usr => {
             if (!usr || usr.role === 'supervisor') return false;
             if (normalizeTeamNameAlias(usr.team) !== normT) return false;
-            if (typeof isUserAccountDeactivated === 'function' && isUserAccountDeactivated(usr)) return false;
             if (usr.role === 'admin') return true;
             return !isPendingOrFloatingAgent(usr);
           });
+
+          const activeTeamMembersV92 = allTeamMembersV92.filter(usr =>
+            !(typeof isUserAccountDeactivated === 'function' && isUserAccountDeactivated(usr))
+          );
+
+          let teamTargetMembers = allTeamMembersV92;
+          let teamActiveScoped = activeTeamMembersV92;
           if (activeShiftV82 !== 'ALL' && !isDateAll) {
-            teamTargetMembers = teamTargetMembers.filter(usr => {
+            teamActiveScoped = activeTeamMembersV92.filter(usr => {
               const effSh = window.getAgentEffectiveShiftLabelForDateV82(usr.id, effDateStr);
               return window.classifyShiftBucketV82(effSh) === activeShiftV82;
             });
+            teamTargetMembers = teamActiveScoped;
           }
 
           const calDaysInMonthV91 = (typeof window.getCalendarDaysInMonthKeyV62 === 'function')
             ? window.getCalendarDaysInMonthKeyV62(selectedMonthKey)
             : 30;
-          const teamWorkTargetSumV91 = teamTargetMembers.reduce((sum, m) => {
-            const baseTgt = Number(m.baseTarget) || 0;
-            return sum + calcWorkingTargetFromBase(baseTgt, m.team);
+          const teamBaseTargetSumV92 = teamTargetMembers.reduce((sum, m) => {
+            const baseTgt = Number(m.baseTarget) || (m.role === 'admin' ? defaultTlBaseV92 : 0);
+            return sum + baseTgt;
           }, 0);
+          const teamWorkTargetSumV91 = calcWorkingTargetFromBase(teamBaseTargetSumV92, normCh);
           const teamDailyTarget = calDaysInMonthV91 > 0 ? Math.round(teamWorkTargetSumV91 / calDaysInMonthV91) : 0;
 
-          const teamSubmitterMembers = teamTargetMembers.filter(usr => usr.role !== 'admin' || includeTl);
+          const teamSubmitterMembers = teamActiveScoped.filter(usr => usr.role !== 'admin' || includeTl);
 
           const tSales = daySalesOmni.filter(s => normalizeTeamNameAlias(s.team) === normT);
           const uniqueSubmitters = new Set(tSales.map(s => String(s.userId).trim()));
@@ -31118,6 +31132,7 @@ function renderChatHubView() {
         _usersCacheMapV67.set(ck, res);
         return res.slice();
       };
+      window._rawGetUsersForMonthV62 = getUsersForMonth;
 
       // -----------------------------------------------------------------------
       // B. PERMANENT CLOUD-SYNCED & ORGANIZED BELL NOTIFICATION CENTER (V67)
