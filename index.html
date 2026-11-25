@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v86)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v87)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -101,10 +101,13 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      on running sprints, plus full monthly breakdown on hover, footer Won/Pool totals, Agent slot-card
      reward pills, and CSV reward columns. Keeps Sprint "Download CSV" button inside the dark table
      header bar for Admin/TL & Supervisor only (strictly hidden & blocked for Agents).
-   - PORTAL-WIDE UI DECLUTTER & CLEAN COPY PASS (V86): Trimmed redundant stacked header pills,
-     verbose instructional helper sentences, and repetitive table-bar filler text across Dashboard
-     and all tabs for a crisp, uncluttered executive layout (0% change to formulas, Apps Script,
-     sync, permissions, buttons, or patch hooks).
+   - PORTAL-WIDE UI DECLUTTER & CLEAN COPY PASS (V86 / V87): Trimmed redundant stacked header pills,
+     verbose instructional helper sentences, and repetitive filler text across Dashboard, tabs &
+     modals; fixed broken fa-user-secret icon and invalid Tailwind padding/sizing utility classes;
+     scoped FB/WA Scale badge to All Channels; and made Role Management 2nd Mirror Sheet collapsible
+     (default collapsed). Kept Sidebar FREE badge, Live Cloud Sync box, Top Header active tab name,
+     and Chat Hub notice banner / search hint intact as requested (0% change to formulas, Apps
+     Script, sync, or permissions).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -1696,7 +1699,6 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   : `<span class="text-3xl font-black text-blue-600">${targetUser.name.charAt(0)}</span>`
                 }
               </div>
-              <p class="text-xs font-bold text-slate-500">Upload a square photo. It will automatically compress & sync next to ${String(targetUser.id) === String(currentUser.id) ? 'your' : targetUser.name + "'s"} name across the portal!</p>
             </div>
 
             <input type="file" id="profilePicFileInput" accept="image/*" onchange="handleProfilePicSelected(event)" class="hidden">
@@ -1818,7 +1820,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                 <i class="fa-solid fa-users-slash"></i> Delete for Everyone (All Panels)
               </button>
               <button type="button" onclick="executeAdminChatDelete('ONLY_ME')" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2">
-                <i class="fa-solid fa-user-Secret"></i> Delete for Only Me (My Panel Only)
+                <i class="fa-solid fa-user-secret"></i> Delete for Only Me (My Panel Only)
               </button>
               <button type="button" onclick="closeModal('chatDeleteModal')" class="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-600">
                 Cancel
@@ -3085,12 +3087,8 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                 ` : ''}
                 ${isSuperAdmin(u) ? `
                 <div class="pt-2 mt-2 border-t border-slate-200/80">
-                  <span class="px-2.5 text-[9px] font-black uppercase tracking-widest text-purple-600 block mb-1">Nazim Master Control</span>
-                  <button onclick="setTab('role_management')" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'role_management' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg' : 'bg-purple-50 text-purple-900 hover:bg-purple-100 border border-purple-200'}">
-                    <span class="flex items-center gap-2.5">
-                      <i class="fa-solid fa-user-shield text-sm ${activeTab === 'role_management' ? 'text-amber-300' : 'text-purple-600'}"></i> Role & Feature Access
-                    </span>
-                    <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${activeTab === 'role_management' ? 'bg-white/20 text-white' : 'bg-purple-600 text-white'}">ONLY YOU</span>
+                  <button onclick="setTab('role_management')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-colors ${activeTab === 'role_management' ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg' : 'bg-purple-50 text-purple-900 hover:bg-purple-100 border border-purple-200'}">
+                    <i class="fa-solid fa-user-shield text-sm ${activeTab === 'role_management' ? 'text-amber-300' : 'text-purple-600'}"></i> Role & Feature Access
                   </button>
                 </div>
                 ` : ''}
@@ -4181,9 +4179,6 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                     </span>
                     <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200/80">
                       <i class="fa-solid fa-users text-slate-400 mr-1"></i>${canViewAll(u) ? `${tInfo.agentCount} Active Agents` : `Grade: ${myMonthUser.grade}`}
-                    </span>
-                    <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200/60">
-                      <i class="fa-regular fa-calendar-check mr-1"></i>${periodLabel}
                     </span>
                   </div>
                   <h2 class="text-xl font-black text-slate-900 mt-1 truncate">Welcome, ${u.name}! 👋</h2>
@@ -6332,7 +6327,6 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
               <div class="card-dynamic overflow-hidden border border-slate-200">
                 <div class="bg-slate-800 text-white px-4 py-2.5 flex items-center justify-between">
                   <span class="font-black text-xs uppercase tracking-wider"><i class="fa-solid fa-clock-rotate-left text-amber-400 mr-1.5"></i>${chMeta.name} Duty Roster & Team Assignment History Log</span>
-                  <span class="text-[10px] font-bold text-slate-300">Tracks which TL modified shifts, assigned or released members</span>
                 </div>
                 <div class="max-h-56 overflow-y-auto">
                   <table class="w-full text-left text-[11px] whitespace-nowrap">
@@ -7252,7 +7246,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
               ${recentChecks.map(rc => `
                 <button type="button" onclick="handleRunFraudCheck(null, '${rc.phone}')" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-extrabold text-white flex items-center gap-1.5 transition-colors cursor-pointer">
                   <span class="font-mono">${rc.phone}</span>
-                  <span class="px-1.5 py-0.2 rounded text-[9px] font-black ${rc.pct >= 80 ? 'bg-emerald-500 text-slate-950' : (rc.pct >= 55 ? 'bg-amber-400 text-slate-950' : 'bg-rose-500 text-white')}">${rc.pct}%</span>
+                  <span class="px-1.5 py-0.5 rounded text-[9px] font-black ${rc.pct >= 80 ? 'bg-emerald-500 text-slate-950' : (rc.pct >= 55 ? 'bg-amber-400 text-slate-950' : 'bg-rose-500 text-white')}">${rc.pct}%</span>
                 </button>
               `).join('')}
             </div>
@@ -9268,7 +9262,6 @@ function renderRankingAndComparison() {
                 <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-black"><i class="fa-solid fa-user-xmark"></i></div>
               </div>
               <p class="text-2xl font-black text-slate-900 mt-2">${absentCount} <span class="text-xs font-bold text-slate-500">Absent Day(s)</span></p>
-              <p class="text-[11px] font-bold text-amber-800 mt-0.5">Click to view full Leave & Absent log</p>
             </div>
           </div>
 
@@ -9286,7 +9279,7 @@ function renderRankingAndComparison() {
               ${agentMissingPills.map(ap => `
                 <button type="button" onclick="setMissingReportsAgentFilter('${ap.userId}')" class="px-2.5 py-1 rounded-xl text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer ${String(missingReportsAgentFilter) === String(ap.userId) ? 'bg-rose-600 text-white border-rose-600 shadow' : 'bg-rose-50/70 hover:bg-rose-100 text-slate-800 border-rose-200'}">
                   <span>${ap.userName}</span>
-                  <span class="px-1.5 py-0.2 rounded-full text-[10px] font-black ${String(missingReportsAgentFilter) === String(ap.userId) ? 'bg-white text-rose-700' : 'bg-rose-600 text-white'}">${ap.dates.length}</span>
+                  <span class="px-1.5 py-0.5 rounded-full text-[10px] font-black ${String(missingReportsAgentFilter) === String(ap.userId) ? 'bg-white text-rose-700' : 'bg-rose-600 text-white'}">${ap.dates.length}</span>
                 </button>
               `).join('')}
             </div>
@@ -9827,7 +9820,6 @@ function renderRankingAndComparison() {
                     return `<div class="${getCardThemeV70(st.teamName, false).bar} h-1.5 transition-all" style="width:${pct}%" title="${st.teamName}: ${Math.round(Number(pct))}%"></div>`;
                   }).join('')}
                 </div>
-                <span class="text-[9px] font-bold text-slate-400 shrink-0 hidden sm:inline">Click any team card to filter</span>
               </div>
               ` : ''}
               ` : ''}
@@ -9928,7 +9920,6 @@ function renderRankingAndComparison() {
                     return `<span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full ${getCardThemeV70(st.teamName, false).bar}"></span>${st.teamName}: <strong class="text-slate-900">${pct}%</strong></span>`;
                   }).join('')}
                 </div>
-                <span class="text-[9px] text-slate-400 font-bold hidden sm:inline">Click any team card to filter table</span>
               </div>
             </div>
             ` : ''}
@@ -10016,7 +10007,6 @@ function renderRankingAndComparison() {
                   <i class="fa-solid fa-file-invoice text-blue-600"></i>
                   <span>Daily Sales & Conversion Leaderboard</span>
                 </h2>
-                <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-blue-50 text-blue-700 border border-blue-200"><i class="fa-solid fa-fire text-amber-500 mr-1"></i>Live</span>
                 <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">${sales.length} Entries • ${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}${activeShiftV82 !== 'ALL' ? ` • ${activeShiftMetaV82.label}` : ''}</span>
               </div>
 
@@ -10390,7 +10380,7 @@ function renderRankingAndComparison() {
                       ` : '<span class="px-2 py-0.5 bg-slate-100 text-slate-400 rounded text-[10px] font-sans font-bold"><i class="fa-solid fa-lock mr-1"></i>Protected</span>'}
                     </td>` : ''}
                     <td class="p-3.5 font-bold">৳${Number(usr.baseTarget || 0).toLocaleString()}${(() => {
-                      if (usr.role === 'supervisor' || Number(usr.baseTarget || 0) <= 0 || !isPendingOrFloatingAgent(usr)) return '';
+                      if (activeChannel !== 'ALL_CHANNELS' || usr.role === 'supervisor' || Number(usr.baseTarget || 0) <= 0 || !isPendingOrFloatingAgent(usr)) return '';
                       const isWaScale = usr.channel === 'WHATSAPP' || getChannelForTeam(usr.team) === 'WHATSAPP' || [1696589, 1576609, 1476810, 1377011, 1277213, 498997].includes(Number(usr.baseTarget));
                       return isWaScale
                         ? ' <span class="ml-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase">🟢 WA Scale</span>'
@@ -10884,7 +10874,6 @@ function renderRankingAndComparison() {
             <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
               <div>
                 <h3 class="text-base font-black text-slate-900">Daily Sales Report Entry (Leads, Orders & Amount)</h3>
-                <p class="text-xs font-bold text-slate-400">Conversion ratio & daily target achievement calculate automatically</p>
               </div>
               <button type="button" id="subModalCloseXBtn" onclick="closeModal('submitModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -10955,7 +10944,6 @@ function renderRankingAndComparison() {
                 <div class="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200 flex items-center justify-between gap-3">
                   <div>
                     <span class="text-[11px] font-black uppercase text-amber-900 block"><i class="fa-solid fa-box-open mr-1 text-amber-600"></i>Drive Product Cumulative Entry</span>
-                    <p class="text-[10px] font-bold text-amber-700 mt-0.5">Drive Products are tracked as cumulative totals (not date-by-date).</p>
                   </div>
                   <button type="button" onclick="closeModal('submitModal'); openDriveProductModal(hasFeatureAccess(currentUser, 'feat_manage_all_sales') ? document.getElementById('subAgentId')?.value : currentUser?.id);" class="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-extrabold shrink-0 shadow-xs">
                     Update Drive Products →
@@ -13688,7 +13676,6 @@ function renderRankingAndComparison() {
                 </div>
                 <div>
                   <h3 class="text-base font-black text-slate-900">Broadcast Official Notice / Announcement</h3>
-                  <p class="text-xs font-bold text-slate-400">Select your team, combined channel, or All Channels to broadcast instantly!</p>
                 </div>
               </div>
               <button type="button" onclick="closeModal('announceModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
@@ -13878,7 +13865,6 @@ function renderRankingAndComparison() {
                 </div>
                 <div>
                   <h3 class="text-base font-black text-slate-900">Official Floor Notice Board</h3>
-                  <p class="text-xs font-bold text-slate-400">All official announcements and instructions broadcasted for your team & channel</p>
                 </div>
               </div>
               <div class="flex items-center gap-2">
@@ -14039,9 +14025,7 @@ function renderRankingAndComparison() {
           <div class="modal-card-anim bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
             <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
               <div>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-purple-100 text-purple-800">Team Leader Group Creator</span>
-                <h3 class="text-base font-black text-slate-900 mt-0.5">Create New Custom Chat Group</h3>
-                <p class="text-xs font-bold text-slate-400">Name your group and select members from any team to create a private group chat.</p>
+                <h3 class="text-base font-black text-slate-900">Create Custom Chat Group</h3>
               </div>
               <button type="button" onclick="closeModal('customChatGroupModal')" class="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -14375,7 +14359,7 @@ function renderChatHubView() {
                   ${filterPills.map(fp => `
                     <button type="button" onclick="setChatLeftFilter('${fp.key}')" class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-colors ${activeChatLeftFilter === fp.key ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}">
                       <span>${fp.label}</span>
-                      ${fp.count > 0 ? `<span class="px-1.5 py-0.2 rounded-full text-[9px] font-black ${activeChatLeftFilter === fp.key ? 'bg-white text-blue-700' : 'bg-red-600 text-white'}">${fp.count}</span>` : ''}
+                      ${fp.count > 0 ? `<span class="px-1.5 py-0.5 rounded-full text-[9px] font-black ${activeChatLeftFilter === fp.key ? 'bg-white text-blue-700' : 'bg-red-600 text-white'}">${fp.count}</span>` : ''}
                     </button>
                   `).join('')}
                 </div>
@@ -14933,7 +14917,7 @@ function renderChatHubView() {
           <!-- Top Hero Banner -->
           <div class="p-5 rounded-3xl bg-gradient-to-r from-slate-900 via-purple-950 to-indigo-950 text-white shadow-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border border-purple-500/30">
             <div class="flex items-center gap-4">
-              <div class="w-13 h-13 p-3.5 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center text-2xl shadow-lg shrink-0">
+              <div class="w-12 h-12 p-3.5 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center text-2xl shadow-lg shrink-0">
                 <i class="fa-solid fa-user-shield"></i>
               </div>
               <div>
@@ -14961,47 +14945,54 @@ function renderChatHubView() {
             </div>
           </div>
 
-          <!-- 2nd Mirror Google Sheet Setup Card (For Sharing Organized Sales, Product & Roster Tabs with TLs) -->
+          <!-- 2nd Mirror Google Sheet Setup Card (Collapsible — Default Collapsed in V87) -->
           ${(() => {
             const mCfg = getMirrorSheetConfig();
+            const isMirrorOpenV87 = Boolean(window._mirrorSheetExpandedV87);
             return `
-              <div class="card-dynamic p-5 border-2 border-emerald-200 bg-gradient-to-r from-emerald-50/50 via-white to-teal-50/40">
-                <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                  <div class="flex items-start gap-3.5">
-                    <div class="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-lg shadow-md shrink-0">
+              <div class="card-dynamic px-4 py-3 border border-emerald-200 bg-gradient-to-r from-emerald-50/50 via-white to-teal-50/40">
+                <div class="flex flex-wrap justify-between items-center gap-2.5">
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-xs shadow-xs shrink-0">
                       <i class="fa-solid fa-file-excel"></i>
                     </div>
-                    <div>
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white">2nd Google Sheet Live Mirror</span>
-                        <span class="text-[11px] font-extrabold ${mCfg.id ? 'text-emerald-700' : 'text-amber-700'}">
-                          ${mCfg.id ? `✅ Connected (ID: ${mCfg.id.slice(0, 12)}...)` : '⚡ Paste 2nd Google Sheet Link Below to Activate'}
-                        </span>
-                      </div>
-                      <h3 class="text-sm font-black text-slate-900 mt-1">Secondary Mirror Sheet for Team Leaders (Sales, Product & Roster Only)</h3>
-                      <p class="text-xs font-bold text-slate-500 mt-0.5">
-                        Create a new blank Google Sheet, paste its link below, and click <strong>Link & Sync</strong>. It will automatically mirror only the organized <strong>FB_Sales, FB_Product, FB_Roster, WA_Sales, WA_Product & WA_Roster</strong> tabs (no raw logs or Apps Script). Even if someone renames the 2nd sheet or its tabs, data will still sync automatically!
-                      </p>
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                      <span class="text-xs font-black text-slate-900">2nd Mirror Google Sheet</span>
+                      <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold ${mCfg.id ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
+                        ${mCfg.id ? `✅ Connected (${mCfg.id.slice(0, 10)}...)` : 'Not Linked'}
+                      </span>
                     </div>
                   </div>
-                  <form onsubmit="handleSaveMirrorSheetUrl(event)" class="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
-                    <input
-                      type="text"
-                      id="mirrorSheetUrlInput"
-                      value="${mCfg.url || ''}"
-                      placeholder="Paste 2nd Google Sheet URL or ID here..."
-                      class="w-full sm:w-80 px-3.5 py-2.5 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                    >
-                    <button type="submit" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
-                      <i class="fa-solid fa-link"></i> Link & Sync 2nd Sheet
-                    </button>
+                  <div class="flex items-center gap-2 shrink-0">
                     ${mCfg.id ? `
-                      <button type="button" onclick="handleForceSyncBothSheetsNow()" class="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 cursor-pointer" title="Force rebuild & sync both Main Sheet and 2nd Mirror Sheet right now">
-                        <i class="fa-solid fa-rotate"></i> Sync Both Now
+                      <button type="button" onclick="handleForceSyncBothSheetsNow()" class="h-8 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[11px] font-extrabold inline-flex items-center gap-1.5 cursor-pointer" title="Force rebuild & sync both Main Sheet and 2nd Mirror Sheet right now">
+                        <i class="fa-solid fa-rotate"></i> Sync Both
                       </button>
                     ` : ''}
-                  </form>
+                    <button type="button" onclick="window._mirrorSheetExpandedV87 = !window._mirrorSheetExpandedV87; renderAppLayout();" class="h-8 px-3 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl text-[11px] font-black inline-flex items-center gap-1.5 cursor-pointer transition-colors">
+                      <i class="fa-solid ${isMirrorOpenV87 ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px]"></i> ${isMirrorOpenV87 ? 'Hide' : 'Configure'}
+                    </button>
+                  </div>
                 </div>
+                ${isMirrorOpenV87 ? `
+                  <div class="mt-3 pt-3 border-t border-emerald-200/70 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+                    <p class="text-[11px] font-bold text-slate-500">
+                      Mirrors organized <strong>FB_Sales, FB_Product, FB_Roster, WA_Sales, WA_Product & WA_Roster</strong> tabs for TLs (no raw logs or Apps Script).
+                    </p>
+                    <form onsubmit="handleSaveMirrorSheetUrl(event)" class="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                      <input
+                        type="text"
+                        id="mirrorSheetUrlInput"
+                        value="${mCfg.url || ''}"
+                        placeholder="Paste 2nd Google Sheet URL or ID..."
+                        class="w-full sm:w-80 px-3.5 py-2 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      >
+                      <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-link"></i> Link & Sync
+                      </button>
+                    </form>
+                  </div>
+                ` : ''}
               </div>
             `;
           })()}
@@ -15059,9 +15050,9 @@ function renderChatHubView() {
                             <span class="text-[10px] font-mono font-black ${isSel ? 'text-purple-200' : 'text-blue-600'}">(${usr.id})</span>
                           </div>
                           <div class="flex items-center gap-1.5 mt-0.5">
-                            <span class="px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${isSel ? 'bg-white/20 text-white' : roleBadge}">${usr.role}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${isSel ? 'bg-white/20 text-white' : roleBadge}">${usr.role}</span>
                             <span class="text-[10px] font-bold ${isSel ? 'text-purple-100' : 'text-slate-400'}">${usr.team}</span>
-                            ${isCustom ? `<span class="px-1.5 py-0.2 rounded text-[8px] font-black uppercase ${isSel ? 'bg-amber-400 text-slate-950' : 'bg-amber-100 text-amber-800'}">Customized</span>` : ''}
+                            ${isCustom ? `<span class="px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${isSel ? 'bg-amber-400 text-slate-950' : 'bg-amber-100 text-amber-800'}">Customized</span>` : ''}
                           </div>
                         </div>
                       </div>
@@ -21233,9 +21224,6 @@ function renderChatHubView() {
                       </span>
                       <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
                         <i class="fa-solid fa-users text-slate-400 mr-1"></i>${tInfo.agentCount} Agents
-                      </span>
-                      <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
-                        ${periodLabel}
                       </span>
                     </div>
                     <h2 class="text-xl font-black text-slate-900 mt-1 truncate">Welcome, ${u.name}! 👋</h2>
