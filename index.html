@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v89)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v90)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -116,6 +116,11 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      grid + 80% & 90% progress markers), Dashboard TL Incentive Summary card, Incentive Tab KPI
      & TL table (with 90% Goal column), Incentive CSV export, and Super Admin Edit TL Rewards modal
      (syncs r80/r90/r100 cleanly via Monthly_Configs to Google Sheets without Apps Script changes).
+   - DAILY SALES REPORTS FIXED TEAM TARGET (+5% INCL. TL) & INCLUDE TL SALES TOGGLE (V90):
+     In Daily Sales Reports Daily VS team cards, Team Daily Target (+5% buffer) ALWAYS includes
+     the Team Leader's daily target regardless of the "Include TL Sales" checkbox, while unchecking
+     "Include TL Sales" hides TL names, TL rows & TL personal sales amounts across the VS cards,
+     table, footer sum & CSV export.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -9599,10 +9604,11 @@ function renderRankingAndComparison() {
         const includeTl = Boolean(window.showTlInSalesTables);
         const isCollapsed = Boolean(window._dailyCompCollapsedV70);
 
-        // Deduplicated sales for the selected date across all channels (respects Include TL Sales + V82 Shift Filter!)
+        // Deduplicated sales for the selected date across all channels (hides TL personal sales when Include TL Sales is unchecked!)
         const dedupMap = new Map();
         (allRawSalesOmni || []).forEach(s => {
           if (!s || !s.userId || !s.date) return;
+          if (!includeTl && typeof window.isUserTeamLeaderRecord === 'function' && window.isUserTeamLeaderRecord(s.userId)) return;
           const dClean = String(s.date).replace(/^'/, '').trim();
           if (dClean.startsWith('MONTHLY_PROD_')) return;
           const matchDate = isDateAll ? dClean.endsWith(selectedMonthKey) : (dClean === effDateStr);
@@ -9628,24 +9634,24 @@ function renderRankingAndComparison() {
           compMode = getChannelForTeam(logsFilterScope);
         }
 
-        // Build clean stats for any team name
+        // Build clean stats for any team name (V90: Team Daily Target +5% ALWAYS includes TL, while TL sales & rows obey Include TL Sales!)
         function computeTeamDailyStat(teamName) {
           const normT = normalizeTeamNameAlias(teamName);
-          let teamMembers = (allUsersOmni || []).filter(usr => {
+          let teamTargetMembers = (allUsersOmni || []).filter(usr => {
             if (!usr || usr.role === 'supervisor') return false;
             if (normalizeTeamNameAlias(usr.team) !== normT) return false;
             if (typeof isUserAccountDeactivated === 'function' && isUserAccountDeactivated(usr)) return false;
-            if (usr.role === 'admin') return includeTl;
+            if (usr.role === 'admin') return true;
             return !isPendingOrFloatingAgent(usr);
           });
           if (activeShiftV82 !== 'ALL' && !isDateAll) {
-            teamMembers = teamMembers.filter(usr => {
+            teamTargetMembers = teamTargetMembers.filter(usr => {
               const effSh = window.getAgentEffectiveShiftLabelForDateV82(usr.id, effDateStr);
               return window.classifyShiftBucketV82(effSh) === activeShiftV82;
             });
           }
 
-          const teamDailyTarget = teamMembers.reduce((sum, m) => {
+          const teamDailyTarget = teamTargetMembers.reduce((sum, m) => {
             const baseTgt = Number(m.baseTarget) || 0;
             const workTgt = calcWorkingTargetFromBase(baseTgt, m.team);
             const dt = (typeof window.getAgentDynamicDailyTargetV62 === 'function')
@@ -9653,6 +9659,8 @@ function renderRankingAndComparison() {
               : Math.round(workTgt / 26);
             return sum + (Number(dt) || 0);
           }, 0);
+
+          const teamSubmitterMembers = teamTargetMembers.filter(usr => usr.role !== 'admin' || includeTl);
 
           const tSales = daySalesOmni.filter(s => normalizeTeamNameAlias(s.team) === normT);
           const uniqueSubmitters = new Set(tSales.map(s => String(s.userId).trim()));
@@ -9670,7 +9678,7 @@ function renderRankingAndComparison() {
             leads,
             conv,
             submittedCount: uniqueSubmitters.size,
-            expectedCount: teamMembers.length,
+            expectedCount: teamSubmitterMembers.length,
             teamDailyTarget,
             achPct
           };
@@ -16241,7 +16249,7 @@ function renderChatHubView() {
 
         if (isAdminOrSup) {
           const checkboxHtml = `
-            <label class="h-8 flex items-center gap-1.5 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2.5 rounded-xl shadow-2xs cursor-pointer select-none transition-colors" title="Tick to include Team Leaders' personal sales in the table & bottom total">
+            <label class="h-8 flex items-center gap-1.5 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2.5 rounded-xl shadow-2xs cursor-pointer select-none transition-colors" title="Tick to show Team Leaders' names, rows & personal sales in the VS cards, table, total & CSV (Team Daily Target +5% always includes TL)">
               <input type="checkbox" ${window.showTlInSalesTables ? 'checked' : ''} onchange="toggleShowTlInSalesTables(this)" class="w-3.5 h-3.5 accent-orange-600 rounded cursor-pointer">
               <span class="text-[11px] font-black text-orange-900"><i class="fa-solid fa-crown text-amber-500 mr-1"></i>Include TL Sales</span>
             </label>
