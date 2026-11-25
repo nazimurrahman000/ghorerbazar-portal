@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v81)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v82)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -90,6 +90,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      cache during peak hours. Includes a 6-second cooldown guard (with remaining-seconds toast) to
      prevent accidental double-click / rapid forceFresh cache resets (3.5s auto delta-sync continues
      seamlessly for all roles).
+   - DAILY SALES REPORTS SHIFT-WISE FILTER (V82): Compact segmented filter (All | Morning | Evening | Night)
+     in Daily Sales Reports Row 2 beside Date picker. Groups 7 AM, 9 AM & 10 AM under Morning, 3 PM under
+     Evening, and Night (11 PM) under Night (respecting Same-Day Shift Swaps & Duty Swaps). Automatically
+     updates the top Team Daily VS comparison cards, table rows, footer sum & CSV export accordingly.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -134,7 +138,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 - postToSheet / handleSalesSubmit           => V64/V65 (serialized fastSubmit queue)
 - downloadPortalCsvFile                     => V57 (strips +5% labels/columns)
 - renderSprintTargetView / exportSprintTargetCsv => Base + V69 (Sprint Daily Target excl. DO) + V58 button + V52 actual CSV
-- renderReports                             => Base + V70 (Daily Team Comparison strip for TL/Admin/Sup) + V27 TL toggle + V41 CSV header
+- renderReports                             => Base + V82 (Shift-wise filter All/Morning/Evening/Night) + V70 (Daily Team Comparison strip) + V27 TL toggle + V41 CSV header
 - exportMonthlyPerformanceCsv / DateWise / Sprint / Ranking / DailySales / Incentive
   => wrapped via V52 wrapExportWithActualTarget()
 ================================================================================
@@ -2856,6 +2860,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       }
       if (tab === 'reports') {
         logsFilterScope = 'ALL';
+        window.reportsShiftFilterV82 = 'ALL';
         if (!reportsDateFilter) reportsDateFilter = getTodayFormatted();
       } else if (tab === 'attendance') {
         logsFilterScope = 'ALL';
@@ -9396,16 +9401,97 @@ function renderRankingAndComparison() {
       }
     };
 
+    // =========================================================================
+    // V82: COMPACT SHIFT-WISE FILTER FOR DAILY SALES REPORTS (ALL / MORNING / EVENING / NIGHT)
+    // Morning = 7:00 AM, 9:00 AM, 10:00 AM | Evening = 3:00 PM | Night = Night (11:00 PM)
+    // Automatically honors Same-Day Shift Swaps & Duty Swaps and syncs Team VS cards + Table + CSV!
+    // =========================================================================
+    window.reportsShiftFilterV82 = 'ALL';
+
+    window.setReportsShiftFilterV82 = function(shiftKey) {
+      const cleanKey = String(shiftKey || 'ALL').toUpperCase();
+      if (cleanKey !== 'ALL' && window.reportsShiftFilterV82 === cleanKey) {
+        window.reportsShiftFilterV82 = 'ALL';
+      } else {
+        window.reportsShiftFilterV82 = ['ALL', 'MORNING', 'EVENING', 'NIGHT'].includes(cleanKey) ? cleanKey : 'ALL';
+      }
+      renderAppLayout();
+    };
+
+    window.getAgentEffectiveShiftLabelForDateV82 = function(empId, dateStr) {
+      try {
+        const uid = String(empId || '').trim();
+        const cleanD = String(dateStr || '').replace(/^'/, '').trim();
+        if (!uid || !cleanD || cleanD.startsWith('MONTHLY_PROD_')) return '';
+        const mk = cleanD.length === 10 ? cleanD.substring(3) : selectedMonthKey;
+
+        // 1. Check Same-Day Shift Swap override
+        if (typeof window.getSameDayShiftSwapsStoreForMonth === 'function') {
+          const sSwaps = window.getSameDayShiftSwapsStoreForMonth(mk);
+          const sw = sSwaps && sSwaps[`${uid}_${cleanD}`];
+          if (sw && !sw.isRemoved && sw.newShift) {
+            return String(sw.newShift).trim();
+          }
+        }
+        // 2. Check Duty / DO Swap covered shift override
+        if (typeof window.getDutySwapsStoreForMonth === 'function') {
+          const dSwaps = window.getDutySwapsStoreForMonth(mk);
+          if (dSwaps) {
+            const dKeys = Object.keys(dSwaps);
+            for (let i = 0; i < dKeys.length; i++) {
+              const dsw = dSwaps[dKeys[i]];
+              if (dsw && !dsw.isRemoved && String(dsw.workingUserId || '').trim() === uid && String(dsw.coveredDate || '').trim() === cleanD && dsw.coveredShift) {
+                return String(dsw.coveredShift).trim();
+              }
+            }
+          }
+        }
+        // 3. Fast O(1) memoized Duty Roster shift
+        if (typeof window.getAgentRosterShiftForDateStr === 'function') {
+          return String(window.getAgentRosterShiftForDateStr(uid, cleanD) || '').trim();
+        }
+      } catch (eSh82) {}
+      return '';
+    };
+
+    window.classifyShiftBucketV82 = function(shiftStr) {
+      const s = String(shiftStr || '').trim().toUpperCase();
+      if (!s || s === 'DO' || s.includes('OFF')) return 'DO';
+      if (s.includes('NIGHT') || s.includes('11:00') || s.includes('11 PM') || s.includes('11PM')) return 'NIGHT';
+      if (s.includes('3:00') || s.includes('EVENING')) return 'EVENING';
+      if (s.includes('7:00') || s.includes('9:00') || s.includes('10:00') || s.includes('8:00') || s.includes('MORNING') || s.includes('AM')) return 'MORNING';
+      if (s.includes('PM')) return 'EVENING';
+      return 'OTHER';
+    };
+
+    window.doesSalesRecordMatchShiftFilterV82 = function(rec, shiftFilterOverride) {
+      const sf = shiftFilterOverride || window.reportsShiftFilterV82 || 'ALL';
+      if (sf === 'ALL') return true;
+      if (!rec || !rec.userId || !rec.date) return false;
+      const effShift = window.getAgentEffectiveShiftLabelForDateV82(rec.userId, rec.date);
+      return window.classifyShiftBucketV82(effShift) === sf;
+    };
+
+    window.getShiftPillMetaV82 = function(sf) {
+      const k = String(sf || 'ALL').toUpperCase();
+      if (k === 'MORNING') return { key: 'MORNING', label: 'Morning', shortLabel: 'Morning', icon: 'fa-sun', chipCls: 'bg-amber-50 text-amber-800 border-amber-200', activeCls: 'bg-amber-500 text-white shadow-xs', title: 'Morning Shift (7:00 AM, 9:00 AM, 10:00 AM)' };
+      if (k === 'EVENING') return { key: 'EVENING', label: 'Evening', shortLabel: 'Evening', icon: 'fa-cloud-sun', chipCls: 'bg-orange-50 text-orange-800 border-orange-200', activeCls: 'bg-orange-500 text-white shadow-xs', title: 'Evening Shift (3:00 PM)' };
+      if (k === 'NIGHT')   return { key: 'NIGHT',   label: 'Night',   shortLabel: 'Night',   icon: 'fa-moon', chipCls: 'bg-indigo-50 text-indigo-800 border-indigo-200', activeCls: 'bg-indigo-600 text-white shadow-xs', title: 'Night Shift (11:00 PM)' };
+      return { key: 'ALL', label: 'All Shifts', shortLabel: 'All', icon: 'fa-clock', chipCls: 'bg-slate-100 text-slate-700 border-slate-200', activeCls: 'bg-slate-900 text-white shadow-xs', title: 'Show All Shifts' };
+    };
+
     window.renderDailyTeamComparisonStripV70 = function(u, allUsersOmni, allRawSalesOmni) {
       try {
         if (!u || !canViewAll(u)) return '';
         const isDateAll = (reportsDateFilter === 'ALL');
         const effDateStr = isDateAll ? getTodayFormatted() : reportsDateFilter;
+        const activeShiftV82 = window.reportsShiftFilterV82 || 'ALL';
+        const shiftMetaV82 = window.getShiftPillMetaV82(activeShiftV82);
         const dateLabel = isDateAll ? `Month (${selectedMonthKey})` : cleanDisplayDate(effDateStr);
         const includeTl = Boolean(window.showTlInSalesTables);
         const isCollapsed = Boolean(window._dailyCompCollapsedV70);
 
-        // Deduplicated sales for the selected date across all channels (already respects Include TL Sales!)
+        // Deduplicated sales for the selected date across all channels (respects Include TL Sales + V82 Shift Filter!)
         const dedupMap = new Map();
         (allRawSalesOmni || []).forEach(s => {
           if (!s || !s.userId || !s.date) return;
@@ -9416,7 +9502,10 @@ function renderRankingAndComparison() {
           const k = `${String(s.userId).trim()}_${dClean}`;
           if (!dedupMap.has(k)) dedupMap.set(k, { ...s, date: dClean });
         });
-        const daySalesOmni = Array.from(dedupMap.values());
+        let daySalesOmni = Array.from(dedupMap.values());
+        if (activeShiftV82 !== 'ALL') {
+          daySalesOmni = daySalesOmni.filter(s => window.doesSalesRecordMatchShiftFilterV82(s, activeShiftV82));
+        }
         const monthSalesPreloadedV70 = deduplicateSalesRecordsList(allRawSalesOmni || []).filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'));
 
         // Determine which channel mode to display in the comparison strip
@@ -9434,13 +9523,19 @@ function renderRankingAndComparison() {
         // Build clean stats for any team name
         function computeTeamDailyStat(teamName) {
           const normT = normalizeTeamNameAlias(teamName);
-          const teamMembers = (allUsersOmni || []).filter(usr => {
+          let teamMembers = (allUsersOmni || []).filter(usr => {
             if (!usr || usr.role === 'supervisor') return false;
             if (normalizeTeamNameAlias(usr.team) !== normT) return false;
             if (typeof isUserAccountDeactivated === 'function' && isUserAccountDeactivated(usr)) return false;
             if (usr.role === 'admin') return includeTl;
             return !isPendingOrFloatingAgent(usr);
           });
+          if (activeShiftV82 !== 'ALL' && !isDateAll) {
+            teamMembers = teamMembers.filter(usr => {
+              const effSh = window.getAgentEffectiveShiftLabelForDateV82(usr.id, effDateStr);
+              return window.classifyShiftBucketV82(effSh) === activeShiftV82;
+            });
+          }
 
           const teamDailyTarget = teamMembers.reduce((sum, m) => {
             const baseTgt = Number(m.baseTarget) || 0;
@@ -9599,6 +9694,7 @@ function renderRankingAndComparison() {
                 <div class="flex flex-wrap items-center gap-1.5">
                   <span class="px-2 py-0.5 rounded-md bg-purple-600 text-white text-[10px] font-black uppercase inline-flex items-center gap-1"><i class="fa-solid fa-scale-balanced text-[9px]"></i>All Teams Daily VS</span>
                   <span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-extrabold text-slate-600">${dateLabel}</span>
+                  ${activeShiftV82 !== 'ALL' ? `<span class="px-2 py-0.5 rounded-md border text-[10px] font-black inline-flex items-center gap-1 ${shiftMetaV82.chipCls}"><i class="fa-solid ${shiftMetaV82.icon} text-[9px]"></i>${shiftMetaV82.label}</span>` : ''}
                 </div>
 
                 <!-- Slim Inline Channel Battle Pill (FB VS WA) — Clickable to filter by Channel -->
@@ -9707,6 +9803,7 @@ function renderRankingAndComparison() {
               <div class="flex items-center gap-1.5">
                 <span class="px-2 py-0.5 rounded-md ${chBadgeCls} text-[10px] font-black uppercase inline-flex items-center gap-1"><i class="${chIcon} text-[9px]"></i>${chLabel} Daily VS</span>
                 <span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-extrabold text-slate-600">${dateLabel}</span>
+                ${activeShiftV82 !== 'ALL' ? `<span class="px-2 py-0.5 rounded-md border text-[10px] font-black inline-flex items-center gap-1 ${shiftMetaV82.chipCls}"><i class="fa-solid ${shiftMetaV82.icon} text-[9px]"></i>${shiftMetaV82.label}</span>` : ''}
               </div>
               <div class="flex flex-wrap items-center gap-1.5">
                 ${topStatusPill}
@@ -9790,7 +9887,11 @@ function renderRankingAndComparison() {
         const key = `${s.userId}_${s.date}`;
         if (!uniqueMap.has(key)) uniqueMap.set(key, s);
       });
-      sales = Array.from(uniqueMap.values()).sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0) || (Number(b.orders) || 0) - (Number(a.orders) || 0));
+      const activeShiftV82 = window.reportsShiftFilterV82 || 'ALL';
+      const activeShiftMetaV82 = window.getShiftPillMetaV82 ? window.getShiftPillMetaV82(activeShiftV82) : { label: 'All Shifts', shortLabel: 'All' };
+      sales = Array.from(uniqueMap.values())
+        .filter(s => !window.doesSalesRecordMatchShiftFilterV82 || window.doesSalesRecordMatchShiftFilterV82(s, activeShiftV82))
+        .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0) || (Number(b.orders) || 0) - (Number(a.orders) || 0));
 
       let sumLeads = 0, sumOrders = 0, sumAmount = 0, sumDailyTgt = 0;
       const monthSalesPreloadedRR = deduplicateSalesRecordsList(allRawSalesOmni).filter(r => String(r.date || '').endsWith(selectedMonthKey) && !String(r.date || '').startsWith('MONTHLY_PROD_'));
@@ -9822,7 +9923,7 @@ function renderRankingAndComparison() {
                   <span>Daily Sales & Conversion Leaderboard</span>
                 </h2>
                 <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-blue-50 text-blue-700 border border-blue-200"><i class="fa-solid fa-fire text-amber-500 mr-1"></i>Live</span>
-                <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">${sales.length} Entries • ${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}</span>
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">${sales.length} Entries • ${cleanDisplayDate(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}${activeShiftV82 !== 'ALL' ? ` • ${activeShiftMetaV82.label}` : ''}</span>
               </div>
 
               <div class="flex flex-wrap items-center gap-2 shrink-0">
@@ -9846,6 +9947,13 @@ function renderRankingAndComparison() {
                   <i class="fa-solid fa-calendar-day text-blue-600 text-[11px]"></i>
                   <span class="text-[10px] font-extrabold uppercase text-slate-500">Date:</span>
                   <input type="date" value="${dateToInputVal(reportsDateFilter === 'ALL' ? getTodayFormatted() : reportsDateFilter)}" onchange="setReportsDateFilter(inputValToDateStr(this.value))" class="bg-transparent text-xs font-black text-slate-900 focus:outline-none cursor-pointer">
+                </div>
+
+                <div class="h-8 inline-flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-xl border border-slate-200/90 shadow-2xs" title="Filter Daily Sales & Team VS totals by Roster Shift">
+                  <button type="button" onclick="window.setReportsShiftFilterV82('ALL')" class="h-7 px-2 rounded-lg text-[10px] font-black transition-all cursor-pointer ${activeShiftV82 === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}">All</button>
+                  <button type="button" onclick="window.setReportsShiftFilterV82('MORNING')" title="Morning Shift (7:00 AM, 9:00 AM & 10:00 AM)" class="h-7 px-2 rounded-lg text-[10px] font-black inline-flex items-center gap-1 transition-all cursor-pointer ${activeShiftV82 === 'MORNING' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}"><i class="fa-solid fa-sun text-[9px] ${activeShiftV82 === 'MORNING' ? 'text-white' : 'text-amber-500'}"></i>Morning</button>
+                  <button type="button" onclick="window.setReportsShiftFilterV82('EVENING')" title="Evening Shift (3:00 PM)" class="h-7 px-2 rounded-lg text-[10px] font-black inline-flex items-center gap-1 transition-all cursor-pointer ${activeShiftV82 === 'EVENING' ? 'bg-orange-500 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}"><i class="fa-solid fa-cloud-sun text-[9px] ${activeShiftV82 === 'EVENING' ? 'text-white' : 'text-orange-500'}"></i>Evening</button>
+                  <button type="button" onclick="window.setReportsShiftFilterV82('NIGHT')" title="Night Shift (11:00 PM)" class="h-7 px-2 rounded-lg text-[10px] font-black inline-flex items-center gap-1 transition-all cursor-pointer ${activeShiftV82 === 'NIGHT' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-white/80'}"><i class="fa-solid fa-moon text-[9px] ${activeShiftV82 === 'NIGHT' ? 'text-white' : 'text-indigo-500'}"></i>Night</button>
                 </div>
               </div>
 
@@ -9895,7 +10003,7 @@ function renderRankingAndComparison() {
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 font-semibold">
-                ${sales.length === 0 ? `<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No sales reports submitted for ${reportsDateFilter === 'ALL' ? selectedMonthKey : cleanDisplayDate(reportsDateFilter)} yet. Be the first to submit today!</td></tr>` : ''}
+                ${sales.length === 0 ? `<tr><td colspan="11" class="p-8 text-center text-slate-400 font-bold">No ${activeShiftV82 !== 'ALL' ? `${activeShiftMetaV82.label} shift ` : ''}sales reports submitted for ${reportsDateFilter === 'ALL' ? selectedMonthKey : cleanDisplayDate(reportsDateFilter)} yet.${activeShiftV82 !== 'ALL' ? ' Click "All" to view all shifts.' : ' Be the first to submit today!'}</td></tr>` : ''}
                 ${sales.map((s, idx) => {
                   const agObj = allUsers.find(usr => String(usr.id) === String(s.userId)) || u;
                   const agWorkTarget = calcWorkingTargetFromBase((agObj.baseTarget !== undefined && agObj.baseTarget !== null) ? Number(agObj.baseTarget) : 1232174, agObj.team);
@@ -9913,7 +10021,16 @@ function renderRankingAndComparison() {
                   return `
                   <tr class="${isMe ? 'bg-blue-50/75 font-extrabold' : 'hover:bg-slate-50/90'}">
                     <td class="p-3.5 text-center">${rankPill}</td>
-                    <td class="p-3.5 font-bold text-slate-700">${cleanDisplayDate(s.date)}</td>
+                    <td class="p-3.5 font-bold text-slate-700">${cleanDisplayDate(s.date)}${(() => {
+                      const rowSh = window.getAgentEffectiveShiftLabelForDateV82 ? window.getAgentEffectiveShiftLabelForDateV82(s.userId, s.date) : '';
+                      if (!rowSh) return '';
+                      const bkt = window.classifyShiftBucketV82 ? window.classifyShiftBucketV82(rowSh) : '';
+                      const cls = bkt === 'MORNING' ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : (bkt === 'EVENING' ? 'bg-orange-50 text-orange-800 border-orange-200'
+                        : (bkt === 'NIGHT' ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                        : 'bg-slate-100 text-slate-500 border-slate-200'));
+                      return `<span class="ml-1.5 px-1.5 py-0.5 rounded border text-[9px] font-black ${cls}" title="Roster Shift: ${rowSh}">${rowSh}</span>`;
+                    })()}</td>
                     <td class="p-3.5 font-extrabold text-slate-900">
                       <div class="flex items-center gap-2.5">
                         ${renderUserAvatarHtml(agObj, 'w-7 h-7 rounded-xl text-[11px]', 'bg-blue-100 text-blue-700', false)}
@@ -9953,7 +10070,7 @@ function renderRankingAndComparison() {
               <tfoot class="bg-slate-900 text-white font-black text-xs">
                 <tr>
                   <td colspan="4" class="p-4 uppercase tracking-wider text-amber-400">
-                    <i class="fa-solid fa-calculator mr-1.5"></i> Total Sum (${sales.length} ${sales.length === 1 ? 'Agent Entry' : 'Agent Entries'})
+                    <i class="fa-solid fa-calculator mr-1.5"></i> ${activeShiftV82 !== 'ALL' ? `${activeShiftMetaV82.label} ` : ''}Total Sum (${sales.length} ${sales.length === 1 ? 'Agent Entry' : 'Agent Entries'})
                   </td>
                   <td class="p-4 text-center">${sumLeads.toLocaleString()}</td>
                   <td class="p-4 text-center text-blue-300">${sumOrders.toLocaleString()}</td>
@@ -18723,6 +18840,10 @@ function renderChatHubView() {
           ? scopeSales.filter(s => String(s.date || '').endsWith(selectedMonthKey) && !String(s.date || '').startsWith('MONTHLY_PROD_'))
           : scopeSales.filter(s => s.date === reportsDateFilter && !String(s.date || '').startsWith('MONTHLY_PROD_'));
         if (logsFilterScope === 'MINE') dateSales = dateSales.filter(s => String(s.userId) === String(u.id));
+        const activeShiftCsvV82 = window.reportsShiftFilterV82 || 'ALL';
+        if (activeShiftCsvV82 !== 'ALL' && typeof window.doesSalesRecordMatchShiftFilterV82 === 'function') {
+          dateSales = dateSales.filter(s => window.doesSalesRecordMatchShiftFilterV82(s, activeShiftCsvV82));
+        }
         dateSales.sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
 
         const headers = ['Rank', 'Date', 'Emp ID', 'Agent Name', 'Team', 'Leads', 'Orders', 'Conv. Ratio (%)', 'Sales Amount (BDT)', 'Daily Target (BDT)', 'Daily Achieved (%)'];
@@ -18740,7 +18861,8 @@ function renderChatHubView() {
         const totConv = sumL > 0 ? ((sumO / sumL) * 100).toFixed(2) + '%' : '0.00%';
         const totAch = sumTgt > 0 ? Math.round((sumAmt / sumTgt) * 100) + '%' : '0%';
         rows.push(['TOTAL', reportsDateFilter, 'ALL', `TOTAL (${rows.length} Entries)`, logsFilterScope, sumL, sumO, totConv, sumAmt, sumTgt, totAch]);
-        downloadPortalCsvFile(`Daily_Sales_Report_${(reportsDateFilter || selectedMonthKey).replace(/\//g, '-')}.csv`, headers, rows);
+        const shiftSlugV82 = activeShiftCsvV82 !== 'ALL' ? `_${activeShiftCsvV82}` : '';
+        downloadPortalCsvFile(`Daily_Sales_Report_${(reportsDateFilter || selectedMonthKey).replace(/\//g, '-')}${shiftSlugV82}.csv`, headers, rows);
       };
 
       const _origRenderDashboardV41 = renderDashboard;
