@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v85)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v86)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -101,6 +101,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      on running sprints, plus full monthly breakdown on hover, footer Won/Pool totals, Agent slot-card
      reward pills, and CSV reward columns. Keeps Sprint "Download CSV" button inside the dark table
      header bar for Admin/TL & Supervisor only (strictly hidden & blocked for Agents).
+   - PORTAL-WIDE UI DECLUTTER & CLEAN COPY PASS (V86): Trimmed redundant stacked header pills,
+     verbose instructional helper sentences, and repetitive table-bar filler text across Dashboard
+     and all tabs for a crisp, uncluttered executive layout (0% change to formulas, Apps Script,
+     sync, permissions, buttons, or patch hooks).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -4326,13 +4330,12 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                 <div class="flex justify-between items-start gap-2">
                   <div>
                     <div class="flex items-center gap-1.5">
-                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-600 text-white">TL / Team Total Target Reward</span>
-                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-white text-indigo-800 border border-indigo-200')}">
-                        ${hit100 ? '🏆 100% Full Reward Unlocked!' : (hit80 ? '🔥 80% Reward Unlocked!' : '80% & 100% Milestones')}
+                      <span class="px-2 py-0.5 rounded text-[9px] font-black uppercase ${hit100 ? 'bg-emerald-600 text-white' : (hit80 ? 'bg-amber-500 text-white' : 'bg-indigo-600 text-white')}">
+                        ${hit100 ? '🏆 100% Unlocked' : (hit80 ? '🔥 80% Unlocked' : 'TL Milestone')}
                       </span>
                     </div>
                     <h3 class="text-base font-black text-slate-900 mt-1">
-                      ${dashboardScope === 'ALL' ? 'Overall Floor Milestone (80% / 100%)' : `${dashboardScope} — TL Reward Milestone`}
+                      ${dashboardScope === 'ALL' ? 'Floor Milestone (80% / 100%)' : `${dashboardScope} — Milestone`}
                     </h3>
                   </div>
                   <button onclick="setTab('sprint_target')" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 shrink-0 transition-colors" title="View all agents' live 10-day Sprint performance">
@@ -4474,10 +4477,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
               </h3>
               <div class="flex flex-wrap items-center gap-2">
                 <button onclick="setTab('drive_product')" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-extrabold shadow-sm flex items-center gap-1.5 transition-colors">
-                  <i class="fa-solid fa-box-open"></i> Drive Product Details (Agent & Date-wise)
+                  <i class="fa-solid fa-box-open"></i> Drive Product Details
                 </button>
                 ${hasFeatureAccess(u, 'feat_edit_products') ? `<button onclick="openProductConfigModal()" class="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-[11px] font-extrabold hover:bg-blue-100"><i class="fa-solid fa-pen mr-1"></i>Edit Product Targets</button>` : ''}
-                <span class="px-2.5 py-0.5 rounded-full bg-white border text-[10px] font-extrabold text-slate-600">90% = Entry Bonus | 100% = Full Bonus</span>
+                <span class="px-2.5 py-0.5 rounded-full bg-white border text-[10px] font-extrabold text-slate-600">90% Entry • 100% Full</span>
               </div>
             </div>
 
@@ -4949,18 +4952,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             <!-- Row 1: Title & Primary Action Buttons -->
             <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3.5 border-b border-slate-100">
               <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200">
-                    <i class="fa-solid fa-box-open mr-1"></i>Date-Range Cumulative Totals
-                  </span>
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-700">Month: ${monthLabel}</span>
-                </div>
-                <h2 class="text-xl font-black text-slate-900 mt-1">
-                  <i class="fa-solid fa-box-open text-amber-500 mr-2"></i>Drive Product Total Achievement (${monthLabel})
+                <h2 class="text-lg font-black text-slate-900">
+                  <i class="fa-solid fa-box-open text-amber-500 mr-2"></i>Drive Product (${monthLabel})
                 </h2>
-                <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  Select a date range to enter cumulative product totals, filter by team/agent, or download the selected data as an Excel/CSV spreadsheet.
-                </p>
               </div>
 
               <div class="flex flex-wrap items-center gap-2.5 shrink-0">
@@ -4971,7 +4965,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                 ` : ''}
                 ${!isCurrentChannelReadOnlyForUser(u) ? `
                 <button onclick="openDriveProductModal('${u.role === 'agent' ? u.id : (driveProdAgentId !== 'ALL' ? driveProdAgentId : '')}')" class="h-9 px-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-xl text-xs font-extrabold shadow-sm inline-flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-calendar-plus"></i> Add / Update Drive Product (Date Range)
+                  <i class="fa-solid fa-calendar-plus"></i> Update Drive Product
                 </button>
                 ` : ''}
                 <button onclick="exportDriveProductCsv()" class="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer" title="Download filtered Drive Product table as Excel/CSV">
@@ -5447,11 +5441,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         <div class="space-y-4 mt-6">
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200">
             <div>
-              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-100 text-indigo-800">${isAdminOrSup ? 'Date-by-Date Team & Channel Summary' : `${myAgentTeam} — Date-Wise Team Summary`}</span>
-              <h3 class="text-base font-black text-slate-900 mt-1">
-                <i class="fa-solid fa-calendar-check text-indigo-600 mr-1.5"></i>${isAdminOrSup ? `Date-Wise Team & Total ${chMeta.name} Channel Sales Reports (${selectedMonthKey})` : `${myAgentTeam} — Date-Wise Team Total Sales Report (${selectedMonthKey})`}
+              <h3 class="text-base font-black text-slate-900">
+                <i class="fa-solid fa-calendar-check text-indigo-600 mr-1.5"></i>${isAdminOrSup ? `Date-Wise Team & ${chMeta.name} Sales (${selectedMonthKey})` : `${myAgentTeam} — Date-Wise Sales (${selectedMonthKey})`}
               </h3>
-              <p class="text-xs font-bold text-slate-500">${isAdminOrSup ? `Chronological day-by-day sales breakdown for each individual team AND the combined ${chMeta.fullTitle} total, with individual CSV download on every table.` : `Chronological day-by-day sales breakdown for ${myAgentTeam} (${selectedMonthKey}).`}</p>
             </div>
             ${isAdminOrSup ? `
             <div class="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
@@ -5571,20 +5563,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             <!-- Row 1: Title & Primary Action Buttons -->
             <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 ${canViewAll(u) ? 'pb-3.5 border-b border-slate-100' : ''}">
               <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-purple-100 text-purple-800 border border-purple-200">
-                    <i class="fa-solid fa-chart-column mr-1"></i>Monthly Summary & Date-Wise Archive
-                  </span>
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-700">
-                    Period: ${monthLabel}
-                  </span>
-                </div>
-                <h2 class="text-xl font-black text-slate-900 mt-1">
-                  ${getActiveChannelMeta().fullTitle} — Monthly Performance Report (${monthLabel})
+                <h2 class="text-lg font-black text-slate-900">
+                  <i class="fa-solid fa-chart-column text-purple-600 mr-2"></i>${getActiveChannelMeta().name} — Monthly Performance (${monthLabel})
                 </h2>
-                <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  ${canViewAll(u) ? `Filter by Team or Agent, sort by Sales Amount or Achievement %, and download Excel/CSV reports anytime.` : `View your complete monthly summary and date-wise performance table with CSV download.`}
-                </p>
               </div>
 
               <div class="flex flex-wrap items-center gap-2.5 shrink-0">
@@ -5786,9 +5767,6 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                     <i class="fa-solid fa-calendar-day text-blue-600 mr-1.5"></i> 
                     ${singleAgentObj.name}'s Date-Wise Monthly Performance (${monthLabel})
                   </h3>
-                  <p class="text-xs font-bold text-slate-400">
-                    ${isAdmin ? 'Admin Editable Mode: Any Edit or Delete here will show a confirmation warning and automatically update Agent Panel, Central Dashboard & Google Sheet.' : 'Day-by-day sales, conversion ratio, product weights & grand total sum'}
-                  </p>
                 </div>
                 <div class="flex items-center gap-2">
                   ${isAdmin ? `
@@ -5900,12 +5878,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           ${isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(activityTeamFilter, "setActivityTeamFilter") : ""}
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200">
             <div>
-              <h2 class="text-xl font-black text-slate-900">
-                <i class="fa-solid fa-list-check text-rose-500 mr-2"></i>System Activity Logs
+              <h2 class="text-lg font-black text-slate-900">
+                <i class="fa-solid fa-list-check text-rose-500 mr-2"></i>Activity Logs
               </h2>
-              <p class="text-xs font-bold text-slate-500 mt-0.5">
-                ${canViewAll(u) ? 'Complete real-time activity timeline of all Agents, Supervisors, and Admins' : 'Your personal activity timeline (logins, breaks, sales report submissions & updates)'}
-              </p>
             </div>
 
             ${canViewAll(u) ? `
@@ -6258,15 +6233,12 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             return `
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl border ${pendingCount > 0 ? 'border-2 border-amber-400 bg-amber-50/40' : 'border-slate-200'}">
               <div>
-                <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-calendar-week ${chMeta.colorClass} mr-2"></i>${chMeta.fullTitle} — Duty Roster (${monthTitle})</h2>
-                <p class="text-xs font-bold text-slate-500">
-                  ${isEditable ? 'Change shift dropdowns below and click "Save Roster Changes", or click "+ Add / Assign Member to Roster" to add an agent via team dropdown.' : 'View weekly shift schedule, active work force, and combined shift summary below.'}
-                </p>
+                <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-calendar-week ${chMeta.colorClass} mr-2"></i>${chMeta.name} — Duty Roster (${monthTitle})</h2>
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 ${(isEditable && !isCurrentChannelReadOnlyForUser(u)) ? `
                   <button type="button" onclick="handleAddCustomRosterRowPrompt()" class="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer transition-all">
-                    <i class="fa-solid fa-user-plus"></i> + Add / Assign Member to Roster
+                    <i class="fa-solid fa-user-plus"></i> + Add Member
                   </button>
                 ` : ''}
                 ${pendingCount > 0 ? `
@@ -6305,7 +6277,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           <div class="card-dynamic overflow-hidden border-2 border-purple-200">
             <div class="bg-gradient-to-r from-purple-700 to-indigo-700 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
               <span class="font-black text-xs uppercase tracking-wider"><i class="fa-solid fa-user-astronaut mr-1.5"></i>Unassigned / Pending & Floating Agents Pool (${unassignedAgentsList.length} Available)</span>
-              <span class="text-[10px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full">Any Team Leader (Facebook or WhatsApp) can assign an available agent from this pool to their team & roster</span>
+              <span class="text-[10px] font-extrabold bg-white/20 px-2.5 py-0.5 rounded-full">Available for Team Assignment</span>
             </div>
             <table class="w-full text-[11px] border-collapse">
               <thead class="bg-slate-50 font-extrabold text-slate-600">
@@ -7237,18 +7209,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <i class="fa-solid fa-shield-halved"></i>
                 </div>
                 <div>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-teal-400 text-slate-950">
-                      1-Click Instant Portal Scanner
-                    </span>
-                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-white/10 text-teal-200">
-                      Steadfast • Pathao • RedX • Paperfly
-                    </span>
-                  </div>
-                  <h2 class="text-xl font-black text-white mt-1">Customer Delivery Success & Return Ratio Checker</h2>
-                  <p class="text-xs font-bold text-slate-300 mt-0.5">
-                    Enter customer's 11-digit mobile number and click <strong>Check Ratio</strong> to see the complete delivery & cancel breakdown right here inside the portal.
-                  </p>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-white/10 text-teal-200">
+                    Steadfast • Pathao • RedX • Paperfly
+                  </span>
+                  <h2 class="text-lg font-black text-white mt-1">Customer Fraud & Courier Checker</h2>
                 </div>
               </div>
 
@@ -7477,14 +7441,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           ${isSupervisor(u) ? renderSupervisorQuickChannelTeamBar(logsFilterScope, "setLogsScope") : ""}
           <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  <i class="fa-regular fa-clock mr-1"></i>Live Shift & Break Tracker
-                </span>
-                <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-blue-50 text-blue-700">Period: ${selectedMonthKey}</span>
-              </div>
-              <h2 class="text-xl font-black text-slate-900 mt-1"><i class="fa-regular fa-clock text-emerald-600 mr-2"></i>Attendance & Duty Logs (${selectedMonthKey})</h2>
-              <p class="text-xs font-bold text-slate-500 mt-0.5">Live duty tracking from login to logout with break reasons and total active duration.</p>
+              <h2 class="text-lg font-black text-slate-900"><i class="fa-regular fa-clock text-emerald-600 mr-2"></i>Attendance & Duty Logs (${selectedMonthKey})</h2>
             </div>
             <div class="flex flex-wrap items-center gap-2.5 shrink-0">
               ${canViewAll(u) ? `
@@ -8105,12 +8062,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                     </span>
                   ` : ''}
                 </div>
-                <h2 class="text-xl font-black text-slate-900 mt-1">
-                  <i class="fa-solid fa-bolt text-blue-600 mr-2"></i>Agent Sprint Target Competition (${monthLabel})
+                <h2 class="text-lg font-black text-slate-900 mt-1">
+                  <i class="fa-solid fa-bolt text-blue-600 mr-2"></i>Sprint Target (${monthLabel})
                 </h2>
-                <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  Switch between <strong>Sprint 1 (Days 1–10)</strong>, <strong>Sprint 2 (Days 11–20)</strong>, or <strong>Sprint 3 (Days 21–31)</strong> and filter by team anytime.
-                </p>
               </div>
 
               <div class="flex flex-wrap items-center gap-2.5 shrink-0">
@@ -8197,7 +8151,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                 <span class="text-xs font-black uppercase tracking-wider">${phaseInfo.name} — Live Agent Leaderboard (${rankedSprintAgents.length} Agents)</span>
               </div>
               <div class="flex flex-wrap items-center gap-3">
-                <span class="text-[11px] font-bold text-slate-300">Sorted by highest ${phaseInfo.short} Sales • Floor ${phaseInfo.short} Achieved: <strong class="text-amber-300">${overallCurPct}%</strong></span>
+                <span class="text-[11px] font-bold text-slate-300">Floor ${phaseInfo.short} Achieved: <strong class="text-amber-300">${overallCurPct}%</strong></span>
                 ${(u && (u.role === 'admin' || u.role === 'supervisor')) ? `
                 <button type="button" onclick="exportSprintTargetCsv()" class="h-7 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-black shadow-xs inline-flex items-center gap-1 cursor-pointer transition-colors">
                   <i class="fa-solid fa-file-csv"></i> Download CSV
@@ -8562,14 +8516,11 @@ function renderRankingAndComparison() {
             <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 mb-4 bg-white p-4 rounded-2xl border border-slate-200">
               <div>
                 <div class="flex flex-wrap items-center gap-2">
-                  <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Overall Floor Ranking (${selectedMonthKey})</h2>
+                  <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-crown text-amber-500 mr-2"></i>Floor Ranking (${selectedMonthKey})</h2>
                   <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'}">
-                    ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'Sorted by Target Achievement Ratio (%)' : 'Sorted by Achieved Sales Revenue (৳)'}
+                    ${getEffectiveRankingSortBy() === 'ACHIEVEMENT' ? 'Achievement % Wise' : 'Sales Amount Wise'} • ${rankedAgents.length} Agents
                   </span>
                 </div>
-                <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  Leaderboard across ${getActiveChannelMeta().fullTitle} (${rankedAgents.length} Agents) — use the Sort dropdown to switch between <strong>Achievement % Wise</strong> and <strong>Amount Wise</strong> anytime.
-                </p>
               </div>
 
               <div class="flex flex-wrap items-center gap-2">
@@ -9221,23 +9172,9 @@ function renderRankingAndComparison() {
             <!-- Row 1: Title & Primary Action Buttons -->
             <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-3.5 border-b border-slate-100">
               <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-rose-100 text-rose-700 border border-rose-200">
-                    <i class="fa-solid fa-calendar-check mr-1"></i>Auto Roster-Linked Tracker
-                  </span>
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                    🌙 Night Shift Auto-Matched to Start Date
-                  </span>
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-slate-100 text-slate-600">Period: ${monthLabel}</span>
-                </div>
-                <h2 class="text-xl font-black text-slate-900 mt-1">
-                  <i class="fa-solid fa-calendar-xmark text-rose-600 mr-2"></i>${isAdminOrSup ? `${missingReportsTeamScope === 'ALL' ? chMeta.fullTitle : missingReportsTeamScope} — Missing Reports & Leave Tracker` : 'My Missing Reports & Leave / Absent Log'}
+                <h2 class="text-lg font-black text-slate-900">
+                  <i class="fa-solid fa-calendar-xmark text-rose-600 mr-2"></i>${isAdminOrSup ? `${missingReportsTeamScope === 'ALL' ? chMeta.name : missingReportsTeamScope} — Missing Reports & Leave (${monthLabel})` : `My Missing Reports & Leave (${monthLabel})`}
                 </h2>
-                <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  ${isAdminOrSup
-                    ? 'Automatically checks the Duty Roster (excluding DO) to find who missed submitting their sales report. Submit directly in 1 click or mark as Leave/Absent!'
-                    : 'Checks your weekly Duty Roster (excluding DO). If any duty date is missing a report, click "+ Submit Report" to clear it immediately.'}
-                </p>
               </div>
 
               <div class="flex flex-wrap items-center gap-2.5 shrink-0">
@@ -10363,18 +10300,7 @@ function renderRankingAndComparison() {
           <div class="card-dynamic p-5 bg-white border border-slate-200/90 shadow-xs space-y-3.5">
             <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
               <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase bg-blue-100 text-blue-800 border border-blue-200">
-                    <i class="fa-solid fa-sliders mr-1"></i>Account & Target Configuration
-                  </span>
-                  <span class="px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Active Period: ${monthLabel}
-                  </span>
-                </div>
-                <h2 class="text-xl font-black text-slate-900 mt-1"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Target Setup, Grades & User IDs (${monthLabel})</h2>
-                <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  ${isFullAdmin(u) ? `Create Agent or Supervisor IDs, check live online status (Online agents shown first), and customize monthly targets for ${monthLabel}.` : `View registered Agent, Team Leader & Supervisor accounts, live online status & monthly targets for ${monthLabel}.`}
-                </p>
+                <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-sliders text-blue-600 mr-2"></i>Target Setup & IDs (${monthLabel})</h2>
               </div>
               <div class="flex flex-wrap items-center gap-2 shrink-0">
                 ${isSuperAdmin(u) ? `
@@ -14359,7 +14285,7 @@ function renderChatHubView() {
         });
 
       let activeHeaderTitle = '🌐 Central Floor Group (All)';
-      let activeHeaderSub = 'Central Group • All Facebook & WhatsApp Teams can communicate here';
+      let activeHeaderSub = 'All Facebook & WhatsApp Teams';
       let activeHeaderBadge = renderOnlineStatusBadge(u.id);
       let isDmChannel = false;
       let activeCustomGroupMeta = null;
@@ -15011,18 +14937,10 @@ function renderChatHubView() {
                 <i class="fa-solid fa-user-shield"></i>
               </div>
               <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-400 text-slate-950 shadow">
-                    <i class="fa-solid fa-crown mr-1"></i>Nazim Exclusive Master Panel (ID: 10122)
-                  </span>
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-white/10 text-purple-200 border border-white/15">
-                    Invisible to Other Admins, Supervisors & Agents
-                  </span>
-                </div>
-                <h2 class="text-xl font-black text-white mt-1.5">Granular ID-by-ID Role & Feature Access Control</h2>
-                <p class="text-xs font-bold text-slate-300 mt-0.5">
-                  Select any Employee ID on the left and toggle ON/OFF exactly which tabs, buttons, and admin features that specific ID can use!
-                </p>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-400 text-slate-950 shadow">
+                  <i class="fa-solid fa-crown mr-1"></i>Master Control (ID: 10122)
+                </span>
+                <h2 class="text-lg font-black text-white mt-1">Role & Feature Access</h2>
               </div>
             </div>
             <div class="flex flex-wrap items-center gap-2.5 shrink-0">
@@ -16761,19 +16679,11 @@ function renderChatHubView() {
             <!-- Top Header & Filter Controls -->
             <div class="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 shadow-2xs">
               <div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800">
-                    <i class="fa-solid fa-award mr-1"></i>TL & Agent Incentive Center
-                  </span>
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700">
-                    Period: ${monthLabel}
-                  </span>
-                </div>
-                <h2 class="text-xl font-black text-slate-900 mt-1">
-                  ${chMeta.fullTitle} — Earned Cash Incentives & Product Gifts (${monthLabel})
+                <h2 class="text-lg font-black text-slate-900">
+                  <i class="fa-solid fa-award text-amber-500 mr-2"></i>Earned Incentives & Gifts (${monthLabel})
                 </h2>
                 <p class="text-xs font-bold text-slate-500 mt-0.5">
-                  Complete breakdown of Team Leader rewards (80% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()}) and Agent Sprint + Drive Product bonuses & gifts.
+                  TL Milestone: 80% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r80).toLocaleString()} • 100% = ৳${((window.getTlMilestoneRewardsForMonthV58 ? window.getTlMilestoneRewardsForMonthV58(activeChannel, selectedMonthKey) : {r80:7000,r100:12000}).r100).toLocaleString()}
                 </p>
               </div>
 
@@ -16915,7 +16825,7 @@ function renderChatHubView() {
                 <span class="text-xs font-black uppercase tracking-wider text-amber-400">
                   <i class="fa-solid fa-users-viewfinder mr-1.5"></i>Agent-Wise Sprint & Drive Product Incentive Breakdown (${data.agentRows.length} Agents)
                 </span>
-                <span class="text-[11px] font-bold text-slate-300">Shows exact Sprint & Drive Product cash bonuses and physical gifts earned by each agent</span>
+
               </div>
               <table class="w-full text-left text-xs whitespace-nowrap">
                 <thead class="table-header-light uppercase font-extrabold">
@@ -17133,7 +17043,7 @@ function renderChatHubView() {
                   <span class="text-[10px] font-black uppercase text-amber-900 mr-1"><i class="fa-solid fa-list-check mr-1"></i>Earned Breakdown:</span>
                   ${itemBreakdownPills.length > 0
                     ? itemBreakdownPills.map(p => `<span class="px-2.5 py-0.5 rounded-lg border ${p.cls} text-[11px] font-extrabold shadow-2xs">${p.label}</span>`).join('')
-                    : `<span class="text-[11px] font-bold text-amber-800">Hit 100% in Sprints or 90%/100% in Drive Products (Pink Salt 100% = 2L Mustard Oil • Black Garlic 100% = 400gm Gawa Ghee) to unlock your rewards!</span>`
+                    : `<span class="text-[11px] font-bold text-amber-800">Hit 100% in Sprints or 90%/100% in Drive Products to unlock bonuses.</span>`
                   }
                 </div>
               </div>
@@ -19129,7 +19039,7 @@ function renderChatHubView() {
         let htmlOut = _origRenderDriveProdV41();
         htmlOut = htmlOut.replace(
           `<span class="text-[11px] font-bold text-slate-300">Shows cumulative total KG sold till now & Last Update date</span>`,
-          `<div class="flex items-center gap-3"><span class="text-[11px] font-bold text-slate-300 hidden sm:inline">Shows cumulative total KG sold till now</span><button type="button" onclick="exportDriveProductCsv()" class="h-7 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-black shadow-xs inline-flex items-center gap-1 cursor-pointer"><i class="fa-solid fa-file-csv"></i> Download CSV</button></div>`
+          `<button type="button" onclick="exportDriveProductCsv()" class="h-7 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-black shadow-xs inline-flex items-center gap-1 cursor-pointer"><i class="fa-solid fa-file-csv"></i> Download CSV</button>`
         );
         return htmlOut;
       };
@@ -19155,11 +19065,11 @@ function renderChatHubView() {
         // Add Download CSV button directly inside Missing & Leave table headers
         htmlOut = htmlOut.replace(
           `<span class="text-[11px] font-bold text-slate-300">Day Off (DO) & Leave dates are automatically excluded</span>`,
-          `<div class="flex items-center gap-3"><span class="text-[11px] font-bold text-slate-300 hidden sm:inline">Day Off (DO) & Leave dates excluded</span><button type="button" onclick="exportMissingAndLeaveCsv()" class="h-7 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-black shadow-xs inline-flex items-center gap-1 cursor-pointer"><i class="fa-solid fa-file-csv"></i> Download CSV</button></div>`
+          `<button type="button" onclick="exportMissingAndLeaveCsv()" class="h-7 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-black shadow-xs inline-flex items-center gap-1 cursor-pointer"><i class="fa-solid fa-file-csv"></i> Download CSV</button>`
         );
         htmlOut = htmlOut.replace(
           `<span class="text-[11px] font-bold text-indigo-200">Shows Casual Leave, Sick Leave, Emergency Leave & Absent records</span>`,
-          `<div class="flex items-center gap-3"><span class="text-[11px] font-bold text-indigo-200 hidden sm:inline">Casual, Sick, Emergency Leave & Absent</span><button type="button" onclick="exportMissingAndLeaveCsv()" class="h-7 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-black shadow-xs inline-flex items-center gap-1 cursor-pointer"><i class="fa-solid fa-file-csv"></i> Download CSV</button></div>`
+          `<button type="button" onclick="exportMissingAndLeaveCsv()" class="h-7 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-black shadow-xs inline-flex items-center gap-1 cursor-pointer"><i class="fa-solid fa-file-csv"></i> Download CSV</button>`
         );
 
         if (currentUser && !canViewAll(currentUser)) {
@@ -19737,7 +19647,7 @@ function renderChatHubView() {
                   <span class="text-[10px] font-black uppercase text-amber-900 mr-1"><i class="fa-solid fa-list-check mr-1"></i>Earned Breakdown:</span>
                   ${itemBreakdownPills.length > 0
                     ? itemBreakdownPills.map(p => `<span class="px-2.5 py-0.5 rounded-lg border ${p.cls} text-[11px] font-extrabold shadow-2xs">${p.label}</span>`).join('')
-                    : `<span class="text-[11px] font-bold text-amber-800">Hit 100% in Sprints or 90%/100% in Drive Products (Pink Salt 100% = 2L Mustard Oil • Black Garlic 100% = 400gm Gawa Ghee) to unlock your rewards!</span>`
+                    : `<span class="text-[11px] font-bold text-amber-800">Hit 100% in Sprints or 90%/100% in Drive Products to unlock bonuses.</span>`
                   }
                 </div>
               </div>
@@ -19786,8 +19696,7 @@ function renderChatHubView() {
                       Achieved: ${exactPct}%
                     </span>
                   </div>
-                  <h3 class="text-base font-black text-slate-900 mt-1 truncate">TL Milestone & Team Agents' Incentive Summary</h3>
-                  <p class="text-xs font-semibold text-slate-500">Live overview of your TL milestone bonus and team agents' combined earnings.</p>
+                  <h3 class="text-base font-black text-slate-900 mt-1 truncate">TL & Team Incentive Summary</h3>
                 </div>
               </div>
 
@@ -21062,23 +20971,14 @@ function renderChatHubView() {
                   <i class="fa-solid fa-chart-pie"></i>
                 </div>
                 <div>
-                  <div class="flex flex-wrap items-center gap-1.5">
-                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-200/80">
-                      All-Channel Executive Matrix
-                    </span>
-                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
-                      ${allTeamsList.length} Active Teams (${fbTeamCount} Facebook + ${waTeamCount} WhatsApp)
-                    </span>
-                    <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200/70">
-                      <i class="fa-regular fa-calendar mr-1"></i>${monthLabel}
+                  <h3 class="text-base font-black text-slate-900">All-Channel Sales Summary (${monthLabel})</h3>
+                  <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-600">
+                      ${allTeamsList.length} Teams (${fbTeamCount} FB + ${waTeamCount} WA)
                     </span>
                   </div>
-                  <h3 class="text-base font-black text-slate-900 mt-0.5">Ghorerbazar All-Channel Combined Sales Summary</h3>
                 </div>
               </div>
-              <span class="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] font-bold text-slate-500">
-                <i class="fa-solid fa-hand-pointer text-indigo-500 mr-1"></i>Click any channel or team card to open its live dashboard
-              </span>
             </div>
 
             <!-- PART 1: Top 3 Spacious Channel Comparison Cards (Grand Total | Facebook Total | WhatsApp Total) -->
@@ -21329,13 +21229,13 @@ function renderChatHubView() {
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-1.5">
                       <span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase ${activeChannel === 'ALL_CHANNELS' ? 'bg-purple-600' : (activeChannel === 'WHATSAPP' ? 'bg-emerald-600' : 'bg-blue-600')} text-white shadow-2xs">
-                        <i class="${getActiveChannelMeta().icon} mr-1"></i>${activeChannel === 'ALL_CHANNELS' ? 'All Channels Executive Overview' : `${getActiveChannelMeta().fullTitle} Overview`}
+                        <i class="${getActiveChannelMeta().icon} mr-1"></i>${activeChannel === 'ALL_CHANNELS' ? 'All Channels' : getActiveChannelMeta().fullTitle}
                       </span>
                       <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700">
-                        <i class="fa-solid fa-users text-slate-400 mr-1"></i>${tInfo.agentCount} Active Agents
+                        <i class="fa-solid fa-users text-slate-400 mr-1"></i>${tInfo.agentCount} Agents
                       </span>
                       <span class="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-blue-50 text-blue-700">
-                        Active Period: ${periodLabel}
+                        ${periodLabel}
                       </span>
                     </div>
                     <h2 class="text-xl font-black text-slate-900 mt-1 truncate">Welcome, ${u.name}! 👋</h2>
@@ -26307,21 +26207,20 @@ function renderChatHubView() {
                     <i class="fa-regular fa-calendar-check mr-1"></i>Day ${mtd.elapsedDays} / ${mtd.daysInMonth}
                   </span>
                 </div>
-                <p class="text-[11px] font-bold text-slate-500 mt-0.5 truncate">Target Progress Till Today</p>
               </div>
             </div>
 
             <div class="flex flex-wrap items-center gap-3 sm:gap-4 text-xs flex-1 xl:justify-center">
               <div class="px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
-                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">MTD Target (Till Today)</span>
+                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">MTD Target</span>
                 <strong class="text-xs sm:text-sm font-black text-slate-900">৳${mtd.mtdTarget.toLocaleString()}</strong>
               </div>
               <div class="px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
-                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Achieved (Till Today)</span>
+                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Achieved</span>
                 <strong class="text-xs sm:text-sm font-black ${mtd.textCls}">৳${mtd.achieved.toLocaleString()}</strong>
               </div>
               <div class="px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
-                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">MTD Target Status</span>
+                <span class="text-[9px] font-extrabold uppercase text-slate-400 block">Status</span>
                 <div class="text-xs">${varianceHtml}</div>
               </div>
               <div class="hidden 2xl:block w-32">
