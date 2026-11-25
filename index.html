@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v82)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v83)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -94,6 +94,11 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      in Daily Sales Reports Row 2 beside Date picker. Groups 7 AM, 9 AM & 10 AM under Morning, 3 PM under
      Evening, and Night (11 PM) under Night (respecting Same-Day Shift Swaps & Duty Swaps). Automatically
      updates the top Team Daily VS comparison cards, table rows, footer sum & CSV export accordingly.
+   - SPRINT TARGET PROGRESS & REWARD DISPLAY (V83): Inside the Sprint Target leaderboard's Progress
+     column, displays each agent's exact Grade & Channel Sprint cash reward beside the % badge, smart
+     2-Sprint Combo (+৳500) / All-3 Grand Reward cue under the progress bar, rich hover tooltip, footer
+     Won/Pool reward totals, Agent top slot-card reward pill, and CSV reward column (reads live values
+     from getSprintRewardProgramForMonthV58).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -137,7 +142,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 - fetchFromSheet / handleCloudData          => V68 (ETag clientVer delta sync + submit priority + V67 bell pre-merge)
 - postToSheet / handleSalesSubmit           => V64/V65 (serialized fastSubmit queue)
 - downloadPortalCsvFile                     => V57 (strips +5% labels/columns)
-- renderSprintTargetView / exportSprintTargetCsv => Base + V69 (Sprint Daily Target excl. DO) + V58 button + V52 actual CSV
+- renderSprintTargetView / exportSprintTargetCsv => Base + V83 (Sprint Progress & Reward display) + V69 (Sprint Daily Target excl. DO) + V58 button + V52 actual CSV
 - renderReports                             => Base + V82 (Shift-wise filter All/Morning/Evening/Night) + V70 (Daily Team Comparison strip) + V27 TL toggle + V41 CSV header
 - exportMonthlyPerformanceCsv / DateWise / Sprint / Ranking / DailySales / Incentive
   => wrapped via V52 wrapExportWithActualTarget()
@@ -7737,6 +7742,65 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       };
     };
 
+    // =========================================================================
+    // V83: SPRINT PROGRESS & CASH REWARD RESOLVER (LIVE PER-GRADE & CHANNEL)
+    // =========================================================================
+    window.computeAgentSprintPhaseRewardMetaV83 = function(agObj, effPhase, s1Hit, s2Hit, s3Hit, curGoal, mKey) {
+      const mk = mKey || selectedMonthKey;
+      const gradeKey = (agObj && agObj.role === 'admin') ? 'TL' : String((agObj && agObj.grade) || '').trim();
+      if (!agObj || !gradeKey || gradeKey === 'Pending' || gradeKey === 'Supervisor' || Number(curGoal || 0) <= 0) {
+        return {
+          hasReward: false,
+          baseReward: 0,
+          isHit: false,
+          otherHits: 0,
+          totalHits: 0,
+          any2Extra: 0,
+          all3Reward: 0,
+          total100Reward: 0,
+          unlockedCashThisSprint: 0,
+          tooltip: 'No sprint reward configured for Pending / zero-target account'
+        };
+      }
+      const chKey = getChannelForTeam(agObj.team) === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+      const progMap = (typeof window.getSprintRewardProgramForMonthV58 === 'function')
+        ? window.getSprintRewardProgramForMonthV58(chKey, mk)
+        : (SPRINT_REWARD_PROGRAM[chKey] || SPRINT_REWARD_PROGRAM.FACEBOOK);
+      const spec = progMap[gradeKey] || progMap['A'] || SPRINT_REWARD_PROGRAM.FACEBOOK['A'];
+
+      const baseReward = effPhase === 'S1'
+        ? (Number(spec.s1) || 0)
+        : (effPhase === 'S2' ? (Number(spec.s2) || 0) : (Number(spec.s3) || 0));
+      const any2Extra = Number(spec.any2Extra) || 0;
+      const all3Reward = Number(spec.all3) || ((Number(spec.s1) || 0) + (Number(spec.s2) || 0) + (Number(spec.s3) || 0));
+      const total100Reward = Number(spec.total100) || 0;
+
+      const isHit = effPhase === 'S1' ? Boolean(s1Hit) : (effPhase === 'S2' ? Boolean(s2Hit) : Boolean(s3Hit));
+      const totalHits = (s1Hit ? 1 : 0) + (s2Hit ? 1 : 0) + (s3Hit ? 1 : 0);
+      const otherHits = totalHits - (isHit ? 1 : 0);
+
+      const chLabel = chKey === 'WHATSAPP' ? 'WhatsApp' : 'Facebook';
+      const phName = effPhase === 'S1' ? 'Sprint 1' : (effPhase === 'S2' ? 'Sprint 2' : 'Sprint 3');
+      const statusText = isHit ? 'UNLOCKED' : 'Target 100%';
+      const tooltip = `Grade ${gradeKey} (${chLabel}) • ${phName} Reward: ৳${baseReward.toLocaleString()} (${statusText})`
+        + (any2Extra > 0 ? ` | Any 2 Sprints Combo: +৳${any2Extra.toLocaleString()}` : '')
+        + (all3Reward > 0 ? ` | All 3 Sprints Grand Total: ৳${all3Reward.toLocaleString()}` : '')
+        + (total100Reward > 0 ? ` | 100% Monthly Bonus: ৳${total100Reward.toLocaleString()}` : '');
+
+      return {
+        hasReward: baseReward > 0,
+        baseReward,
+        isHit,
+        otherHits,
+        totalHits,
+        any2Extra,
+        all3Reward,
+        total100Reward,
+        unlockedCashThisSprint: isHit ? baseReward : 0,
+        tooltip
+      };
+    };
+
     function exportSprintTargetCsv() {
       const allUsers = getUsersForMonth(selectedMonthKey);
       const allAgents = allUsers.filter(u => u.role === 'agent');
@@ -7782,9 +7846,11 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         const curPct = curGoal > 0 ? Number(((curSales / curGoal) * 100).toFixed(2)) : 0;
         const convRatio = activeSprintLeads > 0 ? ((activeSprintOrders / activeSprintLeads) * 100).toFixed(2) + '%' : '0.00%';
         const sprintDaily = window.computeAgentSprintDailyTargetV69(ag, effPhase, curGoal, curSales, selectedMonthKey, sprintDailyCtxCsv);
+        const curHitCsv = curGoal > 0 && curSales >= curGoal;
+        const rewardMetaCsv = window.computeAgentSprintPhaseRewardMetaV83(ag, effPhase, effPhase === 'S1' && curHitCsv, effPhase === 'S2' && curHitCsv, effPhase === 'S3' && curHitCsv, curGoal, selectedMonthKey);
 
         return {
-          ag, workTgt, curGoal, curSales, curRem, curPct, activeSprintOrders, activeSprintLeads, convRatio, sprintDaily
+          ag, workTgt, curGoal, curSales, curRem, curPct, activeSprintOrders, activeSprintLeads, convRatio, sprintDaily, rewardMetaCsv
         };
       }).sort((a, b) => {
         if (getEffectiveSprintSortBy() === 'AMOUNT') {
@@ -7798,7 +7864,8 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         'Rank', 'Emp ID', 'Agent Name', 'Team', 'Grade', 'Monthly Working Target (+5%)',
         `${phaseMeta.label} Leads`, `${phaseMeta.label} Orders`, `${phaseMeta.label} Conv. Ratio`,
         `${phaseMeta.label} Goal (BDT)`, `${phaseMeta.label} Achieved (BDT)`, `${phaseMeta.label} Remaining (BDT)`,
-        `${phaseMeta.label} Daily Target (Excl. DO)`, `${phaseMeta.label} Duty Days Left`, `${phaseMeta.label} Achieved (%)`
+        `${phaseMeta.label} Daily Target (Excl. DO)`, `${phaseMeta.label} Duty Days Left`, `${phaseMeta.label} Achieved (%)`,
+        `${phaseMeta.label} Cash Reward (BDT)`, `${phaseMeta.label} Reward Status`
       ];
 
       const csvRows = rows.map((r, i) => [
@@ -7807,7 +7874,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         r.curGoal, r.curSales, r.curRem,
         r.sprintDaily ? r.sprintDaily.dailyTarget : 0,
         r.sprintDaily ? r.sprintDaily.remainingDutyDays : 0,
-        `${r.curPct}%`
+        `${r.curPct}%`,
+        r.rewardMetaCsv && r.rewardMetaCsv.hasReward ? r.rewardMetaCsv.baseReward : 0,
+        r.rewardMetaCsv && r.rewardMetaCsv.hasReward ? (r.rewardMetaCsv.isHit ? 'Unlocked' : 'On 100% Hit') : '-'
       ]);
 
       const safeMonth = selectedMonthKey.replace('/', '-');
@@ -7871,7 +7940,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         ? allAgents
         : allAgents.filter(a => a.team === sprintTabTeamScope);
 
-      let sumWorkTgt = 0, sumCurGoal = 0, sumCurSales = 0, sumCurDailyTarget = 0;
+      let sumWorkTgt = 0, sumCurGoal = 0, sumCurSales = 0, sumCurDailyTarget = 0, sumCurRewardWon = 0, sumCurRewardPool = 0;
       let sumS1Goal = 0, sumS2Goal = 0, sumS3Goal = 0;
       let sumS1 = 0, sumS2 = 0, sumS3 = 0;
       const sprintDailyCtxView = window.buildSprintDailySharedCtxV69(selectedMonthKey, activeChannel, monthSales);
@@ -7911,11 +7980,19 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         const conv = sprintLeads > 0 ? ((sprintOrders / sprintLeads) * 100).toFixed(1) : '0.0';
 
         const sprintDaily = window.computeAgentSprintDailyTargetV69(ag, effPhase, curGoal, curSales, selectedMonthKey, sprintDailyCtxView);
+        const hitS1Row = s1Goal > 0 && s1Sales >= s1Goal;
+        const hitS2Row = s2Goal > 0 && s2Sales >= s2Goal;
+        const hitS3Row = s3Goal > 0 && s3Sales >= s3Goal;
+        const sprintReward = window.computeAgentSprintPhaseRewardMetaV83(ag, effPhase, hitS1Row, hitS2Row, hitS3Row, curGoal, selectedMonthKey);
 
         sumWorkTgt += workTgt;
         sumCurGoal += curGoal;
         sumCurSales += curSales;
         sumCurDailyTarget += (Number(sprintDaily.dailyTarget) || 0);
+        if (sprintReward.hasReward) {
+          sumCurRewardPool += sprintReward.baseReward;
+          if (sprintReward.isHit) sumCurRewardWon += sprintReward.baseReward;
+        }
         sumS1Goal += s1Goal;
         sumS2Goal += s2Goal;
         sumS3Goal += s3Goal;
@@ -7925,7 +8002,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 
         return {
           ...ag, workTgt, s1Goal, s1Sales, s1Pct, s2Goal, s2Sales, s2Pct, s3Goal, s3Sales, s3Pct,
-          curGoal, curSales, curRem, curPct, sprintOrders, sprintLeads, conv, sprintDaily
+          curGoal, curSales, curRem, curPct, sprintOrders, sprintLeads, conv, sprintDaily, sprintReward
         };
       }).sort((a, b) => {
         if (getEffectiveSprintSortBy() === 'AMOUNT') {
@@ -7961,10 +8038,22 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           })())
         : null;
 
+      const myRewardSlotMetaV83 = myOwnSprintRow ? (() => {
+        const meRef = allUsers.find(x => String(x.id) === String(u.id)) || u;
+        const h1 = myOwnSprintRow.s1Goal > 0 && myOwnSprintRow.s1Sales >= myOwnSprintRow.s1Goal;
+        const h2 = myOwnSprintRow.s2Goal > 0 && myOwnSprintRow.s2Sales >= myOwnSprintRow.s2Goal;
+        const h3 = myOwnSprintRow.s3Goal > 0 && myOwnSprintRow.s3Sales >= myOwnSprintRow.s3Goal;
+        return {
+          S1: window.computeAgentSprintPhaseRewardMetaV83(meRef, 'S1', h1, h2, h3, myOwnSprintRow.s1Goal, selectedMonthKey),
+          S2: window.computeAgentSprintPhaseRewardMetaV83(meRef, 'S2', h1, h2, h3, myOwnSprintRow.s2Goal, selectedMonthKey),
+          S3: window.computeAgentSprintPhaseRewardMetaV83(meRef, 'S3', h1, h2, h3, myOwnSprintRow.s3Goal, selectedMonthKey)
+        };
+      })() : null;
+
       const slotCards = myOwnSprintRow ? [
-        { key: 'S1', title: 'Slot 1 • My Sprint 1 (Days 1–10)', share: '👤 My 40% Goal', goal: myOwnSprintRow.s1Goal, achieved: myOwnSprintRow.s1Sales, pct: myOwnSprintRow.s1Pct, isAutoNow: autoPhase === 'S1' },
-        { key: 'S2', title: 'Slot 2 • My Sprint 2 (Days 11–20)', share: '👤 My 35% Goal', goal: myOwnSprintRow.s2Goal, achieved: myOwnSprintRow.s2Sales, pct: myOwnSprintRow.s2Pct, isAutoNow: autoPhase === 'S2' },
-        { key: 'S3', title: 'Slot 3 • My Sprint 3 (Days 21–31)', share: '👤 My 35% Goal', goal: myOwnSprintRow.s3Goal, achieved: myOwnSprintRow.s3Sales, pct: myOwnSprintRow.s3Pct, isAutoNow: autoPhase === 'S3' }
+        { key: 'S1', title: `Slot 1 • My Sprint 1 (Days 1–${spRngView.s1End})`, share: `👤 My ${spPctView.s1}% Goal`, goal: myOwnSprintRow.s1Goal, achieved: myOwnSprintRow.s1Sales, pct: myOwnSprintRow.s1Pct, isAutoNow: autoPhase === 'S1', rewardMeta: myRewardSlotMetaV83.S1 },
+        { key: 'S2', title: `Slot 2 • My Sprint 2 (Days ${spRngView.s1End + 1}–${spRngView.s2End})`, share: `👤 My ${spPctView.s2}% Goal`, goal: myOwnSprintRow.s2Goal, achieved: myOwnSprintRow.s2Sales, pct: myOwnSprintRow.s2Pct, isAutoNow: autoPhase === 'S2', rewardMeta: myRewardSlotMetaV83.S2 },
+        { key: 'S3', title: `Slot 3 • My Sprint 3 (Days ${spRngView.s2End + 1}–31)`, share: `👤 My ${spPctView.s3}% Goal`, goal: myOwnSprintRow.s3Goal, achieved: myOwnSprintRow.s3Sales, pct: myOwnSprintRow.s3Pct, isAutoNow: autoPhase === 'S3', rewardMeta: myRewardSlotMetaV83.S3 }
       ] : [
         { key: 'S1', title: 'Slot 1 • Sprint 1 (Days 1–10)', share: '👥 Team 40% Goal', goal: sumS1Goal, achieved: sumS1, pct: sumS1Goal > 0 ? Math.round((sumS1 / sumS1Goal) * 100) : 0, isAutoNow: autoPhase === 'S1' },
         { key: 'S2', title: 'Slot 2 • Sprint 2 (Days 11–20)', share: '👥 Team 35% Goal', goal: sumS2Goal, achieved: sumS2, pct: sumS2Goal > 0 ? Math.round((sumS2 / sumS2Goal) * 100) : 0, isAutoNow: autoPhase === 'S2' },
@@ -8058,7 +8147,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                       <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}">${sc.title}</span>
                       ${sc.isAutoNow ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">Running Now</span>` : ''}
                     </div>
-                    <span class="text-xs font-black ${isSelected ? 'text-blue-700' : 'text-slate-500'}">${sc.share}</span>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                      ${(sc.rewardMeta && sc.rewardMeta.hasReward) ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-black border ${sc.rewardMeta.isHit ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-amber-50 text-amber-800 border-amber-200'}" title="${sc.rewardMeta.tooltip}">${sc.rewardMeta.isHit ? '✓' : '🎁'} ৳${sc.rewardMeta.baseReward.toLocaleString()}</span>` : ''}
+                      <span class="text-xs font-black ${isSelected ? 'text-blue-700' : 'text-slate-500'}">${sc.share}</span>
+                    </div>
                   </div>
                   <div class="flex items-baseline justify-between mt-2">
                     <div>
@@ -8100,7 +8192,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <th class="p-3.5 bg-blue-50/60 text-blue-900">${phaseInfo.short} Achieved</th>
                   <th class="p-3.5 bg-blue-50/60 text-blue-900">Remaining</th>
                   <th class="p-3.5 bg-indigo-50/70 text-indigo-900">Daily Target<br><span class="text-[9px] text-indigo-600 font-extrabold">Excl. Roster DO</span></th>
-                  <th class="p-3.5 bg-blue-50/60 text-blue-900 text-center">${phaseInfo.short} Progress</th>
+                  <th class="p-3.5 bg-blue-50/60 text-blue-900 text-center">${phaseInfo.short} Progress<br><span class="text-[9px] text-amber-600 font-extrabold">& Cash Reward</span></th>
                   <th onclick="setSprintTabPhase('S1')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S1' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 1">Sprint 1 (40%)<br><span class="text-[9px] text-slate-400">Days 1–10</span></th>
                   <th onclick="setSprintTabPhase('S2')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S2' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 2">Sprint 2 (35%)<br><span class="text-[9px] text-slate-400">Days 11–20</span></th>
                   <th onclick="setSprintTabPhase('S3')" class="p-3.5 text-center cursor-pointer hover:bg-blue-50 ${effPhase === 'S3' ? 'bg-blue-100/70 text-blue-900' : ''}" title="Click to sort by Sprint 3">Sprint 3 (35%)<br><span class="text-[9px] text-slate-400">Days 21–31</span></th>
@@ -8161,13 +8253,55 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                           return `<span class="font-black text-indigo-700 text-sm">৳${Number(sd.dailyTarget || 0).toLocaleString()}</span><span class="block text-[10px] font-bold text-slate-500">${sd.remainingDutyDays}d left${sd.remainingDoDays > 0 ? ` • ${sd.remainingDoDays} DO` : ''}${sd.remainingLeaveDays > 0 ? ` • ${sd.remainingLeaveDays} Lv` : ''}</span>`;
                         })()}
                       </td>
-                      <td class="p-3.5 bg-blue-50/30">
-                        <div class="flex flex-col items-center min-w-[115px]">
-                          <span class="px-2 py-0.5 rounded-md border text-[11px] font-black ${statusColor}">${ag.curPct}%</span>
-                          <div class="w-full progress-track h-1.5 bg-white mt-1">
-                            <div class="${ag.curPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'} h-1.5 rounded-full" style="width:${barPct}%"></div>
-                          </div>
-                        </div>
+                      <td class="p-3.5 bg-blue-50/30" title="${(ag.sprintReward && ag.sprintReward.tooltip) ? ag.sprintReward.tooltip : ''}">
+                        ${(() => {
+                          const rw = ag.sprintReward || {};
+                          if (!rw.hasReward) {
+                            return `
+                              <div class="flex flex-col items-center min-w-[132px]">
+                                <span class="px-2 py-0.5 rounded-md border text-[11px] font-black ${statusColor}">${ag.curPct}%</span>
+                                <div class="w-full progress-track h-1.5 bg-white mt-1.5">
+                                  <div class="${ag.curPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'} h-1.5 rounded-full" style="width:${barPct}%"></div>
+                                </div>
+                              </div>
+                            `;
+                          }
+                          const rwPillHtml = rw.isHit
+                            ? `<span class="px-1.5 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black shadow-2xs inline-flex items-center gap-0.5"><i class="fa-solid fa-check text-[8px]"></i>৳${rw.baseReward.toLocaleString()}</span>`
+                            : `<span class="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-black inline-flex items-center gap-0.5"><i class="fa-solid fa-gift text-[8px] text-amber-500"></i>৳${rw.baseReward.toLocaleString()}</span>`;
+
+                          let subCaptionHtml = '';
+                          if (rw.isHit) {
+                            if (rw.totalHits === 3 && rw.all3Reward > 0) {
+                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-emerald-700 mt-1 leading-none">🏆 All-3: ৳${rw.all3Reward.toLocaleString()}</span>`;
+                            } else if (rw.totalHits === 2 && rw.any2Extra > 0) {
+                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-emerald-700 mt-1 leading-none">✓ Won • +৳${rw.any2Extra.toLocaleString()} Combo</span>`;
+                            } else {
+                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-emerald-600 mt-1 leading-none">✓ Reward Unlocked</span>`;
+                            }
+                          } else {
+                            if (rw.otherHits === 2 && rw.all3Reward > 0) {
+                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-indigo-600 mt-1 leading-none">Hit → 🏆 All-3: ৳${rw.all3Reward.toLocaleString()}</span>`;
+                            } else if (rw.otherHits === 1 && rw.any2Extra > 0) {
+                              subCaptionHtml = `<span class="text-[9px] font-extrabold text-blue-600 mt-1 leading-none">+৳${rw.any2Extra.toLocaleString()} Combo on Hit</span>`;
+                            } else {
+                              subCaptionHtml = `<span class="text-[9px] font-bold text-slate-400 mt-1 leading-none">on 100% Hit</span>`;
+                            }
+                          }
+
+                          return `
+                            <div class="flex flex-col items-center min-w-[138px]">
+                              <div class="w-full flex items-center justify-between gap-1.5">
+                                <span class="px-1.5 py-0.5 rounded-md border text-[10px] font-black ${statusColor}">${ag.curPct}%</span>
+                                ${rwPillHtml}
+                              </div>
+                              <div class="w-full progress-track h-1.5 bg-white mt-1.5">
+                                <div class="${ag.curPct >= 100 ? 'bg-emerald-500' : 'bg-blue-600'} h-1.5 rounded-full" style="width:${barPct}%"></div>
+                              </div>
+                              ${subCaptionHtml}
+                            </div>
+                          `;
+                        })()}
                       </td>
                       <td class="p-3.5 text-center ${effPhase === 'S1' ? 'font-black text-blue-700 bg-blue-50/20' : 'text-slate-500'}">
                         ৳${ag.s1Sales.toLocaleString()} <span class="block text-[10px] font-bold">(${ag.s1Pct}% of ৳${ag.s1Goal.toLocaleString()})</span>
@@ -8191,7 +8325,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   <td class="p-4 text-emerald-400 text-sm">৳${sumCurSales.toLocaleString()}</td>
                   <td class="p-4 text-slate-300">৳${Math.max(0, sumCurGoal - sumCurSales).toLocaleString()}</td>
                   <td class="p-4 text-indigo-300">৳${sumCurDailyTarget.toLocaleString()}<span class="block text-[9px] text-slate-400 font-bold">Daily Pace Sum</span></td>
-                  <td class="p-4 text-center"><span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black">${overallCurPct}%</span></td>
+                  <td class="p-4 text-center">
+                    <span class="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black">${overallCurPct}%</span>
+                    ${sumCurRewardPool > 0 ? `<span class="block text-[9px] text-emerald-300 font-extrabold mt-1">Won: ৳${sumCurRewardWon.toLocaleString()} / ৳${sumCurRewardPool.toLocaleString()}</span>` : ''}
+                  </td>
                   <td class="p-4 text-center text-slate-300">৳${sumS1.toLocaleString()}</td>
                   <td class="p-4 text-center text-slate-300">৳${sumS2.toLocaleString()}</td>
                   <td class="p-4 text-center text-slate-300">৳${sumS3.toLocaleString()}</td>
