@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v92)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v94)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -31,7 +31,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 - Special Monthly_Configs cloud keys (NEVER break or overwrite structure):
   CHAT_AND_NOTICES, DEACTIVATED_USERS, DELETED_USERS, FRAUD_API_CONFIG,
   MIRROR_SHEET_CONFIG, PORTAL_MASTER_CONFIG, RENAMED_USER_IDS, RESIGNED_USERS,
-  ROLE_PERMISSIONS, USER_AVATARS, USER_BELL_STATE, LEAVE_RECORDS_<MM/YYYY>.
+  OFFICIAL_NOTICES, ROLE_PERMISSIONS, USER_AVATARS, USER_BELL_STATE, LEAVE_RECORDS_<MM/YYYY>.
 
 [SECTION B — ACTIVE BUSINESS & CALCULATION RULES]
 1. TARGET +5% BUFFER RULE (STRICT PORTAL vs EXTERNAL SEPARATION):
@@ -129,6 +129,16 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      limited to active non-deactivated submitters. Also synced _rawGetUsersForMonthV62 after
      V66/V67 rename-dedup & cache wrappers, aligned exportDateWiseSummaryCsv floating filter,
      and fixed WA TL fallback in Monthly Performance footer.
+   - DARK MODE HIGH-CONTRAST BADGES & DRIVE PRODUCT CELLS + ZERO-LOSS OFFICIAL NOTICES (V93):
+     (1) Restored high-contrast deep-tinted Dark Mode styles for all -100 badges/cards
+     (bg-emerald-100, bg-orange-100, bg-amber-100, bg-blue-100, bg-purple-100, bg-indigo-100,
+     bg-rose-100, bg-red-100, bg-teal-100, bg-cyan-100) + inner progress tracks so white/colored
+     text in Drive Product (>=90% achieved cells) and Team pills is 100% crisp in Dark Mode.
+     (2) Isolated Official Notices into dedicated Monthly_Configs key OFFICIAL_NOTICES (tracked
+     by V60 Zero-Loss verified retry queue, capped at latest 20 notices [V94], backward-compatible
+     with legacy CHAT_AND_NOTICES notices), added 55KB keepalive guard in postToSheet (prevents
+     browser 64KB drop), and added 44,000-char safe trim guard on CHAT_AND_NOTICES (prevents
+     Google Sheets 50,000-char reject).
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -2326,13 +2336,16 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         const bodyParams = new URLSearchParams();
         bodyParams.append('action', action);
         bodyParams.append('payload', JSON.stringify(fullData));
-        await fetch(webhookUrl, {
+        const bodyStr = bodyParams.toString();
+        const fetchOpts = {
           method: 'POST',
           mode: 'no-cors',
-          keepalive: true,
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: bodyParams.toString()
-        });
+          body: bodyStr
+        };
+        // V93: Browser keepalive hard limit is 64KB — only attach keepalive for safe <=55KB payloads!
+        if (bodyStr.length <= 55000) fetchOpts.keepalive = true;
+        await fetch(webhookUrl, fetchOpts);
       } catch (err) {
         const params = new URLSearchParams({ action, payload: JSON.stringify(fullData) });
         new Image().src = `${webhookUrl}?${params.toString()}&_cb=${Date.now()}`;
@@ -2641,7 +2654,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
               noticeMap.set(n.id, n);
             }
           });
-          const mergedNotices = Array.from(noticeMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-40);
+          const mergedNotices = Array.from(noticeMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-20);
 
           const mergedReads = {};
           const locReads = (locHub.readReceipts && typeof locHub.readReceipts === 'object') ? locHub.readReceipts : {};
@@ -2662,6 +2675,35 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           });
           const mergedCustomGroups = Array.from(grpMap.values());
           mergedConfigs['CHAT_AND_NOTICES'] = { messages: mergedMsgs, notices: mergedNotices, readReceipts: mergedReads, customGroups: mergedCustomGroups };
+        }
+
+        if (localCfg['OFFICIAL_NOTICES'] || res.monthlyConfigs['OFFICIAL_NOTICES']) {
+          const locDed = (localCfg['OFFICIAL_NOTICES'] && typeof localCfg['OFFICIAL_NOTICES'] === 'object') ? localCfg['OFFICIAL_NOTICES'] : {};
+          const cldDed = (res.monthlyConfigs['OFFICIAL_NOTICES'] && typeof res.monthlyConfigs['OFFICIAL_NOTICES'] === 'object') ? res.monthlyConfigs['OFFICIAL_NOTICES'] : {};
+          const locRev = Number(locDed._syncRev || locDed.updatedTs || 0);
+          const cldRev = Number(cldDed._syncRev || cldDed.updatedTs || 0);
+          const delMerged = new Set([
+            ...(Array.isArray(cldDed.deletedIds) ? cldDed.deletedIds.map(String) : []),
+            ...(Array.isArray(locDed.deletedIds) ? locDed.deletedIds.map(String) : [])
+          ]);
+          const ntDedMap = new Map();
+          (Array.isArray(cldDed.notices) ? cldDed.notices : []).forEach(n => {
+            if (n && n.id && !delMerged.has(String(n.id))) ntDedMap.set(String(n.id), n);
+          });
+          (Array.isArray(locDed.notices) ? locDed.notices : []).forEach(n => {
+            if (n && n.id && !delMerged.has(String(n.id)) && !ntDedMap.has(String(n.id))) {
+              if (locRev >= cldRev || (Date.now() - Number(n.ts || 0) < 120000)) {
+                ntDedMap.set(String(n.id), n);
+              }
+            }
+          });
+          mergedConfigs['OFFICIAL_NOTICES'] = {
+            ...cldDed,
+            notices: Array.from(ntDedMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-20),
+            deletedIds: Array.from(delMerged).slice(-80),
+            _syncRev: Math.max(locRev, cldRev),
+            updatedTs: Math.max(Number(locDed.updatedTs || 0), Number(cldDed.updatedTs || 0))
+          };
         }
 
         if (JSON.stringify(mergedConfigs) !== JSON.stringify(localCfg)) {
@@ -13316,12 +13358,71 @@ function renderRankingAndComparison() {
       if (inputEl) inputEl.focus();
     }
 
+    function getMergedOfficialNoticesListV93(configsObj) {
+      const cfgs = configsObj || getStored('monthly_configs', {});
+      const legacyHub = cfgs['CHAT_AND_NOTICES'] || {};
+      const dedStore = cfgs['OFFICIAL_NOTICES'] || {};
+      const deletedSet = new Set(Array.isArray(dedStore.deletedIds) ? dedStore.deletedIds.map(String) : []);
+      const nMap = new Map();
+      (Array.isArray(legacyHub.notices) ? legacyHub.notices : []).forEach(n => {
+        if (n && n.id && !deletedSet.has(String(n.id))) nMap.set(String(n.id), n);
+      });
+      (Array.isArray(dedStore.notices) ? dedStore.notices : []).forEach(n => {
+        if (n && n.id && !deletedSet.has(String(n.id))) nMap.set(String(n.id), n);
+      });
+      return Array.from(nMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-20);
+    }
+
+    function trimChatHubToSafeCellSizeV93(hubObj) {
+      const safe = {
+        messages: Array.isArray(hubObj.messages) ? hubObj.messages.slice(-220) : [],
+        notices: Array.isArray(hubObj.notices) ? hubObj.notices.slice(-20) : [],
+        readReceipts: (hubObj.readReceipts && typeof hubObj.readReceipts === 'object') ? hubObj.readReceipts : {},
+        customGroups: Array.isArray(hubObj.customGroups) ? hubObj.customGroups : []
+      };
+      // Guard against Google Sheets 50,000-character cell limit (keep <= 44,000 chars)
+      let jsonStr = JSON.stringify(safe);
+      if (jsonStr.length > 44000) {
+        const caps = [160, 120, 90, 65, 45, 30];
+        for (let ci = 0; ci < caps.length && jsonStr.length > 44000; ci++) {
+          safe.messages = safe.messages.slice(-caps[ci]);
+          jsonStr = JSON.stringify(safe);
+        }
+      }
+      return { hub: safe, jsonStr };
+    }
+
+    function saveOfficialNoticesStoreV93(noticesArr, deletedIdsArr) {
+      const configs = getStored('monthly_configs', {});
+      const prevDed = (configs['OFFICIAL_NOTICES'] && typeof configs['OFFICIAL_NOTICES'] === 'object') ? configs['OFFICIAL_NOTICES'] : {};
+      const delSet = new Set(Array.isArray(prevDed.deletedIds) ? prevDed.deletedIds.map(String) : []);
+      if (Array.isArray(deletedIdsArr)) deletedIdsArr.forEach(id => { if (id) delSet.add(String(id)); });
+      const cleanNotices = (Array.isArray(noticesArr) ? noticesArr : [])
+        .filter(n => n && n.id && !delSet.has(String(n.id)))
+        .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0))
+        .slice(-20);
+      const nextStore = {
+        notices: cleanNotices,
+        deletedIds: Array.from(delSet).slice(-80),
+        updatedTs: Date.now()
+      };
+      configs['OFFICIAL_NOTICES'] = nextStore;
+      setStored('monthly_configs', configs);
+      markLocalUserOrConfigMutatedNow();
+      // Sync via V60 Zero-Loss verified meta queue (dedicated tiny cell — NEVER collides with chat!)
+      postToSheet('SAVE_MONTHLY_CONFIG', {
+        monthKey: 'OFFICIAL_NOTICES',
+        configJson: JSON.stringify(nextStore)
+      }).catch(() => {});
+      return nextStore;
+    }
+
     function getChatAndNoticeHubStore() {
       const configs = getStored('monthly_configs', {});
       const hub = configs['CHAT_AND_NOTICES'] || {};
       return {
         messages: Array.isArray(hub.messages) ? hub.messages : [],
-        notices: Array.isArray(hub.notices) ? hub.notices : [],
+        notices: getMergedOfficialNoticesListV93(configs),
         readReceipts: (hub.readReceipts && typeof hub.readReceipts === 'object') ? hub.readReceipts : {},
         customGroups: Array.isArray(hub.customGroups) ? hub.customGroups : []
       };
@@ -13330,17 +13431,17 @@ function renderRankingAndComparison() {
     function saveChatAndNoticeHubStore(hubData) {
       const configs = getStored('monthly_configs', {});
       const existing = configs['CHAT_AND_NOTICES'] || {};
-      const trimmedHub = {
+      const packed = trimChatHubToSafeCellSizeV93({
         messages: (hubData.messages || existing.messages || []).slice(-220),
-        notices: (hubData.notices || existing.notices || []).slice(-40),
+        notices: (hubData.notices || existing.notices || []).slice(-20),
         readReceipts: hubData.readReceipts || existing.readReceipts || {},
         customGroups: hubData.customGroups || existing.customGroups || []
-      };
-      configs['CHAT_AND_NOTICES'] = trimmedHub;
+      });
+      configs['CHAT_AND_NOTICES'] = packed.hub;
       setStored('monthly_configs', configs);
       postToSheet('SAVE_MONTHLY_CONFIG', {
         monthKey: 'CHAT_AND_NOTICES',
-        configJson: JSON.stringify(trimmedHub)
+        configJson: packed.jsonStr
       }).catch(() => {});
     }
 
@@ -13608,11 +13709,10 @@ function renderRankingAndComparison() {
 
     function syncIncomingChatAndNoticesFromConfigs(allConfigs, triggerPopup = false) {
       if (!currentUser || !allConfigs || typeof allConfigs !== 'object') return;
-      const hub = allConfigs['CHAT_AND_NOTICES'];
-      if (!hub) return;
-
-      const notices = Array.isArray(hub.notices) ? hub.notices : [];
+      const hub = allConfigs['CHAT_AND_NOTICES'] || {};
+      const notices = getMergedOfficialNoticesListV93(allConfigs);
       const messages = Array.isArray(hub.messages) ? hub.messages : [];
+      if (notices.length === 0 && messages.length === 0) return;
 
       const seenNoticeKey = `gb_seen_notices_${currentUser.id}`;
       let seenNotices = [];
@@ -13843,8 +13943,9 @@ function renderRankingAndComparison() {
       if (!msgVal) return;
 
       const hub = getChatAndNoticeHubStore();
+      const nowAnnTs = Date.now();
       const newNotice = {
-        id: 'nt_' + Date.now(),
+        id: 'nt_' + nowAnnTs,
         senderId: String(currentUser.id),
         senderName: currentUser.name,
         targetTeam: targetVal,
@@ -13852,14 +13953,15 @@ function renderRankingAndComparison() {
         message: msgVal,
         date: getTodayFormatted(),
         time: getNowTimeStr(),
-        ts: Date.now()
+        ts: nowAnnTs
       };
       hub.notices.push(newNotice);
 
+      let chatNoticeMsg = null;
       if (postInChat) {
         const roomTarget = resolveChatRoomForNoticeTarget(targetVal);
-        hub.messages.push({
-          id: 'msg_' + Date.now() + '_ann',
+        chatNoticeMsg = {
+          id: 'msg_' + nowAnnTs + '_ann',
           roomId: roomTarget,
           senderId: String(currentUser.id),
           senderName: currentUser.name,
@@ -13869,8 +13971,10 @@ function renderRankingAndComparison() {
           isNotice: true,
           date: newNotice.date,
           time: newNotice.time,
-          ts: Date.now()
-        });
+          ts: nowAnnTs,
+          localSentAt: nowAnnTs
+        };
+        hub.messages.push(chatNoticeMsg);
       }
 
       const seenNoticeKey = `gb_seen_notices_${currentUser.id}`;
@@ -13879,7 +13983,26 @@ function renderRankingAndComparison() {
       seenNotices.push(newNotice.id);
       localStorage.setItem(seenNoticeKey, JSON.stringify(seenNotices.slice(-100)));
 
-      saveChatAndNoticeHubStore(hub);
+      // V93: Save to dedicated OFFICIAL_NOTICES row via V60 Zero-Loss verified retry queue (never dropped by 64KB/50K chat limit!)
+      saveOfficialNoticesStoreV93(hub.notices);
+
+      if (chatNoticeMsg) {
+        const cfgsChat = getStored('monthly_configs', {});
+        const packedChat = trimChatHubToSafeCellSizeV93({
+          messages: hub.messages,
+          notices: (cfgsChat['CHAT_AND_NOTICES'] && Array.isArray(cfgsChat['CHAT_AND_NOTICES'].notices)) ? cfgsChat['CHAT_AND_NOTICES'].notices : [],
+          readReceipts: hub.readReceipts || {},
+          customGroups: hub.customGroups || []
+        });
+        cfgsChat['CHAT_AND_NOTICES'] = packedChat.hub;
+        setStored('monthly_configs', cfgsChat);
+        postToSheet('SEND_CHAT_MESSAGE', {
+          messageObj: chatNoticeMsg,
+          monthKey: 'CHAT_AND_NOTICES',
+          configJson: packedChat.jsonStr
+        }).catch(() => {});
+      }
+
       syncIncomingChatAndNoticesFromConfigs(getStored('monthly_configs', {}), false);
 
       recordActivityLog('Broadcasted Official Notice', `Sent Notice "${titleVal}" (${formatNoticeTargetLabel(targetVal)}): ${msgVal}`, false);
@@ -13892,8 +14015,8 @@ function renderRankingAndComparison() {
     function handleDeleteOfficialNotice(noticeId) {
       if (!hasFeatureAccess(currentUser, 'feat_post_notice')) return;
       const hub = getChatAndNoticeHubStore();
-      hub.notices = hub.notices.filter(n => n.id !== noticeId);
-      saveChatAndNoticeHubStore(hub);
+      const remaining = hub.notices.filter(n => String(n.id) !== String(noticeId));
+      saveOfficialNoticesStoreV93(remaining, [String(noticeId)]);
       renderAppLayout();
       openModal('announceModal');
       showPortalToast('Notice Removed', 'Deleted the announcement from the broadcast list.', 'warning');
@@ -14014,12 +14137,13 @@ function renderRankingAndComparison() {
       hub.readReceipts[String(currentUser.id)][activeChatChannelId] = nowTs;
 
       const configs = getStored('monthly_configs', {});
-      configs['CHAT_AND_NOTICES'] = {
+      const packedChatMsg = trimChatHubToSafeCellSizeV93({
         messages: (hub.messages || []).slice(-220),
-        notices: (hub.notices || []).slice(-40),
+        notices: (configs['CHAT_AND_NOTICES'] && Array.isArray(configs['CHAT_AND_NOTICES'].notices)) ? configs['CHAT_AND_NOTICES'].notices.slice(-20) : [],
         readReceipts: hub.readReceipts || {},
         customGroups: hub.customGroups || []
-      };
+      });
+      configs['CHAT_AND_NOTICES'] = packedChatMsg.hub;
       setStored('monthly_configs', configs);
       markChatChannelRead(activeChatChannelId, false);
 
@@ -14032,7 +14156,7 @@ function renderRankingAndComparison() {
       postToSheet('SEND_CHAT_MESSAGE', {
         messageObj: newMsg,
         monthKey: 'CHAT_AND_NOTICES',
-        configJson: JSON.stringify(configs['CHAT_AND_NOTICES'])
+        configJson: packedChatMsg.jsonStr
       }).then(() => {
         fetchFromSheet();
       }).catch(() => {});
@@ -20739,7 +20863,7 @@ function renderChatHubView() {
                 noticeMap.set(n.id, n);
               }
             });
-            const mergedNotices = Array.from(noticeMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-40);
+            const mergedNotices = Array.from(noticeMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-20);
 
             const mergedReads = {};
             const locReads = (locHub.readReceipts && typeof locHub.readReceipts === 'object') ? locHub.readReceipts : {};
@@ -20760,6 +20884,35 @@ function renderChatHubView() {
             });
             const mergedCustomGroups = Array.from(grpMap.values());
             mergedConfigs['CHAT_AND_NOTICES'] = { messages: mergedMsgs, notices: mergedNotices, readReceipts: mergedReads, customGroups: mergedCustomGroups };
+          }
+
+          if (localCfg['OFFICIAL_NOTICES'] || res.monthlyConfigs['OFFICIAL_NOTICES']) {
+            const locDed = (localCfg['OFFICIAL_NOTICES'] && typeof localCfg['OFFICIAL_NOTICES'] === 'object') ? localCfg['OFFICIAL_NOTICES'] : {};
+            const cldDed = (res.monthlyConfigs['OFFICIAL_NOTICES'] && typeof res.monthlyConfigs['OFFICIAL_NOTICES'] === 'object') ? res.monthlyConfigs['OFFICIAL_NOTICES'] : {};
+            const locRev = Number(locDed._syncRev || locDed.updatedTs || 0);
+            const cldRev = Number(cldDed._syncRev || cldDed.updatedTs || 0);
+            const delMerged = new Set([
+              ...(Array.isArray(cldDed.deletedIds) ? cldDed.deletedIds.map(String) : []),
+              ...(Array.isArray(locDed.deletedIds) ? locDed.deletedIds.map(String) : [])
+            ]);
+            const ntDedMap = new Map();
+            (Array.isArray(cldDed.notices) ? cldDed.notices : []).forEach(n => {
+              if (n && n.id && !delMerged.has(String(n.id))) ntDedMap.set(String(n.id), n);
+            });
+            (Array.isArray(locDed.notices) ? locDed.notices : []).forEach(n => {
+              if (n && n.id && !delMerged.has(String(n.id)) && !ntDedMap.has(String(n.id))) {
+                if (locRev >= cldRev || (Date.now() - Number(n.ts || 0) < 120000)) {
+                  ntDedMap.set(String(n.id), n);
+                }
+              }
+            });
+            mergedConfigs['OFFICIAL_NOTICES'] = {
+              ...cldDed,
+              notices: Array.from(ntDedMap.values()).sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).slice(-20),
+              deletedIds: Array.from(delMerged).slice(-80),
+              _syncRev: Math.max(locRev, cldRev),
+              updatedTs: Math.max(Number(locDed.updatedTs || 0), Number(cldDed.updatedTs || 0))
+            };
           }
 
           if (JSON.stringify(mergedConfigs) !== JSON.stringify(localCfg)) {
@@ -23872,6 +24025,8 @@ function renderChatHubView() {
         html.gb-dark-mode [class*="bg-indigo-50/"],
         html.gb-dark-mode [class*="bg-rose-50/"],
         html.gb-dark-mode [class*="bg-teal-50/"],
+        html.gb-dark-mode [class*="bg-cyan-50/"],
+        html.gb-dark-mode [class*="bg-red-50/"],
         html.gb-dark-mode .bg-blue-50,
         html.gb-dark-mode .bg-emerald-50,
         html.gb-dark-mode .bg-amber-50,
@@ -23879,10 +24034,62 @@ function renderChatHubView() {
         html.gb-dark-mode .bg-purple-50,
         html.gb-dark-mode .bg-indigo-50,
         html.gb-dark-mode .bg-rose-50,
-        html.gb-dark-mode .bg-teal-50 {
+        html.gb-dark-mode .bg-red-50,
+        html.gb-dark-mode .bg-teal-50,
+        html.gb-dark-mode .bg-cyan-50 {
           background-color: #0f172a !important;
           border-color: #334155 !important;
           color: #f1f5f9 !important;
+        }
+        /* V93: High-contrast deep-tinted Dark Mode styles for all -100 badges & Drive Product >=90% cells */
+        html.gb-dark-mode .bg-emerald-100, html.gb-dark-mode [class*="bg-emerald-100/"] {
+          background-color: rgba(6, 78, 59, 0.78) !important;
+          border-color: rgba(16, 185, 129, 0.55) !important;
+          color: #6ee7b7 !important;
+        }
+        html.gb-dark-mode .bg-orange-100, html.gb-dark-mode [class*="bg-orange-100/"] {
+          background-color: rgba(124, 45, 18, 0.72) !important;
+          border-color: rgba(249, 115, 22, 0.5) !important;
+          color: #fdba74 !important;
+        }
+        html.gb-dark-mode .bg-amber-100, html.gb-dark-mode [class*="bg-amber-100/"] {
+          background-color: rgba(120, 53, 15, 0.72) !important;
+          border-color: rgba(245, 158, 11, 0.5) !important;
+          color: #fcd34d !important;
+        }
+        html.gb-dark-mode .bg-blue-100, html.gb-dark-mode [class*="bg-blue-100/"] {
+          background-color: rgba(30, 58, 138, 0.72) !important;
+          border-color: rgba(59, 130, 246, 0.5) !important;
+          color: #93c5fd !important;
+        }
+        html.gb-dark-mode .bg-purple-100, html.gb-dark-mode [class*="bg-purple-100/"] {
+          background-color: rgba(88, 28, 135, 0.72) !important;
+          border-color: rgba(168, 85, 247, 0.5) !important;
+          color: #d8b4fe !important;
+        }
+        html.gb-dark-mode .bg-indigo-100, html.gb-dark-mode [class*="bg-indigo-100/"] {
+          background-color: rgba(49, 46, 129, 0.72) !important;
+          border-color: rgba(99, 102, 241, 0.5) !important;
+          color: #a5b4fc !important;
+        }
+        html.gb-dark-mode .bg-rose-100, html.gb-dark-mode [class*="bg-rose-100/"],
+        html.gb-dark-mode .bg-red-100, html.gb-dark-mode [class*="bg-red-100/"] {
+          background-color: rgba(136, 19, 55, 0.72) !important;
+          border-color: rgba(244, 63, 94, 0.5) !important;
+          color: #fda4af !important;
+        }
+        html.gb-dark-mode .bg-teal-100, html.gb-dark-mode [class*="bg-teal-100/"] {
+          background-color: rgba(19, 78, 74, 0.72) !important;
+          border-color: rgba(20, 184, 166, 0.5) !important;
+          color: #5eead4 !important;
+        }
+        html.gb-dark-mode .bg-cyan-100, html.gb-dark-mode [class*="bg-cyan-100/"] {
+          background-color: rgba(22, 78, 99, 0.72) !important;
+          border-color: rgba(6, 182, 212, 0.5) !important;
+          color: #67e8f9 !important;
+        }
+        html.gb-dark-mode [class*="bg-slate-200/"] {
+          background-color: rgba(15, 23, 42, 0.65) !important;
         }
         html.gb-dark-mode .text-blue-950,
         html.gb-dark-mode .text-emerald-950,
@@ -23899,6 +24106,7 @@ function renderChatHubView() {
         html.gb-dark-mode .text-indigo-900, html.gb-dark-mode .text-indigo-800, html.gb-dark-mode .text-indigo-700 { color: #c084fc !important; }
         html.gb-dark-mode .text-rose-900, html.gb-dark-mode .text-rose-800, html.gb-dark-mode .text-rose-700 { color: #fb7185 !important; }
         html.gb-dark-mode .text-teal-900, html.gb-dark-mode .text-teal-800, html.gb-dark-mode .text-teal-700 { color: #2dd4bf !important; }
+        html.gb-dark-mode .text-cyan-900, html.gb-dark-mode .text-cyan-800, html.gb-dark-mode .text-cyan-700 { color: #22d3ee !important; }
       `;
       document.head.appendChild(darkFixStyleV53);
 
@@ -31358,16 +31566,16 @@ function renderChatHubView() {
           const bState = window.getBellUserStateV67(currentUser.id);
           const clearedNoticesSet = new Set(bState.clearedNoticeIds || []);
           const readNoticesSet = new Set(bState.readNoticeIds || []);
-          const hub = allConfigs && allConfigs['CHAT_AND_NOTICES'];
+          const mergedNoticesV93 = (typeof getMergedOfficialNoticesListV93 === 'function')
+            ? getMergedOfficialNoticesListV93(allConfigs)
+            : ((allConfigs && allConfigs['CHAT_AND_NOTICES'] && Array.isArray(allConfigs['CHAT_AND_NOTICES'].notices)) ? allConfigs['CHAT_AND_NOTICES'].notices : []);
           const noticeTsMap = new Map();
-          if (hub && Array.isArray(hub.notices)) {
-            hub.notices.forEach(nt => {
-              if (nt && nt.id) {
-                const ntTs = Number(nt.ts || 0) || window.parseNotifDateTimeTsV67(nt.date, nt.time);
-                noticeTsMap.set('notice_' + nt.id, ntTs);
-              }
-            });
-          }
+          mergedNoticesV93.forEach(nt => {
+            if (nt && nt.id) {
+              const ntTs = Number(nt.ts || 0) || window.parseNotifDateTimeTsV67(nt.date, nt.time);
+              noticeTsMap.set('notice_' + nt.id, ntTs);
+            }
+          });
           const rawAll = getStored('portal_notifications', []);
           let changedAny = false;
           const cleaned = [];
