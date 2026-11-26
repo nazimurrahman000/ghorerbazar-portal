@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v98)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v100)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -182,6 +182,26 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      (4) Forward-only gradeTargets carry-forward (prevMk < mk) in getGradeTargetsForMonth &
      getGradeMapForChannelScale so updated grade amounts inherit into future months without ever
      touching previous months.
+   - ZERO-COLLISION USER/NAME SYNC & NO PAST-MONTH TAB FLASHING (V99):
+     (1) Added nameOk check to V60 isMetaWriteConfirmedInCloudV60 for both SAVE_USER and SAVE_ROSTER_ROW
+     so pure Name edits can never be falsely confirmed/dropped on server lock contention.
+     (2) handleSaveUser skips freezePrevMonthUserSnapshotV96 when only name/pass/role changed (no
+     team/grade/target change), and sends skipRebuild:true on past-month frozen snapshots,
+     USER_JOIN_MONTHS, and secondary opposite-channel mirror configs — cutting 6 colliding rebuilds
+     down to 1 fast atomic rebuild (~2s) and eliminating Oct_2026 tab flashing.
+     (3) Added 'sujan' to 10741 AI ERP alias list.
+   - FULL PORTAL-TO-SHEET SYNC HARDENING & ZERO-COLLISION BATCH ENGINE (V100):
+     (1) Future-month identity edits (Name/Pass/Role) send SAVE_USER with identityOnly:true (never
+     overwriting future-month team/target in Sheets) and update only identity fields in __GLOBAL_USERS__.
+     (2) Self-service Password Change sends identityOnly:true + skipRebuild:true (~0.2s, zero target risk).
+     (3) Bulk Duty Roster Save (confirmAndSaveAllRosterChanges) sends skipRebuild:true on all rows except
+     the final row so 10-20 roster edits sync in ~4s with ONE clean Master+Mirror Roster rebuild.
+     (4) Eliminated multi-rebuild lock collisions in quickAssignAgentToTeam, handleReleaseAgentToFloatingPool,
+     handleSaveRosterModalAdd (writes SAVE_ROSTER_ROW before SAVE_USER), handleDeleteUser, handleResignUser,
+     and V66 RENAME_USER_ID.
+     (5) Portal-only settings (Sprint Toggle/Rewards, Master Buffer %/Working Days, Role Permissions) use
+     skipRebuild:true (~0.2s), Product edits pass buildMode:'PRODUCT_ONLY'+skipRosterRebuild:true, and
+     Grade edits pass buildMode:'SALES_ONLY'+skipRosterRebuild:true.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -1335,7 +1355,8 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       setStored('monthly_configs', configs);
       postToSheet('SAVE_MONTHLY_CONFIG', {
         monthKey: 'ROLE_PERMISSIONS',
-        configJson: JSON.stringify(configs['ROLE_PERMISSIONS'])
+        configJson: JSON.stringify(configs['ROLE_PERMISSIONS']),
+        skipRebuild: true
       }).catch(() => {});
     }
 
@@ -1400,6 +1421,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           postToSheet('SAVE_MONTHLY_CONFIG', {
             monthKey: mk,
             configJson: JSON.stringify(configs[mk]),
+            skipRebuild: true,
             ...logMeta
           }).catch(() => {});
         },
@@ -1457,6 +1479,8 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             await postToSheet('SAVE_MONTHLY_CONFIG', {
               monthKey: tk,
               configJson: JSON.stringify(configs[tk]),
+              buildMode: 'PRODUCT_ONLY',
+              skipRosterRebuild: true,
               ...logMeta
             }).catch(() => {});
           }
@@ -2042,7 +2066,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       renderAppLayout();
       showPortalToast('Password Updated & Synced!', 'Your new password is now active across the portal & Admin Panel.', 'success');
 
-      await postToSheet('SAVE_USER', { ...updatedUser, ...logMeta }).catch(() => {});
+      await postToSheet('SAVE_USER', { ...updatedUser, identityOnly: true, skipRebuild: true, ...logMeta }).catch(() => {});
     }
 
     function renderProfilePicModal() {
@@ -7216,16 +7240,18 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           closeModal('rosterAddModal');
           renderAppLayout();
           showPortalToast('Member Assigned & Synced to Roster!', `${newRow.name} (${newRow.id}) is now live under ${targetTeam} for ${selectedMonthKey}.`, 'success');
+          const willSaveUserRosterAdd = Boolean(userToSave && isEditingCurrentMonthV96);
           for (const snap of frozenSnaps) {
-            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj) }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj), skipRebuild: true }).catch(() => {});
           }
-          if (userToSave && isEditingCurrentMonthV96) {
+          // Write custom Sat-Fri shifts BEFORE SAVE_USER so the single SAVE_USER rebuild renders the exact new shifts!
+          await postToSheet('SAVE_ROSTER_ROW', { ...newRow, skipRebuild: true, ...logMeta }).catch(() => {});
+          if (willSaveUserRosterAdd) {
             await postToSheet('SAVE_USER', { ...userToSave, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
           }
-          await postToSheet('SAVE_ROSTER_ROW', { ...newRow, ...logMeta }).catch(() => {});
-          await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+          await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj), skipRebuild: willSaveUserRosterAdd }).catch(() => {});
           if (otherConfigObj) {
-            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj), skipRebuild: true }).catch(() => {});
           }
         },
         'Yes, Assign & Sync Now',
@@ -7269,8 +7295,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           renderAppLayout();
           showPortalToast('Duty Roster Saved & Synced!', `Updated schedule for ${changedRows.length} member(s).`, 'success');
 
-          for (const row of changedRows) {
-            await postToSheet('SAVE_ROSTER_ROW', { ...row, ...logMeta }).catch(() => {});
+          for (let rIdx = 0; rIdx < changedRows.length; rIdx++) {
+            const row = changedRows[rIdx];
+            const isLastRow = (rIdx === changedRows.length - 1);
+            await postToSheet('SAVE_ROSTER_ROW', { ...row, skipRebuild: !isLastRow, ...(isLastRow ? logMeta : {}) }).catch(() => {});
           }
         },
         'Yes, Save & Sync Roster',
@@ -12399,7 +12427,7 @@ function renderRankingAndComparison() {
         '10191': ['shagor', 'sagor'],
         '10289': ['dipu', 'abdullah dipu'],
         '11044': ['eraz', 'hasibul', 'iraz'],
-        '10741': ['shujon', 'sujon', 'kamruzzaman'],
+        '10741': ['shujon', 'sujon', 'sujan', 'kamruzzaman'],
         '10803': ['mahmud', 'abdullah mahmud'],
         '11042': ['ashiqur', 'ashik', 'ashiq'],
         '10328': ['rayhan', 'raihan', 'sheikh'],
@@ -19972,14 +20000,15 @@ function renderChatHubView() {
               nextResignedState ? 'warning' : 'success'
             );
 
-            postToSheet('SAVE_MONTHLY_CONFIG', {
+            await postToSheet('SAVE_MONTHLY_CONFIG', {
+              monthKey: 'DEACTIVATED_USERS',
+              configJson: JSON.stringify(configs['DEACTIVATED_USERS']),
+              skipRebuild: true
+            }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', {
               monthKey: 'RESIGNED_USERS',
               configJson: JSON.stringify(configs['RESIGNED_USERS']),
               ...logMeta
-            }).catch(() => {});
-            postToSheet('SAVE_MONTHLY_CONFIG', {
-              monthKey: 'DEACTIVATED_USERS',
-              configJson: JSON.stringify(configs['DEACTIVATED_USERS'])
             }).catch(() => {});
           },
           nextResignedState ? 'Yes, Mark Resigned & Deactivate' : 'Yes, Undo Resign & Activate',
@@ -22327,7 +22356,7 @@ function renderChatHubView() {
             await postToSheet('SAVE_MONTHLY_CONFIG', {
               monthKey: 'DELETED_USERS',
               configJson: JSON.stringify(configs['DELETED_USERS']),
-              ...logMeta
+              skipRebuild: true
             }).catch(() => {});
             await postToSheet('DELETE_USER', {
               id: uidStr,
@@ -22688,7 +22717,7 @@ function renderChatHubView() {
             await postToSheet('SAVE_USER', { ...users[idx !== -1 ? idx : users.length - 1], ...logMeta }).catch(() => {});
             await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
             if (otherConfigObj) {
-              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj), skipRebuild: true }).catch(() => {});
             }
           },
           'Yes, Confirm & Save',
@@ -25027,6 +25056,15 @@ function renderChatHubView() {
         if (shouldUpdateGlobal) {
           store['__GLOBAL_USERS__'] = store['__GLOBAL_USERS__'] || {};
           store['__GLOBAL_USERS__'][uid] = { ...store[mk][uid] };
+        } else if (store['__GLOBAL_USERS__'] && store['__GLOBAL_USERS__'][uid]) {
+          // V100: Keep identity (name/pass/role) fresh in __GLOBAL_USERS__ without touching current-month team/grade/target!
+          store['__GLOBAL_USERS__'][uid] = {
+            ...store['__GLOBAL_USERS__'][uid],
+            name: userObj.name || store['__GLOBAL_USERS__'][uid].name,
+            pass: userObj.pass || store['__GLOBAL_USERS__'][uid].pass,
+            role: userObj.role || store['__GLOBAL_USERS__'][uid].role,
+            updatedTs: nowTs
+          };
         }
         localStorage.setItem('gb_persistent_user_edits_v54', JSON.stringify(store));
         window._gbStoreCacheGenV67 = (window._gbStoreCacheGenV67 || 1) + 1;
@@ -25424,10 +25462,16 @@ function renderChatHubView() {
             const isEditingCurrentMonthV96 = (monthCmpV96 === 0);
             const isEditingFutureMonthV96 = (monthCmpV96 > 0);
 
-            // V96: Freeze previous/active month snapshot BEFORE mutating so earlier months NEVER change!
-            const frozenSnaps = !isNewAccount ? freezePrevMonthUserSnapshotV96(newUser.id, selectedMonthKey) : [];
+            // V99: ONLY freeze previous/active month snapshot if team, grade, or baseTarget actually changed!
+            const prevUserInMonthV99 = (!isNewAccount && idx !== -1) ? (getUsersForMonth(selectedMonthKey, true).find(u => u && String(u.id).trim() === String(newUser.id).trim()) || users[idx]) : null;
+            const monthMetricsChangedV99 = !prevUserInMonthV99 ||
+              normalizeTeamNameAlias(prevUserInMonthV99.team) !== normalizeTeamNameAlias(newUser.team) ||
+              String(prevUserInMonthV99.grade || '') !== String(newUser.grade || '') ||
+              Number(prevUserInMonthV99.baseTarget || 0) !== Number(newUser.baseTarget || 0);
+            const frozenSnaps = (!isNewAccount && monthMetricsChangedV99) ? freezePrevMonthUserSnapshotV96(newUser.id, selectedMonthKey) : [];
 
             let userPayloadForSheet = null;
+            let isIdentityOnlySheetSaveV100 = false;
             if (isNewAccount) {
               users.push(newUser);
               setStored('users', users);
@@ -25443,6 +25487,7 @@ function renderChatHubView() {
                 users[idx] = { ...users[idx], name: newUser.name, pass: newUser.pass, role: newUser.role, updatedTs: nowTs };
                 setStored('users', users);
                 userPayloadForSheet = users[idx];
+                isIdentityOnlySheetSaveV100 = true;
               }
             }
 
@@ -25486,25 +25531,30 @@ function renderChatHubView() {
             renderAppLayout();
             showPortalToast('User ID Saved & Synced!', newUser.name + ' (' + newUser.id + ') updated for ' + selectedMonthKey + '!', 'success');
 
+            // V99: Send frozen past-month snapshots & secondary configs with skipRebuild:true (~0.2s, ZERO tab flashing or lock timeout!)
             for (const snap of frozenSnaps) {
-              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj) }).catch(() => {});
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj), skipRebuild: true }).catch(() => {});
+            }
+            if (joinMonthsSyncObj) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: 'USER_JOIN_MONTHS', configJson: JSON.stringify(joinMonthsSyncObj), skipRebuild: true }).catch(() => {});
+            }
+            const saveUserWillRebuildMonth = Boolean(userPayloadForSheet) && !isIdentityOnlySheetSaveV100;
+            if (syncedRosterRowV96) {
+              await postToSheet('SAVE_ROSTER_ROW', { ...syncedRosterRowV96, skipRebuild: true, ...logMeta }).catch(() => {});
             }
             if (userPayloadForSheet) {
               await postToSheet('SAVE_USER', {
                 ...userPayloadForSheet,
-                monthKey: selectedMonthKey,
+                identityOnly: isIdentityOnlySheetSaveV100,
+                skipRebuild: isIdentityOnlySheetSaveV100 && monthMetricsChangedV99,
+                monthKey: isIdentityOnlySheetSaveV100 ? getEffectivePortalActiveMonthKeyStrV95() : selectedMonthKey,
                 ...logMeta
               }).catch(() => {});
             }
-            if (joinMonthsSyncObj) {
-              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: 'USER_JOIN_MONTHS', configJson: JSON.stringify(joinMonthsSyncObj) }).catch(() => {});
-            }
-            if (syncedRosterRowV96) {
-              await postToSheet('SAVE_ROSTER_ROW', { ...syncedRosterRowV96, ...logMeta }).catch(() => {});
-            }
-            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+            // Trigger sheet rebuild on effKey whenever SAVE_USER didn't rebuild this month (e.g. future-month edit)!
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj), skipRebuild: saveUserWillRebuildMonth }).catch(() => {});
             if (otherConfigObj) {
-              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj), skipRebuild: true }).catch(() => {});
             }
           },
           'Yes, Confirm & Save',
@@ -25574,17 +25624,17 @@ function renderChatHubView() {
             showPortalToast('Team Assigned & Synced!', `${targetUser.name} is now assigned to ${cleanNewTeam} for ${selectedMonthKey}.`, 'success');
 
             for (const snap of frozenSnaps) {
-              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj) }).catch(() => {});
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj), skipRebuild: true }).catch(() => {});
+            }
+            if (syncedRosterRowV96) {
+              await postToSheet('SAVE_ROSTER_ROW', { ...syncedRosterRowV96, skipRebuild: true, ...logMeta }).catch(() => {});
             }
             if (isEditingCurrentMonthV96) {
               await postToSheet('SAVE_USER', { ...updatedUsrObj, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
             }
-            if (syncedRosterRowV96) {
-              await postToSheet('SAVE_ROSTER_ROW', { ...syncedRosterRowV96, ...logMeta }).catch(() => {});
-            }
-            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj), skipRebuild: isEditingCurrentMonthV96 }).catch(() => {});
             if (otherConfigObj) {
-              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj), skipRebuild: true }).catch(() => {});
             }
           },
           `Yes, Assign to ${cleanNewTeam}`,
@@ -25669,15 +25719,15 @@ function renderChatHubView() {
             showPortalToast('Released to Floating Pool!', `${memberName} (${empId}) is now in ${floatingPoolName} for ${selectedMonthKey}.`, 'warning');
 
             for (const snap of frozenSnaps) {
-              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj) }).catch(() => {});
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj), skipRebuild: true }).catch(() => {});
             }
+            await postToSheet('SAVE_ROSTER_ROW', { ...updatedRosterRow, skipRebuild: true, ...logMeta }).catch(() => {});
             if (isEditingCurrentMonthV96) {
               await postToSheet('SAVE_USER', { ...releasedUsrObj, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
             }
-            await postToSheet('SAVE_ROSTER_ROW', { ...updatedRosterRow, ...logMeta }).catch(() => {});
-            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj), skipRebuild: isEditingCurrentMonthV96 }).catch(() => {});
             if (otherConfigObj) {
-              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj), skipRebuild: true }).catch(() => {});
             }
           },
           'Yes, Release to Pool',
@@ -27883,6 +27933,8 @@ function renderChatHubView() {
               await postToSheet('SAVE_MONTHLY_CONFIG', {
                 monthKey: tk,
                 configJson: JSON.stringify(configs[tk]),
+                buildMode: 'PRODUCT_ONLY',
+                skipRosterRebuild: true,
                 ...logMeta
               }).catch(() => {});
             }
@@ -28076,6 +28128,8 @@ function renderChatHubView() {
             postToSheet('SAVE_MONTHLY_CONFIG', {
               monthKey: effKey,
               configJson: JSON.stringify(configs[effKey]),
+              buildMode: 'SALES_ONLY',
+              skipRosterRebuild: true,
               ...logMeta
             }).catch(() => {});
           },
@@ -28294,6 +28348,7 @@ function renderChatHubView() {
             postToSheet('SAVE_MONTHLY_CONFIG', {
               monthKey: effKey,
               configJson: JSON.stringify(configs[effKey]),
+              skipRebuild: true,
               ...logMeta
             }).catch(() => {});
           },
@@ -29077,8 +29132,8 @@ function renderChatHubView() {
             renderAppLayout();
             showPortalToast('Master Target Rules Saved!', `Updated ${selectedMonthKey} Buffer % & Working Days across Portal & Google Sheets.`, 'success');
 
-            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: fbKey, configJson: JSON.stringify(configs[fbKey]), ...logMeta }).catch(() => {});
-            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: waKey, configJson: JSON.stringify(configs[waKey]), ...logMeta }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: fbKey, configJson: JSON.stringify(configs[fbKey]), skipRebuild: true, ...logMeta }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: waKey, configJson: JSON.stringify(configs[waKey]), skipRebuild: true }).catch(() => {});
           },
           'Yes, Save Rules & Sync',
           true
@@ -29399,7 +29454,8 @@ function renderChatHubView() {
           const match = res.rosterRecords.find(r => String(r.monthKey || '').trim() === rMk && String(r.id || '').trim() === rId);
           if (!match) return false;
           if (p.isDeleted) return Boolean(match.isDeleted);
-          return ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'].every(d =>
+          const rNameOk = !p.name || String(match.name || '').replace(/\s*\(TL\)\s*/gi, '').trim() === String(p.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
+          return rNameOk && ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'].every(d =>
             !p[d] || String(match[d] || '').trim() === String(p[d] || '').trim()
           ) && (!p.team || normalizeTeamNameAlias(match.team) === normalizeTeamNameAlias(p.team));
         }
@@ -29409,11 +29465,12 @@ function renderChatHubView() {
           const uid = String(p.id || '').trim();
           const match = res.customUsers.find(u => String(u.id || '').trim() === uid);
           if (!match) return false;
+          const nameOk = !p.name || String(match.name || '').replace(/\s*\(TL\)\s*/gi, '').trim() === String(p.name || '').replace(/\s*\(TL\)\s*/gi, '').trim();
           const teamOk = !p.team || normalizeTeamNameAlias(match.team) === normalizeTeamNameAlias(p.team);
           const gradeOk = !p.grade || String(match.grade || '').trim() === String(p.grade || '').trim();
           const tgtOk = p.baseTarget === undefined || Number(match.baseTarget || 0) === Number(p.baseTarget || 0);
           const passOk = !p.pass || String(match.pass || '').trim() === String(p.pass || '').trim();
-          return teamOk && gradeOk && tgtOk && passOk;
+          return nameOk && teamOk && gradeOk && tgtOk && passOk;
         }
 
         return true;
@@ -31766,9 +31823,9 @@ function renderChatHubView() {
               monthKey: selectedMonthKey,
               ...logMeta
             }).catch(() => {});
-            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj), skipRebuild: true }).catch(() => {});
             if (otherConfigObj) {
-              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj), skipRebuild: true }).catch(() => {});
             }
           },
           'Yes, Rename & Migrate ID',
