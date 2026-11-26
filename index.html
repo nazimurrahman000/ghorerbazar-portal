@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v97)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v98)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -168,6 +168,20 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      findAnyUserByIdV96. (5) Cloud polling monthKey uses getEffectivePortalActiveMonthKeyStrV95().
      (6) saveLocalUserEditLock bumps _gbStoreCacheGenV67, and V66 ID rename migrates USER_JOIN_MONTHS
      and gb_persistent_user_edits_v54 cleanly.
+   - MONTHLY DRIVE PRODUCT ON/OFF TOGGLE, DYNAMIC GIFT HINT & PRODUCT MODAL FIX (V98):
+     (1) Fixed ID mismatch in V58 handleSaveProductConfig & handleRemoveCustomProduct
+     (cfg_en_/cfg_name_/cfg_kg_/cfg_prod_applyBothCh) so save confirmation preview & remove modal
+     display exact product names, KG targets & active count instead of 0.
+     (2) Added per-month isDriveProductSystemActiveForMonth(mKey) & toggleDriveProductSystemForMonth(mKey)
+     (stored in Monthly_Configs[mk].driveProductEnabled, with 1-click toggle in Role & Feature Access
+     and Edit Product Targets modal). When deactivated for a month, Drive Product tab hides for agents,
+     Dashboard hides Product Incentive cards cleanly, and Incentive tab calculates ৳0 product bonus/gifts
+     for that month only (past months remain 100% untouched).
+     (3) Replaced hardcoded Pink Salt/Black Garlic gift text in Dashboard Incentive Banner with live
+     dynamic active-product gift items (or clean inactive status when disabled).
+     (4) Forward-only gradeTargets carry-forward (prevMk < mk) in getGradeTargetsForMonth &
+     getGradeMapForChannelScale so updated grade amounts inherit into future months without ever
+     touching previous months.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -641,12 +655,37 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       return Math.round(base * 1.05);
     }
 
-    function getGradeTargetsForMonth(mKey) {
+    function resolveChannelGradeTargetsCarryForwardV98(chKey, mKey) {
+      const mk = String(mKey || selectedMonthKey || '').replace(/^WA_/, '').trim();
+      const ch = chKey === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK';
+      const baseDefaults = ch === 'WHATSAPP' ? WA_DEFAULT_GRADE_TARGETS : DEFAULT_GRADE_TARGETS;
       const configs = getStored('monthly_configs', {});
-      const effKey = getEffectiveMonthConfigKey(mKey);
-      const mCfg = configs[effKey] || {};
-      const baseDefaults = activeChannel === 'WHATSAPP' ? WA_DEFAULT_GRADE_TARGETS : DEFAULT_GRADE_TARGETS;
-      return { ...baseDefaults, ...(mCfg.gradeTargets || {}) };
+      const effKey = ch === 'WHATSAPP' ? `WA_${mk}` : mk;
+      if (configs[effKey] && configs[effKey].gradeTargets && Object.keys(configs[effKey].gradeTargets).length > 0) {
+        return { ...baseDefaults, ...configs[effKey].gradeTargets };
+      }
+      // Forward-only carry-forward from latest strictly earlier month (prevMk < mk) — NEVER leaks backward!
+      const targetNum = parseMonthKeyNumV96(mk);
+      if (targetNum > 0) {
+        let bestNum = 0;
+        let bestGrades = null;
+        Object.keys(configs).forEach(ck => {
+          const isWa = ck.startsWith('WA_');
+          if ((ch === 'WHATSAPP' && !isWa) || (ch === 'FACEBOOK' && isWa)) return;
+          const cleanCk = ck.replace(/^WA_/, '');
+          const cNum = parseMonthKeyNumV96(cleanCk);
+          if (cNum > 0 && cNum < targetNum && cNum > bestNum && configs[ck] && configs[ck].gradeTargets && Object.keys(configs[ck].gradeTargets).length > 0) {
+            bestNum = cNum;
+            bestGrades = configs[ck].gradeTargets;
+          }
+        });
+        if (bestGrades) return { ...baseDefaults, ...bestGrades };
+      }
+      return { ...baseDefaults };
+    }
+
+    function getGradeTargetsForMonth(mKey) {
+      return resolveChannelGradeTargetsCarryForwardV98(activeChannel === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK', mKey || selectedMonthKey);
     }
 
     const DEFAULT_USERS = [
@@ -1369,6 +1408,64 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       );
     }
 
+    // V98: Per-Month Drive Product Incentive On/Off Switch (zero effect on past months!)
+    function isDriveProductSystemActiveForMonth(mKey) {
+      const mk = mKey || selectedMonthKey;
+      const configs = getStored('monthly_configs', {});
+      const effKey = getEffectiveMonthConfigKey(mk);
+      if (configs[effKey] && configs[effKey].driveProductEnabled === false) return false;
+      if (configs[mk] && configs[mk].driveProductEnabled === false) return false;
+      return true;
+    }
+
+    function toggleDriveProductSystemForMonth(mKey, forceVal) {
+      if (!isSuperAdmin(currentUser) && !hasFeatureAccess(currentUser, 'feat_edit_products')) return;
+      const mk = mKey || selectedMonthKey;
+      const currentState = isDriveProductSystemActiveForMonth(mk);
+      const nextState = (typeof forceVal === 'boolean') ? forceVal : !currentState;
+
+      openConfirmWarningModal(
+        `${nextState ? 'Activate' : 'Deactivate'} Drive Product Incentive (${mk})?`,
+        `Are you sure you want to <strong>${nextState ? 'ACTIVATE' : 'DEACTIVATE'}</strong> the Drive Product Incentive system for <strong>${mk}</strong> across both Facebook & WhatsApp?<br><br>• ${nextState ? 'Drive Product tab, Dashboard product cards & product bonuses will be active for ' + mk + '.' : 'Drive Product tab & Dashboard product cards will be hidden from agents for ' + mk + ', and product bonus/gifts will be ৳0 for ' + mk + '.'}<br>• Past months' product targets, sales & bonuses will remain 100% untouched.`,
+        'Drive Product System Confirmation',
+        async () => {
+          const configs = getStored('monthly_configs', {});
+          const targetKeys = Array.from(new Set([mk, `WA_${mk}`]));
+          targetKeys.forEach(tk => {
+            if (!configs[tk]) configs[tk] = { users: {}, products: {} };
+            configs[tk].driveProductEnabled = nextState;
+          });
+          setStored('monthly_configs', configs);
+          markLocalUserOrConfigMutatedNow();
+
+          const logMeta = recordActivityLog(
+            nextState ? 'Activated Drive Product System' : 'Deactivated Drive Product System',
+            `${currentUser.name} (${currentUser.id}) ${nextState ? 'ENABLED' : 'DISABLED'} Drive Product Incentive system for ${mk}`
+          );
+          if (!nextState && activeTab === 'drive_product' && !isSuperAdmin(currentUser) && !hasFeatureAccess(currentUser, 'feat_edit_products')) {
+            activeTab = 'dashboard';
+          }
+          renderAppLayout();
+          showPortalToast(
+            nextState ? `Drive Product Activated (${mk})` : `Drive Product Deactivated (${mk})`,
+            nextState
+              ? `Drive Product targets & incentives are now active for ${mk}!`
+              : `Drive Product tab & cards are now hidden for ${mk} (past months untouched).`,
+            nextState ? 'success' : 'warning'
+          );
+          for (const tk of targetKeys) {
+            await postToSheet('SAVE_MONTHLY_CONFIG', {
+              monthKey: tk,
+              configJson: JSON.stringify(configs[tk]),
+              ...logMeta
+            }).catch(() => {});
+          }
+        },
+        nextState ? 'Yes, Activate Drive Product' : 'Yes, Deactivate Drive Product',
+        true
+      );
+    }
+
     function toggleBulkFeatureForAllAgents(featureKey, enableVal) {
       if (!isSuperAdmin(currentUser)) return;
       const allUsers = getUsersForMonth(selectedMonthKey).filter(u => String(u.id) !== '10122');
@@ -1401,6 +1498,9 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       if (!u) return false;
       if (featureKey === 'tab_sprint_target' && !isSprintSystemActiveForMonth(selectedMonthKey)) {
         return isSuperAdmin(u) || hasFeatureAccess(u, 'feat_edit_sprint_targets');
+      }
+      if (featureKey === 'tab_drive_product' && !isDriveProductSystemActiveForMonth(selectedMonthKey)) {
+        return isSuperAdmin(u) || hasFeatureAccess(u, 'feat_edit_products');
       }
       if (isSuperAdmin(u)) return true;
       // Critical Master Controls: ONLY active if Nazim explicitly delegated them to this specific ID!
@@ -2181,9 +2281,13 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       return result;
     }
 
-    // Returns ONLY active/enabled products for the selected month (could be 4, 5, 6, 7+ products!)
+    // Returns ONLY active/enabled products for the selected month (could be 0, 4, 5, 6, 7+ products!)
     function getActiveProductsForMonth(mKey) {
-      const all = getAllConfiguredProductsForMonth(mKey);
+      const mk = mKey || selectedMonthKey;
+      if (typeof isDriveProductSystemActiveForMonth === 'function' && !isDriveProductSystemActiveForMonth(mk)) {
+        return {};
+      }
+      const all = getAllConfiguredProductsForMonth(mk);
       const active = {};
       Object.keys(all).forEach(k => {
         if (all[k].enabled !== false) {
@@ -3928,7 +4032,17 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             <div class="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-amber-200/70">
               ${(incentiveSummary.earnedGiftItems && incentiveSummary.earnedGiftItems.length > 0)
                 ? incentiveSummary.earnedGiftItems.map(g => `<span class="px-2 py-0.5 rounded-md bg-white border border-rose-300 text-rose-700 text-[10px] font-extrabold shadow-2xs">${g}</span>`).join('')
-                : `<span class="text-[10px] font-bold text-amber-800">🎁 Product Gifts: Pink Salt 100% = <strong>2L Mustard Oil</strong> • Black Garlic 100% = <strong>400gm Gawa Ghee</strong></span>`
+                : (() => {
+                    const actProdsHint = getActiveProductsForMonth(selectedMonthKey);
+                    const actKeysHint = Object.keys(actProdsHint);
+                    if (actKeysHint.length === 0) {
+                      return `<span class="text-[10px] font-bold text-amber-800">📦 Drive Product Incentive is inactive for ${selectedMonthKey}.</span>`;
+                    }
+                    const giftPairs = actKeysHint.filter(pk => actProdsHint[pk] && actProdsHint[pk].item100).map(pk => `${actProdsHint[pk].name} 100% = <strong>${actProdsHint[pk].item100}</strong>`);
+                    return giftPairs.length > 0
+                      ? `<span class="text-[10px] font-bold text-amber-800">🎁 Product Gifts: ${giftPairs.join(' • ')}</span>`
+                      : `<span class="text-[10px] font-bold text-amber-800">🔥 ${actKeysHint.length} Active Drive Product(s) for ${selectedMonthKey}</span>`;
+                  })()
               }
               ${(incentiveSummary.earnedCashBadges || []).map(c => `<span class="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-extrabold">💰 ${c}</span>`).join('')}
             </div>
@@ -4816,6 +4930,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             </div>
           </div>
 
+          ${Object.keys(activeProds).length > 0 ? `
           <div>
             <div class="flex items-center justify-between mb-2.5">
               <h3 class="text-xs font-black text-slate-800 uppercase tracking-wide">
@@ -4862,6 +4977,15 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
               }).join('')}
             </div>
           </div>
+          ` : (hasFeatureAccess(u, 'feat_edit_products') ? `
+          <div class="card-dynamic px-4 py-3 bg-slate-50 border border-dashed border-slate-300 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs font-extrabold text-slate-600"><i class="fa-solid fa-box-open text-slate-400 mr-1.5"></i>Drive Product Incentive is turned OFF for ${selectedMonthKey}.</span>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="toggleDriveProductSystemForMonth('${selectedMonthKey}', true)" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black cursor-pointer"><i class="fa-solid fa-toggle-on mr-1"></i>Activate Products (${selectedMonthKey})</button>
+              <button type="button" onclick="openProductConfigModal()" class="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-extrabold cursor-pointer"><i class="fa-solid fa-pen mr-1"></i>Configure Products</button>
+            </div>
+          </div>
+          ` : '')}
         </div>
       `;
     }
@@ -15439,6 +15563,16 @@ function renderChatHubView() {
                   ${isSprintSystemActiveForMonth(selectedMonthKey) ? `Deactivate Sprint (${selectedMonthKey})` : `Activate Sprint (${selectedMonthKey})`}
                 </button>
               </div>
+              <div class="p-3 rounded-2xl bg-white/10 border border-white/20 flex items-center gap-3">
+                <div>
+                  <span class="text-[9px] font-black uppercase text-amber-300 block">Drive Product Incentive (${selectedMonthKey})</span>
+                  <strong class="text-xs font-extrabold text-white">${isDriveProductSystemActiveForMonth(selectedMonthKey) ? '✅ Active for All Agents' : '🚫 Deactivated for Agents'}</strong>
+                </div>
+                <button type="button" onclick="toggleDriveProductSystemForMonth('${selectedMonthKey}')" class="px-3.5 py-2 rounded-xl text-xs font-black shadow transition-colors cursor-pointer ${isDriveProductSystemActiveForMonth(selectedMonthKey) ? 'bg-rose-500 hover:bg-rose-600 text-white' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}">
+                  <i class="fa-solid ${isDriveProductSystemActiveForMonth(selectedMonthKey) ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1"></i>
+                  ${isDriveProductSystemActiveForMonth(selectedMonthKey) ? `Deactivate Products (${selectedMonthKey})` : `Activate Products (${selectedMonthKey})`}
+                </button>
+              </div>
               <div class="px-4 py-2.5 rounded-2xl bg-white/10 border border-white/15 text-right">
                 <span class="text-[10px] font-extrabold uppercase text-purple-300 block">Controllable IDs</span>
                 <strong class="text-lg font-black text-white">${controllableUsers.length} Accounts</strong>
@@ -22856,12 +22990,7 @@ function renderChatHubView() {
       window.userModalSelectedScaleChannel = 'FACEBOOK';
 
       window.getGradeMapForChannelScale = function(chKey, mKey) {
-        const mk = mKey || selectedMonthKey;
-        const configs = getStored('monthly_configs', {});
-        const effKey = chKey === 'WHATSAPP' ? ('WA_' + mk) : mk;
-        const mCfg = configs[effKey] || {};
-        const baseDefaults = chKey === 'WHATSAPP' ? WA_DEFAULT_GRADE_TARGETS : DEFAULT_GRADE_TARGETS;
-        return { ...baseDefaults, ...(mCfg.gradeTargets || {}) };
+        return resolveChannelGradeTargetsCarryForwardV98(chKey === 'WHATSAPP' ? 'WHATSAPP' : 'FACEBOOK', mKey || selectedMonthKey);
       };
 
       window.setUserModalChannelScale = function(chKey, shouldSyncFloatingTeam = true) {
@@ -27520,6 +27649,9 @@ function renderChatHubView() {
                     <h3 class="text-base font-black text-slate-900">Edit Monthly Drive Products, Gifts & 100%+ Rates (${selectedMonthKey})</h3>
                     <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">${activeCount} Active Products</span>
                     <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800">${chLabel}</span>
+                    <button type="button" onclick="closeModal('productConfigModal'); toggleDriveProductSystemForMonth('${selectedMonthKey}');" class="px-2.5 py-0.5 rounded-full text-[10px] font-black cursor-pointer transition-colors ${isDriveProductSystemActiveForMonth(selectedMonthKey) ? 'bg-rose-100 hover:bg-rose-200 text-rose-700' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}">
+                      <i class="fa-solid ${isDriveProductSystemActiveForMonth(selectedMonthKey) ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1"></i>${isDriveProductSystemActiveForMonth(selectedMonthKey) ? `Turn Off Drive Products (${selectedMonthKey})` : `Turn On Drive Products (${selectedMonthKey})`}
+                    </button>
                   </div>
                   <p class="text-xs font-bold text-slate-500 mt-0.5">
                     Rename products, change KG targets, edit 90%/100% cash bonuses, Gift items, 100%+ per-kg/500gm rates, or add 7th/8th+ custom products — syncs automatically to Portal & Google Sheet 1 + 2!
@@ -27691,7 +27823,7 @@ function renderChatHubView() {
 
       handleRemoveCustomProduct = function(prodKey) {
         if (!hasFeatureAccess(currentUser, 'feat_edit_products')) return;
-        const pName = document.getElementById(`cfg_prod_name_${prodKey}`)?.value?.trim() || prodKey;
+        const pName = document.getElementById(`cfg_name_${prodKey}`)?.value?.trim() || prodKey;
         openConfirmWarningModal(
           `Remove Drive Product "${pName}"?`,
           `Are you sure you want to remove custom Drive Product <strong>${pName}</strong> from <strong>${selectedMonthKey}</strong>?`,
@@ -27720,14 +27852,15 @@ function renderChatHubView() {
         const allProdsPrev = getAllConfiguredProductsForMonth(selectedMonthKey);
         const previewLines = [];
         Object.keys(allProdsPrev).forEach(k => {
-          const enEl = document.getElementById(`cfg_prod_en_${k}`);
-          const nameEl = document.getElementById(`cfg_prod_name_${k}`);
-          const kgEl = document.getElementById(`cfg_prod_kg_${k}`);
+          const enEl = document.getElementById(`cfg_en_${k}`);
+          const nameEl = document.getElementById(`cfg_name_${k}`);
+          const kgEl = document.getElementById(`cfg_kg_${k}`);
           if (nameEl && (!enEl || enEl.checked)) {
             previewLines.push(`<strong>${nameEl.value.trim() || allProdsPrev[k].name}</strong>: ${Number(kgEl?.value) || allProdsPrev[k].targetKg} kg`);
           }
         });
-        const applyBoth = document.getElementById('cfg_prod_apply_both_channels')?.checked !== false;
+        const applyBothEl = document.getElementById('cfg_prod_applyBothCh');
+        const applyBoth = applyBothEl ? applyBothEl.checked : (window._prodConfigApplyBothChannelsV58 !== false);
         const scopeLabel = applyBoth ? 'Both Facebook & WhatsApp' : (activeChannel === 'WHATSAPP' ? 'WhatsApp Only' : 'Facebook Only');
 
         openConfirmWarningModal(
