@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v94)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v97)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -31,7 +31,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 - Special Monthly_Configs cloud keys (NEVER break or overwrite structure):
   CHAT_AND_NOTICES, DEACTIVATED_USERS, DELETED_USERS, FRAUD_API_CONFIG,
   MIRROR_SHEET_CONFIG, PORTAL_MASTER_CONFIG, RENAMED_USER_IDS, RESIGNED_USERS,
-  OFFICIAL_NOTICES, ROLE_PERMISSIONS, USER_AVATARS, USER_BELL_STATE, LEAVE_RECORDS_<MM/YYYY>.
+  OFFICIAL_NOTICES, USER_JOIN_MONTHS, ROLE_PERMISSIONS, USER_AVATARS, USER_BELL_STATE, LEAVE_RECORDS_<MM/YYYY>.
 
 [SECTION B — ACTIVE BUSINESS & CALCULATION RULES]
 1. TARGET +5% BUFFER RULE (STRICT PORTAL vs EXTERNAL SEPARATION):
@@ -139,6 +139,35 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      with legacy CHAT_AND_NOTICES notices), added 55KB keepalive guard in postToSheet (prevents
      browser 64KB drop), and added 44,000-char safe trim guard on CHAT_AND_NOTICES (prevents
      Google Sheets 50,000-char reject).
+   - 1ST-OF-MONTH 10:00 AM ROLLOVER & AGENT LOCK CUTOFF (V95):
+     Portal auto-month switch and Agent previous-month edit lock now roll over cleanly at
+     10:00 AM on the 1st of each new month (via getEffectivePortalActiveMonthKeyStrV95 &
+     checkAndApplyAutoMonthRolloverV95) instead of 12:00 AM midnight — applies universally to
+     all roles (Agents, TLs, Supervisors & all future newly created accounts) and auto-switches
+     even already-open tabs at 10:00 AM without adding extra timers or affecting real login dates.
+   - NEXT-MONTH ZERO-IMPACT ISOLATION, AUTO-SNAPSHOT FREEZE & ROSTER UPGRADE (V96):
+     (1) Numeric month comparison (compareMonthKeysV96) replaces all string >= month checks
+     (fixes Jan 2027+ year-rollover bugs). (2) Editing any agent's team/grade/target in a new
+     or future month auto-freezes the previous/current month's snapshot first, never mutates
+     past/running months or leaks globalLocks across months, and carries forward forward-only
+     (<= mk) into subsequent months automatically. (3) Brand-new accounts record USER_JOIN_MONTHS
+     so future joiners never pollute earlier months; Resigned agents remain preserved in their
+     resignation month but auto-exclude from next month onwards (still visible in Target Setup &
+     IDs for re-activation). (4) Duty Roster carries forward latest earlier-month shifts, syncs
+     SAVE_ROSTER_ROW on Target Setup team edits, honors intentional Sat-Thu 3 PM + Fri DO shifts,
+     and hides Resigned/Deactivated staff from active Roster & Work Force counts. (5) Sprint
+     auto-phase shows Sprint 1 for future months and Sprint 3 on 1st before 10:00 AM closing.
+   - DEEP AUDIT HARDENING — MULTI-DAY ROSTER EDIT CACHE, SESSION SYNC & REPORT MONTH TEAM TAG (V97):
+     (1) Fixed V47 getRosterForMonth stale memoization key by adding monotonic _pendingRosterEditSeqV97
+     so editing multiple days (Sat..Fri) for the SAME agent before clicking Save never snaps back.
+     (2) Added resolveEffectiveSessionUserV97() in handleLogin, init, checkAndApplyAutoMonthRolloverV95,
+     and handleCloudData so any agent moved in FB, WA, or cross-channel for next month automatically logs
+     into their new team/channel/grade/target at 10:00 AM on the 1st (and open tabs auto-sync too).
+     (3) handleSalesSubmit resolves targetAgent via the report date's exact month (dateStr.substring(3))
+     for both Agents and Admins. (4) openUserModal finds past-month Resigned users cleanly via
+     findAnyUserByIdV96. (5) Cloud polling monthKey uses getEffectivePortalActiveMonthKeyStrV95().
+     (6) saveLocalUserEditLock bumps _gbStoreCacheGenV67, and V66 ID rename migrates USER_JOIN_MONTHS
+     and gb_persistent_user_edits_v54 cleanly.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -333,6 +362,218 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
     function getCurrentMonthKeyStr() {
       const d = new Date();
       return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+
+    // V95: Portal Active Month rolls over at 10:00 AM on the 1st of the new month (gives Night/Late-Evening shifts until 10:00 AM!)
+    function getEffectivePortalActiveMonthKeyStrV95(refDate) {
+      const d = (refDate instanceof Date) ? new Date(refDate.getTime()) : new Date();
+      if (d.getDate() === 1 && d.getHours() < 10) {
+        d.setDate(0); // Safely moves to last day of previous month (handles Jan 1 -> Dec of prev year too!)
+      }
+      return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    }
+
+    // V97: Always resolve session user against the active portal month's monthly_configs/carry-forward
+    // so agents rearranged for a new month (FB, WA, or cross-channel) immediately get their new team/grade/target!
+    function resolveEffectiveSessionUserV97(rawUser, monthKeyOverride) {
+      if (!rawUser || !rawUser.id) return rawUser;
+      const baseU = normalizeUserRecord(rawUser);
+      const mk = monthKeyOverride || getEffectivePortalActiveMonthKeyStrV95();
+      try {
+        if (typeof getUsersForMonth === 'function') {
+          const resolved = getUsersForMonth(mk, true).find(u => u && String(u.id).trim() === String(baseU.id).trim());
+          if (resolved) {
+            return normalizeUserRecord({
+              ...baseU,
+              name: resolved.name || baseU.name,
+              team: resolved.team || baseU.team,
+              channel: resolved.channel || getChannelForTeam(resolved.team || baseU.team),
+              grade: resolved.grade || baseU.grade,
+              baseTarget: (resolved.baseTarget !== undefined && resolved.baseTarget !== null) ? Number(resolved.baseTarget) : baseU.baseTarget,
+              role: resolved.role || baseU.role
+            });
+          }
+        }
+      } catch (eResSess97) {}
+      return baseU;
+    }
+
+    function checkAndApplyAutoMonthRolloverV95(shouldRenderIfChanged = false) {
+      const portalActiveMonth = getEffectivePortalActiveMonthKeyStrV95();
+      const lastAutoMonth = localStorage.getItem('gb_last_auto_month');
+      if (lastAutoMonth !== portalActiveMonth) {
+        localStorage.setItem('gb_last_auto_month', portalActiveMonth);
+        localStorage.setItem('gb_selected_month', portalActiveMonth);
+        selectedMonthKey = portalActiveMonth;
+        // V97: Refresh currentUser's team/channel/grade/target for the newly rolled-over month!
+        if (currentUser) {
+          currentUser = resolveEffectiveSessionUserV97(currentUser, portalActiveMonth);
+          setStored('session_user', currentUser);
+          if (currentUser.role === 'agent') {
+            activeChannel = getChannelForTeam(currentUser.team);
+            localStorage.setItem('gb_active_channel', activeChannel);
+            const myT = normalizeTeamNameAlias(currentUser.team);
+            sprintTabTeamScope = myT;
+            driveProdTeamScope = myT;
+          }
+        }
+        if (shouldRenderIfChanged && currentUser && !isAnyModalOpen() && !isUserInteractingWithControl()) {
+          renderAppLayout();
+        }
+        return true;
+      }
+      return false;
+    }
+
+    // V96: Exact Numeric Month Helpers (100% Year-Boundary Safe: e.g. 12/2026 < 01/2027!)
+    function parseMonthKeyNumV96(mk) {
+      const clean = String(mk || '').replace(/^WA_/, '').replace(/^'/, '').trim();
+      const parts = clean.split('/');
+      if (parts.length !== 2) return 0;
+      const mm = parseInt(parts[0], 10);
+      const yy = parseInt(parts[1], 10);
+      if (!mm || !yy || mm < 1 || mm > 12) return 0;
+      return yy * 100 + mm;
+    }
+
+    function compareMonthKeysV96(mkA, mkB) {
+      return parseMonthKeyNumV96(mkA) - parseMonthKeyNumV96(mkB);
+    }
+
+    function getPreviousMonthKeyV96(mk) {
+      const clean = String(mk || '').replace(/^WA_/, '').replace(/^'/, '').trim();
+      const parts = clean.split('/');
+      if (parts.length !== 2) return '';
+      let mm = parseInt(parts[0], 10);
+      let yy = parseInt(parts[1], 10);
+      if (!mm || !yy) return '';
+      mm--;
+      if (mm < 1) { mm = 12; yy--; }
+      return `${String(mm).padStart(2, '0')}/${yy}`;
+    }
+
+    function getUserJoinMonthsStoreV96() {
+      const configs = getStored('monthly_configs', {});
+      return (configs['USER_JOIN_MONTHS'] && typeof configs['USER_JOIN_MONTHS'] === 'object')
+        ? configs['USER_JOIN_MONTHS']
+        : {};
+    }
+
+    function getResignedMonthKeyForUserV96(uid) {
+      const cleanUid = String(uid || '').trim();
+      if (!cleanUid) return '';
+      const configs = getStored('monthly_configs', {});
+      const rMap = (configs['RESIGNED_USERS'] && typeof configs['RESIGNED_USERS'] === 'object') ? configs['RESIGNED_USERS'] : {};
+      const entry = rMap[cleanUid];
+      if (!entry || entry.isRemoved) return '';
+      if (entry.resignedMonth && parseMonthKeyNumV96(entry.resignedMonth) > 0) return String(entry.resignedMonth).trim();
+      const rDate = String(entry.resignedDate || '').replace(/^'/, '').trim();
+      if (rDate.length === 10 && rDate.includes('/')) return rDate.substring(3);
+      return '';
+    }
+
+    function findAnyUserByIdV96(targetId, mKey) {
+      const uid = String(targetId || '').trim();
+      if (!uid) return null;
+      const inMonth = (typeof getUsersForMonth === 'function')
+        ? getUsersForMonth(mKey || selectedMonthKey, true).find(u => u && String(u.id).trim() === uid)
+        : null;
+      if (inMonth) return inMonth;
+      const stored = getStored('users', DEFAULT_USERS).find(u => u && String(u.id).trim() === uid);
+      if (stored) return normalizeUserRecord(stored);
+      const defU = DEFAULT_USERS.find(u => u && String(u.id).trim() === uid);
+      return defU ? normalizeUserRecord(defU) : null;
+    }
+
+    // Auto-freeze previous/active month snapshot for an existing user BEFORE writing edits for a newer month,
+    // guaranteeing that editing a user in Dec 2026 NEVER mutates Nov 2026!
+    function freezePrevMonthUserSnapshotV96(uid, editMonthKey) {
+      const cleanUid = String(uid || '').trim();
+      const editMk = String(editMonthKey || selectedMonthKey || '').trim();
+      if (!cleanUid || parseMonthKeyNumV96(editMk) <= 202610) return [];
+      const activeMk = getEffectivePortalActiveMonthKeyStrV95();
+      const prevMk = getPreviousMonthKeyV96(editMk);
+      const candidateMonths = Array.from(new Set([prevMk, activeMk])).filter(sm =>
+        sm && parseMonthKeyNumV96(sm) >= 202610 && compareMonthKeysV96(sm, editMk) < 0
+      );
+      if (candidateMonths.length === 0) return [];
+
+      let configs = { ...getStored('monthly_configs', {}) };
+      const frozenPayloads = [];
+      let anyChanged = false;
+      const snapTs = Date.now() - 5000;
+
+      candidateMonths.forEach(sm => {
+        const fbExisting = configs[sm] && configs[sm].users && configs[sm].users[cleanUid];
+        const waExisting = configs[`WA_${sm}`] && configs[`WA_${sm}`].users && configs[`WA_${sm}`].users[cleanUid];
+        if (fbExisting || waExisting) return; // Already has explicit snapshot for this month!
+
+        const resolvedInSm = (typeof getUsersForMonth === 'function')
+          ? getUsersForMonth(sm, true).find(u => u && String(u.id).trim() === cleanUid)
+          : null;
+        if (!resolvedInSm) return; // User didn't exist in that earlier month
+
+        const snapTeam = normalizeTeamNameAlias(resolvedInSm.team);
+        const snapCh = resolvedInSm.channel || getChannelForTeam(snapTeam);
+        const snapEntry = {
+          team: snapTeam,
+          channel: snapCh,
+          grade: resolvedInSm.grade || (resolvedInSm.role === 'admin' ? 'TL' : 'A'),
+          baseTarget: Number(resolvedInSm.baseTarget) || 0,
+          updatedTs: snapTs,
+          frozenSnapshotV96: true
+        };
+        const effK = snapCh === 'WHATSAPP' ? `WA_${sm}` : sm;
+        const othK = snapCh === 'WHATSAPP' ? sm : `WA_${sm}`;
+        if (!configs[effK]) configs[effK] = { users: {}, products: {} };
+        if (!configs[effK].users) configs[effK].users = {};
+        if (!configs[othK]) configs[othK] = { users: {}, products: {} };
+        if (!configs[othK].users) configs[othK].users = {};
+
+        configs[effK].users[cleanUid] = { ...snapEntry };
+        configs[othK].users[cleanUid] = { ...snapEntry };
+        anyChanged = true;
+        frozenPayloads.push({ monthKey: effK, configObj: configs[effK] });
+        frozenPayloads.push({ monthKey: othK, configObj: configs[othK] });
+      });
+
+      if (anyChanged) {
+        setStored('monthly_configs', configs);
+      }
+      return frozenPayloads;
+    }
+
+    // Sync/upsert a user's Duty Roster row for selectedMonthKey when their team/name changes in Target Setup & IDs
+    function upsertRosterRowForTeamChangeV96(userObj, mk) {
+      if (!userObj || !userObj.id || userObj.role === 'supervisor') return null;
+      const uid = String(userObj.id).trim();
+      const targetMk = mk || selectedMonthKey;
+      const cleanTeam = normalizeTeamNameAlias(userObj.team);
+      const currentRoster = (typeof getRosterForMonth === 'function') ? getRosterForMonth(targetMk) : [];
+      const curRow = currentRoster.find(r => r && String(r.id).trim() === uid);
+      const updatedRow = {
+        id: uid,
+        name: userObj.name,
+        team: cleanTeam,
+        isTL: userObj.role === 'admin',
+        sat: (curRow && curRow.sat) || '3:00 PM',
+        sun: (curRow && curRow.sun) || '3:00 PM',
+        mon: (curRow && curRow.mon) || '3:00 PM',
+        tue: (curRow && curRow.tue) || '3:00 PM',
+        wed: (curRow && curRow.wed) || '3:00 PM',
+        thu: (curRow && curRow.thu) || '3:00 PM',
+        fri: (curRow && curRow.fri) || 'DO',
+        isDeleted: false,
+        monthKey: targetMk
+      };
+      let savedRoster = [...getStored('roster_records', [])];
+      const rIdx = savedRoster.findIndex(r => r.monthKey === targetMk && String(r.id).trim() === uid);
+      if (rIdx !== -1) savedRoster[rIdx] = updatedRow;
+      else savedRoster.push(updatedRow);
+      if (pendingRosterEditsMap[`${targetMk}_${uid}`]) delete pendingRosterEditsMap[`${targetMk}_${uid}`];
+      setStored('roster_records', savedRoster);
+      markLocalUserOrConfigMutatedNow();
+      return updatedRow;
     }
 
     function buildAvailableMonthsList() {
@@ -867,14 +1108,14 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 
     let activeTab = 'dashboard';
     let selectedMonthKey = (function() {
-      const realNowMonth = getCurrentMonthKeyStr();
+      const portalActiveMonth = getEffectivePortalActiveMonthKeyStrV95();
       const lastAutoMonth = localStorage.getItem('gb_last_auto_month');
-      if (lastAutoMonth !== realNowMonth) {
-        localStorage.setItem('gb_last_auto_month', realNowMonth);
-        localStorage.setItem('gb_selected_month', realNowMonth);
-        return realNowMonth;
+      if (lastAutoMonth !== portalActiveMonth) {
+        localStorage.setItem('gb_last_auto_month', portalActiveMonth);
+        localStorage.setItem('gb_selected_month', portalActiveMonth);
+        return portalActiveMonth;
       }
-      return localStorage.getItem('gb_selected_month') || realNowMonth;
+      return localStorage.getItem('gb_selected_month') || portalActiveMonth;
     })();
     let dashboardScope = (currentUser && currentUser.role === 'admin' && getChannelForTeam(currentUser.team) === activeChannel) ? normalizeTeamNameAlias(currentUser.team) : 'ALL';
     
@@ -1235,8 +1476,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 
     function handleToggleUserActiveStatus(targetId) {
       if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
-      const users = getUsersForMonth(selectedMonthKey, true);
-      const targetUser = users.find(u => String(u.id) === String(targetId));
+      const targetUser = findAnyUserByIdV96(targetId, selectedMonthKey);
       if (!targetUser) return;
 
       if (!canToggleActiveTargetUser(currentUser, targetUser)) {
@@ -2024,57 +2264,93 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 
     function getRosterForMonth(mKey) {
       const mk = mKey || selectedMonthKey;
+      const targetMkNum = parseMonthKeyNumV96(mk);
       const savedList = getStored('roster_records', []);
-      const monthRows = savedList.filter(r => r.monthKey === mk && !r.isDeleted);
-      const deletedIds = new Set(savedList.filter(r => r.monthKey === mk && r.isDeleted).map(r => String(r.id)));
+      const monthRows = savedList.filter(r => r && r.monthKey === mk && !r.isDeleted);
+      const deletedIds = new Set(savedList.filter(r => r && r.monthKey === mk && r.isDeleted).map(r => String(r.id).trim()));
       const allUsers = getUsersForMonth(mk, true);
+      const userById = new Map();
+      allUsers.forEach(u => { if (u && u.id) userById.set(String(u.id).trim(), u); });
+
+      // V96: Build carry-forward map of each user's latest saved shifts from any earlier month (prevMk < mk)
+      const prevShiftByUid = new Map();
+      const prevMkNumByUid = new Map();
+      if (targetMkNum > 0) {
+        savedList.forEach(r => {
+          if (!r || !r.id || r.isDeleted || !r.monthKey) return;
+          const rMkNum = parseMonthKeyNumV96(r.monthKey);
+          if (rMkNum > 0 && rMkNum < targetMkNum) {
+            const uid = String(r.id).trim();
+            if (!prevMkNumByUid.has(uid) || rMkNum >= prevMkNumByUid.get(uid)) {
+              prevMkNumByUid.set(uid, rMkNum);
+              prevShiftByUid.set(uid, r);
+            }
+          }
+        });
+      }
 
       const mergedMap = new Map();
-      // 1. Default Roster Rows
+      // 1. Default Roster Rows (ONLY for users active/present in `mk` — excludes past-resigned & future-joined!)
       DEFAULT_ROSTER.forEach(defRow => {
-        const uid = String(defRow.id);
-        if (!deletedIds.has(uid)) {
-          const usr = allUsers.find(u => String(u.id) === uid);
+        const uid = String(defRow.id).trim();
+        const usr = userById.get(uid);
+        if (!usr || usr.role === 'supervisor' || deletedIds.has(uid)) return;
+        const cfRow = prevShiftByUid.get(uid);
+        mergedMap.set(uid, {
+          ...defRow,
+          ...(cfRow ? { sat: cfRow.sat, sun: cfRow.sun, mon: cfRow.mon, tue: cfRow.tue, wed: cfRow.wed, thu: cfRow.thu, fri: cfRow.fri } : {}),
+          id: uid,
+          name: usr.name || defRow.name,
+          team: normalizeTeamNameAlias(usr.team || defRow.team),
+          isTL: usr.role === 'admin' || Boolean(defRow.isTL)
+        });
+      });
+      // 2. Auto-include any custom/newly created Agents & TLs present in `mk` (carrying forward earlier shifts if any!)
+      allUsers.filter(u => u && u.role !== 'supervisor').forEach(u => {
+        const uid = String(u.id).trim();
+        if (!deletedIds.has(uid) && !mergedMap.has(uid)) {
+          const cfRow = prevShiftByUid.get(uid);
           mergedMap.set(uid, {
-            ...defRow,
-            name: usr ? usr.name : defRow.name,
-            team: usr ? usr.team : defRow.team
+            id: uid,
+            name: u.name,
+            team: normalizeTeamNameAlias(u.team),
+            isTL: u.role === 'admin',
+            sat: (cfRow && cfRow.sat) || '3:00 PM',
+            sun: (cfRow && cfRow.sun) || '3:00 PM',
+            mon: (cfRow && cfRow.mon) || '3:00 PM',
+            tue: (cfRow && cfRow.tue) || '3:00 PM',
+            wed: (cfRow && cfRow.wed) || '3:00 PM',
+            thu: (cfRow && cfRow.thu) || '3:00 PM',
+            fri: (cfRow && cfRow.fri) || 'DO'
           });
         }
       });
-      // 2. Auto-include any newly created custom Agents/TLs from Users List
-      allUsers.filter(u => u.role !== 'supervisor').forEach(u => {
-        const uid = String(u.id);
-        if (!deletedIds.has(uid) && !mergedMap.has(uid) && !DEFAULT_USER_IDS_SET.has(uid)) {
-          mergedMap.set(uid, {
-            id: uid, name: u.name, team: u.team, isTL: u.role === 'admin',
-            sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO'
-          });
-        }
-      });
-      // 3. Apply saved cloud overrides & custom added rows for this month
-      const defaultRosterLookup = new Map(DEFAULT_ROSTER.map(dr => [String(dr.id), dr]));
+      // 3. Apply explicit saved cloud overrides for `mk` (V96: honors ALL saved shifts including Sat-Thu 3:00 PM + Fri DO,
+      //    and keeps `team`/`name` synchronized with `getUsersForMonth(mk)` so Target Setup & Roster never desync!)
       monthRows.forEach(r => {
-        const uid = String(r.id);
+        const uid = String(r.id).trim();
         if (['20101', '20102', '20103', '11102'].includes(uid)) return;
-        const defRow = defaultRosterLookup.get(uid);
-        // Ignore stale auto-generated fallback rows (where sat..thu = 3:00 PM & fri = DO) if DEFAULT_ROSTER has official shifts for this user
-        const isGenericFallback = r.sat === '3:00 PM' && r.sun === '3:00 PM' && r.mon === '3:00 PM' && r.tue === '3:00 PM' && r.wed === '3:00 PM' && r.thu === '3:00 PM' && r.fri === 'DO';
-        if (defRow && isGenericFallback && !(defRow.sat === '3:00 PM' && defRow.sun === '3:00 PM' && defRow.mon === '3:00 PM' && defRow.tue === '3:00 PM' && defRow.wed === '3:00 PM' && defRow.thu === '3:00 PM' && defRow.fri === 'DO')) {
-          return;
-        }
+        const usr = userById.get(uid);
+        if (!usr) return; // Respect join-month & past-month resignation exclusions
         const prev = mergedMap.get(uid) || { id: uid, sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO' };
-        mergedMap.set(uid, { ...prev, ...r, team: normalizeTeamNameAlias(r.team || prev.team) });
+        mergedMap.set(uid, {
+          ...prev,
+          ...r,
+          id: uid,
+          name: usr.name || r.name || prev.name,
+          team: normalizeTeamNameAlias(usr.team || r.team || prev.team),
+          isTL: usr.role === 'admin' || Boolean(prev.isTL)
+        });
       });
       // 4. Apply unsaved pending edits in memory (so all summary formulas recalculate live!)
       Object.keys(pendingRosterEditsMap).forEach(k => {
         if (k.startsWith(mk + '_')) {
           const pRow = pendingRosterEditsMap[k];
           if (pRow.isDeleted) {
-            mergedMap.delete(String(pRow.id));
+            mergedMap.delete(String(pRow.id).trim());
           } else {
-            const prev = mergedMap.get(String(pRow.id)) || {};
-            mergedMap.set(String(pRow.id), { ...prev, ...pRow });
+            const prev = mergedMap.get(String(pRow.id).trim()) || {};
+            mergedMap.set(String(pRow.id).trim(), { ...prev, ...pRow });
           }
         }
       });
@@ -2364,7 +2640,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       lastCloudFetchTime = now;
 
       let pingQuery = '';
-      const liveCalendarMonthKey = getCurrentMonthKeyStr();
+      const liveCalendarMonthKey = getEffectivePortalActiveMonthKeyStrV95();
       if (currentUser) {
         const st = getUserOnlineStatus(currentUser.id);
         pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}&monthKey=${encodeURIComponent(liveCalendarMonthKey)}`;
@@ -2729,7 +3005,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             if (currentUser) {
               const myUpdated = mergedArr.find(u => String(u.id) === String(currentUser.id));
               if (myUpdated) {
-                currentUser = normalizeUserRecord(myUpdated);
+                currentUser = resolveEffectiveSessionUserV97(myUpdated, getEffectivePortalActiveMonthKeyStrV95());
                 setStored('session_user', currentUser);
               }
             }
@@ -2743,8 +3019,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
     }
 
     function init() {
+      checkAndApplyAutoMonthRolloverV95(false);
       if (currentUser) {
-        currentUser = normalizeUserRecord(currentUser);
+        currentUser = resolveEffectiveSessionUserV97(currentUser, getEffectivePortalActiveMonthKeyStrV95());
+        setStored('session_user', currentUser);
         if (currentUser.role === 'agent') {
           activeChannel = getChannelForTeam(currentUser.team);
           localStorage.setItem('gb_active_channel', activeChannel);
@@ -2811,7 +3089,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         showPortalToast('Account Deactivated', 'This Employee ID is currently deactivated by your Team Leader / Admin.', 'error');
         return;
       }
-      const user = normalizeUserRecord(rawUser);
+      const user = resolveEffectiveSessionUserV97(rawUser, getEffectivePortalActiveMonthKeyStrV95());
       currentUser = user;
       setStored('session_user', user);
       activeChannel = user.role === 'supervisor' ? 'ALL_CHANNELS' : getChannelForTeam(user.team);
@@ -6084,7 +6362,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         `Are you sure you want to remove <strong>${memberName} (${empId})</strong> from <strong>${currentTeam}</strong> for <strong>${selectedMonthKey}</strong>?<br><br>• They will move to the <strong>Unassigned / Floating Pool</strong>.<br>• Once in the Floating Pool, any Team Leader (Facebook or WhatsApp) can claim & assign them to their team and roster.<br>• Past months' sales & team records will remain 100% untouched.`,
         'Confirm Team Release',
         async () => {
-          const isCurrentOrFutureMonth = selectedMonthKey >= getCurrentMonthKeyStr();
+          const isCurrentOrFutureMonth = compareMonthKeysV96(selectedMonthKey, getEffectivePortalActiveMonthKeyStrV95()) === 0;
           let users = getStored('users', DEFAULT_USERS);
           const uIdx = users.findIndex(u => String(u.id) === String(empId));
           if (uIdx !== -1 && isCurrentOrFutureMonth) {
@@ -6132,7 +6410,14 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
     function renderDutyRosterView() {
       const u = currentUser;
       const isEditable = hasFeatureAccess(u, 'feat_edit_roster');
-      const allRoster = getRosterForMonth(selectedMonthKey);
+      const allRosterRawV96 = getRosterForMonth(selectedMonthKey);
+      const allUsersMapRosterV96 = new Map(getUsersForMonth(selectedMonthKey, true).map(usr => [String(usr.id).trim(), usr]));
+      // V96: Exclude Resigned & Deactivated accounts from active Duty Roster tables & Work Force counts
+      const allRoster = allRosterRawV96.filter(r => {
+        if (!r || !r.id) return false;
+        const uRec = allUsersMapRosterV96.get(String(r.id).trim());
+        return !uRec || !isUserAccountDeactivated(uRec);
+      });
       const roster = allRoster.filter(r => activeChannel === 'ALL_CHANNELS' || getChannelForTeam(r.team) === activeChannel);
       const days = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
       const dayLabels = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
@@ -6286,7 +6571,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       const allUsersOmni = getUsersForMonth(selectedMonthKey, true);
       const allActiveTeamNames = getDynamicTeamsForChannel('ALL_CHANNELS');
       const unassignedAgentsList = allUsersOmni.filter(usr => {
-        if (usr.role !== 'agent') return false;
+        if (usr.role !== 'agent' || isUserAccountDeactivated(usr)) return false;
         const t = normalizeTeamNameAlias(usr.team);
         return !allActiveTeamNames.includes(t) || isPendingOrFloatingAgent(usr);
       });
@@ -6505,6 +6790,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 
       const updatedRow = { ...targetRow, [dayKey]: newShift, monthKey: selectedMonthKey };
       pendingRosterEditsMap[`${selectedMonthKey}_${empId}`] = updatedRow;
+      window._pendingRosterEditSeqV97 = (window._pendingRosterEditSeqV97 || 0) + 1;
       renderAppLayout();
     }
 
@@ -6516,6 +6802,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 
       const updatedRow = { ...targetRow, [fieldName]: newValue, monthKey: selectedMonthKey };
       pendingRosterEditsMap[`${selectedMonthKey}_${empId}`] = updatedRow;
+      window._pendingRosterEditSeqV97 = (window._pendingRosterEditSeqV97 || 0) + 1;
       renderAppLayout();
     }
 
@@ -6559,6 +6846,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       // Show ONLY agents who are Unassigned / Floating / Pending (NOT in any active team)!
       // Sort Channel-Wise First: Current Channel's Floating/Pending agents at the top, followed by other channel's Floating/Pending agents.
       const unassignedOnlyList = allUsersOmni.filter(usr => {
+        if (isUserAccountDeactivated(usr)) return false;
         const t = normalizeTeamNameAlias(usr.team);
         return !activeTeamNamesList.includes(t) || isPendingOrFloatingAgent(usr);
       }).sort((a, b) => {
@@ -6764,24 +7052,31 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           const assignedGrade = (existingAgent && existingAgent.grade && existingAgent.grade !== 'Pending') ? existingAgent.grade : 'C';
           const assignedBaseTarget = (existingAgent && Number(existingAgent.baseTarget) > 0) ? Number(existingAgent.baseTarget) : Number(gMap[assignedGrade] || 0);
 
-          const isCurrentOrFutureMonth = selectedMonthKey >= getCurrentMonthKeyStr();
-          let users = getStored('users', DEFAULT_USERS);
+          const frozenSnaps = freezePrevMonthUserSnapshotV96(newRow.id, selectedMonthKey);
+          const isEditingCurrentMonthV96 = compareMonthKeysV96(selectedMonthKey, getEffectivePortalActiveMonthKeyStrV95()) === 0;
+          let users = [...getStored('users', DEFAULT_USERS)];
           const uIdx = users.findIndex(u => String(u.id) === String(newRow.id));
           let userToSave = null;
           if (uIdx !== -1) {
-            if (isCurrentOrFutureMonth) {
-              users[uIdx].team = targetTeam;
-              users[uIdx].channel = targetCh;
-              if (users[uIdx].grade === 'Pending' || Number(users[uIdx].baseTarget || 0) === 0) {
-                users[uIdx].grade = assignedGrade;
-                users[uIdx].baseTarget = assignedBaseTarget;
-              }
+            const nextUsr = {
+              ...users[uIdx],
+              team: targetTeam,
+              channel: targetCh,
+              grade: (users[uIdx].grade === 'Pending' || Number(users[uIdx].baseTarget || 0) === 0) ? assignedGrade : users[uIdx].grade,
+              baseTarget: (users[uIdx].grade === 'Pending' || Number(users[uIdx].baseTarget || 0) === 0) ? assignedBaseTarget : users[uIdx].baseTarget,
+              updatedTs: Date.now()
+            };
+            if (isEditingCurrentMonthV96) {
+              users[uIdx] = nextUsr;
               setStored('users', users); markLocalUserOrConfigMutatedNow();
             }
-            userToSave = users[uIdx];
+            if (typeof window.saveLocalUserEditLock === 'function') {
+              window.saveLocalUserEditLock(selectedMonthKey, nextUsr, isEditingCurrentMonthV96);
+            }
+            userToSave = nextUsr;
           }
 
-          const { effKey, monthConfigObj } = syncAgentTeamForSelectedMonthOnly(
+          const { effKey, monthConfigObj, otherKey, otherConfigObj } = syncAgentTeamForSelectedMonthOnly(
             newRow.id,
             newRow.name,
             targetTeam,
@@ -6797,11 +7092,17 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           closeModal('rosterAddModal');
           renderAppLayout();
           showPortalToast('Member Assigned & Synced to Roster!', `${newRow.name} (${newRow.id}) is now live under ${targetTeam} for ${selectedMonthKey}.`, 'success');
-          if (userToSave && isCurrentOrFutureMonth) {
-            await postToSheet('SAVE_USER', { ...userToSave, ...logMeta }).catch(() => {});
+          for (const snap of frozenSnaps) {
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj) }).catch(() => {});
+          }
+          if (userToSave && isEditingCurrentMonthV96) {
+            await postToSheet('SAVE_USER', { ...userToSave, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
           }
           await postToSheet('SAVE_ROSTER_ROW', { ...newRow, ...logMeta }).catch(() => {});
           await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
+          if (otherConfigObj) {
+            await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
+          }
         },
         'Yes, Assign & Sync Now',
         true
@@ -6812,6 +7113,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       Object.keys(pendingRosterEditsMap).forEach(k => {
         if (k.startsWith(selectedMonthKey + '_')) delete pendingRosterEditsMap[k];
       });
+      window._pendingRosterEditSeqV97 = (window._pendingRosterEditSeqV97 || 0) + 1;
       renderAppLayout();
       showPortalToast('Changes Discarded', 'Reverted unsaved Duty Roster edits.', 'warning');
     }
@@ -7588,10 +7890,18 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
     // =========================================================================
     // SPRINT TARGET & LEADERBOARD VIEW (AGENT 10-DAY SPRINTS + TL 80%/100% REWARD)
     // =========================================================================
-    function getAutoCurrentSprintPhase() {
-      const d = new Date().getDate();
+    function getAutoCurrentSprintPhase(mKeyOverride) {
+      const mk = mKeyOverride || selectedMonthKey;
+      const activePortalMk = getEffectivePortalActiveMonthKeyStrV95();
+      const cmp = compareMonthKeysV96(mk, activePortalMk);
+      if (cmp > 0) return 'S1'; // Future month always starts at Sprint 1
+      if (cmp < 0) return 'S3'; // Past closed month defaults to final Sprint 3
+      const now = new Date();
+      // On 1st before 10:00 AM, activePortalMk is still the closing month -> Sprint 3
+      if (now.getDate() === 1 && now.getHours() < 10) return 'S3';
+      const d = now.getDate();
       const rng = (typeof window.getSprintDateRangesForMonthV59 === 'function')
-        ? window.getSprintDateRangesForMonthV59(activeChannel, selectedMonthKey)
+        ? window.getSprintDateRangesForMonthV59(activeChannel, mk)
         : { s1End: 10, s2End: 20 };
       if (d <= rng.s1End) return 'S1';
       if (d <= rng.s2End) return 'S2';
@@ -10288,7 +10598,7 @@ function renderRankingAndComparison() {
         `Are you sure you want to assign <strong>${targetUser.name} (${targetUser.id})</strong> from <strong>${targetUser.team}</strong> to <strong>${cleanNewTeam} (${newChannel})</strong> for <strong>${selectedMonthKey}</strong>?<br><br>• Their sales, roster & targets for <strong>${selectedMonthKey}</strong> will sync under <strong>${cleanNewTeam}</strong>.<br>• Past months' historical data will remain untouched.`,
         'Team Assignment Confirmation',
         async () => {
-          const isCurrentOrFutureMonth = selectedMonthKey >= getCurrentMonthKeyStr();
+          const isCurrentOrFutureMonth = compareMonthKeysV96(selectedMonthKey, getEffectivePortalActiveMonthKeyStrV95()) === 0;
           let users = getStored('users', DEFAULT_USERS);
           const idx = users.findIndex(u => String(u.id) === String(agentId));
           if (idx !== -1 && isCurrentOrFutureMonth) {
@@ -10344,6 +10654,20 @@ function renderRankingAndComparison() {
       const userMap = new Map();
       allChannelUsers.forEach(usr => userMap.set(String(usr.id), usr));
       allOmniPending.forEach(usr => { if (!userMap.has(String(usr.id))) userMap.set(String(usr.id), usr); });
+      // V96: Also show past-month Resigned accounts in Target Setup & IDs (excluded from new-month targets/rosters,
+      // but kept accessible here so Admin can Undo Resign / Re-Activate anytime!)
+      try {
+        const resStoreV96 = (typeof window.getResignedUsersStore === 'function') ? window.getResignedUsersStore() : {};
+        Object.keys(resStoreV96).forEach(rUid => {
+          const rInfo = resStoreV96[rUid];
+          if (!rInfo || rInfo.isRemoved || userMap.has(String(rUid))) return;
+          const rUsr = findAnyUserByIdV96(rUid, selectedMonthKey);
+          if (!rUsr) return;
+          if (activeChannel === 'ALL_CHANNELS' || getChannelForTeam(rUsr.team) === activeChannel) {
+            userMap.set(String(rUid), rUsr);
+          }
+        });
+      } catch (eResList96) {}
       let allUsers = Array.from(userMap.values());
 
       // Pin Supervisor and TLs (Admins) at the top always (regardless of online/offline status),
@@ -11252,7 +11576,7 @@ function renderRankingAndComparison() {
         `<strong>Name:</strong> ${newUser.name} (ID: ${newUser.id})<br><strong>Assigned Team (${selectedMonthKey}):</strong> ${newUser.team} • <strong>Grade:</strong> ${newUser.grade}<br><strong>Base Target (${selectedMonthKey}):</strong> ৳${newUser.baseTarget.toLocaleString()}<br><br>Confirm to save and sync this account for <strong>${selectedMonthKey}</strong> (past months' historical team & sales data will remain untouched).`,
         'Confirm User Account Save',
         async () => {
-          const isCurrentOrFutureMonth = selectedMonthKey >= getCurrentMonthKeyStr();
+          const isCurrentOrFutureMonth = compareMonthKeysV96(selectedMonthKey, getEffectivePortalActiveMonthKeyStrV95()) === 0;
           if (idx !== -1) {
             if (isCurrentOrFutureMonth) {
               users[idx] = newUser;
@@ -11296,8 +11620,7 @@ function renderRankingAndComparison() {
 
     function handleDeleteUser(delId) {
       if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
-      const users = getUsersForMonth(selectedMonthKey);
-      const targetUser = users.find(u => String(u.id) === String(delId));
+      const targetUser = findAnyUserByIdV96(delId, selectedMonthKey);
       if (!targetUser) return;
 
       if (!canDeleteTargetUser(currentUser, targetUser)) {
@@ -11354,7 +11677,7 @@ function renderRankingAndComparison() {
     // when they submit their report after midnight (12:00 AM – 8:59 AM), their default report date is the Night shift start date (the 1st)!
     function getEffectiveReportDateForAgent(agentId) {
       const now = new Date();
-      if (agentId && now.getHours() < 9) {
+      if (agentId && now.getHours() < 10) {
         const yesterday = new Date(now);
         yesterday.setDate(now.getDate() - 1);
         const yMonthKey = `${String(yesterday.getMonth() + 1).padStart(2, '0')}/${yesterday.getFullYear()}`;
@@ -11476,15 +11799,21 @@ function renderRankingAndComparison() {
       e.preventDefault();
       const u = currentUser;
       if (!hasFeatureAccess(u, 'feat_manage_all_sales') && !hasFeatureAccess(u, 'feat_submit_own_sales')) return;
-      const allUsers = getUsersForMonth(selectedMonthKey, true);
-      const targetAgent = hasFeatureAccess(u, 'feat_manage_all_sales') ? allUsers.find(usr => String(usr.id) === String(document.getElementById('subAgentId').value)) : u;
-
       const leads = Number(document.getElementById('subLeads').value) || 0;
       const orders = Number(document.getElementById('subOrders').value) || 0;
       const amount = Number(document.getElementById('subAmount').value) || 0;
       const dateStr = inputValToDateStr(document.getElementById('subDate').value);
+      // V97: Always resolve targetAgent & active products from the submitted report date's exact month!
+      const submitMkV97 = (dateStr && dateStr.length === 10 && dateStr.includes('/')) ? dateStr.substring(3) : selectedMonthKey;
+      const allUsers = getUsersForMonth(submitMkV97, true);
+      const targetUidV97 = hasFeatureAccess(u, 'feat_manage_all_sales')
+        ? String(document.getElementById('subAgentId').value || '').trim()
+        : String(u.id).trim();
+      const targetAgent = allUsers.find(usr => String(usr.id).trim() === targetUidV97)
+        || findAnyUserByIdV96(targetUidV97, submitMkV97)
+        || u;
 
-      const activeProdsSubmit = getActiveProductsForMonth(selectedMonthKey);
+      const activeProdsSubmit = getActiveProductsForMonth(submitMkV97);
       const prodValuesObj = { ajwa: 0, pinkSalt: 0, blackGarlic: 0, sunHoney: 0, bsHoney: 0, gawaGhee: 0 };
       Object.keys(activeProdsSubmit).forEach(k => {
         prodValuesObj[k] = Number(document.getElementById(`subProd_${k}`)?.value) || 0;
@@ -18977,10 +19306,10 @@ function renderChatHubView() {
       // -----------------------------------------------------------------------
       window.isMonthLockedForAgent = function(user, monthKeyToCheck) {
         if (!user || canViewAll(user) || user.role === 'admin') return false;
-        const realCurrMonth = getCurrentMonthKeyStr();
+        const portalActiveMonth = getEffectivePortalActiveMonthKeyStrV95();
         const targetMk = String(monthKeyToCheck || selectedMonthKey).replace(/^'/, '').trim();
         const [m1, y1] = targetMk.split('/').map(Number);
-        const [m2, y2] = realCurrMonth.split('/').map(Number);
+        const [m2, y2] = portalActiveMonth.split('/').map(Number);
         if (!m1 || !y1 || !m2 || !y2) return false;
         return (y1 < y2) || (y1 === y2 && m1 < m2);
       };
@@ -19429,8 +19758,7 @@ function renderChatHubView() {
 
       window.handleToggleUserResignedStatus = function(targetId) {
         if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
-        const users = getUsersForMonth(selectedMonthKey, true);
-        const targetUser = users.find(u => String(u.id) === String(targetId));
+        const targetUser = findAnyUserByIdV96(targetId, selectedMonthKey);
         if (!targetUser) return;
 
         if (!window.canToggleResignTargetUser(currentUser, targetUser)) {
@@ -19477,6 +19805,7 @@ function renderChatHubView() {
                 team: targetUser.team,
                 grade: targetUser.grade,
                 resignedDate: getTodayFormatted(),
+                resignedMonth: selectedMonthKey,
                 markedBy: currentUser.name,
                 at: nowStamp,
                 updatedTs: Date.now()
@@ -19529,8 +19858,7 @@ function renderChatHubView() {
       const _origHandleToggleUserActiveV43 = handleToggleUserActiveStatus;
       handleToggleUserActiveStatus = function(targetId) {
         if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
-        const users = getUsersForMonth(selectedMonthKey, true);
-        const targetUser = users.find(u => String(u.id) === String(targetId));
+        const targetUser = findAnyUserByIdV96(targetId, selectedMonthKey);
         if (!targetUser) return;
         if (!canToggleActiveTargetUser(currentUser, targetUser)) {
           showPortalToast('Permission Denied', `You can only activate or deactivate agents in your own team (${currentUser.team}).`, 'error');
@@ -21002,7 +21330,7 @@ function renderChatHubView() {
           return;
         }
 
-        const user = normalizeUserRecord(rawUser);
+        const user = resolveEffectiveSessionUserV97(rawUser, getEffectivePortalActiveMonthKeyStrV95());
         currentUser = user;
         window._lastLoginTimestampMs = Date.now();
         setStored('session_user', user);
@@ -21744,7 +22072,7 @@ function renderChatHubView() {
           _rosterMemoGen = _cacheGenId;
         }
         const mk = mKey || selectedMonthKey;
-        const cacheKey = mk + '_' + pendingKeys;
+        const cacheKey = mk + '_' + (window._pendingRosterEditSeqV97 || 0) + '_' + pendingKeys;
         if (_rosterMemoMap.has(cacheKey)) {
           return _rosterMemoMap.get(cacheKey);
         }
@@ -21812,8 +22140,7 @@ function renderChatHubView() {
       handleDeleteUser = function(delId) {
         if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
         const uidStr = String(delId || '').trim();
-        const users = getUsersForMonth(selectedMonthKey, true);
-        const targetUser = users.find(u => String(u.id) === uidStr);
+        const targetUser = findAnyUserByIdV96(uidStr, selectedMonthKey);
         if (!targetUser) return;
 
         if (!canDeleteTargetUser(currentUser, targetUser)) {
@@ -22092,8 +22419,7 @@ function renderChatHubView() {
 
       openUserModal = function(editId) {
         if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
-        const users = getUsersForMonth(selectedMonthKey, true);
-        const existing = users.find(u => String(u.id) === String(editId));
+        const existing = editId ? findAnyUserByIdV96(editId, selectedMonthKey) : null;
         if (existing) {
           if (!canEditTargetUser(currentUser, existing)) {
             showPortalToast('Permission Denied', 'Only Nazim (Super Admin) can edit this account.', 'error');
@@ -22189,7 +22515,7 @@ function renderChatHubView() {
           '<strong>Name:</strong> ' + newUser.name + ' (ID: ' + newUser.id + ')<br><strong>Assigned Team (' + selectedMonthKey + '):</strong> ' + newUser.team + ' • <strong>Grade:</strong> ' + newUser.grade + '<br><strong>Base Target (' + selectedMonthKey + '):</strong> ৳' + newUser.baseTarget.toLocaleString() + '<br><br>Confirm to save and sync this account for <strong>' + selectedMonthKey + '</strong>.',
           'Confirm User Account Save',
           async () => {
-            const isCurrentOrFutureMonth = selectedMonthKey >= getCurrentMonthKeyStr();
+            const isCurrentOrFutureMonth = compareMonthKeysV96(selectedMonthKey, getEffectivePortalActiveMonthKeyStrV95()) === 0;
             if (idx !== -1) {
               if (isCurrentOrFutureMonth) {
                 users[idx] = newUser;
@@ -22741,8 +23067,7 @@ function renderChatHubView() {
 
       openUserModal = function(editId) {
         if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
-        const users = getUsersForMonth(selectedMonthKey, true);
-        const existing = users.find(u => String(u.id) === String(editId));
+        const existing = editId ? findAnyUserByIdV96(editId, selectedMonthKey) : null;
         if (existing) {
           if (!canEditTargetUser(currentUser, existing)) {
             showPortalToast('Permission Denied', 'Only Nazim (Super Admin) can edit this account.', 'error');
@@ -24548,7 +24873,7 @@ function renderChatHubView() {
         }
       };
 
-      window.saveLocalUserEditLock = function(monthKey, userObj) {
+      window.saveLocalUserEditLock = function(monthKey, userObj, updateGlobal = null) {
         if (!userObj || !userObj.id) return;
         const store = window.getLocalUserEditsLockStore();
         const mk = monthKey || selectedMonthKey;
@@ -24566,9 +24891,16 @@ function renderChatHubView() {
           baseTarget: Number(userObj.baseTarget) || 0,
           updatedTs: nowTs
         };
-        store['__GLOBAL_USERS__'] = store['__GLOBAL_USERS__'] || {};
-        store['__GLOBAL_USERS__'][uid] = { ...store[mk][uid] };
+        // V96: Only write __GLOBAL_USERS__ when editing the CURRENT active month (never pollute past/current months from future edits!)
+        const shouldUpdateGlobal = (typeof updateGlobal === 'boolean')
+          ? updateGlobal
+          : (compareMonthKeysV96(mk, getEffectivePortalActiveMonthKeyStrV95()) === 0);
+        if (shouldUpdateGlobal) {
+          store['__GLOBAL_USERS__'] = store['__GLOBAL_USERS__'] || {};
+          store['__GLOBAL_USERS__'][uid] = { ...store[mk][uid] };
+        }
         localStorage.setItem('gb_persistent_user_edits_v54', JSON.stringify(store));
+        window._gbStoreCacheGenV67 = (window._gbStoreCacheGenV67 || 1) + 1;
       };
 
       syncAgentTeamForSelectedMonthOnly = function(agentId, agentName, newTeamName, newGrade, newBaseTarget) {
@@ -24660,17 +24992,78 @@ function renderChatHubView() {
         const fbUsersOv = (fbCfg.users && typeof fbCfg.users === 'object') ? fbCfg.users : {};
         const waUsersOv = (waCfg.users && typeof waCfg.users === 'object') ? waCfg.users : {};
 
-        const mapped = baseUsers.map(u => {
+        // V96: Build forward-only carry-forward index from strictly earlier months (prevMk < mk)
+        // so future-month team/grade/target edits NEVER leak backward, yet seamlessly carry into Jan/Feb/etc.!
+        const targetMkNum = parseMonthKeyNumV96(mk);
+        const earlierMonthKeysSortedDesc = [];
+        if (targetMkNum > 0) {
+          const earlierSet = new Set();
+          Object.keys(configs).forEach(ck => {
+            const cleanCk = ck.replace(/^WA_/, '');
+            const cNum = parseMonthKeyNumV96(cleanCk);
+            if (cNum > 0 && cNum < targetMkNum) earlierSet.add(cleanCk);
+          });
+          Object.keys(lockStore).forEach(lk => {
+            const lNum = parseMonthKeyNumV96(lk);
+            if (lNum > 0 && lNum < targetMkNum) earlierSet.add(lk);
+          });
+          Array.from(earlierSet)
+            .sort((a, b) => parseMonthKeyNumV96(b) - parseMonthKeyNumV96(a))
+            .forEach(emk => earlierMonthKeysSortedDesc.push(emk));
+        }
+
+        const joinMonthsMap = (configs['USER_JOIN_MONTHS'] && typeof configs['USER_JOIN_MONTHS'] === 'object')
+          ? configs['USER_JOIN_MONTHS']
+          : {};
+
+        const mapped = [];
+        for (let bi = 0; bi < baseUsers.length; bi++) {
+          const u = baseUsers[bi];
           const uid = String(u.id).trim();
+
+          // V96 Guard 1: New members created for a future month (e.g. 12/2026) NEVER pollute earlier months (e.g. 11/2026)
+          if (u.role !== 'supervisor' && joinMonthsMap[uid] && targetMkNum > 0) {
+            const joinNum = parseMonthKeyNumV96(joinMonthsMap[uid]);
+            if (joinNum > 0 && targetMkNum < joinNum) continue;
+          }
+
+          // V96 Guard 2: Resigned members are preserved 100% in their resignation month,
+          // and auto-excluded from strictly later months (so Nov resigned agents don't inflate Dec targets!)
+          if (u.role === 'agent' && targetMkNum > 0) {
+            const resMk = getResignedMonthKeyForUserV96(uid);
+            const resNum = parseMonthKeyNumV96(resMk);
+            if (resNum > 0 && targetMkNum > resNum) continue;
+          }
+
           let updated = { ...u, team: normalizeTeamNameAlias(u.team) };
 
-          const candidates = [fbUsersOv[uid], waUsersOv[uid], monthLocks[uid]].filter(x => x && typeof x === 'object' && !x.isRemoved);
+          // Exact-month overrides take highest priority
+          const exactCandidates = [fbUsersOv[uid], waUsersOv[uid], monthLocks[uid]].filter(x => x && typeof x === 'object' && !x.isRemoved);
           let bestOv = null;
-          candidates.forEach(cand => {
+          exactCandidates.forEach(cand => {
             if (!bestOv || Number(cand.updatedTs || 0) >= Number(bestOv.updatedTs || 0)) {
               bestOv = cand;
             }
           });
+
+          // If no explicit override in `mk`, carry forward from the most recent earlier month (< mk)
+          if (!bestOv && earlierMonthKeysSortedDesc.length > 0) {
+            for (let ei = 0; ei < earlierMonthKeysSortedDesc.length; ei++) {
+              const emk = earlierMonthKeysSortedDesc[ei];
+              const eFb = configs[emk] && configs[emk].users && configs[emk].users[uid];
+              const eWa = configs[`WA_${emk}`] && configs[`WA_${emk}`].users && configs[`WA_${emk}`].users[uid];
+              const eLk = lockStore[emk] && lockStore[emk][uid];
+              const eCands = [eFb, eWa, eLk].filter(x => x && typeof x === 'object' && !x.isRemoved);
+              if (eCands.length > 0) {
+                eCands.forEach(cand => {
+                  if (!bestOv || Number(cand.updatedTs || 0) >= Number(bestOv.updatedTs || 0)) {
+                    bestOv = cand;
+                  }
+                });
+                break; // Stop at the most recent earlier month that has an override for this user
+              }
+            }
+          }
 
           if (bestOv) {
             if (bestOv.team) updated.team = normalizeTeamNameAlias(bestOv.team);
@@ -24690,8 +25083,8 @@ function renderChatHubView() {
           } else if (updated.role === 'admin' && (!updated.baseTarget || Number(updated.baseTarget) === 0)) {
             updated.baseTarget = userCh === 'WHATSAPP' ? WA_TL_DEFAULT_BASE_TARGET : TL_DEFAULT_BASE_TARGET;
           }
-          return updated;
-        });
+          mapped.push(updated);
+        }
 
         if (includeAllChannels || activeChannel === 'ALL_CHANNELS') return mapped;
         return mapped.filter(u => u.role === 'supervisor' || getChannelForTeam(u.team) === activeChannel);
@@ -24762,8 +25155,7 @@ function renderChatHubView() {
 
       openUserModal = function(editId) {
         if (!hasFeatureAccess(currentUser, 'feat_manage_users')) return;
-        const users = getUsersForMonth(selectedMonthKey, true);
-        const existing = users.find(u => String(u.id) === String(editId));
+        const existing = editId ? findAnyUserByIdV96(editId, selectedMonthKey) : null;
         if (existing) {
           if (!canEditTargetUser(currentUser, existing)) {
             showPortalToast('Permission Denied', 'Only Nazim (Super Admin) can edit this account.', 'error');
@@ -24899,14 +25291,46 @@ function renderChatHubView() {
           '<strong>Name:</strong> ' + newUser.name + ' (ID: ' + newUser.id + ')<br><strong>Team / Status (' + selectedMonthKey + '):</strong> ' + newUser.team + ' (' + newUser.channel + ') • <strong>Grade:</strong> ' + newUser.grade + '<br><strong>Actual Base Target (' + selectedMonthKey + '):</strong> ৳' + newUser.baseTarget.toLocaleString() + ' <span class="text-xs text-slate-500">(Portal +5%: ৳' + Math.round(newUser.baseTarget * 1.05).toLocaleString() + ')</span><br><br>Confirm to save and sync this account for <strong>' + selectedMonthKey + '</strong>.',
           'Confirm User Account Save',
           async () => {
-            if (idx !== -1) {
-              users[idx] = { ...users[idx], ...newUser, updatedTs: nowTs };
-            } else {
+            const monthCmpV96 = compareMonthKeysV96(selectedMonthKey, getEffectivePortalActiveMonthKeyStrV95());
+            const isEditingCurrentMonthV96 = (monthCmpV96 === 0);
+            const isEditingFutureMonthV96 = (monthCmpV96 > 0);
+
+            // V96: Freeze previous/active month snapshot BEFORE mutating so earlier months NEVER change!
+            const frozenSnaps = !isNewAccount ? freezePrevMonthUserSnapshotV96(newUser.id, selectedMonthKey) : [];
+
+            let userPayloadForSheet = null;
+            if (isNewAccount) {
               users.push(newUser);
+              setStored('users', users);
+              userPayloadForSheet = newUser;
+            } else if (isEditingCurrentMonthV96) {
+              users[idx] = { ...users[idx], ...newUser, updatedTs: nowTs };
+              setStored('users', users);
+              userPayloadForSheet = users[idx];
+            } else {
+              // Editing a PAST or FUTURE month for an existing user: preserve current month's team/grade/target in gb_users!
+              const identityChanged = (users[idx].name !== newUser.name) || (users[idx].pass !== newUser.pass) || (users[idx].role !== newUser.role);
+              if (identityChanged) {
+                users[idx] = { ...users[idx], name: newUser.name, pass: newUser.pass, role: newUser.role, updatedTs: nowTs };
+                setStored('users', users);
+                userPayloadForSheet = users[idx];
+              }
             }
-            setStored('users', users);
-            window.saveLocalUserEditLock(selectedMonthKey, newUser);
+
+            window.saveLocalUserEditLock(selectedMonthKey, newUser, isNewAccount || isEditingCurrentMonthV96);
             markLocalUserOrConfigMutatedNow();
+
+            // V96: For brand-new accounts, record USER_JOIN_MONTHS so future joiners never pollute earlier months!
+            let joinMonthsSyncObj = null;
+            if (isNewAccount && newUser.role !== 'supervisor') {
+              const cfgsJoin = { ...getStored('monthly_configs', {}) };
+              if (!cfgsJoin['USER_JOIN_MONTHS'] || typeof cfgsJoin['USER_JOIN_MONTHS'] !== 'object') {
+                cfgsJoin['USER_JOIN_MONTHS'] = {};
+              }
+              cfgsJoin['USER_JOIN_MONTHS'][String(newUser.id).trim()] = selectedMonthKey;
+              setStored('monthly_configs', cfgsJoin);
+              joinMonthsSyncObj = cfgsJoin['USER_JOIN_MONTHS'];
+            }
 
             const { effKey, monthConfigObj, otherKey, otherConfigObj } = syncAgentTeamForSelectedMonthOnly(
               newUser.id,
@@ -24916,12 +25340,15 @@ function renderChatHubView() {
               newUser.baseTarget
             );
 
+            // V96: Always keep Duty Roster row for selectedMonthKey synced with Target Setup team/name!
+            const syncedRosterRowV96 = upsertRosterRowForTeamChangeV96(newUser, selectedMonthKey);
+
             const logMeta = recordActivityLog(
               isNewAccount ? 'Created User ID' : 'Updated User ID',
               (isNewAccount ? 'Created' : 'Updated') + ' ' + newUser.role.toUpperCase() + ' ID for ' + selectedMonthKey + ': ' + newUser.name + ' (' + newUser.id + '), Team: ' + newUser.team + ', Grade: ' + newUser.grade + ', Target: ৳' + newUser.baseTarget.toLocaleString()
             );
 
-            if (currentUser && String(currentUser.id) === String(newUser.id)) {
+            if (currentUser && String(currentUser.id) === String(newUser.id) && !isEditingFutureMonthV96) {
               currentUser = { ...newUser };
               setStored('session_user', currentUser);
             }
@@ -24930,11 +25357,22 @@ function renderChatHubView() {
             renderAppLayout();
             showPortalToast('User ID Saved & Synced!', newUser.name + ' (' + newUser.id + ') updated for ' + selectedMonthKey + '!', 'success');
 
-            await postToSheet('SAVE_USER', {
-              ...newUser,
-              monthKey: selectedMonthKey,
-              ...logMeta
-            }).catch(() => {});
+            for (const snap of frozenSnaps) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj) }).catch(() => {});
+            }
+            if (userPayloadForSheet) {
+              await postToSheet('SAVE_USER', {
+                ...userPayloadForSheet,
+                monthKey: selectedMonthKey,
+                ...logMeta
+              }).catch(() => {});
+            }
+            if (joinMonthsSyncObj) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: 'USER_JOIN_MONTHS', configJson: JSON.stringify(joinMonthsSyncObj) }).catch(() => {});
+            }
+            if (syncedRosterRowV96) {
+              await postToSheet('SAVE_ROSTER_ROW', { ...syncedRosterRowV96, ...logMeta }).catch(() => {});
+            }
             await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
             if (otherConfigObj) {
               await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
@@ -24971,6 +25409,9 @@ function renderChatHubView() {
           'Team Assignment Confirmation',
           async () => {
             const nowTs = Date.now();
+            const isEditingCurrentMonthV96 = compareMonthKeysV96(selectedMonthKey, getEffectivePortalActiveMonthKeyStrV95()) === 0;
+            const frozenSnaps = freezePrevMonthUserSnapshotV96(agentId, selectedMonthKey);
+
             let users = [...getStored('users', DEFAULT_USERS)];
             const idx = users.findIndex(u => String(u.id) === String(agentId));
             const updatedUsrObj = {
@@ -24981,11 +25422,12 @@ function renderChatHubView() {
               baseTarget: assignedBaseTarget,
               updatedTs: nowTs
             };
-            if (idx !== -1) users[idx] = updatedUsrObj;
-            else users.push(updatedUsrObj);
-
-            setStored('users', users);
-            window.saveLocalUserEditLock(selectedMonthKey, updatedUsrObj);
+            if (isEditingCurrentMonthV96) {
+              if (idx !== -1) users[idx] = updatedUsrObj;
+              else users.push(updatedUsrObj);
+              setStored('users', users);
+            }
+            window.saveLocalUserEditLock(selectedMonthKey, updatedUsrObj, isEditingCurrentMonthV96);
             markLocalUserOrConfigMutatedNow();
 
             const { effKey, monthConfigObj, otherKey, otherConfigObj } = syncAgentTeamForSelectedMonthOnly(
@@ -24996,27 +25438,21 @@ function renderChatHubView() {
               assignedBaseTarget
             );
 
-            const assignedRow = {
-              id: String(targetUser.id),
-              name: targetUser.name,
-              team: cleanNewTeam,
-              isTL: targetUser.role === 'admin',
-              sat: '3:00 PM', sun: '3:00 PM', mon: '3:00 PM', tue: '3:00 PM', wed: '3:00 PM', thu: '3:00 PM', fri: 'DO',
-              monthKey: selectedMonthKey
-            };
-            let savedRoster = [...getStored('roster_records', [])];
-            const rIdx = savedRoster.findIndex(r => r.monthKey === selectedMonthKey && String(r.id) === String(agentId));
-            if (rIdx !== -1) savedRoster[rIdx] = { ...savedRoster[rIdx], team: cleanNewTeam, isDeleted: false };
-            else savedRoster.push(assignedRow);
-            setStored('roster_records', savedRoster);
-            markLocalUserOrConfigMutatedNow();
+            const syncedRosterRowV96 = upsertRosterRowForTeamChangeV96(updatedUsrObj, selectedMonthKey);
 
             const logMeta = recordActivityLog('Assigned Agent Team', `${currentUser.name} assigned ${targetUser.name} (${targetUser.id}) to ${cleanNewTeam} (Grade: ${assignedGrade}, Target: ৳${assignedBaseTarget.toLocaleString()}) for ${selectedMonthKey}`);
             renderAppLayout();
-            showPortalToast('Team Assigned & Synced!', `${targetUser.name} is now assigned to ${cleanNewTeam}.`, 'success');
+            showPortalToast('Team Assigned & Synced!', `${targetUser.name} is now assigned to ${cleanNewTeam} for ${selectedMonthKey}.`, 'success');
 
-            await postToSheet('SAVE_USER', { ...updatedUsrObj, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
-            await postToSheet('SAVE_ROSTER_ROW', { ...(rIdx !== -1 ? savedRoster[rIdx] : assignedRow), ...logMeta }).catch(() => {});
+            for (const snap of frozenSnaps) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj) }).catch(() => {});
+            }
+            if (isEditingCurrentMonthV96) {
+              await postToSheet('SAVE_USER', { ...updatedUsrObj, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
+            }
+            if (syncedRosterRowV96) {
+              await postToSheet('SAVE_ROSTER_ROW', { ...syncedRosterRowV96, ...logMeta }).catch(() => {});
+            }
             await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
             if (otherConfigObj) {
               await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: otherKey, configJson: JSON.stringify(otherConfigObj) }).catch(() => {});
@@ -25049,6 +25485,9 @@ function renderChatHubView() {
           'Confirm Team Release',
           async () => {
             const nowTs = Date.now();
+            const isEditingCurrentMonthV96 = compareMonthKeysV96(selectedMonthKey, getEffectivePortalActiveMonthKeyStrV95()) === 0;
+            const frozenSnaps = freezePrevMonthUserSnapshotV96(empId, selectedMonthKey);
+
             let users = [...getStored('users', DEFAULT_USERS)];
             const uIdx = users.findIndex(u => String(u.id) === String(empId));
             const keepGrade = targetUser ? targetUser.grade : 'Pending';
@@ -25063,9 +25502,11 @@ function renderChatHubView() {
               baseTarget: keepTarget,
               updatedTs: nowTs
             };
-            if (uIdx !== -1) users[uIdx] = releasedUsrObj;
-            setStored('users', users);
-            window.saveLocalUserEditLock(selectedMonthKey, releasedUsrObj);
+            if (isEditingCurrentMonthV96 && uIdx !== -1) {
+              users[uIdx] = releasedUsrObj;
+              setStored('users', users);
+            }
+            window.saveLocalUserEditLock(selectedMonthKey, releasedUsrObj, isEditingCurrentMonthV96);
             markLocalUserOrConfigMutatedNow();
 
             const { effKey, monthConfigObj, otherKey, otherConfigObj } = syncAgentTeamForSelectedMonthOnly(
@@ -25096,9 +25537,14 @@ function renderChatHubView() {
             );
 
             renderAppLayout();
-            showPortalToast('Released to Floating Pool!', `${memberName} (${empId}) is now in ${floatingPoolName}.`, 'warning');
+            showPortalToast('Released to Floating Pool!', `${memberName} (${empId}) is now in ${floatingPoolName} for ${selectedMonthKey}.`, 'warning');
 
-            await postToSheet('SAVE_USER', { ...releasedUsrObj, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
+            for (const snap of frozenSnaps) {
+              await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: snap.monthKey, configJson: JSON.stringify(snap.configObj) }).catch(() => {});
+            }
+            if (isEditingCurrentMonthV96) {
+              await postToSheet('SAVE_USER', { ...releasedUsrObj, monthKey: selectedMonthKey, ...logMeta }).catch(() => {});
+            }
             await postToSheet('SAVE_ROSTER_ROW', { ...updatedRosterRow, ...logMeta }).catch(() => {});
             await postToSheet('SAVE_MONTHLY_CONFIG', { monthKey: effKey, configJson: JSON.stringify(monthConfigObj) }).catch(() => {});
             if (otherConfigObj) {
@@ -25267,7 +25713,8 @@ function renderChatHubView() {
                 if (uOv && uOv.portalActualTarget !== undefined) {
                   uOv.baseTarget = Number(uOv.portalActualTarget);
                 }
-                const locOv = mLocks[uid] || globalLocks[uid];
+                // V96: Strictly use ONLY this month's own local lock (NEVER leak globalLocks into another month!)
+                const locOv = mLocks[uid];
                 if (locOv && Number(locOv.updatedTs || 0) > Number((uOv && uOv.updatedTs) || 0)) {
                   cfgObj.users[uid] = {
                     team: locOv.team,
@@ -25375,7 +25822,7 @@ function renderChatHubView() {
         const reqStartedAtMs = now;
 
         let pingQuery = '';
-        const liveCalendarMonthKey = getCurrentMonthKeyStr();
+        const liveCalendarMonthKey = getEffectivePortalActiveMonthKeyStrV95();
         if (currentUser) {
           const st = getUserOnlineStatus(currentUser.id);
           pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}&monthKey=${encodeURIComponent(liveCalendarMonthKey)}`;
@@ -27933,12 +28380,12 @@ function renderChatHubView() {
           const divDays = window.getWorkingDaysDivisorForMonthV59(chForCalc, mk);
           res.dailyTarget = Math.round(res.workingTarget / divDays);
 
-          const d = new Date().getDate();
-          if (d <= rng.s1End) {
+          const autoPhV96 = (typeof getAutoCurrentSprintPhase === 'function') ? getAutoCurrentSprintPhase(mk) : 'S1';
+          if (autoPhV96 === 'S1') {
             res.sprintName = `Sprint 1 (Days 1–${rng.s1End})`;
             res.sprintPct = sp.s1 / 100;
             res.sprintGoal = Math.round(res.workingTarget * res.sprintPct);
-          } else if (d <= rng.s2End) {
+          } else if (autoPhV96 === 'S2') {
             res.sprintName = `Sprint 2 (Days ${rng.s1End + 1}–${rng.s2End})`;
             res.sprintPct = sp.s2 / 100;
             res.sprintGoal = Math.round(res.workingTarget * res.sprintPct);
@@ -30885,7 +31332,7 @@ function renderChatHubView() {
             delete obj.users[oldId];
             cfgChg = true;
           }
-          if (['USER_AVATARS', 'ROLE_PERMISSIONS', 'DEACTIVATED_USERS', 'RESIGNED_USERS'].includes(cKey)) {
+          if (['USER_AVATARS', 'ROLE_PERMISSIONS', 'DEACTIVATED_USERS', 'RESIGNED_USERS', 'USER_JOIN_MONTHS'].includes(cKey)) {
             if (obj[oldId] !== undefined) {
               if (obj[newId] === undefined) obj[newId] = obj[oldId];
               delete obj[oldId];
@@ -30933,7 +31380,7 @@ function renderChatHubView() {
               }
             });
             if (lMod) {
-              localStorage.setItem('gb_local_user_edits_lock', JSON.stringify(lStore));
+              localStorage.setItem('gb_persistent_user_edits_v54', JSON.stringify(lStore));
               changed = true;
             }
           }
@@ -31973,6 +32420,9 @@ function renderChatHubView() {
       // B. Ultra-Fast Delta Version Sync (ETag clientVer + forceFresh + Submit Priority)
       fetchFromSheet = function(forceImmediate = false, isManualSync = false) {
         if (!forceImmediate && document.hidden) return;
+        if (typeof checkAndApplyAutoMonthRolloverV95 === 'function') {
+          checkAndApplyAutoMonthRolloverV95(true);
+        }
 
         // Give 100% network & server priority to any in-flight report submit!
         if (!forceImmediate && window._inFlightSalesWriteKeysV63 && window._inFlightSalesWriteKeysV63.size > 0) {
@@ -32011,7 +32461,7 @@ function renderChatHubView() {
         const reqStartedAtMs = now;
 
         let pingQuery = '';
-        const liveCalendarMonthKey = getCurrentMonthKeyStr();
+        const liveCalendarMonthKey = getEffectivePortalActiveMonthKeyStrV95();
         if (currentUser) {
           const st = getUserOnlineStatus(currentUser.id);
           pingQuery = `&pingUserId=${encodeURIComponent(currentUser.id)}&pingName=${encodeURIComponent(currentUser.name)}&pingRole=${encodeURIComponent(currentUser.role)}&pingTeam=${encodeURIComponent(currentUser.team)}&pingState=${encodeURIComponent(st)}&monthKey=${encodeURIComponent(liveCalendarMonthKey)}`;
