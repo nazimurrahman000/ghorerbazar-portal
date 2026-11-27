@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v102)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v105)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -216,6 +216,12 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      Incentive calculations (V57 + base + floor breakdown) now dynamically honor each product's
      configured entryPct (e.g. 70%, 80%, 85%, 90%) when Entry Cash (bonus90) > 0, and require
      100% when Entry Cash = 0. Syncs automatically via Monthly_Configs with zero Apps Script changes.
+   - CLEAN IN-PORTAL FRAUD CHECKER UPGRADE (V105 — BUILT CLEANLY ON V102):
+     Pairs with appscript-v32.js zero-lock fast path (10m RAM cache + Keyless Public Live Scan +
+     Future-Ready API Key Setup for BDCourier api.bdcourier.com, FraudBD fraudbd.com, Steadfast Packzy,
+     and SmartPOS saved via FRAUD_API_CONFIG with skipRebuild:true). Removes dead CORS proxy spam,
+     eliminates fake/misleading 0 parcels on blocked scans, keeps everything 100% inside the portal
+     tab (no external window links, no internal manual DB card), and leaves all other tabs untouched.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -7358,7 +7364,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       const configs = getStored('monthly_configs', {});
       return (configs['FRAUD_API_CONFIG'] && typeof configs['FRAUD_API_CONFIG'] === 'object')
         ? configs['FRAUD_API_CONFIG']
-        : { steadfastKey: '', steadfastSecret: '', bdcourierKey: '', smartposKey: '' };
+        : { steadfastKey: '', steadfastSecret: '', bdcourierKey: '', fraudbdKey: '', smartposKey: '' };
     }
 
     function toggleFraudApiSetupPanel() {
@@ -7372,6 +7378,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       const sfKey = (document.getElementById('cfgSfApiKey')?.value || '').trim();
       const sfSec = (document.getElementById('cfgSfSecretKey')?.value || '').trim();
       const bdcKey = (document.getElementById('cfgBdcApiKey')?.value || '').trim();
+      const fbdKey = (document.getElementById('cfgFbdApiKey')?.value || '').trim();
       const spKey = (document.getElementById('cfgSmartPosApiKey')?.value || '').trim();
 
       const configs = getStored('monthly_configs', {});
@@ -7379,6 +7386,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         steadfastKey: sfKey,
         steadfastSecret: sfSec,
         bdcourierKey: bdcKey,
+        fraudbdKey: fbdKey,
         smartposKey: spKey,
         updatedAt: getTodayFormatted()
       };
@@ -7386,12 +7394,13 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       markLocalUserOrConfigMutatedNow();
       showFraudApiConfigBox = false;
       renderAppLayout();
-      showPortalToast('Courier API Keys Saved!', 'Direct API keys synced across the portal & Google Sheet.', 'success');
+      showPortalToast('Courier API Keys Saved!', 'API keys synced across all agents & Google Sheet (~0.2s).', 'success');
       postToSheet('SAVE_MONTHLY_CONFIG', {
         monthKey: 'FRAUD_API_CONFIG',
-        configJson: JSON.stringify(configs['FRAUD_API_CONFIG'])
+        configJson: JSON.stringify(configs['FRAUD_API_CONFIG']),
+        skipRebuild: true
       }).catch(() => {});
-      if (fraudCheckCurrentPhone) handleRunFraudCheck(null, fraudCheckCurrentPhone);
+      if (fraudCheckCurrentPhone) handleRunFraudCheck(null, fraudCheckCurrentPhone, true);
     }
 
     function normalizeBdPhoneNumber(rawInput) {
@@ -7529,79 +7538,69 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       return null;
     }
 
-    async function fetchFreeCourierHistoryForPhone(phone) {
+    async function fetchFreeCourierHistoryForPhone(phone, forceFresh = false) {
       const apiCfg = getSavedFraudApiKeys();
-      const directTasks = [];
+      const keyParams = `&sfKey=${encodeURIComponent(apiCfg.steadfastKey || '')}&sfSec=${encodeURIComponent(apiCfg.steadfastSecret || '')}&bdcKey=${encodeURIComponent(apiCfg.bdcourierKey || '')}&fbdKey=${encodeURIComponent(apiCfg.fraudbdKey || '')}&spKey=${encodeURIComponent(apiCfg.smartposKey || '')}${forceFresh ? '&forceFresh=1' : ''}`;
+      const targetUrl = `${webhookUrl}?action=CHECK_CUSTOMER_FRAUD&phone=${encodeURIComponent(phone)}${keyParams}&t=${Date.now()}`;
 
-      directTasks.push((async () => {
-        const headers = { 'Accept': 'application/json' };
-        if (apiCfg.steadfastKey && apiCfg.steadfastSecret) {
-          headers['Api-Key'] = apiCfg.steadfastKey;
-          headers['Secret-Key'] = apiCfg.steadfastSecret;
+      function normalizeServerFraudResV105(res) {
+        if (!res || res.status !== 'success') return null;
+        if (res.verified && res.courierData) {
+          return {
+            ...res.courierData,
+            verified: true,
+            cached: Boolean(res.cached || res.courierData.cached),
+            needsApiKey: false,
+            apiError: ''
+          };
         }
-        return await tryFetchViaCorsProxies(`https://portal.packzy.com/api/v1/fraud_check/${encodeURIComponent(phone)}`, { method: 'GET', headers }, phone);
-      })());
+        return {
+          phone,
+          verified: false,
+          needsApiKey: Boolean(res.needsApiKey),
+          apiError: String(res.apiError || res.message || ''),
+          source: 'Live Courier Scan',
+          couriers: {
+            steadfast: { name: 'Steadfast Courier', total: 0, delivered: 0, cancelled: 0 },
+            pathao: { name: 'Pathao Courier', total: 0, delivered: 0, cancelled: 0 },
+            redx: { name: 'RedX Courier', total: 0, delivered: 0, cancelled: 0 },
+            paperfly: { name: 'Paperfly Courier', total: 0, delivered: 0, cancelled: 0 }
+          },
+          totalParcels: 0,
+          totalDelivered: 0,
+          totalCancelled: 0
+        };
+      }
 
-      directTasks.push((async () => {
-        const emGet = await tryFetchViaCorsProxies(`https://elitemart.com.bd/fraud-check?phone=${encodeURIComponent(phone)}&number=${encodeURIComponent(phone)}`, { method: 'GET' }, phone);
-        if (emGet && emGet.totalParcels > 0) return { ...emGet, source: 'EliteMart BD Live' };
-
-        const actionsToTry = ['fraud_check', 'check_fraud', 'courier_fraud_check', 'steadfast_fraud_check', 'bd_fraud_check'];
-        for (const actName of actionsToTry) {
-          try {
-            const formBody = `action=${actName}&phone=${encodeURIComponent(phone)}&number=${encodeURIComponent(phone)}&mobile=${encodeURIComponent(phone)}`;
-            const res = await fetch(`https://corsproxy.io/?${encodeURIComponent('https://elitemart.com.bd/wp-admin/admin-ajax.php')}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: formBody
-            });
-            if (res.ok) {
-              const txt = await res.text();
-              const parsed = parseAnyCourierPayload(txt, phone);
-              if (parsed && parsed.totalParcels > 0) return { ...parsed, source: 'EliteMart BD Live' };
-            }
-          } catch (e) {}
+      // 1) Direct CORS fetch to Apps Script zero-lock fast path (~0.4s live / ~50ms cached!)
+      try {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 14000);
+        const r = await fetch(targetUrl, { method: 'GET', cache: 'no-store', signal: controller.signal });
+        clearTimeout(tId);
+        if (r.ok) {
+          const jsonRes = await r.json();
+          const norm = normalizeServerFraudResV105(jsonRes);
+          if (norm) return norm;
         }
-        return null;
-      })());
+      } catch (eDirectFraud) {}
 
-      directTasks.push((async () => {
-        const headers = { 'Accept': 'application/json' };
-        if (apiCfg.smartposKey) headers['X-API-KEY'] = apiCfg.smartposKey;
-        const spRes = await tryFetchViaCorsProxies(`https://fraudchecker.smartposbd.com/api/v1/check?phone=${encodeURIComponent(phone)}`, { method: 'GET', headers }, phone);
-        if (spRes && spRes.totalParcels > 0) return { ...spRes, source: 'SmartPOS BD Live' };
-        return null;
-      })());
-
-      directTasks.push((async () => {
-        const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
-        if (apiCfg.bdcourierKey) headers['Authorization'] = `Bearer ${apiCfg.bdcourierKey}`;
-        const bdcRes = await tryFetchViaCorsProxies(`https://bdcourier.com/api/courier-check?phone=${encodeURIComponent(phone)}`, { method: 'POST', headers }, phone);
-        if (bdcRes && bdcRes.totalParcels > 0) return { ...bdcRes, source: 'BDCourier Live' };
-        return null;
-      })());
-
-      directTasks.push(new Promise((resolve) => {
+      // 2) JSONP fallback if browser blocks CORS
+      return await new Promise((resolve) => {
         const cbName = 'gb_fraud_cb_' + Date.now();
         const script = document.createElement('script');
         const timer = setTimeout(() => {
           delete window[cbName];
           if (script.parentNode) script.parentNode.removeChild(script);
           resolve(null);
-        }, 4800);
-
+        }, 14000);
         window[cbName] = function(res) {
           clearTimeout(timer);
           delete window[cbName];
           if (script.parentNode) script.parentNode.removeChild(script);
-          if (res && res.status === 'success' && res.courierData && Number(res.courierData.totalParcels) > 0) {
-            resolve(res.courierData);
-          } else {
-            resolve(null);
-          }
+          resolve(normalizeServerFraudResV105(res));
         };
-        const keyParams = `&sfKey=${encodeURIComponent(apiCfg.steadfastKey || '')}&sfSec=${encodeURIComponent(apiCfg.steadfastSecret || '')}&bdcKey=${encodeURIComponent(apiCfg.bdcourierKey || '')}&spKey=${encodeURIComponent(apiCfg.smartposKey || '')}`;
-        script.src = `${webhookUrl}?action=CHECK_CUSTOMER_FRAUD&phone=${encodeURIComponent(phone)}${keyParams}&callback=${cbName}&t=${Date.now()}`;
+        script.src = `${targetUrl}&callback=${cbName}`;
         script.onerror = function() {
           clearTimeout(timer);
           delete window[cbName];
@@ -7609,15 +7608,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           resolve(null);
         };
         document.body.appendChild(script);
-      }));
-
-      try {
-        const results = await Promise.all(directTasks);
-        const validHit = results.find(r => r && Number(r.totalParcels) > 0);
-        if (validHit) return validHit;
-      } catch (e) {}
-
-      return null;
+      });
     }
 
     function buildEstimatedCourierHistoryForPhone(phone) {
@@ -7708,7 +7699,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       const activePhone = normalizeBdPhoneNumber(fraudCheckCurrentPhone);
       const res = (fraudCheckResultData && fraudCheckResultData.phone === activePhone) ? fraudCheckResultData : null;
       const apiCfg = getSavedFraudApiKeys();
-      const hasAnyApiKey = Boolean(apiCfg.steadfastKey || apiCfg.bdcourierKey || apiCfg.smartposKey);
+      const hasAnyApiKey = Boolean(apiCfg.bdcourierKey || apiCfg.fraudbdKey || (apiCfg.steadfastKey && apiCfg.steadfastSecret) || apiCfg.smartposKey);
 
       let recentChecks = [];
       try { recentChecks = JSON.parse(localStorage.getItem('gb_recent_fraud_checks') || '[]'); } catch (e) {}
@@ -7821,32 +7812,41 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             ` : ''}
 
             ${showFraudApiConfigBox && isFullAdmin(currentUser) ? `
-            <form onsubmit="handleSaveFraudApiKeys(event)" class="mt-4 pt-4 border-t border-slate-700/80 grid grid-cols-1 sm:grid-cols-4 gap-3 text-left">
-              <div>
-                <label class="block text-[10px] font-extrabold uppercase text-teal-300 mb-1">Steadfast API-Key (Optional)</label>
-                <input type="text" id="cfgSfApiKey" value="${apiCfg.steadfastKey || ''}" placeholder="Paste Steadfast Api-Key..." class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-white">
+            <form onsubmit="handleSaveFraudApiKeys(event)" class="mt-4 pt-4 border-t border-slate-700/80 space-y-2.5 text-left">
+              <div class="text-[11px] font-bold text-teal-200">
+                <i class="fa-solid fa-key text-amber-300 mr-1.5"></i>Optional API Key Setup (Connect any 1 key now or in the future — syncs across all agents with 10-min cache):
               </div>
-              <div>
-                <label class="block text-[10px] font-extrabold uppercase text-teal-300 mb-1">Steadfast Secret-Key</label>
-                <input type="text" id="cfgSfSecretKey" value="${apiCfg.steadfastSecret || ''}" placeholder="Paste Steadfast Secret-Key..." class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-white">
-              </div>
-              <div>
-                <label class="block text-[10px] font-extrabold uppercase text-teal-300 mb-1">SmartPOS Key (Optional)</label>
-                <input type="text" id="cfgSmartPosApiKey" value="${apiCfg.smartposKey || ''}" placeholder="Paste SmartPOS X-API-KEY..." class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-white">
-              </div>
-              <div class="flex items-end gap-2">
-                <div class="flex-1">
-                  <label class="block text-[10px] font-extrabold uppercase text-teal-300 mb-1">BDCourier Key (Optional)</label>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-emerald-300 mb-1">BDCourier Key (All Couriers)</label>
                   <input type="text" id="cfgBdcApiKey" value="${apiCfg.bdcourierKey || ''}" placeholder="BDCourier Bearer Key..." class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-white">
                 </div>
-                <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs shrink-0 cursor-pointer">Save</button>
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-amber-300 mb-1">FraudBD API Key (Optional)</label>
+                  <input type="text" id="cfgFbdApiKey" value="${apiCfg.fraudbdKey || ''}" placeholder="Paste FraudBD api_key..." class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-white">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-teal-300 mb-1">Steadfast API-Key</label>
+                  <input type="text" id="cfgSfApiKey" value="${apiCfg.steadfastKey || ''}" placeholder="Paste Steadfast Api-Key..." class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-white">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-extrabold uppercase text-teal-300 mb-1">Steadfast Secret-Key</label>
+                  <input type="text" id="cfgSfSecretKey" value="${apiCfg.steadfastSecret || ''}" placeholder="Paste Steadfast Secret-Key..." class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-white">
+                </div>
+                <div class="flex items-end gap-2">
+                  <div class="flex-1">
+                    <label class="block text-[10px] font-extrabold uppercase text-slate-300 mb-1">SmartPOS Key</label>
+                    <input type="text" id="cfgSmartPosApiKey" value="${apiCfg.smartposKey || ''}" placeholder="Optional X-API-KEY..." class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 text-xs font-bold text-white">
+                  </div>
+                  <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs shrink-0 cursor-pointer shadow">Save</button>
+                </div>
               </div>
             </form>
             ` : ''}
           </div>
 
           <!-- Native In-Portal Result Dashboard -->
-          ${res ? `
+          ${(res && res.verified === true) ? `
           <div class="p-6 rounded-3xl border-2 ${decisionBannerClass} shadow-sm space-y-5">
             <!-- Header & Circular Success Gauge -->
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-200/80">
@@ -7864,9 +7864,15 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                       <i class="fa-solid fa-mobile-screen-button text-teal-400 mr-1.5"></i>${activePhone}
                     </span>
                     ${riskBadgeHtml}
+                    <span class="px-2.5 py-0.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 text-[10px] font-black">
+                      <i class="fa-solid fa-bolt text-amber-500 mr-1"></i>${res.source || 'Live Courier API'}${res.cached ? ' • Cached' : ''}
+                    </span>
                     <span class="px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-500 text-[10px] font-extrabold">
                       Checked at ${res.checkedAt}
                     </span>
+                    <button type="button" onclick="handleRunFraudCheck(null, '${activePhone}', true)" class="px-2.5 py-0.5 rounded-lg bg-slate-900 hover:bg-blue-700 text-white text-[10px] font-black cursor-pointer" title="Bypass 10-minute cache and fetch fresh live data">
+                      <i class="fa-solid fa-rotate mr-1"></i>Live Refresh
+                    </button>
                   </div>
                   <h3 class="text-base font-black mt-2">${decisionTitle}</h3>
                   <p class="text-xs font-bold text-slate-600 mt-0.5">${decisionAdvice}</p>
@@ -7923,6 +7929,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                         <div><span class="text-[9px] text-rose-600 uppercase block">Cancel</span><strong class="text-rose-600 text-sm font-black">${cObj.cancelled || 0}</strong></div>
                       </div>
                     </div>
+                    ${cObj.rating ? `<div class="mt-2 px-2 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-[10px] font-black text-indigo-800 text-center">${cObj.message || cObj.rating.replace(/_/g, ' ').toUpperCase()}</div>` : ''}
                     <div class="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden mt-3">
                       <div class="${c.bar} h-1.5 rounded-full" style="width: ${cPct}%"></div>
                     </div>
@@ -7973,7 +7980,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
               </table>
             </div>
           </div>
-          ` : `
+          ` : (!res ? `
           <div class="card-dynamic p-10 text-center space-y-2.5">
             <div class="w-14 h-14 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center text-2xl mx-auto shadow-2xs">
               <i class="fa-solid fa-magnifying-glass-chart"></i>
@@ -7983,7 +7990,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
               Type the customer's phone number (e.g. <strong>017XXXXXXXX</strong>) and click <strong>Check Ratio</strong> to see their complete Steadfast, Pathao, RedX & Paperfly delivery success history right inside the portal in 1 click.
             </p>
           </div>
-          `}
+          ` : '')}
         </div>
       `;
     }
@@ -16208,7 +16215,36 @@ function renderChatHubView() {
         let htmlOut = _origRenderFraudCheckerView();
         const activePhone = normalizeBdPhoneNumber(fraudCheckCurrentPhone);
         const res = (fraudCheckResultData && fraudCheckResultData.phone === activePhone) ? fraudCheckResultData : null;
-        if (res && Number(res.totalParcels || 0) === 0) {
+        if (res && res.verified === false) {
+          const diagMsg = res.apiError || 'Live courier databases blocked anonymous scan right now. Click API Setup (gear icon) anytime to add a BDCourier, FraudBD, or Steadfast API key.';
+          const apiWarnBanner = `
+            <div class="p-5 rounded-3xl bg-gradient-to-br from-amber-50 via-white to-orange-50 border-2 border-amber-300 shadow-sm">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-3.5">
+                  <div class="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-xl font-black shrink-0 shadow">
+                    <i class="fa-solid fa-shield-halved"></i>
+                  </div>
+                  <div>
+                    <span class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black uppercase">Live Courier Scan Notice</span>
+                    <h3 class="text-base font-black text-slate-900 mt-1">Could Not Fetch Live Courier History for <span class="font-mono text-amber-700">${activePhone}</span></h3>
+                    <p class="text-xs font-bold text-slate-600 mt-0.5">${diagMsg}</p>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                  <button type="button" onclick="handleRunFraudCheck(null, '${activePhone}', true)" class="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-black cursor-pointer shadow-xs">
+                    <i class="fa-solid fa-rotate mr-1"></i>Retry Scan
+                  </button>
+                  ${isFullAdmin(currentUser) ? `
+                  <button type="button" onclick="showFraudApiConfigBox = true; renderAppLayout();" class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-emerald-700 text-white text-xs font-black cursor-pointer shadow-xs">
+                    <i class="fa-solid fa-key text-amber-300 mr-1"></i>API Setup
+                  </button>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          `;
+          htmlOut = htmlOut.replace('<!-- Native In-Portal Result Dashboard -->', apiWarnBanner + '\n          <!-- Native In-Portal Result Dashboard -->');
+        } else if (res && res.verified === true && Number(res.totalParcels || 0) === 0) {
           const newCustBanner = `
             <div class="p-5 rounded-3xl bg-gradient-to-br from-blue-50 via-white to-indigo-50 border-2 border-blue-300 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div class="flex items-center gap-3.5">
@@ -16216,15 +16252,15 @@ function renderChatHubView() {
                   <i class="fa-solid fa-user-check"></i>
                 </div>
                 <div>
-                  <span class="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-black uppercase">🆕 Brand New Number / No Courier History</span>
+                  <span class="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-black uppercase">✅ Verified Brand New Number (${res.source || 'Live API'})</span>
                   <h3 class="text-base font-black text-slate-900 mt-1">0 Previous Parcels Found for <span class="font-mono text-blue-700">${activePhone}</span></h3>
-                  <p class="text-xs font-bold text-slate-600 mt-0.5">This number has no recorded delivery or cancellation history in Steadfast, Pathao, RedX, or Paperfly databases.</p>
+                  <p class="text-xs font-bold text-slate-600 mt-0.5">Confirmed live via ${res.source || 'Courier API'}: no prior delivery or cancellation history found.</p>
                 </div>
               </div>
               <span class="px-3.5 py-1.5 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-black shrink-0">0 Delivered • 0 Cancelled</span>
             </div>
           `;
-          htmlOut = htmlOut.replace('<!-- Top 1-Click Native Portal Search Bar -->', newCustBanner + '<!-- Top 1-Click Native Portal Search Bar -->');
+          htmlOut = htmlOut.replace('<!-- Native In-Portal Result Dashboard -->', newCustBanner + '\n          <!-- Native In-Portal Result Dashboard -->');
         }
         return htmlOut;
       };
@@ -19819,7 +19855,7 @@ function renderChatHubView() {
         };
       };
 
-      handleRunFraudCheck = async function(e, quickPhone = null) {
+      handleRunFraudCheck = async function(e, quickPhone = null, forceFresh = false) {
         if (e && typeof e.preventDefault === 'function') e.preventDefault();
         const inp = document.getElementById('fraudPhoneInput');
         const rawVal = quickPhone || (inp ? inp.value : fraudCheckCurrentPhone);
@@ -19834,25 +19870,37 @@ function renderChatHubView() {
         fraudCheckLoading = true;
         renderAppLayout();
 
-        let liveData = await fetchFreeCourierHistoryForPhone(cleanPhone);
+        let liveData = await fetchFreeCourierHistoryForPhone(cleanPhone, Boolean(forceFresh));
         fraudCheckLoading = false;
 
-        if (liveData && typeof liveData.totalParcels === 'number' && !liveData.isEstimated && liveData.totalParcels > 0) {
-          fraudCheckResultData = { ...liveData, phone: cleanPhone, checkedAt: getNowTimeStr() };
+        if (liveData && liveData.verified === true) {
+          fraudCheckResultData = { ...liveData, phone: cleanPhone, verified: true, checkedAt: getNowTimeStr() };
+        } else if (liveData && liveData.verified === false) {
+          fraudCheckResultData = { ...liveData, phone: cleanPhone, verified: false, checkedAt: getNowTimeStr() };
         } else {
-          const zeroData = buildEstimatedCourierHistoryForPhone(cleanPhone);
-          fraudCheckResultData = { ...zeroData, phone: cleanPhone, checkedAt: getNowTimeStr() };
+          const fallbackZero = buildEstimatedCourierHistoryForPhone(cleanPhone);
+          const cfgCheck = getSavedFraudApiKeys();
+          fraudCheckResultData = {
+            ...fallbackZero,
+            phone: cleanPhone,
+            verified: false,
+            needsApiKey: !Boolean(cfgCheck.bdcourierKey || cfgCheck.fraudbdKey || (cfgCheck.steadfastKey && cfgCheck.steadfastSecret) || cfgCheck.smartposKey),
+            apiError: 'Could not reach Apps Script Fraud Proxy. Please ensure appscript-v32.js is deployed.',
+            checkedAt: getNowTimeStr()
+          };
         }
 
-        try {
-          let recent = JSON.parse(localStorage.getItem('gb_recent_fraud_checks') || '[]');
-          recent = recent.filter(r => r.phone !== cleanPhone);
-          const totP = fraudCheckResultData.totalParcels || 0;
-          const totD = fraudCheckResultData.totalDelivered || 0;
-          const pct = totP > 0 ? Math.round((totD / totP) * 100) : 0;
-          recent.unshift({ phone: cleanPhone, pct, totP, totD, totC: fraudCheckResultData.totalCancelled || 0, time: getNowTimeStr() });
-          localStorage.setItem('gb_recent_fraud_checks', JSON.stringify(recent.slice(0, 8)));
-        } catch (err) {}
+        if (fraudCheckResultData.verified === true) {
+          try {
+            let recent = JSON.parse(localStorage.getItem('gb_recent_fraud_checks') || '[]');
+            recent = recent.filter(r => r.phone !== cleanPhone);
+            const totP = fraudCheckResultData.totalParcels || 0;
+            const totD = fraudCheckResultData.totalDelivered || 0;
+            const pct = totP > 0 ? Math.round((totD / totP) * 100) : 0;
+            recent.unshift({ phone: cleanPhone, pct, totP, totD, totC: fraudCheckResultData.totalCancelled || 0, time: getNowTimeStr() });
+            localStorage.setItem('gb_recent_fraud_checks', JSON.stringify(recent.slice(0, 8)));
+          } catch (err) {}
+        }
 
         renderAppLayout();
       };
