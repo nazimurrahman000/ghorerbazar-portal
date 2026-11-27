@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v105)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v106)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -222,6 +222,11 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      and SmartPOS saved via FRAUD_API_CONFIG with skipRebuild:true). Removes dead CORS proxy spam,
      eliminates fake/misleading 0 parcels on blocked scans, keeps everything 100% inside the portal
      tab (no external window links, no internal manual DB card), and leaves all other tabs untouched.
+   - SUPER-ADMIN-ONLY FRAUD API SETUP LOCK (V106):
+     Restricted Fraud Checker API Key gear icon, setup form, save handler, and notice API Setup button
+     strictly to Super Admin (ID 10122 / isSuperAdmin) instead of all Team Leaders (isFullAdmin).
+     Non-Super-Admins never see API setup options or API keys in query params (appscript-v32.js reads
+     saved keys server-side automatically). Zero changes to any other tab, sync, timer, or Apps Script.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -7368,13 +7373,14 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
     }
 
     function toggleFraudApiSetupPanel() {
+      if (!isSuperAdmin(currentUser)) return;
       showFraudApiConfigBox = !showFraudApiConfigBox;
       renderAppLayout();
     }
 
     function handleSaveFraudApiKeys(e) {
       e.preventDefault();
-      if (!isFullAdmin(currentUser)) return;
+      if (!isSuperAdmin(currentUser)) return;
       const sfKey = (document.getElementById('cfgSfApiKey')?.value || '').trim();
       const sfSec = (document.getElementById('cfgSfSecretKey')?.value || '').trim();
       const bdcKey = (document.getElementById('cfgBdcApiKey')?.value || '').trim();
@@ -7539,8 +7545,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
     }
 
     async function fetchFreeCourierHistoryForPhone(phone, forceFresh = false) {
-      const apiCfg = getSavedFraudApiKeys();
-      const keyParams = `&sfKey=${encodeURIComponent(apiCfg.steadfastKey || '')}&sfSec=${encodeURIComponent(apiCfg.steadfastSecret || '')}&bdcKey=${encodeURIComponent(apiCfg.bdcourierKey || '')}&fbdKey=${encodeURIComponent(apiCfg.fraudbdKey || '')}&spKey=${encodeURIComponent(apiCfg.smartposKey || '')}${forceFresh ? '&forceFresh=1' : ''}`;
+      const apiCfg = isSuperAdmin(currentUser) ? getSavedFraudApiKeys() : {};
+      const keyParams = isSuperAdmin(currentUser)
+        ? `&sfKey=${encodeURIComponent(apiCfg.steadfastKey || '')}&sfSec=${encodeURIComponent(apiCfg.steadfastSecret || '')}&bdcKey=${encodeURIComponent(apiCfg.bdcourierKey || '')}&fbdKey=${encodeURIComponent(apiCfg.fraudbdKey || '')}&spKey=${encodeURIComponent(apiCfg.smartposKey || '')}${forceFresh ? '&forceFresh=1' : ''}`
+        : `${forceFresh ? '&forceFresh=1' : ''}`;
       const targetUrl = `${webhookUrl}?action=CHECK_CUSTOMER_FRAUD&phone=${encodeURIComponent(phone)}${keyParams}&t=${Date.now()}`;
 
       function normalizeServerFraudResV105(res) {
@@ -7791,8 +7799,8 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   </button>
                 </form>
 
-                ${isFullAdmin(currentUser) ? `
-                <button type="button" onclick="toggleFraudApiSetupPanel()" title="Optional: Connect Steadfast / SmartPOS / BDCourier API Key" class="px-3.5 py-3.5 rounded-2xl ${hasAnyApiKey ? 'bg-emerald-600/30 border border-emerald-400/50 text-emerald-200' : 'bg-white/10 hover:bg-white/20 text-slate-200'} text-xs font-extrabold transition-colors cursor-pointer">
+                ${isSuperAdmin(currentUser) ? `
+                <button type="button" onclick="toggleFraudApiSetupPanel()" title="Super Admin Only: Connect BDCourier / FraudBD / Steadfast / SmartPOS API Key" class="px-3.5 py-3.5 rounded-2xl ${hasAnyApiKey ? 'bg-emerald-600/30 border border-emerald-400/50 text-emerald-200' : 'bg-white/10 hover:bg-white/20 text-slate-200'} text-xs font-extrabold transition-colors cursor-pointer">
                   <i class="fa-solid fa-gear"></i>
                 </button>
                 ` : ''}
@@ -7811,7 +7819,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             </div>
             ` : ''}
 
-            ${showFraudApiConfigBox && isFullAdmin(currentUser) ? `
+            ${showFraudApiConfigBox && isSuperAdmin(currentUser) ? `
             <form onsubmit="handleSaveFraudApiKeys(event)" class="mt-4 pt-4 border-t border-slate-700/80 space-y-2.5 text-left">
               <div class="text-[11px] font-bold text-teal-200">
                 <i class="fa-solid fa-key text-amber-300 mr-1.5"></i>Optional API Key Setup (Connect any 1 key now or in the future — syncs across all agents with 10-min cache):
@@ -16216,7 +16224,11 @@ function renderChatHubView() {
         const activePhone = normalizeBdPhoneNumber(fraudCheckCurrentPhone);
         const res = (fraudCheckResultData && fraudCheckResultData.phone === activePhone) ? fraudCheckResultData : null;
         if (res && res.verified === false) {
-          const diagMsg = res.apiError || 'Live courier databases blocked anonymous scan right now. Click API Setup (gear icon) anytime to add a BDCourier, FraudBD, or Steadfast API key.';
+          const isSA = isSuperAdmin(currentUser);
+          const rawDiag = String(res.apiError || '');
+          const diagMsg = isSA
+            ? (rawDiag || 'Live courier databases blocked anonymous scan right now. Click API Setup (gear icon) anytime to add a BDCourier, FraudBD, or Steadfast API key.')
+            : 'Live courier databases are temporarily unavailable for anonymous scan right now. Please try Retry Scan or contact Super Admin.';
           const apiWarnBanner = `
             <div class="p-5 rounded-3xl bg-gradient-to-br from-amber-50 via-white to-orange-50 border-2 border-amber-300 shadow-sm">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -16234,7 +16246,7 @@ function renderChatHubView() {
                   <button type="button" onclick="handleRunFraudCheck(null, '${activePhone}', true)" class="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-black cursor-pointer shadow-xs">
                     <i class="fa-solid fa-rotate mr-1"></i>Retry Scan
                   </button>
-                  ${isFullAdmin(currentUser) ? `
+                  ${isSA ? `
                   <button type="button" onclick="showFraudApiConfigBox = true; renderAppLayout();" class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-emerald-700 text-white text-xs font-black cursor-pointer shadow-xs">
                     <i class="fa-solid fa-key text-amber-300 mr-1"></i>API Setup
                   </button>
