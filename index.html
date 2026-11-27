@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ================================================================================
-GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v100)
+GHORERBAZAR OMNI-PORTAL — LIVING MASTER RULEBOOK & DO-NOT-BREAK GUARD (v102)
 ================================================================================
 AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
 1. LIVING RULEBOOK POLICY: These rules guard against ACCIDENTAL regressions only.
@@ -202,6 +202,20 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
      (5) Portal-only settings (Sprint Toggle/Rewards, Master Buffer %/Working Days, Role Permissions) use
      skipRebuild:true (~0.2s), Product edits pass buildMode:'PRODUCT_ONLY'+skipRosterRebuild:true, and
      Grade edits pass buildMode:'SALES_ONLY'+skipRosterRebuild:true.
+   - DYNAMIC REWARD-AWARE DRIVE PRODUCT GREEN HIGHLIGHT (V101):
+     Added isDriveProductRewardUnlockedV101(prodObj, soldKg, targetKg) used across Drive Product
+     table cells and Dashboard product cards. Products WITH a 90% Entry Bonus (Number(bonus90) > 0,
+     e.g. Ajwa Dates, Sundarban Honey, Gawa Ghee, or any future edited/added product with 90% Cash > 0)
+     turn Green at >= 90%; products WITHOUT a 90% Entry Bonus (bonus90 <= 0 / N/A, e.g. Pink Salt,
+     Black Garlic, Black Seed Honey, or any future product with 90% Cash = 0) turn Green ONLY at >= 100%
+     (0% change to formulas, incentives, CSV, or Google Sheets sync).
+   - DYNAMIC PER-PRODUCT ENTRY % THRESHOLD (V102):
+     Added editable Entry % input (entryPct, default 90, range 1..100) inside Edit Product Targets
+     modal (Super Admin / feat_edit_products only). Both Drive Product green highlight
+     (isDriveProductRewardUnlockedV101), Dashboard product card bonus labels, and ALL Product
+     Incentive calculations (V57 + base + floor breakdown) now dynamically honor each product's
+     configured entryPct (e.g. 70%, 80%, 85%, 90%) when Entry Cash (bonus90) > 0, and require
+     100% when Entry Cash = 0. Syncs automatically via Monthly_Configs with zero Apps Script changes.
    - CSV Exports & Google Sheets use Actual Base Target / exact calendar days (28/29/30/31).
 3. BELL NOTIFICATION CENTER (V67+ SMOOTH IN-PLACE ENGINE):
    - Switching filter tabs (All | Notices | Sales & Data or Duty & Alerts | Login/Break),
@@ -2280,7 +2294,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
       const result = {};
       Object.keys(DEFAULT_PRODUCTS).forEach(k => {
         const ov = prodOverrides[k] || {};
-        result[k] = { ...DEFAULT_PRODUCTS[k], ...ov, enabled: ov.enabled !== false };
+        result[k] = { ...DEFAULT_PRODUCTS[k], ...ov, entryPct: getProductEntryPctV102(ov), enabled: ov.enabled !== false };
       });
       // Also include any custom products added by Admin for this month
       Object.keys(prodOverrides).forEach((k, idx) => {
@@ -2294,6 +2308,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
             badge: ov.badge || st.badge,
             bar: ov.bar || st.bar,
             icon: ov.icon || st.icon,
+            entryPct: getProductEntryPctV102(ov),
             bonus90: Number(ov.bonus90) || 0,
             bonus100: Number(ov.bonus100) || 0,
             item100: ov.item100 || '',
@@ -2319,6 +2334,29 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
         }
       });
       return active;
+    }
+
+    // V102: Dynamic Entry % helper (defaults to 90% for all existing products/months; supports 70%, 80%, 85%, etc.)
+    function getProductEntryPctV102(prodObj) {
+      const raw = (prodObj && prodObj.entryPct !== undefined && prodObj.entryPct !== null && prodObj.entryPct !== '')
+        ? Number(prodObj.entryPct)
+        : 90;
+      if (!Number.isFinite(raw) || raw < 1 || raw > 100) return 90;
+      return raw;
+    }
+
+    // V101/V102: Dynamic Reward-Aware Green Highlight Check (automatically adapts to any edited/added product & custom Entry %!)
+    // Products with Entry Bonus (bonus90 > 0) turn Green at >= entryPct (default 90%, e.g. 70%/80%); products without Entry Bonus turn Green ONLY at >= 100%.
+    function isDriveProductRewardUnlockedV101(prodObj, soldKg, targetKg) {
+      const tgt = Number(targetKg) || 0;
+      const val = Number(soldKg) || 0;
+      if (tgt <= 0 || val <= 0) return false;
+      const pctExact = (val / tgt) * 100;
+      const entryPct = getProductEntryPctV102(prodObj);
+      if (Number(prodObj && prodObj.bonus90) > 0) {
+        return (pctExact + 0.0001) >= entryPct;
+      }
+      return (val + 0.0001) >= tgt;
     }
 
     // Helper: Format product summary string dynamically for any active products in the month
@@ -2662,10 +2700,10 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
           if (p.item100) {
             earnedGiftItems.push(`🎁 ${p.item100} (${p.name} 100%)`);
           }
-        } else if (pct >= 90) {
+        } else if (pct >= getProductEntryPctV102(p)) {
           if (p.bonus90) {
             totalMoney += Number(p.bonus90);
-            earnedCashBadges.push(`${p.name} (90%: ৳${p.bonus90})`);
+            earnedCashBadges.push(`${p.name} (${getProductEntryPctV102(p)}%: ৳${p.bonus90})`);
           }
         }
       });
@@ -4613,7 +4651,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                   const achieved = pTotals[k];
                   const target = p.targetKg * tInfo.agentCount; 
                   const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
-                  const isUnlocked = pct >= 90;
+                  const isUnlocked = isDriveProductRewardUnlockedV101(p, achieved, target);
                   return `
                     <div onclick="setTab('drive_product')" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
                       <div class="flex justify-between items-start mb-2">
@@ -4976,7 +5014,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                 const achieved = pTotals[k];
                 const target = p.targetKg * tInfo.agentCount; 
                 const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
-                const isUnlocked = pct >= 90;
+                const isUnlocked = isDriveProductRewardUnlockedV101(p, achieved, target);
                 return `
                   <div onclick="setTab('drive_product')" title="Click to view agent-wise & date-wise Drive Product details" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
                     <div class="flex justify-between items-start mb-2">
@@ -4995,7 +5033,7 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                     <div class="progress-track h-1.5 bg-white border border-slate-200/60 mb-2">
                       <div class="${p.bar} h-1.5 rounded-full" style="width: ${pct}%"></div>
                     </div>
-                    <p class="text-[10px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `90%: ৳${p.bonus90} | ` : ''}${p.bonus100 ? `100%: ৳${p.bonus100}` : ''}${p.item100 ? `100%: ${p.item100}` : ''}</strong></p>
+                    <p class="text-[10px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `${getProductEntryPctV102(p)}%: ৳${p.bonus90} | ` : ''}${p.bonus100 ? `100%: ৳${p.bonus100}` : ''}${p.item100 ? `100%: ${p.item100}` : ''}</strong></p>
                   </div>
                 `;
               }).join('')}
@@ -5522,20 +5560,22 @@ AI COLLABORATOR MANDATORY WORKFLOW BEFORE ANY EDIT:
                       </td>
                       <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-black ${st.agent.team === 'Team Nazim' ? 'bg-orange-100 text-orange-800' : (st.agent.team === 'Team Samad' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800')}">${st.agent.team}</span></td>
                       ${prodKeys.map(k => {
+                        const pObj = activeProds[k];
                         const val = st.prodKg[k] || 0;
-                        const tgt = Number(activeProds[k].targetKg) || 1;
+                        const tgt = Number(pObj.targetKg) || 1;
                         const pct = Math.round((val / tgt) * 100);
                         const barWidth = Math.min(100, pct);
-                        const badgeClass = pct >= 90
+                        const isRewardUnlocked = isDriveProductRewardUnlockedV101(pObj, val, tgt);
+                        const badgeClass = isRewardUnlocked
                           ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                           : (val > 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-400 border-slate-100');
-                        const barColor = pct >= 90 ? 'bg-emerald-500' : (val > 0 ? 'bg-amber-500' : 'bg-slate-200');
+                        const barColor = isRewardUnlocked ? 'bg-emerald-500' : (val > 0 ? 'bg-amber-500' : 'bg-slate-200');
                         return `
                           <td class="p-2.5 text-center align-middle">
                             <div class="inline-flex flex-col items-center justify-center px-2.5 py-1.5 rounded-xl border ${badgeClass} min-w-[104px]">
                               <div class="flex items-baseline gap-1">
                                 <span class="font-black text-xs ${val > 0 ? 'text-slate-900' : 'text-slate-400'}">${val.toFixed(2)} kg</span>
-                                <span class="text-[9px] font-extrabold ${pct >= 90 ? 'text-emerald-700' : 'text-slate-500'}">(${pct}%)</span>
+                                <span class="text-[9px] font-extrabold ${isRewardUnlocked ? 'text-emerald-700' : 'text-slate-500'}">(${pct}%)</span>
                               </div>
                               <div class="w-full bg-slate-200/70 h-1 rounded-full mt-1 overflow-hidden">
                                 <div class="${barColor} h-1 rounded-full" style="width:${barWidth}%"></div>
@@ -16595,9 +16635,9 @@ function renderChatHubView() {
             if (pct >= 100) {
               if (p.bonus100) { prodMoney += Number(p.bonus100); earnedCashBadges.push(`${p.name} (100%: ৳${p.bonus100})`); }
               if (p.item100) { earnedGiftItems.push(`🎁 ${p.item100} (${p.name} 100%)`); }
-            } else if (pct >= 90 && p.bonus90) {
+            } else if (pct >= getProductEntryPctV102(p) && p.bonus90) {
               prodMoney += Number(p.bonus90);
-              earnedCashBadges.push(`${p.name} (90%: ৳${p.bonus90})`);
+              earnedCashBadges.push(`${p.name} (${getProductEntryPctV102(p)}%: ৳${p.bonus90})`);
             }
           });
           return { totalMoney: prodMoney, earnedCashBadges, earnedGiftItems, earnedRewards: [...earnedCashBadges, ...earnedGiftItems] };
@@ -16625,9 +16665,9 @@ function renderChatHubView() {
               if (pct >= 100) {
                 if (p.bonus100) { prodMoney += Number(p.bonus100); earnedCashBadges.push(`${ag.name.split(' ')[0]}: ${p.name} (100%: ৳${p.bonus100})`); }
                 if (p.item100) { earnedGiftItems.push(`🎁 ${ag.name.split(' ')[0]}: ${p.item100} (${p.name} 100%)`); }
-              } else if (pct >= 90 && p.bonus90) {
+              } else if (pct >= getProductEntryPctV102(p) && p.bonus90) {
                 prodMoney += Number(p.bonus90);
-                earnedCashBadges.push(`${ag.name.split(' ')[0]}: ${p.name} (90%: ৳${p.bonus90})`);
+                earnedCashBadges.push(`${ag.name.split(' ')[0]}: ${p.name} (${getProductEntryPctV102(p)}%: ৳${p.bonus90})`);
               }
             });
             const spRes = window.computeSingleAgentSprintIncentive(ag, allMonthSales, mk);
@@ -16645,9 +16685,9 @@ function renderChatHubView() {
             if (pct >= 100) {
               if (p.bonus100) { prodMoney += Number(p.bonus100); earnedCashBadges.push(`${p.name} (100%: ৳${p.bonus100})`); }
               if (p.item100) { earnedGiftItems.push(`🎁 ${p.item100} (${p.name} 100%)`); }
-            } else if (pct >= 90 && p.bonus90) {
+            } else if (pct >= getProductEntryPctV102(p) && p.bonus90) {
               prodMoney += Number(p.bonus90);
-              earnedCashBadges.push(`${p.name} (90%: ৳${p.bonus90})`);
+              earnedCashBadges.push(`${p.name} (${getProductEntryPctV102(p)}%: ৳${p.bonus90})`);
             }
           });
           if (currentUser && !canViewAll(currentUser)) {
@@ -17202,9 +17242,9 @@ function renderChatHubView() {
               if (p.item100) {
                 prodGiftBadges.push(`🎁 ${p.item100} (${p.name} 100% — ${soldKg}kg)`);
               }
-            } else if (pct >= 90 && p.bonus90) {
+            } else if (pct >= getProductEntryPctV102(p) && p.bonus90) {
               prodMoney += Number(p.bonus90);
-              prodCashBadges.push(`${p.name} (90% — ${soldKg}kg: ৳${Number(p.bonus90).toLocaleString()})`);
+              prodCashBadges.push(`${p.name} (${getProductEntryPctV102(p)}% — ${soldKg}kg: ৳${Number(p.bonus90).toLocaleString()})`);
             }
           });
 
@@ -17629,9 +17669,9 @@ function renderChatHubView() {
                 earnedGiftPills.push(`🎁 ${p.item100} (${p.name} 100%)`);
                 itemBreakdownPills.push({ label: `🎁 ${p.name} (100%): ${p.item100}`, cls: 'bg-rose-50 border-rose-200 text-rose-700' });
               }
-            } else if (pct >= 90 && p.bonus90) {
+            } else if (pct >= getProductEntryPctV102(p) && p.bonus90) {
               prodCash += Number(p.bonus90);
-              itemBreakdownPills.push({ label: `💰 ${p.name} (90%): ৳${Number(p.bonus90).toLocaleString()}`, cls: 'bg-emerald-50 border-emerald-200 text-emerald-800' });
+              itemBreakdownPills.push({ label: `💰 ${p.name} (${getProductEntryPctV102(p)}%): ৳${Number(p.bonus90).toLocaleString()}`, cls: 'bg-emerald-50 border-emerald-200 text-emerald-800' });
             }
           });
 
@@ -20239,9 +20279,9 @@ function renderChatHubView() {
                 earnedGiftPills.push(`🎁 ${p.item100} (${p.name} 100%)`);
                 itemBreakdownPills.push({ label: `🎁 ${p.name} (100%): ${p.item100}`, cls: 'bg-rose-50 border-rose-200 text-rose-700' });
               }
-            } else if (pct >= 90 && p.bonus90) {
+            } else if (pct >= getProductEntryPctV102(p) && p.bonus90) {
               prodCash += Number(p.bonus90);
-              itemBreakdownPills.push({ label: `💰 ${p.name} (90%): ৳${Number(p.bonus90).toLocaleString()}`, cls: 'bg-emerald-50 border-emerald-200 text-emerald-800' });
+              itemBreakdownPills.push({ label: `💰 ${p.name} (${getProductEntryPctV102(p)}%): ৳${Number(p.bonus90).toLocaleString()}`, cls: 'bg-emerald-50 border-emerald-200 text-emerald-800' });
             }
           });
 
@@ -20608,7 +20648,7 @@ function renderChatHubView() {
                     const achieved = pTotals[k];
                     const target = p.targetKg * tInfo.agentCount; 
                     const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
-                    const isUnlocked = pct >= 90;
+                    const isUnlocked = isDriveProductRewardUnlockedV101(p, achieved, target);
                     return `
                       <div onclick="setTab('drive_product')" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
                         <div class="flex justify-between items-start mb-2">
@@ -21070,7 +21110,7 @@ function renderChatHubView() {
                   const achieved = pTotals[k];
                   const target = p.targetKg * tInfo.agentCount; 
                   const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
-                  const isUnlocked = pct >= 90;
+                  const isUnlocked = isDriveProductRewardUnlockedV101(p, achieved, target);
                   return `
                     <div onclick="setTab('drive_product')" title="Click to view agent-wise & date-wise Drive Product details" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
                       <div class="flex justify-between items-start mb-2">
@@ -21089,7 +21129,7 @@ function renderChatHubView() {
                       <div class="progress-track h-1.5 bg-white border border-slate-200/60 mb-2">
                         <div class="${p.bar} h-1.5 rounded-full" style="width: ${pct}%"></div>
                       </div>
-                      <p class="text-[10px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `90%: ৳${p.bonus90} | ` : ''}${p.bonus100 ? `100%: ৳${p.bonus100}` : ''}${p.item100 ? `100%: ${p.item100}` : ''}</strong></p>
+                      <p class="text-[10px] font-extrabold text-slate-600"><i class="fa-solid fa-award text-blue-600 mr-1"></i> Bonus: <strong>${p.bonus90 ? `${getProductEntryPctV102(p)}%: ৳${p.bonus90} | ` : ''}${p.bonus100 ? `100%: ৳${p.bonus100}` : ''}${p.item100 ? `100%: ${p.item100}` : ''}</strong></p>
                     </div>
                   `;
                 }).join('')}
@@ -22065,7 +22105,7 @@ function renderChatHubView() {
                   const achieved = pTotals[k];
                   const target = p.targetKg * tInfo.agentCount; 
                   const pct = Math.min(100, target > 0 ? Math.round((achieved / target) * 100) : 0);
-                  const isUnlocked = pct >= 90;
+                  const isUnlocked = isDriveProductRewardUnlockedV101(p, achieved, target);
                   return `
                     <div onclick="setTab('drive_product')" class="${p.style} card-dynamic p-4 cursor-pointer ${isUnlocked ? 'border-amber-400 ring-2 ring-amber-400/20' : ''}">
                       <div class="flex justify-between items-start mb-2">
@@ -26819,9 +26859,9 @@ function renderChatHubView() {
               cashBadges.push(`${p.name} (100%+ Extra ${extraWeightStr}: +৳${extraCash.toLocaleString()})`);
             }
           }
-        } else if (pctExact + 0.0001 >= 90 && p.bonus90) {
+        } else if (pctExact + 0.0001 >= getProductEntryPctV102(p) && p.bonus90) {
           baseCash = Number(p.bonus90);
-          cashBadges.push(`${p.name} (90% — ${soldKg.toFixed(2)}kg: ৳${baseCash.toLocaleString()})`);
+          cashBadges.push(`${p.name} (${getProductEntryPctV102(p)}% — ${soldKg.toFixed(2)}kg: ৳${baseCash.toLocaleString()})`);
         }
 
         return {
@@ -27628,7 +27668,7 @@ function renderChatHubView() {
         const result = {};
         Object.keys(DEFAULT_PRODUCTS).forEach(k => {
           const ov = prodOverrides[k] || {};
-          const merged = { ...DEFAULT_PRODUCTS[k], ...ov, enabled: ov.enabled !== false };
+          const merged = { ...DEFAULT_PRODUCTS[k], ...ov, entryPct: getProductEntryPctV102(ov), enabled: ov.enabled !== false };
           if (ov.item100 !== undefined) merged.item100 = String(ov.item100 || '').trim();
           merged.extraUnitKg = Number(merged.extraUnitKg) || (k === 'blackGarlic' ? 0.5 : 1);
           merged.extraRateTk = (merged.extraRateTk !== undefined && merged.extraRateTk !== null) ? Number(merged.extraRateTk) : 50;
@@ -27648,6 +27688,7 @@ function renderChatHubView() {
               badge: ov.badge || st.badge,
               bar: ov.bar || st.bar,
               icon: ov.icon || st.icon,
+              entryPct: getProductEntryPctV102(ov),
               bonus90: Number(ov.bonus90) || 0,
               bonus100: Number(ov.bonus100) || 0,
               item100: String(ov.item100 || '').trim(),
@@ -27722,7 +27763,7 @@ function renderChatHubView() {
                           <div class="sm:col-span-1 flex items-center justify-center">
                             <input type="checkbox" id="cfg_en_${k}" ${isEnabled ? 'checked' : ''} class="w-4 h-4 accent-blue-600 rounded cursor-pointer" title="Enable/Disable this product for ${selectedMonthKey}">
                           </div>
-                          <div class="sm:col-span-4">
+                          <div class="sm:col-span-3">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Product Name (${selectedMonthKey})</label>
                             <input type="text" id="cfg_name_${k}" value="${String(p.name || '').replace(/"/g, '&quot;')}" required class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-extrabold text-slate-900">
                           </div>
@@ -27730,8 +27771,12 @@ function renderChatHubView() {
                             <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Target (KG)</label>
                             <input type="number" step="0.01" min="0.01" id="cfg_kg_${k}" value="${p.targetKg}" required class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold">
                           </div>
+                          <div class="sm:col-span-1">
+                            <label class="block text-[10px] font-bold text-indigo-600 uppercase mb-0.5" title="Minimum % required to unlock Entry Cash & Green highlight (e.g. 70, 80, 90)">Entry %</label>
+                            <input type="number" min="1" max="100" step="1" id="cfg_entryPct_${k}" value="${getProductEntryPctV102(p)}" class="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-extrabold text-indigo-900 text-center">
+                          </div>
                           <div class="sm:col-span-2">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">90% Cash (৳)</label>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Entry Cash (৳)</label>
                             <input type="number" min="0" id="cfg_b90_${k}" value="${p.bonus90 || 0}" class="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold">
                           </div>
                           <div class="sm:col-span-2">
@@ -27807,6 +27852,7 @@ function renderChatHubView() {
           const enEl = document.getElementById(`cfg_en_${k}`);
           const nameEl = document.getElementById(`cfg_name_${k}`);
           const kgEl = document.getElementById(`cfg_kg_${k}`);
+          const entryPctEl = document.getElementById(`cfg_entryPct_${k}`);
           const b90El = document.getElementById(`cfg_b90_${k}`);
           const b100El = document.getElementById(`cfg_b100_${k}`);
           const item100El = document.getElementById(`cfg_item100_${k}`);
@@ -27815,11 +27861,14 @@ function renderChatHubView() {
           if (!nameEl) return;
 
           const unitVal = Number(extraUnitEl?.value) === 0.5 ? 0.5 : 1;
+          const rawEntryPct = Number(entryPctEl?.value);
+          const safeEntryPct = (Number.isFinite(rawEntryPct) && rawEntryPct >= 1 && rawEntryPct <= 100) ? rawEntryPct : 90;
           builtProds[k] = {
             ...(allProds[k] || {}),
             enabled: enEl ? enEl.checked : true,
             name: nameEl.value.trim() || allProds[k].name,
             targetKg: Number(kgEl?.value) || allProds[k].targetKg,
+            entryPct: safeEntryPct,
             bonus90: Number(b90El?.value) || 0,
             bonus100: Number(b100El?.value) || 0,
             item100: String(item100El?.value || '').trim(),
@@ -27848,6 +27897,7 @@ function renderChatHubView() {
         const newProdObj = {
           name: 'New Product ' + (idx + 1),
           targetKg: 25,
+          entryPct: 90,
           bonus90: 500,
           bonus100: 1000,
           item100: '',
@@ -27953,7 +28003,7 @@ function renderChatHubView() {
           Object.keys(activeProds).forEach(k => {
             const p = activeProds[k];
             const parts = [];
-            if (Number(p.bonus90) > 0) parts.push(`90%: ৳${Number(p.bonus90).toLocaleString()}`);
+            if (Number(p.bonus90) > 0) parts.push(`${getProductEntryPctV102(p)}%: ৳${Number(p.bonus90).toLocaleString()}`);
             if (Number(p.bonus100) > 0) parts.push(`100%: ৳${Number(p.bonus100).toLocaleString()}`);
             if (p.item100) parts.push(`100%: ${p.item100}`);
             if (Number(p.extraRateTk) > 0) parts.push(`100%+: ৳${Number(p.extraRateTk)}/${p.extraUnitLabel || 'kg'}`);
